@@ -16,6 +16,7 @@ use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{
     Grid2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
 };
+use num::Integer;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
@@ -30,6 +31,7 @@ pub type RasterKernel = Operator<RasterKernelParams, SingleRasterSource>;
 pub struct RasterKernelParams {
     pub raster_kernel: RasterKernelMethod,
     // TODO: strategies for missing data at the edges
+    // TODO: option to fix resolution
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -45,17 +47,31 @@ enum InitializedRasterKernelMethod {
     StandardDeviation { dimensions: GridShape2D },
 }
 
-impl From<RasterKernelMethod> for InitializedRasterKernelMethod {
-    fn from(kernel_method: RasterKernelMethod) -> Self {
+impl TryFrom<RasterKernelMethod> for InitializedRasterKernelMethod {
+    type Error = RasterKernelError;
+
+    fn try_from(kernel_method: RasterKernelMethod) -> Result<Self, Self::Error> {
         let dimensions = kernel_method.kernel_size();
         match kernel_method {
             RasterKernelMethod::Convolution { matrix } => {
                 let matrix = Grid2D::new(dimensions, matrix.into_iter().flatten().collect())
-                    .expect("matrix must be rectangular");
+                    .map_err(|_| RasterKernelError::MatrixNotRectangular)?;
 
-                Self::Convolution { matrix }
+                ensure!(
+                    dimensions.axis_size_x().is_odd() && dimensions.axis_size_y().is_odd(),
+                    error::DimensionsNotOdd { actual: dimensions }
+                );
+
+                Ok(Self::Convolution { matrix })
             }
-            RasterKernelMethod::StandardDeviation { .. } => Self::StandardDeviation { dimensions },
+            RasterKernelMethod::StandardDeviation { .. } => {
+                ensure!(
+                    dimensions.axis_size_x().is_odd() && dimensions.axis_size_y().is_odd(),
+                    error::DimensionsNotOdd { actual: dimensions }
+                );
+
+                Ok(Self::StandardDeviation { dimensions })
+            }
         }
     }
 }
@@ -80,10 +96,19 @@ pub enum RasterKernelError {
         "The maximum kernel size is {}x{}, but the kernel has size {}x{}",
         limit.axis_size_x(), limit.axis_size_y(), actual.axis_size_x(), actual.axis_size_y()
     ))]
-    KernelTooLarge {
+    TooLarge {
         limit: GridShape2D,
         actual: GridShape2D,
     },
+
+    #[snafu(display(
+        "The kernel must have an odd number of rows and columns, but the kernel has size {}x{}",
+        actual.axis_size_x(), actual.axis_size_y()
+    ))]
+    DimensionsNotOdd { actual: GridShape2D },
+
+    #[snafu(display("The kernel matrix must be rectangular"))]
+    MatrixNotRectangular,
 }
 
 #[typetag::serde]
@@ -101,7 +126,7 @@ impl RasterOperator for RasterKernel {
             dimensions.axis_size_x() <= tiling_specification.tile_size_in_pixels.axis_size_x()
                 && dimensions.axis_size_y()
                     <= tiling_specification.tile_size_in_pixels.axis_size_y(),
-            error::KernelTooLarge {
+            error::TooLarge {
                 limit: tiling_specification.tile_size_in_pixels,
                 actual: dimensions
             }
@@ -112,7 +137,7 @@ impl RasterOperator for RasterKernel {
         let initialized_operator = InitializedRasterKernel {
             result_descriptor: raster_source.result_descriptor().clone(),
             raster_source,
-            raster_kernel_method: self.params.raster_kernel.into(),
+            raster_kernel_method: self.params.raster_kernel.try_into()?,
             tiling_specification,
         };
 
@@ -136,13 +161,13 @@ impl InitializedRasterOperator for InitializedRasterKernel {
                 InitializedRasterKernelMethod::Convolution { matrix } => RasterKernelProcessor::<_,_, ConvolutionKernel>::new(
                         p,
                         self.tiling_specification,
-                        ConvolutionKernel::new(matrix.clone())
+                        ConvolutionKernel::new(matrix.clone())?
                     ).boxed()
                     .into(),
                     InitializedRasterKernelMethod::StandardDeviation { dimensions } => RasterKernelProcessor::<_,_, StandardDeviationKernel>::new(
                         p,
                         self.tiling_specification,
-                        StandardDeviationKernel::new(*dimensions)
+                        StandardDeviationKernel::new(*dimensions)?
                     ).boxed()
                     .into(),
             }
@@ -215,8 +240,10 @@ mod tests {
     use super::*;
     use futures::StreamExt;
     use geoengine_datatypes::{
+        operations::image::{Colorizer, RgbaColor},
         primitives::{
-            Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+            DateTime, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+            TimeInstance, TimeInterval,
         },
         raster::{
             Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
@@ -228,19 +255,22 @@ mod tests {
     use crate::{
         engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor},
         mock::{MockRasterSource, MockRasterSourceParams},
+        source::{GdalSource, GdalSourceParameters},
+        util::{gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes},
     };
 
     #[test]
     fn test_initialized_raster_kernel_method() {
         let kernel_method = RasterKernelMethod::Convolution {
-            matrix: vec![vec![1.0, 2.0], vec![3.0, 4.0], vec![5.0, 6.0]],
+            matrix: vec![vec![1.0], vec![3.0], vec![5.0]],
         };
-        let initialized_kernel_method = InitializedRasterKernelMethod::from(kernel_method);
+        let initialized_kernel_method =
+            InitializedRasterKernelMethod::try_from(kernel_method).unwrap();
 
         if let InitializedRasterKernelMethod::Convolution { matrix } = initialized_kernel_method {
             assert_eq!(
                 matrix,
-                Grid2D::new([3, 2].into(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap()
+                Grid2D::new([3, 1].into(), vec![1.0, 3.0, 5.0]).unwrap()
             );
         } else {
             panic!("Wrong kernel method");
@@ -248,10 +278,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_mean_convolution() -> Result<()> {
+    async fn test_mean_convolution() {
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
             (0., 0.).into(),
-            [2, 2].into(),
+            [3, 3].into(),
         ));
 
         let raster = make_raster();
@@ -266,61 +296,38 @@ mod tests {
         }
         .boxed()
         .initialize(&exe_ctx)
-        .await?;
+        .await
+        .unwrap();
 
-        let processor = operator.query_processor()?.get_i8().unwrap();
+        let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
         let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new((0., 3.).into(), (6., 0.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(0, 20),
-            spatial_resolution: SpatialResolution::zero_point_five(),
+            spatial_resolution: SpatialResolution::one(),
         };
         let query_ctx = MockQueryContext::test_default();
 
-        let result_stream = processor.query(query_rect, &query_ctx).await?;
+        let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
 
         let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
-        let result = result.into_iter().collect::<Result<Vec<_>>>()?;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        let mut times: Vec<TimeInterval> = vec![TimeInterval::new_unchecked(0, 10); 8];
-        times.append(&mut vec![TimeInterval::new_unchecked(10, 20); 8]);
+        let mut times: Vec<TimeInterval> = vec![TimeInterval::new_unchecked(0, 10); 2];
+        times.append(&mut vec![TimeInterval::new_unchecked(10, 20); 2]);
 
         let data = vec![
-            vec![1, 2, 5, 6],
-            vec![2, 3, 6, 7],
-            vec![3, 4, 7, 8],
-            vec![4, 0, 8, 0],
-            vec![5, 6, 0, 0],
-            vec![6, 7, 0, 0],
-            vec![7, 8, 0, 0],
-            vec![8, 0, 0, 0],
-            vec![8, 7, 4, 3],
-            vec![7, 6, 3, 2],
-            vec![6, 5, 2, 1],
-            vec![5, 0, 1, 0],
-            vec![4, 3, 0, 0],
-            vec![3, 2, 0, 0],
-            vec![2, 1, 0, 0],
-            vec![1, 0, 0, 0],
+            vec![0, 0, 0, 0, 8, 9, 0, 0, 0],
+            vec![0, 0, 0, 10, 11, 0, 0, 0, 0],
+            vec![0, 0, 0, 0, 10, 10, 0, 0, 0],
+            vec![0, 0, 0, 9, 7, 0, 0, 0, 0],
         ];
 
         let valid = vec![
-            vec![true; 4],
-            vec![true; 4],
-            vec![true; 4],
-            vec![true, false, true, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, false, false, false],
-            vec![true; 4],
-            vec![true; 4],
-            vec![true; 4],
-            vec![true, false, true, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, false, false, false],
+            vec![false, false, false, false, true, true, false, false, false],
+            vec![false, false, false, true, true, false, false, false, false],
+            vec![false, false, false, false, true, true, false, false, false],
+            vec![false, false, false, true, true, false, false, false, false],
         ];
 
         for (i, tile) in result.into_iter().enumerate() {
@@ -329,55 +336,141 @@ mod tests {
             assert_eq!(tile.grid_array.inner_grid.data, data[i]);
             assert_eq!(tile.grid_array.validity_mask.data, valid[i]);
         }
-
-        Ok(())
     }
 
-    fn make_raster() -> Box<dyn RasterOperator> {
-        // test raster:
-        // [0, 10)
-        // || 1 | 2 || 3 | 4 ||
-        // || 5 | 6 || 7 | 8 ||
-        //
-        // [10, 20)
-        // || 8 | 7 || 6 | 5 ||
-        // || 4 | 3 || 2 | 1 ||
+    #[tokio::test]
+    async fn check_make_raster() {
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 3].into(),
+        ));
+
+        let raster = make_raster();
+
+        let operator = raster.initialize(&exe_ctx).await.unwrap();
+
+        let processor = operator.query_processor().unwrap().get_i8().unwrap();
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((0., 3.).into(), (6., 0.).into()).unwrap(),
+            time_interval: TimeInterval::new_unchecked(0, 20),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        assert_eq!(result.len(), 4);
+
         let raster_tiles = vec![
             RasterTile2D::<i8>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![1, 2, 5, 6]).unwrap()),
+                GridOrEmpty::from(
+                    Grid2D::new([3, 3].into(), vec![1, 2, 3, 7, 8, 9, 13, 14, 15]).unwrap(),
+                ),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![3, 4, 7, 8]).unwrap()),
+                GridOrEmpty::from(
+                    Grid2D::new([3, 3].into(), vec![4, 5, 6, 10, 11, 12, 16, 17, 18]).unwrap(),
+                ),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![8, 7, 4, 3]).unwrap()),
+                GridOrEmpty::from(
+                    Grid2D::new([3, 3].into(), vec![18, 17, 16, 12, 11, 10, 6, 5, 4]).unwrap(),
+                ),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
-                GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![6, 5, 2, 1]).unwrap()),
+                GridOrEmpty::from(
+                    Grid2D::new([3, 3].into(), vec![15, 14, 13, 9, 8, 7, 3, 2, 1]).unwrap(),
+                ),
+            ),
+        ];
+
+        assert_eq!(result, raster_tiles);
+    }
+
+    fn make_raster() -> Box<dyn RasterOperator> {
+        // test raster:
+        // [0, 10)
+        // ||  1 |   2 |  3 ||  4 |  5 |  6 ||
+        // ||  7 |   8 |  9 || 10 | 11 | 12 ||
+        // || 13 |  14 | 15 || 16 | 17 | 18 ||
+        //
+        // [10, 20)
+        // || 18 |  17 | 16 || 15 | 14 | 13 ||
+        // || 12 |  11 | 10 ||  9 |  8 |  7 ||
+        // ||  6 |   5 |  4 ||  3 |  2 |  1 ||
+        //
+        let raster_tiles = vec![
+            RasterTile2D::<i8>::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 3].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                GridOrEmpty::from(
+                    Grid2D::new([3, 3].into(), vec![1, 2, 3, 7, 8, 9, 13, 14, 15]).unwrap(),
+                ),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 3].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                GridOrEmpty::from(
+                    Grid2D::new([3, 3].into(), vec![4, 5, 6, 10, 11, 12, 16, 17, 18]).unwrap(),
+                ),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 3].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                GridOrEmpty::from(
+                    Grid2D::new([3, 3].into(), vec![18, 17, 16, 12, 11, 10, 6, 5, 4]).unwrap(),
+                ),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 3].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                GridOrEmpty::from(
+                    Grid2D::new([3, 3].into(), vec![15, 14, 13, 9, 8, 7, 3, 2, 1]).unwrap(),
+                ),
             ),
         ];
 
@@ -395,5 +488,141 @@ mod tests {
             },
         }
         .boxed()
+    }
+
+    #[tokio::test]
+    async fn test_ndvi_gaussian_filter() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let operator = RasterKernel {
+            params: RasterKernelParams {
+                raster_kernel: RasterKernelMethod::Convolution {
+                    matrix: vec![
+                        vec![1. / 16., 1. / 8., 1. / 16.],
+                        vec![1. / 8., 1. / 4., 1. / 8.],
+                        vec![1. / 16., 1. / 8., 1. / 16.],
+                    ],
+                },
+            },
+            sources: SingleRasterSource {
+                raster: GdalSource {
+                    params: GdalSourceParameters { data: ndvi_id },
+                }
+                .boxed(),
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        let processor = operator.query_processor().unwrap().get_u8().unwrap();
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
+                .unwrap(),
+            time_interval: TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        // let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
+
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::white()).try_into().unwrap(),
+                (255.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::pink(),
+        )
+        .unwrap();
+
+        let bytes = raster_stream_to_png_bytes(
+            processor,
+            query_rect,
+            query_ctx,
+            360,
+            180,
+            None,
+            Some(colorizer),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            bytes,
+            include_bytes!("../../../../test_data/wms/gaussian_blur.png")
+        );
+
+        // Use for getting the image to compare against
+        // save_test_bytes(&bytes, "gaussian_blur.png");
+    }
+
+    #[tokio::test]
+    async fn test_ndvi_sobel_filter() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let operator = RasterKernel {
+            params: RasterKernelParams {
+                raster_kernel: RasterKernelMethod::Convolution {
+                    matrix: vec![vec![1., 0., -1.], vec![2., 0., -2.], vec![1., 0., -1.]],
+                },
+            },
+            sources: SingleRasterSource {
+                raster: GdalSource {
+                    params: GdalSourceParameters { data: ndvi_id },
+                }
+                .boxed(),
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        let processor = operator.query_processor().unwrap().get_u8().unwrap();
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
+                .unwrap(),
+            time_interval: TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        // let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
+
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::white()).try_into().unwrap(),
+                (255.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::pink(),
+        )
+        .unwrap();
+
+        let bytes = raster_stream_to_png_bytes(
+            processor,
+            query_rect,
+            query_ctx,
+            360,
+            180,
+            None,
+            Some(colorizer),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            bytes,
+            include_bytes!("../../../../test_data/wms/sobel_filter.png")
+        );
+
+        // Use for getting the image to compare against
+        // save_test_bytes(&bytes, "sobel_filter.png");
     }
 }

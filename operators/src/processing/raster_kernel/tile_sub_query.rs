@@ -5,7 +5,10 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{FutureExt, TryFutureExt};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartitioned};
-use geoengine_datatypes::raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, GridSize};
+use geoengine_datatypes::raster::{
+    Blit, EmptyGrid, EmptyGrid2D, FromIndexFnParallel, GeoTransform, GridIdx, GridIdx2D,
+    GridIndexAccess, GridOrEmpty, GridSize,
+};
 use geoengine_datatypes::{
     primitives::{
         Coordinate2D, RasterQueryRectangle, SpatialPartition2D, TimeInstance, TimeInterval,
@@ -49,7 +52,7 @@ where
     type TileAccu = RasterKernelAccu<P, F>;
     type TileAccuFuture = BoxFuture<'a, Result<Self::TileAccu>>;
 
-    /// Create a 9x9 tile to store the values of the neighborhood
+    /// Create a 3x3 tile to store the values of the neighborhood
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
@@ -60,7 +63,7 @@ where
         let tiling_specification = self.tiling_specification;
         let kernel_fn = self.kernel_fn.clone();
         crate::util::spawn_blocking(move || {
-            create_9x9_tile(tile_info, query_rect, pool, tiling_specification, kernel_fn)
+            create_enlarged_tile(tile_info, query_rect, pool, tiling_specification, kernel_fn)
         })
         .map_err(From::from)
         .boxed()
@@ -74,14 +77,15 @@ where
         start_time: TimeInstance,
     ) -> Result<Option<RasterQueryRectangle>> {
         let spatial_bounds = tile_info.spatial_partition();
-        let one_pixel = Coordinate2D::from((
-            tile_info.global_geo_transform.x_pixel_size(),
-            -tile_info.global_geo_transform.y_pixel_size(),
+
+        let margin_pixels = Coordinate2D::from((
+            self.kernel_fn.x_radius() as f64 * tile_info.global_geo_transform.x_pixel_size(),
+            self.kernel_fn.y_radius() as f64 * tile_info.global_geo_transform.y_pixel_size(),
         ));
 
         let enlarged_spatial_bounds = SpatialPartition2D::new(
-            spatial_bounds.upper_left() - one_pixel,
-            spatial_bounds.lower_right() + one_pixel,
+            spatial_bounds.upper_left() - margin_pixels,
+            spatial_bounds.lower_right() + margin_pixels,
         )?;
 
         Ok(Some(RasterQueryRectangle {
@@ -93,7 +97,8 @@ where
 
     fn fold_method(&self) -> Self::FoldMethod {
         |accu, tile| {
-            crate::util::spawn_blocking(|| merge_tile_into_9x9_tile(accu, tile)).map(flatten_result)
+            crate::util::spawn_blocking(|| merge_tile_into_enlarged_tile(accu, tile))
+                .map(flatten_result)
         }
     }
 }
@@ -123,18 +128,21 @@ impl<P: Pixel, F> RasterKernelAccu<P, F> {
 }
 
 #[async_trait]
-impl<P: Pixel, F: KernelFunction<P>> FoldTileAccu for RasterKernelAccu<P, F>
+impl<P, F> FoldTileAccu for RasterKernelAccu<P, F>
 where
+    P: Pixel,
     f64: AsPrimitive<P>,
+    F: KernelFunction<P> + 'static,
 {
     type RasterType = P;
 
     /// now that we collected all the input tile pixels we perform the actual raster kernel
     async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
+        let kernel_fn = self.kernel_fn.clone();
         let output_tile = crate::util::spawn_blocking_with_thread_pool(self.pool, move || {
-            apply_kernel_for_each_inner_pixel()
+            apply_kernel_for_each_inner_pixel(&self.input_tile, &self.output_info, &kernel_fn)
         })
-        .await??;
+        .await?;
 
         Ok(output_tile)
     }
@@ -145,11 +153,55 @@ where
 }
 
 /// Apply kernel function to all pixels of the inner input tile in the 9x9 grid
-fn apply_kernel_for_each_inner_pixel<P: Pixel>() -> Result<RasterTile2D<P>> {
-    todo!("implement")
+fn apply_kernel_for_each_inner_pixel<P, F>(
+    input: &RasterTile2D<P>,
+    info_out: &TileInformation,
+    kernel_fn: &F,
+) -> RasterTile2D<P>
+where
+    P: Pixel,
+    f64: AsPrimitive<P>,
+    F: KernelFunction<P>,
+{
+    if input.is_empty() {
+        return RasterTile2D::new_with_tile_info(
+            input.time,
+            *info_out,
+            EmptyGrid::new(info_out.tile_size_in_pixels).into(),
+        );
+    }
+
+    let map_fn = |gidx: GridIdx2D| {
+        let GridIdx([y, x]) = gidx;
+
+        // TODO: better to feed kernel values one-by-one?
+        let mut kernel_matrix =
+            Vec::<Option<P>>::with_capacity(kernel_fn.kernel_size().number_of_elements());
+
+        let y_stop = y + kernel_fn.y_width() as isize;
+        let x_stop = x + kernel_fn.x_width() as isize;
+        // copy row-by-row all pixels in x direction into kernel matrix
+        for y_index in y..y_stop {
+            for x_index in x..x_stop {
+                kernel_matrix.push(input.get_at_grid_index_unchecked([y_index, x_index]));
+            }
+        }
+
+        kernel_fn.apply(&kernel_matrix)
+    };
+
+    // TODO: this will check for empty tiles. Change to MaskedGrid::from(…) to avoid this.
+    let out_data = GridOrEmpty::from_index_fn_parallel(&info_out.tile_size_in_pixels, map_fn);
+
+    RasterTile2D::new(
+        input.time,
+        info_out.global_tile_position,
+        info_out.global_geo_transform,
+        out_data,
+    )
 }
 
-fn create_9x9_tile<P: Pixel, F: KernelFunction<P>>(
+fn create_enlarged_tile<P: Pixel, F: KernelFunction<P>>(
     tile_info: TileInformation,
     query_rect: RasterQueryRectangle,
     pool: Arc<ThreadPool>,
@@ -159,19 +211,20 @@ fn create_9x9_tile<P: Pixel, F: KernelFunction<P>>(
 where
     f64: AsPrimitive<P>,
 {
-    // create an accumulator as a single 9x9 tile that fits all the input tiles
+    // create an accumulator as a single tile that fits all the input tiles + some margin for the kernel size
 
     let tiling = tiling_specification.strategy(
         query_rect.spatial_resolution.x,
         -query_rect.spatial_resolution.y,
     );
 
-    let origin_coordinate = tiling
-        .tile_information_iterator(query_rect.spatial_bounds)
-        .next()
-        .expect("a query contains at least one tile")
-        .spatial_partition()
-        .upper_left();
+    // let origin_coordinate = tiling
+    //     .tile_information_iterator(query_rect.spatial_bounds)
+    //     .next()
+    //     .expect("a query contains at least one tile")
+    //     .spatial_partition()
+    //     .upper_left();
+    let origin_coordinate = query_rect.spatial_bounds.upper_left();
 
     let geo_transform = GeoTransform::new(
         origin_coordinate,
@@ -179,11 +232,9 @@ where
         -query_rect.spatial_resolution.y,
     );
 
-    let bbox = tiling.tile_grid_box(query_rect.spatial_bounds);
-
     let shape = [
-        bbox.axis_size_y() * tiling.tile_size_in_pixels.axis_size_y(),
-        bbox.axis_size_x() * tiling.tile_size_in_pixels.axis_size_x(),
+        tiling.tile_size_in_pixels.axis_size_y() + 2 * kernel_fn.y_radius(),
+        tiling.tile_size_in_pixels.axis_size_x() + 2 * kernel_fn.x_radius(),
     ];
 
     // create a non-aligned (w.r.t. the tiling specification) grid by setting the origin to the top-left of the tile and the tile-index to [0, 0]
@@ -219,7 +270,7 @@ where
 }
 
 /// Merge, step by step, the 9 input tiles into the larger accumulator tile
-pub fn merge_tile_into_9x9_tile<P: Pixel, F: KernelFunction<P>>(
+pub fn merge_tile_into_enlarged_tile<P: Pixel, F: KernelFunction<P>>(
     mut accu: RasterKernelAccu<P, F>,
     tile: RasterTile2D<P>,
 ) -> Result<RasterKernelAccu<P, F>>
@@ -238,8 +289,10 @@ where
     let mut accu_input_tile = accu.input_tile.into_materialized_tile();
     accu_input_tile.blit(tile)?;
 
+    let accu_input_tile: RasterTile2D<P> = accu_input_tile.into();
+
     Ok(RasterKernelAccu::new(
-        accu_input_tile.into(),
+        accu_input_tile,
         accu.output_info,
         accu.pool,
         accu.kernel_fn,
@@ -250,13 +303,72 @@ where
 mod tests {
     use super::*;
 
-    use crate::engine::{MockExecutionContext, MockQueryContext};
-    use geoengine_datatypes::util::test::TestDefault;
+    use crate::{
+        engine::MockExecutionContext,
+        processing::raster_kernel::kernel_function::StandardDeviationKernel,
+    };
+    use geoengine_datatypes::{
+        primitives::SpatialResolution, raster::TilingStrategy, util::test::TestDefault,
+    };
 
     #[test]
-    fn test_create_9x9_tile() {
-        // let execution_context = MockExecutionContext::test_default();
-        // let query_context = MockQueryContext::test_default();
-        // let tile = create_9x9_tile(execution_context.tiling_specification, query_rect, pool, tiling_specification, kernel_fn)
+    #[allow(clippy::float_cmp)]
+    fn test_create_enlarged_tile() {
+        let execution_context = MockExecutionContext::test_default();
+
+        let spatial_resolution = SpatialResolution::one();
+        let tiling_strategy = TilingStrategy::new_with_tiling_spec(
+            execution_context.tiling_specification,
+            spatial_resolution.x,
+            -spatial_resolution.y,
+        );
+
+        let spatial_partition = SpatialPartition2D::new((0., 1.).into(), (1., 0.).into()).unwrap();
+        let tile_info = tiling_strategy
+            .tile_information_iterator(spatial_partition)
+            .next()
+            .unwrap();
+
+        let qrect = RasterQueryRectangle {
+            spatial_bounds: tile_info.spatial_partition(),
+            time_interval: TimeInstance::from_millis(0).unwrap().into(),
+            spatial_resolution,
+        };
+
+        let aggregator = RasterKernelTileNeighborhood::<u8, _>::new(
+            StandardDeviationKernel::new([5, 5].into()).unwrap(),
+            execution_context.tiling_specification,
+        );
+
+        let tile_query_rectangle = aggregator
+            .tile_query_rectangle(tile_info, qrect, qrect.time_interval.start())
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            tile_info.spatial_partition(),
+            SpatialPartition2D::new((0., 512.).into(), (512., 0.).into()).unwrap()
+        );
+        assert_eq!(
+            tile_query_rectangle.spatial_bounds,
+            SpatialPartition2D::new((-2., 514.).into(), (514., -2.).into()).unwrap()
+        );
+
+        let accu = create_enlarged_tile::<u8, _>(
+            tile_info,
+            tile_query_rectangle,
+            execution_context.thread_pool.clone(),
+            execution_context.tiling_specification,
+            aggregator.kernel_fn,
+        );
+
+        assert_eq!(tile_info.tile_size_in_pixels.axis_size(), [512, 512]);
+        assert_eq!(
+            accu.input_tile.grid_array.shape_ref().axis_size(),
+            [512 + 2 + 2, 512 + 2 + 2]
+        );
+
+        assert_eq!(accu.input_tile.tile_geo_transform().x_pixel_size(), 1.);
+        assert_eq!(accu.input_tile.tile_geo_transform().y_pixel_size(), -1.);
     }
 }

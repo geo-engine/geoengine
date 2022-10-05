@@ -1,6 +1,9 @@
-use crate::util::number_statistics::NumberStatistics;
+use super::{error, RasterKernelError};
+use crate::util::{number_statistics::NumberStatistics, Result};
 use geoengine_datatypes::raster::{Grid2D, GridShape2D, GridSize, Pixel};
+use num::Integer;
 use num_traits::AsPrimitive;
+use snafu::ensure;
 
 /// A function that calculates one pixel values from a neighborhood of pixels.
 pub trait KernelFunction<P>: Sync + Send + Clone
@@ -10,7 +13,25 @@ where
 {
     fn kernel_size(&self) -> GridShape2D;
 
-    // TODO: we must ensure that the size of `values` adhere to `kernel_size`
+    /// Specifies the x extent beginning from the center pixel
+    fn x_radius(&self) -> usize {
+        self.kernel_size().axis_size_x() / 2
+    }
+
+    fn x_width(&self) -> usize {
+        self.kernel_size().axis_size_x()
+    }
+
+    /// Specifies the y extent beginning from the center pixel
+    fn y_width(&self) -> usize {
+        self.kernel_size().axis_size_y()
+    }
+
+    /// Specifies the x extent right of one pixel
+    fn y_radius(&self) -> usize {
+        self.kernel_size().axis_size_y() / 2
+    }
+
     fn apply(&self, values: &[Option<P>]) -> Option<P>;
 }
 
@@ -21,8 +42,13 @@ pub struct StandardDeviationKernel {
 }
 
 impl StandardDeviationKernel {
-    pub fn new(dimensions: GridShape2D) -> Self {
-        Self { dimensions }
+    pub fn new(dimensions: GridShape2D) -> Result<Self, RasterKernelError> {
+        ensure!(
+            dimensions.axis_size_x().is_odd() && dimensions.axis_size_y().is_odd(),
+            error::DimensionsNotOdd { actual: dimensions }
+        );
+
+        Ok(Self { dimensions })
     }
 }
 
@@ -60,8 +86,15 @@ pub struct ConvolutionKernel {
 }
 
 impl ConvolutionKernel {
-    pub fn new(kernel: Grid2D<f64>) -> Self {
-        Self { kernel }
+    pub fn new(kernel: Grid2D<f64>) -> Result<Self, RasterKernelError> {
+        ensure!(
+            kernel.axis_size_x().is_odd() && kernel.axis_size_y().is_odd(),
+            error::DimensionsNotOdd {
+                actual: kernel.axis_size()
+            }
+        );
+
+        Ok(Self { kernel })
     }
 }
 
@@ -105,7 +138,7 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_standard_deviation_kernel() {
-        let kernel = StandardDeviationKernel::new(GridShape2D::new([3, 3]));
+        let kernel = StandardDeviationKernel::new(GridShape2D::new([3, 3])).unwrap();
 
         let result = kernel.apply(&[
             Some(1.),
@@ -141,7 +174,8 @@ mod tests {
     fn test_convolution_kernel() {
         let kernel = ConvolutionKernel::new(
             Grid2D::new(GridShape2D::new([3, 3]), vec![1. / 9.; 9]).unwrap(),
-        );
+        )
+        .unwrap();
 
         let result = kernel.apply(&[
             Some(1.),
