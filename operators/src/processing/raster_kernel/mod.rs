@@ -23,15 +23,19 @@ use snafu::{ensure, Snafu};
 use std::marker::PhantomData;
 
 /// A raster kernel operator applies a kernel to a raster.
-/// For each output pixel, the kernel is applied to its neighborhood.
+/// For each output pixel, the kernel is applied to an input pixel plus its neighborhood.
 pub type RasterKernel = Operator<RasterKernelParams, SingleRasterSource>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+/// Parameters for the `RasterKernel` operator.
+///
+/// TODO: Possible extensions:
+///  - strategies for missing data at the edges
 pub struct RasterKernelParams {
+    /// The kernel must be symmetrical.
+    /// The size of the kernel must not be larger than one tile in Geo Engine's tiling scheme.
     pub raster_kernel: RasterKernelMethod,
-    // TODO: strategies for missing data at the edges
-    // TODO: option to fix resolution
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

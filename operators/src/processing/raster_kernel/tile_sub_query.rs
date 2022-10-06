@@ -20,6 +20,22 @@ use rayon::ThreadPool;
 use std::{marker::PhantomData, sync::Arc};
 use tokio::task::JoinHandle;
 
+/// A sub-query aggregator that queries for each output tile an enlarged input tiles.
+/// This means itself plus parts of the 8 surrounding tiles.
+///
+/// --------|--------|--------
+/// -      -|-      -|-      -
+/// -    xx-|-xxxxxx-|-xx    -
+/// --------|--------|--------
+/// -    xx-|-xxxxxx-|-xx    -
+/// -    xx-|-xxxxxx-|-xx    -
+/// --------|--------|--------
+/// -    xx-|-xxxxxx-|-xx    -
+/// -      -|-      -|-      -
+/// --------|--------|--------
+///
+/// It then applies a kernel function to each pixel and its surrounding.
+///
 #[derive(Debug, Clone)]
 pub struct RasterKernelTileNeighborhood<P, F> {
     kernel_fn: F,
@@ -42,8 +58,6 @@ where
     P: Pixel,
     f64: AsPrimitive<P>,
     F: KernelFunction<P> + 'static,
-    // FoldM: Send + Sync + 'a + Clone + Fn(RasterKernelAccu<P>, RasterTile2D<P>) -> FoldF,
-    // FoldF: Send + TryFuture<Ok = RasterKernelAccu<P>, Error = crate::error::Error>,
 {
     type FoldFuture = FoldFuture<P, F>;
 
