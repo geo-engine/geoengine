@@ -35,11 +35,11 @@ pub type RasterKernel = Operator<RasterKernelParams, SingleRasterSource>;
 pub struct RasterKernelParams {
     /// The kernel must be symmetrical.
     /// The size of the kernel must not be larger than one tile in Geo Engine's tiling scheme.
-    pub raster_kernel: RasterKernelMethod,
+    pub kernel: RasterKernelMethod,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum RasterKernelMethod {
     Convolution { matrix: Vec<Vec<f64>> },
     StandardDeviation { dimensions: GridShape2D },
@@ -125,7 +125,7 @@ impl RasterOperator for RasterKernel {
         let tiling_specification = context.tiling_specification();
 
         // dimensions must not be larger as the neighboring tiles
-        let dimensions = self.params.raster_kernel.kernel_size();
+        let dimensions = self.params.kernel.kernel_size();
         ensure!(
             dimensions.axis_size_x() <= tiling_specification.tile_size_in_pixels.axis_size_x()
                 && dimensions.axis_size_y()
@@ -141,7 +141,7 @@ impl RasterOperator for RasterKernel {
         let initialized_operator = InitializedRasterKernel {
             result_descriptor: raster_source.result_descriptor().clone(),
             raster_source,
-            raster_kernel_method: self.params.raster_kernel.try_into()?,
+            raster_kernel_method: self.params.kernel.try_into()?,
             tiling_specification,
         };
 
@@ -241,9 +241,19 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
+
+    use crate::{
+        engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor},
+        mock::{MockRasterSource, MockRasterSourceParams},
+        source::{GdalSource, GdalSourceParameters},
+        util::{gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes},
+    };
     use futures::StreamExt;
     use geoengine_datatypes::{
+        dataset::DatasetId,
         operations::image::{Colorizer, RgbaColor},
         primitives::{
             DateTime, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
@@ -256,12 +266,109 @@ mod tests {
         util::test::TestDefault,
     };
 
-    use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor},
-        mock::{MockRasterSource, MockRasterSourceParams},
-        source::{GdalSource, GdalSourceParameters},
-        util::{gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes},
-    };
+    #[test]
+    fn test_serialization_matrix() {
+        let operator = RasterKernel {
+            params: RasterKernelParams {
+                kernel: RasterKernelMethod::Convolution {
+                    matrix: vec![vec![1., 2., 3.], vec![4., 5., 6.], vec![7., 8., 9.]],
+                },
+            },
+            sources: SingleRasterSource {
+                raster: GdalSource {
+                    params: GdalSourceParameters {
+                        data: DatasetId::from_str("8d01593c-75c0-4ffa-8152-eabfe4430817")
+                            .unwrap()
+                            .into(),
+                    },
+                }
+                .boxed(),
+            },
+        }
+        .boxed();
+
+        let serialized = serde_json::to_value(&operator).unwrap();
+
+        assert_eq!(
+            serde_json::json!({
+                "type": "RasterKernel",
+                "params": {
+                    "kernel": {
+                        "type": "convolution",
+                        "matrix": [
+                            [1.0, 2.0, 3.0],
+                            [4.0, 5.0, 6.0],
+                            [7.0, 8.0, 9.0]
+                        ]
+                    }
+                },
+                "sources": {
+                    "raster": {
+                        "type": "GdalSource",
+                        "params": {
+                            "data": {
+                                "type": "internal",
+                                "datasetId": "8d01593c-75c0-4ffa-8152-eabfe4430817"
+                            }
+                        }
+                    }
+                }
+            }),
+            serialized
+        );
+
+        serde_json::from_value::<RasterKernel>(serialized).unwrap();
+    }
+
+    #[test]
+    fn test_serialization_stddev() {
+        let operator = RasterKernel {
+            params: RasterKernelParams {
+                kernel: RasterKernelMethod::StandardDeviation {
+                    dimensions: [3, 3].into(),
+                },
+            },
+            sources: SingleRasterSource {
+                raster: GdalSource {
+                    params: GdalSourceParameters {
+                        data: DatasetId::from_str("8d01593c-75c0-4ffa-8152-eabfe4430817")
+                            .unwrap()
+                            .into(),
+                    },
+                }
+                .boxed(),
+            },
+        }
+        .boxed();
+
+        let serialized = serde_json::to_value(&operator).unwrap();
+
+        assert_eq!(
+            serde_json::json!({
+                "type": "RasterKernel",
+                "params": {
+                    "kernel": {
+                        "type": "standardDeviation",
+                        "dimensions": [3, 3]
+                    }
+                },
+                "sources": {
+                    "raster": {
+                        "type": "GdalSource",
+                        "params": {
+                            "data": {
+                                "type": "internal",
+                                "datasetId": "8d01593c-75c0-4ffa-8152-eabfe4430817"
+                            }
+                        }
+                    }
+                }
+            }),
+            serialized
+        );
+
+        serde_json::from_value::<RasterKernel>(serialized).unwrap();
+    }
 
     #[test]
     fn test_initialized_raster_kernel_method() {
@@ -292,7 +399,7 @@ mod tests {
 
         let operator = RasterKernel {
             params: RasterKernelParams {
-                raster_kernel: RasterKernelMethod::Convolution {
+                kernel: RasterKernelMethod::Convolution {
                     matrix: vec![vec![1. / 9.; 3]; 3],
                 },
             },
@@ -501,7 +608,7 @@ mod tests {
 
         let operator = RasterKernel {
             params: RasterKernelParams {
-                raster_kernel: RasterKernelMethod::Convolution {
+                kernel: RasterKernelMethod::Convolution {
                     matrix: vec![
                         vec![1. / 16., 1. / 8., 1. / 16.],
                         vec![1. / 8., 1. / 4., 1. / 8.],
@@ -571,7 +678,7 @@ mod tests {
 
         let operator = RasterKernel {
             params: RasterKernelParams {
-                raster_kernel: RasterKernelMethod::Convolution {
+                kernel: RasterKernelMethod::Convolution {
                     matrix: vec![vec![1., 0., -1.], vec![2., 0., -2.], vec![1., 0., -1.]],
                 },
             },
