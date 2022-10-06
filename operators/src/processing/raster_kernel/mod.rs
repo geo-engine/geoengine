@@ -42,7 +42,7 @@ pub struct RasterKernelParams {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum RasterKernelMethod {
     Convolution { matrix: Vec<Vec<f64>> },
-    StandardDeviation { dimensions: GridShape2D },
+    StandardDeviation { dimensions: [usize; 2] },
 }
 
 #[derive(Debug, Clone)]
@@ -56,24 +56,21 @@ impl TryFrom<RasterKernelMethod> for InitializedRasterKernelMethod {
 
     fn try_from(kernel_method: RasterKernelMethod) -> Result<Self, Self::Error> {
         let dimensions = kernel_method.kernel_size();
+
+        ensure!(dimensions.number_of_elements() > 0, error::DimensionsZero);
+        ensure!(
+            dimensions.axis_size_x().is_odd() && dimensions.axis_size_y().is_odd(),
+            error::DimensionsNotOdd { actual: dimensions }
+        );
+
         match kernel_method {
             RasterKernelMethod::Convolution { matrix } => {
                 let matrix = Grid2D::new(dimensions, matrix.into_iter().flatten().collect())
                     .map_err(|_| RasterKernelError::MatrixNotRectangular)?;
 
-                ensure!(
-                    dimensions.axis_size_x().is_odd() && dimensions.axis_size_y().is_odd(),
-                    error::DimensionsNotOdd { actual: dimensions }
-                );
-
                 Ok(Self::Convolution { matrix })
             }
             RasterKernelMethod::StandardDeviation { .. } => {
-                ensure!(
-                    dimensions.axis_size_x().is_odd() && dimensions.axis_size_y().is_odd(),
-                    error::DimensionsNotOdd { actual: dimensions }
-                );
-
                 Ok(Self::StandardDeviation { dimensions })
             }
         }
@@ -88,7 +85,7 @@ impl RasterKernelMethod {
                 let y_size = matrix.get(0).map_or(0, Vec::len);
                 GridShape2D::new([x_size, y_size])
             }
-            Self::StandardDeviation { dimensions } => *dimensions,
+            Self::StandardDeviation { dimensions } => GridShape2D::new(*dimensions),
         }
     }
 }
@@ -110,6 +107,9 @@ pub enum RasterKernelError {
         actual.axis_size_x(), actual.axis_size_y()
     ))]
     DimensionsNotOdd { actual: GridShape2D },
+
+    #[snafu(display("The kernel matrix dimensions must not be 0"))]
+    DimensionsZero,
 
     #[snafu(display("The kernel matrix must be rectangular"))]
     MatrixNotRectangular,
@@ -324,9 +324,7 @@ mod tests {
     fn test_serialization_stddev() {
         let operator = RasterKernel {
             params: RasterKernelParams {
-                kernel: RasterKernelMethod::StandardDeviation {
-                    dimensions: [3, 3].into(),
-                },
+                kernel: RasterKernelMethod::StandardDeviation { dimensions: [3, 3] },
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
