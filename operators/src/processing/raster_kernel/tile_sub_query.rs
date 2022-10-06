@@ -90,16 +90,11 @@ where
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
     ) -> Result<Option<RasterQueryRectangle>> {
-        // slightly enlarge the spatial bounds to prevent rounding errors that exclude boundary pixels
-        const EPSILON: f64 = 0.001;
-
         let spatial_bounds = tile_info.spatial_partition();
 
         let margin_pixels = Coordinate2D::from((
-            (self.kernel_fn.x_radius() as f64 + EPSILON)
-                * tile_info.global_geo_transform.x_pixel_size(),
-            (self.kernel_fn.y_radius() as f64 + EPSILON)
-                * tile_info.global_geo_transform.y_pixel_size(),
+            self.kernel_fn.x_radius() as f64 * tile_info.global_geo_transform.x_pixel_size(),
+            self.kernel_fn.y_radius() as f64 * tile_info.global_geo_transform.y_pixel_size(),
         ));
 
         let enlarged_spatial_bounds = SpatialPartition2D::new(
