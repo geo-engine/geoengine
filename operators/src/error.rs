@@ -299,6 +299,8 @@ pub enum Error {
 
     AlphaBandAsMaskNotAllowed,
 
+    SpatialReferenceMustNotBeUnreferenced,
+
     #[snafu(context(false))]
     RasterKernelError {
         source: crate::processing::RasterKernelError,
