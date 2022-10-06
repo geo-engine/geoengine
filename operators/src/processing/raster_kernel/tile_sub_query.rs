@@ -23,6 +23,7 @@ use tokio::task::JoinHandle;
 /// A sub-query aggregator that queries for each output tile an enlarged input tiles.
 /// This means itself plus parts of the 8 surrounding tiles.
 ///
+/// ```notest
 /// --------|--------|--------
 /// -      -|-      -|-      -
 /// -    xx-|-xxxxxx-|-xx    -
@@ -33,6 +34,7 @@ use tokio::task::JoinHandle;
 /// -    xx-|-xxxxxx-|-xx    -
 /// -      -|-      -|-      -
 /// --------|--------|--------
+/// ```
 ///
 /// It then applies a kernel function to each pixel and its surrounding.
 ///
