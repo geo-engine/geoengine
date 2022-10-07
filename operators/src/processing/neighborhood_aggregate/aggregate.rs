@@ -195,8 +195,6 @@ mod tests {
             None,
         ]);
         assert!(result.is_none());
-
-        assert!(Sum::apply::<f64>(&[] as &[Option<f64>]).is_none());
     }
 
     #[test]
@@ -252,10 +250,6 @@ mod tests {
                 None
             ]
         );
-
-        assert_eq!(ones.apply(vec![Some(1.),]), vec![]);
-        assert_eq!(ones.apply(vec![]), vec![]);
-        assert_eq!(ones.apply(vec![Some(0.); 10]), vec![]);
 
         let one_to_nine = Neighborhood::new(
             Grid2D::new([3, 3].into(), vec![1., 2., 3., 4., 5., 6., 7., 8., 9.]).unwrap(),
