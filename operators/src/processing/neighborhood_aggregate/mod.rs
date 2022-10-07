@@ -654,8 +654,6 @@ mod tests {
         };
         let query_ctx = MockQueryContext::test_default();
 
-        // let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
-
         let colorizer = Colorizer::linear_gradient(
             vec![
                 (0.0, RgbaColor::white()).try_into().unwrap(),
