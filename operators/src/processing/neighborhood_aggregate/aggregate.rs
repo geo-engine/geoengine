@@ -90,16 +90,16 @@ impl AggregateFunction for StandardDeviation {
         P: Pixel,
         f64: AsPrimitive<P>,
     {
-        let mut aggreagtor = NumberStatistics::default();
+        let mut aggregator = NumberStatistics::default();
         for value in values {
             match value {
-                Some(v) => aggreagtor.add(*v),
+                Some(v) => aggregator.add(*v),
                 // TODO: Decide if the result should be NODATA on the first NODATA or if it should be ignored
-                None => aggreagtor.add_no_data(),
+                None => aggregator.add_no_data(),
             }
         }
 
-        let std_dev = aggreagtor.std_dev();
+        let std_dev = aggregator.std_dev();
 
         if std_dev.is_finite() {
             Some(std_dev.as_())
