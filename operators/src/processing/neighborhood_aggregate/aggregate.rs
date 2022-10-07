@@ -28,10 +28,12 @@ impl Neighborhood {
     // TODO: Think about returning only the f64 values and omitting NODATA values.
     //       We need more aggregate functions first to see if this would suffice.
     pub fn apply(&self, mut values: Vec<Option<f64>>) -> Vec<Option<f64>> {
-        // enforce NODATA when neighborhood is incomplete
-        if values.len() != self.matrix.number_of_elements() {
-            return Vec::new();
-        }
+        debug_assert!(
+            values.len() == self.matrix.number_of_elements(),
+            "Dimensions of `values` and neighborhood `matrix` do not match: {} != {}",
+            values.len(),
+            self.matrix.number_of_elements()
+        );
 
         for (value, weight) in values.iter_mut().zip(self.matrix.data.iter()) {
             if let Some(value) = value {
@@ -68,7 +70,7 @@ impl Neighborhood {
 
 /// A function that aggregates a neighborhood of pixels to a single pixel value.
 pub trait AggregateFunction: Sync + Send + Clone {
-    fn apply<P>(&self, values: &[Option<f64>]) -> Option<P>
+    fn apply<P>(values: &[Option<f64>]) -> Option<P>
     where
         P: Pixel,
         f64: AsPrimitive<P>;
@@ -78,14 +80,8 @@ pub trait AggregateFunction: Sync + Send + Clone {
 #[derive(Debug, Clone, Copy)]
 pub struct StandardDeviation;
 
-impl StandardDeviation {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
 impl AggregateFunction for StandardDeviation {
-    fn apply<P>(&self, values: &[Option<f64>]) -> Option<P>
+    fn apply<P>(values: &[Option<f64>]) -> Option<P>
     where
         P: Pixel,
         f64: AsPrimitive<P>,
@@ -113,21 +109,13 @@ impl AggregateFunction for StandardDeviation {
 #[derive(Debug, Clone)]
 pub struct Sum;
 
-impl Sum {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
 impl AggregateFunction for Sum {
-    fn apply<P>(&self, value_options: &[Option<f64>]) -> Option<P>
+    fn apply<P>(value_options: &[Option<f64>]) -> Option<P>
     where
         P: Pixel,
         f64: AsPrimitive<P>,
     {
-        if value_options.is_empty() {
-            return None;
-        }
+        debug_assert!(!value_options.is_empty(), "No values given to aggregate");
 
         let mut sum = 0.;
 
@@ -150,9 +138,7 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_standard_deviation() {
-        let aggregate_function = StandardDeviation::new();
-
-        let result: Option<f64> = aggregate_function.apply(&[
+        let result: Option<f64> = StandardDeviation::apply(&[
             Some(1.),
             Some(2.),
             Some(3.),
@@ -165,7 +151,7 @@ mod tests {
         ]);
         assert_eq!(result.unwrap(), 2.581_988_897_471_611);
 
-        let result: Option<f64> = aggregate_function.apply(&[
+        let result: Option<f64> = StandardDeviation::apply(&[
             Some(1.),
             Some(2.),
             Some(3.),
@@ -178,17 +164,13 @@ mod tests {
         ]);
         assert_eq!(result.unwrap(), 2.291_287_847_477_92);
 
-        assert!(aggregate_function
-            .apply::<f64>(&[] as &[Option<f64>])
-            .is_none());
+        assert!(StandardDeviation::apply::<f64>(&[] as &[Option<f64>]).is_none());
     }
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_sum_fn() {
-        let kernel = Sum::new();
-
-        let result = kernel.apply::<f64>(&[
+        let result = Sum::apply::<f64>(&[
             Some(1.),
             Some(2.),
             Some(3.),
@@ -201,7 +183,7 @@ mod tests {
         ]);
         assert_eq!(result.unwrap(), 45.);
 
-        let result = kernel.apply::<f64>(&[
+        let result = Sum::apply::<f64>(&[
             Some(1.),
             Some(2.),
             Some(3.),
@@ -214,7 +196,7 @@ mod tests {
         ]);
         assert!(result.is_none());
 
-        assert!(kernel.apply::<f64>(&[] as &[Option<f64>]).is_none());
+        assert!(Sum::apply::<f64>(&[] as &[Option<f64>]).is_none());
     }
 
     #[test]

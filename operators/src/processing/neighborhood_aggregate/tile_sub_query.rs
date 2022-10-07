@@ -41,20 +41,14 @@ use tokio::task::JoinHandle;
 #[derive(Debug, Clone)]
 pub struct NeighborhoodAggregateTileNeighborhood<P, A> {
     neighborhood: Neighborhood,
-    aggregate_fn: A,
     tiling_specification: TilingSpecification,
-    _phantom_types: PhantomData<P>,
+    _phantom_types: PhantomData<(P, A)>,
 }
 
 impl<P, A> NeighborhoodAggregateTileNeighborhood<P, A> {
-    pub fn new(
-        neighborhood: Neighborhood,
-        aggregate_fn: A,
-        tiling_specification: TilingSpecification,
-    ) -> Self {
+    pub fn new(neighborhood: Neighborhood, tiling_specification: TilingSpecification) -> Self {
         Self {
             neighborhood,
-            aggregate_fn,
             tiling_specification,
             _phantom_types: PhantomData,
         }
@@ -83,7 +77,6 @@ where
     ) -> Self::TileAccuFuture {
         let pool = pool.clone();
         let tiling_specification = self.tiling_specification;
-        let kernel_fn = self.aggregate_fn.clone();
         let neighborhood = self.neighborhood.clone();
         crate::util::spawn_blocking(move || {
             create_enlarged_tile(
@@ -92,7 +85,6 @@ where
                 pool,
                 tiling_specification,
                 neighborhood,
-                kernel_fn,
             )
         })
         .map_err(From::from)
@@ -139,46 +131,43 @@ pub struct NeighborhoodAggregateAccu<P: Pixel, A> {
     pub input_tile: RasterTile2D<P>,
     pub pool: Arc<ThreadPool>,
     pub neighborhood: Neighborhood,
-    pub kernel_fn: A,
+    phantom_aggregate_fn: PhantomData<A>,
 }
 
-impl<P: Pixel, F> NeighborhoodAggregateAccu<P, F> {
+impl<P: Pixel, A> NeighborhoodAggregateAccu<P, A> {
     pub fn new(
         input_tile: RasterTile2D<P>,
         output_info: TileInformation,
         pool: Arc<ThreadPool>,
         neighborhood: Neighborhood,
-        kernel_fn: F,
     ) -> Self {
         NeighborhoodAggregateAccu {
             output_info,
             input_tile,
             pool,
             neighborhood,
-            kernel_fn,
+            phantom_aggregate_fn: PhantomData,
         }
     }
 }
 
 #[async_trait]
-impl<P, F> FoldTileAccu for NeighborhoodAggregateAccu<P, F>
+impl<P, A> FoldTileAccu for NeighborhoodAggregateAccu<P, A>
 where
     P: Pixel,
     f64: AsPrimitive<P>,
-    F: AggregateFunction + 'static,
+    A: AggregateFunction + 'static,
 {
     type RasterType = P;
 
     /// now that we collected all the input tile pixels we perform the actual raster kernel
     async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
         let neighborhood = self.neighborhood.clone();
-        let kernel_fn = self.kernel_fn.clone();
         let output_tile = crate::util::spawn_blocking_with_thread_pool(self.pool, move || {
-            apply_kernel_for_each_inner_pixel(
+            apply_kernel_for_each_inner_pixel::<P, A>(
                 &self.input_tile,
                 &self.output_info,
                 &neighborhood,
-                &kernel_fn,
             )
         })
         .await?;
@@ -196,7 +185,6 @@ fn apply_kernel_for_each_inner_pixel<P, A>(
     input: &RasterTile2D<P>,
     info_out: &TileInformation,
     neighborhood: &Neighborhood,
-    aggregate_fn: &A,
 ) -> RasterTile2D<P>
 where
     P: Pixel,
@@ -214,7 +202,7 @@ where
     let map_fn = |gidx: GridIdx2D| {
         let GridIdx([y, x]) = gidx;
 
-        let mut kernel_matrix =
+        let mut neighborhood_matrix =
             Vec::<Option<f64>>::with_capacity(neighborhood.matrix().number_of_elements());
 
         let y_stop = y + neighborhood.y_width() as isize;
@@ -222,7 +210,7 @@ where
         // copy row-by-row all pixels in x direction into kernel matrix
         for y_index in y..y_stop {
             for x_index in x..x_stop {
-                kernel_matrix.push(
+                neighborhood_matrix.push(
                     input
                         .get_at_grid_index_unchecked([y_index, x_index])
                         .map(AsPrimitive::as_),
@@ -230,7 +218,7 @@ where
             }
         }
 
-        aggregate_fn.apply(&neighborhood.apply(kernel_matrix))
+        A::apply(&neighborhood.apply(neighborhood_matrix))
     };
 
     // TODO: this will check for empty tiles. Change to MaskedGrid::from(…) to avoid this.
@@ -250,7 +238,6 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
     pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
     neighborhood: Neighborhood,
-    kernel_fn: A,
 ) -> NeighborhoodAggregateAccu<P, A> {
     // create an accumulator as a single tile that fits all the input tiles + some margin for the kernel size
 
@@ -282,7 +269,7 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
         GridOrEmpty::from(grid),
     );
 
-    NeighborhoodAggregateAccu::new(input_tile, tile_info, pool, neighborhood, kernel_fn)
+    NeighborhoodAggregateAccu::new(input_tile, tile_info, pool, neighborhood)
 }
 
 type FoldFutureFn<P, F> = fn(
@@ -331,7 +318,6 @@ where
         accu.output_info,
         accu.pool,
         accu.neighborhood,
-        accu.kernel_fn,
     ))
 }
 
@@ -341,7 +327,10 @@ mod tests {
 
     use crate::{
         engine::MockExecutionContext,
-        processing::neighborhood_aggregate::{aggregate::StandardDeviation, NeighborhoodParams},
+        processing::neighborhood_aggregate::{
+            aggregate::{StandardDeviation, Sum},
+            NeighborhoodParams,
+        },
     };
     use geoengine_datatypes::{
         primitives::SpatialResolution, raster::TilingStrategy, util::test::TestDefault,
@@ -371,11 +360,10 @@ mod tests {
             spatial_resolution,
         };
 
-        let aggregator = NeighborhoodAggregateTileNeighborhood::<u8, _>::new(
+        let aggregator = NeighborhoodAggregateTileNeighborhood::<u8, StandardDeviation>::new(
             NeighborhoodParams::Rectangle { dimensions: [5, 5] }
                 .try_into()
                 .unwrap(),
-            StandardDeviation::new(),
             execution_context.tiling_specification,
         );
 
@@ -393,13 +381,12 @@ mod tests {
             SpatialPartition2D::new((-2., 514.).into(), (514., -2.).into()).unwrap()
         );
 
-        let accu = create_enlarged_tile::<u8, _>(
+        let accu = create_enlarged_tile::<u8, Sum>(
             tile_info,
             tile_query_rectangle,
             execution_context.thread_pool.clone(),
             execution_context.tiling_specification,
             aggregator.neighborhood,
-            aggregator.aggregate_fn,
         );
 
         assert_eq!(tile_info.tile_size_in_pixels.axis_size(), [512, 512]);

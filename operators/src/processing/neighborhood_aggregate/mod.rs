@@ -22,8 +22,8 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::marker::PhantomData;
 
-/// A raster kernel operator applies a kernel to a raster.
-/// For each output pixel, the kernel is applied to an input pixel plus its neighborhood.
+/// A neighborhood aggregate operator applies an aggregate function to each raster pixel and its surrounding.
+/// For each output pixel, the aggregate function is applied to an input pixel plus its neighborhood.
 pub type NeighborhoodAggregate = Operator<NeighborhoodAggregateParams, SingleRasterSource>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -172,14 +172,12 @@ impl InitializedRasterOperator for InitializedNeighborhoodAggregate {
                         p,
                         self.tiling_specification,
                         self.neighborhood.clone(),
-                        Sum::new()
                     ).boxed()
                     .into(),
                     AggregateFunctionParams::StandardDeviation => NeighborhoodAggregateProcessor::<_,_, StandardDeviation>::new(
                         p,
                         self.tiling_specification,
                         self.neighborhood.clone(),
-                        StandardDeviation::new()
                     ).boxed()
                     .into(),
             }
@@ -197,8 +195,7 @@ pub struct NeighborhoodAggregateProcessor<Q, P, A> {
     source: Q,
     tiling_specification: TilingSpecification,
     neighborhood: Neighborhood,
-    aggregate_function: A,
-    _phantom_types: PhantomData<P>,
+    _phantom_types: PhantomData<(P, A)>,
 }
 
 impl<Q, P, A> NeighborhoodAggregateProcessor<Q, P, A>
@@ -210,13 +207,11 @@ where
         source: Q,
         tiling_specification: TilingSpecification,
         neighborhood: Neighborhood,
-        aggregate_function: A,
     ) -> Self {
         Self {
             source,
             tiling_specification,
             neighborhood,
-            aggregate_function,
             _phantom_types: PhantomData,
         }
     }
@@ -240,7 +235,6 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let sub_query = NeighborhoodAggregateTileNeighborhood::<P, A>::new(
             self.neighborhood.clone(),
-            self.aggregate_function.clone(),
             self.tiling_specification,
         );
 
