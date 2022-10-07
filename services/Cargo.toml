@@ -33,7 +33,7 @@ bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.13"
 erased-serde = "0.3"
-flexi_logger = { version = "0.23", features = ["trc"] }
+flexi_logger = { version = "0.24", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
