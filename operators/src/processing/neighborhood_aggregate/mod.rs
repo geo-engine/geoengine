@@ -98,7 +98,7 @@ pub enum NeighborhoodAggregateError {
         "The maximum kernel size is {}x{}, but the kernel has size {}x{}",
         limit.axis_size_x(), limit.axis_size_y(), actual.axis_size_x(), actual.axis_size_y()
     ))]
-    TooLarge {
+    NeighborhoodTooLarge {
         limit: GridShape2D,
         actual: GridShape2D,
     },
@@ -134,7 +134,7 @@ impl RasterOperator for NeighborhoodAggregate {
             dimensions.axis_size_x() <= tiling_specification.tile_size_in_pixels.axis_size_x()
                 && dimensions.axis_size_y()
                     <= tiling_specification.tile_size_in_pixels.axis_size_y(),
-            error::TooLarge {
+            error::NeighborhoodTooLarge {
                 limit: tiling_specification.tile_size_in_pixels,
                 actual: dimensions
             }
