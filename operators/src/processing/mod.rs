@@ -4,8 +4,8 @@ mod expression;
 mod interpolation;
 mod map_query;
 mod meteosat;
+mod neighborhood_aggregate;
 mod point_in_polygon;
-mod raster_kernel;
 mod raster_type_conversion;
 mod raster_vector_join;
 mod reprojection;
@@ -16,11 +16,13 @@ mod vector_join;
 
 pub use expression::{Expression, ExpressionError, ExpressionParams, ExpressionSources};
 pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
+pub use neighborhood_aggregate::{
+    NeighborhoodAggregate, NeighborhoodAggregateError, NeighborhoodAggregateParams,
+};
 pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,
 };
-pub use raster_kernel::{RasterKernel, RasterKernelError, RasterKernelParams};
 pub use raster_type_conversion::{RasterTypeConversionParams, RasterTypeConversionQueryProcessor};
 pub use reprojection::{Reprojection, ReprojectionParams};
 pub use time_projection::{TimeProjection, TimeProjectionError, TimeProjectionParams};

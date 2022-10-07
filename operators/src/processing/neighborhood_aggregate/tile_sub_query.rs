@@ -1,4 +1,4 @@
-use super::kernel_function::KernelFunction;
+use super::aggregate::{AggregateFunction, Neighborhood};
 use crate::adapters::{FoldTileAccu, SubQueryTileAggregator};
 use crate::util::Result;
 use async_trait::async_trait;
@@ -39,33 +39,39 @@ use tokio::task::JoinHandle;
 /// It then applies a kernel function to each pixel and its surrounding.
 ///
 #[derive(Debug, Clone)]
-pub struct RasterKernelTileNeighborhood<P, F> {
-    kernel_fn: F,
+pub struct NeighborhoodAggregateTileNeighborhood<P, A> {
+    neighborhood: Neighborhood,
+    aggregate_fn: A,
     tiling_specification: TilingSpecification,
     _phantom_types: PhantomData<P>,
 }
 
-impl<P, F> RasterKernelTileNeighborhood<P, F> {
-    pub fn new(kernel_fn: F, tiling_specification: TilingSpecification) -> Self {
+impl<P, A> NeighborhoodAggregateTileNeighborhood<P, A> {
+    pub fn new(
+        neighborhood: Neighborhood,
+        aggregate_fn: A,
+        tiling_specification: TilingSpecification,
+    ) -> Self {
         Self {
-            kernel_fn,
+            neighborhood,
+            aggregate_fn,
             tiling_specification,
             _phantom_types: PhantomData,
         }
     }
 }
 
-impl<'a, P, F> SubQueryTileAggregator<'a, P> for RasterKernelTileNeighborhood<P, F>
+impl<'a, P, A> SubQueryTileAggregator<'a, P> for NeighborhoodAggregateTileNeighborhood<P, A>
 where
     P: Pixel,
     f64: AsPrimitive<P>,
-    F: KernelFunction<P> + 'static,
+    A: AggregateFunction + 'static,
 {
-    type FoldFuture = FoldFuture<P, F>;
+    type FoldFuture = FoldFuture<P, A>;
 
-    type FoldMethod = fn(RasterKernelAccu<P, F>, RasterTile2D<P>) -> Self::FoldFuture;
+    type FoldMethod = fn(NeighborhoodAggregateAccu<P, A>, RasterTile2D<P>) -> Self::FoldFuture;
 
-    type TileAccu = RasterKernelAccu<P, F>;
+    type TileAccu = NeighborhoodAggregateAccu<P, A>;
     type TileAccuFuture = BoxFuture<'a, Result<Self::TileAccu>>;
 
     /// Create an enlarged tile to store the values of the neighborhood
@@ -77,9 +83,17 @@ where
     ) -> Self::TileAccuFuture {
         let pool = pool.clone();
         let tiling_specification = self.tiling_specification;
-        let kernel_fn = self.kernel_fn.clone();
+        let kernel_fn = self.aggregate_fn.clone();
+        let neighborhood = self.neighborhood.clone();
         crate::util::spawn_blocking(move || {
-            create_enlarged_tile(tile_info, query_rect, pool, tiling_specification, kernel_fn)
+            create_enlarged_tile(
+                tile_info,
+                query_rect,
+                pool,
+                tiling_specification,
+                neighborhood,
+                kernel_fn,
+            )
         })
         .map_err(From::from)
         .boxed()
@@ -95,8 +109,8 @@ where
         let spatial_bounds = tile_info.spatial_partition();
 
         let margin_pixels = Coordinate2D::from((
-            self.kernel_fn.x_radius() as f64 * tile_info.global_geo_transform.x_pixel_size(),
-            self.kernel_fn.y_radius() as f64 * tile_info.global_geo_transform.y_pixel_size(),
+            self.neighborhood.x_radius() as f64 * tile_info.global_geo_transform.x_pixel_size(),
+            self.neighborhood.y_radius() as f64 * tile_info.global_geo_transform.y_pixel_size(),
         ));
 
         let enlarged_spatial_bounds = SpatialPartition2D::new(
@@ -120,43 +134,52 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct RasterKernelAccu<P: Pixel, F> {
+pub struct NeighborhoodAggregateAccu<P: Pixel, A> {
     pub output_info: TileInformation,
     pub input_tile: RasterTile2D<P>,
     pub pool: Arc<ThreadPool>,
-    pub kernel_fn: F,
+    pub neighborhood: Neighborhood,
+    pub kernel_fn: A,
 }
 
-impl<P: Pixel, F> RasterKernelAccu<P, F> {
+impl<P: Pixel, F> NeighborhoodAggregateAccu<P, F> {
     pub fn new(
         input_tile: RasterTile2D<P>,
         output_info: TileInformation,
         pool: Arc<ThreadPool>,
+        neighborhood: Neighborhood,
         kernel_fn: F,
     ) -> Self {
-        RasterKernelAccu {
+        NeighborhoodAggregateAccu {
             output_info,
             input_tile,
             pool,
+            neighborhood,
             kernel_fn,
         }
     }
 }
 
 #[async_trait]
-impl<P, F> FoldTileAccu for RasterKernelAccu<P, F>
+impl<P, F> FoldTileAccu for NeighborhoodAggregateAccu<P, F>
 where
     P: Pixel,
     f64: AsPrimitive<P>,
-    F: KernelFunction<P> + 'static,
+    F: AggregateFunction + 'static,
 {
     type RasterType = P;
 
     /// now that we collected all the input tile pixels we perform the actual raster kernel
     async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
+        let neighborhood = self.neighborhood.clone();
         let kernel_fn = self.kernel_fn.clone();
         let output_tile = crate::util::spawn_blocking_with_thread_pool(self.pool, move || {
-            apply_kernel_for_each_inner_pixel(&self.input_tile, &self.output_info, &kernel_fn)
+            apply_kernel_for_each_inner_pixel(
+                &self.input_tile,
+                &self.output_info,
+                &neighborhood,
+                &kernel_fn,
+            )
         })
         .await?;
 
@@ -169,15 +192,16 @@ where
 }
 
 /// Apply kernel function to all pixels of the inner input tile in the 9x9 grid
-fn apply_kernel_for_each_inner_pixel<P, F>(
+fn apply_kernel_for_each_inner_pixel<P, A>(
     input: &RasterTile2D<P>,
     info_out: &TileInformation,
-    kernel_fn: &F,
+    neighborhood: &Neighborhood,
+    aggregate_fn: &A,
 ) -> RasterTile2D<P>
 where
     P: Pixel,
     f64: AsPrimitive<P>,
-    F: KernelFunction<P>,
+    A: AggregateFunction,
 {
     if input.is_empty() {
         return RasterTile2D::new_with_tile_info(
@@ -190,20 +214,23 @@ where
     let map_fn = |gidx: GridIdx2D| {
         let GridIdx([y, x]) = gidx;
 
-        // TODO: better to feed kernel values one-by-one?
         let mut kernel_matrix =
-            Vec::<Option<P>>::with_capacity(kernel_fn.kernel_size().number_of_elements());
+            Vec::<Option<f64>>::with_capacity(neighborhood.matrix().number_of_elements());
 
-        let y_stop = y + kernel_fn.y_width() as isize;
-        let x_stop = x + kernel_fn.x_width() as isize;
+        let y_stop = y + neighborhood.y_width() as isize;
+        let x_stop = x + neighborhood.x_width() as isize;
         // copy row-by-row all pixels in x direction into kernel matrix
         for y_index in y..y_stop {
             for x_index in x..x_stop {
-                kernel_matrix.push(input.get_at_grid_index_unchecked([y_index, x_index]));
+                kernel_matrix.push(
+                    input
+                        .get_at_grid_index_unchecked([y_index, x_index])
+                        .map(AsPrimitive::as_),
+                );
             }
         }
 
-        kernel_fn.apply(&kernel_matrix)
+        aggregate_fn.apply(&neighborhood.apply(kernel_matrix))
     };
 
     // TODO: this will check for empty tiles. Change to MaskedGrid::from(…) to avoid this.
@@ -217,16 +244,14 @@ where
     )
 }
 
-fn create_enlarged_tile<P: Pixel, F: KernelFunction<P>>(
+fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
     tile_info: TileInformation,
     query_rect: RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
-    kernel_fn: F,
-) -> RasterKernelAccu<P, F>
-where
-    f64: AsPrimitive<P>,
-{
+    neighborhood: Neighborhood,
+    kernel_fn: A,
+) -> NeighborhoodAggregateAccu<P, A> {
     // create an accumulator as a single tile that fits all the input tiles + some margin for the kernel size
 
     let tiling = tiling_specification.strategy(
@@ -234,12 +259,6 @@ where
         -query_rect.spatial_resolution.y,
     );
 
-    // let origin_coordinate = tiling
-    //     .tile_information_iterator(query_rect.spatial_bounds)
-    //     .next()
-    //     .expect("a query contains at least one tile")
-    //     .spatial_partition()
-    //     .upper_left();
     let origin_coordinate = query_rect.spatial_bounds.upper_left();
 
     let geo_transform = GeoTransform::new(
@@ -249,8 +268,8 @@ where
     );
 
     let shape = [
-        tiling.tile_size_in_pixels.axis_size_y() + 2 * kernel_fn.y_radius(),
-        tiling.tile_size_in_pixels.axis_size_x() + 2 * kernel_fn.x_radius(),
+        tiling.tile_size_in_pixels.axis_size_y() + 2 * neighborhood.y_radius(),
+        tiling.tile_size_in_pixels.axis_size_x() + 2 * neighborhood.x_radius(),
     ];
 
     // create a non-aligned (w.r.t. the tiling specification) grid by setting the origin to the top-left of the tile and the tile-index to [0, 0]
@@ -263,19 +282,19 @@ where
         GridOrEmpty::from(grid),
     );
 
-    RasterKernelAccu::new(input_tile, tile_info, pool, kernel_fn)
+    NeighborhoodAggregateAccu::new(input_tile, tile_info, pool, neighborhood, kernel_fn)
 }
 
 type FoldFutureFn<P, F> = fn(
-    Result<Result<RasterKernelAccu<P, F>>, tokio::task::JoinError>,
-) -> Result<RasterKernelAccu<P, F>>;
+    Result<Result<NeighborhoodAggregateAccu<P, F>>, tokio::task::JoinError>,
+) -> Result<NeighborhoodAggregateAccu<P, F>>;
 type FoldFuture<P, F> =
-    futures::future::Map<JoinHandle<Result<RasterKernelAccu<P, F>>>, FoldFutureFn<P, F>>;
+    futures::future::Map<JoinHandle<Result<NeighborhoodAggregateAccu<P, F>>>, FoldFutureFn<P, F>>;
 
 /// Turn a result of results into a result
-fn flatten_result<P: Pixel, F: KernelFunction<P>>(
-    result: Result<Result<RasterKernelAccu<P, F>>, tokio::task::JoinError>,
-) -> Result<RasterKernelAccu<P, F>>
+fn flatten_result<P: Pixel, F: AggregateFunction>(
+    result: Result<Result<NeighborhoodAggregateAccu<P, F>>, tokio::task::JoinError>,
+) -> Result<NeighborhoodAggregateAccu<P, F>>
 where
     f64: AsPrimitive<P>,
 {
@@ -286,10 +305,10 @@ where
 }
 
 /// Merge, step by step, the 9 input tiles into the larger accumulator tile
-pub fn merge_tile_into_enlarged_tile<P: Pixel, F: KernelFunction<P>>(
-    mut accu: RasterKernelAccu<P, F>,
+pub fn merge_tile_into_enlarged_tile<P: Pixel, F: AggregateFunction>(
+    mut accu: NeighborhoodAggregateAccu<P, F>,
     tile: RasterTile2D<P>,
-) -> Result<RasterKernelAccu<P, F>>
+) -> Result<NeighborhoodAggregateAccu<P, F>>
 where
     f64: AsPrimitive<P>,
 {
@@ -307,10 +326,11 @@ where
 
     let accu_input_tile: RasterTile2D<P> = accu_input_tile.into();
 
-    Ok(RasterKernelAccu::new(
+    Ok(NeighborhoodAggregateAccu::new(
         accu_input_tile,
         accu.output_info,
         accu.pool,
+        accu.neighborhood,
         accu.kernel_fn,
     ))
 }
@@ -321,7 +341,7 @@ mod tests {
 
     use crate::{
         engine::MockExecutionContext,
-        processing::raster_kernel::kernel_function::StandardDeviationKernel,
+        processing::neighborhood_aggregate::{aggregate::StandardDeviation, NeighborhoodParams},
     };
     use geoengine_datatypes::{
         primitives::SpatialResolution, raster::TilingStrategy, util::test::TestDefault,
@@ -351,8 +371,11 @@ mod tests {
             spatial_resolution,
         };
 
-        let aggregator = RasterKernelTileNeighborhood::<u8, _>::new(
-            StandardDeviationKernel::new([5, 5].into()).unwrap(),
+        let aggregator = NeighborhoodAggregateTileNeighborhood::<u8, _>::new(
+            NeighborhoodParams::Rectangle { dimensions: [5, 5] }
+                .try_into()
+                .unwrap(),
+            StandardDeviation::new(),
             execution_context.tiling_specification,
         );
 
@@ -375,7 +398,8 @@ mod tests {
             tile_query_rectangle,
             execution_context.thread_pool.clone(),
             execution_context.tiling_specification,
-            aggregator.kernel_fn,
+            aggregator.neighborhood,
+            aggregator.aggregate_fn,
         );
 
         assert_eq!(tile_info.tile_size_in_pixels.axis_size(), [512, 512]);

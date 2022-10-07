@@ -1,8 +1,8 @@
-mod kernel_function;
+mod aggregate;
 mod tile_sub_query;
 
-use self::kernel_function::{ConvolutionKernel, KernelFunction, StandardDeviationKernel};
-use self::tile_sub_query::RasterKernelTileNeighborhood;
+use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
+use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
 use crate::adapters::RasterSubQueryAdapter;
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
@@ -24,38 +24,54 @@ use std::marker::PhantomData;
 
 /// A raster kernel operator applies a kernel to a raster.
 /// For each output pixel, the kernel is applied to an input pixel plus its neighborhood.
-pub type RasterKernel = Operator<RasterKernelParams, SingleRasterSource>;
+pub type NeighborhoodAggregate = Operator<NeighborhoodAggregateParams, SingleRasterSource>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-/// Parameters for the `RasterKernel` operator.
+/// Parameters for the `NeighborhoodAggregate` operator.
 ///
 /// TODO: Possible extensions:
 ///  - strategies for missing data at the edges
-pub struct RasterKernelParams {
-    /// The kernel must be symmetrical.
-    /// The size of the kernel must not be larger than one tile in Geo Engine's tiling scheme.
-    pub kernel: RasterKernelMethod,
+pub struct NeighborhoodAggregateParams {
+    /// Defines the neighborhood for each pixel.
+    /// Each dimension must be odd.
+    pub neighborhood: NeighborhoodParams,
+    /// Defines the aggregate function to apply to the neighborhood.
+    pub aggregate_function: AggregateFunctionParams,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum AggregateFunctionParams {
+    Sum,
+    StandardDeviation,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
-pub enum RasterKernelMethod {
-    Convolution { matrix: Vec<Vec<f64>> },
-    StandardDeviation { dimensions: [usize; 2] },
+pub enum NeighborhoodParams {
+    Rectangle { dimensions: [usize; 2] },
+    WeightsMatrix { weights: Vec<Vec<f64>> },
 }
 
-#[derive(Debug, Clone)]
-enum InitializedRasterKernelMethod {
-    Convolution { matrix: Grid2D<f64> },
-    StandardDeviation { dimensions: GridShape2D },
+impl NeighborhoodParams {
+    fn dimensions(&self) -> GridShape2D {
+        match self {
+            Self::WeightsMatrix { weights } => {
+                let x_size = weights.len();
+                let y_size = weights.get(0).map_or(0, Vec::len);
+                GridShape2D::new([x_size, y_size])
+            }
+            Self::Rectangle { dimensions } => GridShape2D::new(*dimensions),
+        }
+    }
 }
 
-impl TryFrom<RasterKernelMethod> for InitializedRasterKernelMethod {
-    type Error = RasterKernelError;
+impl TryFrom<NeighborhoodParams> for Neighborhood {
+    type Error = NeighborhoodAggregateError;
 
-    fn try_from(kernel_method: RasterKernelMethod) -> Result<Self, Self::Error> {
-        let dimensions = kernel_method.kernel_size();
+    fn try_from(neighborhood: NeighborhoodParams) -> Result<Self, Self::Error> {
+        let dimensions = neighborhood.dimensions();
 
         ensure!(dimensions.number_of_elements() > 0, error::DimensionsZero);
         ensure!(
@@ -63,36 +79,21 @@ impl TryFrom<RasterKernelMethod> for InitializedRasterKernelMethod {
             error::DimensionsNotOdd { actual: dimensions }
         );
 
-        match kernel_method {
-            RasterKernelMethod::Convolution { matrix } => {
-                let matrix = Grid2D::new(dimensions, matrix.into_iter().flatten().collect())
-                    .map_err(|_| RasterKernelError::MatrixNotRectangular)?;
+        let matrix = match neighborhood {
+            NeighborhoodParams::WeightsMatrix { weights } => {
+                Grid2D::new(dimensions, weights.into_iter().flatten().collect())
+                    .map_err(|_| NeighborhoodAggregateError::IrregularDimensions)?
+            }
+            NeighborhoodParams::Rectangle { .. } => Grid2D::new_filled(dimensions, 1.),
+        };
 
-                Ok(Self::Convolution { matrix })
-            }
-            RasterKernelMethod::StandardDeviation { .. } => {
-                Ok(Self::StandardDeviation { dimensions })
-            }
-        }
-    }
-}
-
-impl RasterKernelMethod {
-    fn kernel_size(&self) -> GridShape2D {
-        match self {
-            Self::Convolution { matrix } => {
-                let x_size = matrix.len();
-                let y_size = matrix.get(0).map_or(0, Vec::len);
-                GridShape2D::new([x_size, y_size])
-            }
-            Self::StandardDeviation { dimensions } => GridShape2D::new(*dimensions),
-        }
+        Self::new(matrix)
     }
 }
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
-pub enum RasterKernelError {
+pub enum NeighborhoodAggregateError {
     #[snafu(display(
         "The maximum kernel size is {}x{}, but the kernel has size {}x{}",
         limit.axis_size_x(), limit.axis_size_y(), actual.axis_size_x(), actual.axis_size_y()
@@ -108,6 +109,9 @@ pub enum RasterKernelError {
     ))]
     DimensionsNotOdd { actual: GridShape2D },
 
+    #[snafu(display("The input matrix has irregular dimensions"))]
+    IrregularDimensions,
+
     #[snafu(display("The kernel matrix dimensions must not be 0"))]
     DimensionsZero,
 
@@ -117,7 +121,7 @@ pub enum RasterKernelError {
 
 #[typetag::serde]
 #[async_trait]
-impl RasterOperator for RasterKernel {
+impl RasterOperator for NeighborhoodAggregate {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
@@ -125,7 +129,7 @@ impl RasterOperator for RasterKernel {
         let tiling_specification = context.tiling_specification();
 
         // dimensions must not be larger as the neighboring tiles
-        let dimensions = self.params.kernel.kernel_size();
+        let dimensions = self.params.neighborhood.dimensions();
         ensure!(
             dimensions.axis_size_x() <= tiling_specification.tile_size_in_pixels.axis_size_x()
                 && dimensions.axis_size_y()
@@ -138,10 +142,11 @@ impl RasterOperator for RasterKernel {
 
         let raster_source = self.sources.raster.initialize(context).await?;
 
-        let initialized_operator = InitializedRasterKernel {
+        let initialized_operator = InitializedNeighborhoodAggregate {
             result_descriptor: raster_source.result_descriptor().clone(),
             raster_source,
-            raster_kernel_method: self.params.kernel.try_into()?,
+            neighborhood: self.params.neighborhood.try_into()?,
+            aggregate_function: self.params.aggregate_function,
             tiling_specification,
         };
 
@@ -149,29 +154,32 @@ impl RasterOperator for RasterKernel {
     }
 }
 
-pub struct InitializedRasterKernel {
+pub struct InitializedNeighborhoodAggregate {
     result_descriptor: RasterResultDescriptor,
     raster_source: Box<dyn InitializedRasterOperator>,
-    raster_kernel_method: InitializedRasterKernelMethod,
+    neighborhood: Neighborhood,
+    aggregate_function: AggregateFunctionParams,
     tiling_specification: TilingSpecification,
 }
 
-impl InitializedRasterOperator for InitializedRasterKernel {
+impl InitializedRasterOperator for InitializedNeighborhoodAggregate {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let source_processor = self.raster_source.query_processor()?;
 
         let res = call_on_generic_raster_processor!(
-            source_processor, p => match &self.raster_kernel_method  {
-                InitializedRasterKernelMethod::Convolution { matrix } => RasterKernelProcessor::<_,_, ConvolutionKernel>::new(
+            source_processor, p => match &self.aggregate_function  {
+                AggregateFunctionParams::Sum => NeighborhoodAggregateProcessor::<_,_, Sum>::new(
                         p,
                         self.tiling_specification,
-                        ConvolutionKernel::new(matrix.clone())?
+                        self.neighborhood.clone(),
+                        Sum::new()
                     ).boxed()
                     .into(),
-                    InitializedRasterKernelMethod::StandardDeviation { dimensions } => RasterKernelProcessor::<_,_, StandardDeviationKernel>::new(
+                    AggregateFunctionParams::StandardDeviation => NeighborhoodAggregateProcessor::<_,_, StandardDeviation>::new(
                         p,
                         self.tiling_specification,
-                        StandardDeviationKernel::new(*dimensions)?
+                        self.neighborhood.clone(),
+                        StandardDeviation::new()
                     ).boxed()
                     .into(),
             }
@@ -185,35 +193,42 @@ impl InitializedRasterOperator for InitializedRasterKernel {
     }
 }
 
-pub struct RasterKernelProcessor<Q, P, F> {
+pub struct NeighborhoodAggregateProcessor<Q, P, A> {
     source: Q,
     tiling_specification: TilingSpecification,
-    kernel_function: F,
+    neighborhood: Neighborhood,
+    aggregate_function: A,
     _phantom_types: PhantomData<P>,
 }
 
-impl<Q, P, F> RasterKernelProcessor<Q, P, F>
+impl<Q, P, A> NeighborhoodAggregateProcessor<Q, P, A>
 where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
-    pub fn new(source: Q, tiling_specification: TilingSpecification, kernel_function: F) -> Self {
+    pub fn new(
+        source: Q,
+        tiling_specification: TilingSpecification,
+        neighborhood: Neighborhood,
+        aggregate_function: A,
+    ) -> Self {
         Self {
             source,
             tiling_specification,
-            kernel_function,
+            neighborhood,
+            aggregate_function,
             _phantom_types: PhantomData,
         }
     }
 }
 
 #[async_trait]
-impl<Q, P, F> QueryProcessor for RasterKernelProcessor<Q, P, F>
+impl<Q, P, A> QueryProcessor for NeighborhoodAggregateProcessor<Q, P, A>
 where
     Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
     P: Pixel,
     f64: AsPrimitive<P>,
-    F: KernelFunction<P> + 'static,
+    A: AggregateFunction + 'static,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
@@ -223,8 +238,9 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let sub_query = RasterKernelTileNeighborhood::<P, F>::new(
-            self.kernel_function.clone(),
+        let sub_query = NeighborhoodAggregateTileNeighborhood::<P, A>::new(
+            self.neighborhood.clone(),
+            self.aggregate_function.clone(),
             self.tiling_specification,
         );
 
@@ -268,11 +284,12 @@ mod tests {
 
     #[test]
     fn test_serialization_matrix() {
-        let operator = RasterKernel {
-            params: RasterKernelParams {
-                kernel: RasterKernelMethod::Convolution {
-                    matrix: vec![vec![1., 2., 3.], vec![4., 5., 6.], vec![7., 8., 9.]],
+        let operator = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::WeightsMatrix {
+                    weights: vec![vec![1., 2., 3.], vec![4., 5., 6.], vec![7., 8., 9.]],
                 },
+                aggregate_function: AggregateFunctionParams::Sum,
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
@@ -291,16 +308,17 @@ mod tests {
 
         assert_eq!(
             serde_json::json!({
-                "type": "RasterKernel",
+                "type": "NeighborhoodAggregate",
                 "params": {
-                    "kernel": {
-                        "type": "convolution",
-                        "matrix": [
+                    "neighborhood": {
+                        "type": "weightsMatrix",
+                        "weights": [
                             [1.0, 2.0, 3.0],
                             [4.0, 5.0, 6.0],
                             [7.0, 8.0, 9.0]
                         ]
-                    }
+                    },
+                    "aggregateFunction": "sum"
                 },
                 "sources": {
                     "raster": {
@@ -317,14 +335,15 @@ mod tests {
             serialized
         );
 
-        serde_json::from_value::<RasterKernel>(serialized).unwrap();
+        serde_json::from_value::<NeighborhoodAggregate>(serialized).unwrap();
     }
 
     #[test]
     fn test_serialization_stddev() {
-        let operator = RasterKernel {
-            params: RasterKernelParams {
-                kernel: RasterKernelMethod::StandardDeviation { dimensions: [3, 3] },
+        let operator = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::Rectangle { dimensions: [3, 3] },
+                aggregate_function: AggregateFunctionParams::StandardDeviation,
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
@@ -343,12 +362,13 @@ mod tests {
 
         assert_eq!(
             serde_json::json!({
-                "type": "RasterKernel",
+                "type": "NeighborhoodAggregate",
                 "params": {
-                    "kernel": {
-                        "type": "standardDeviation",
+                    "neighborhood": {
+                        "type": "rectangle",
                         "dimensions": [3, 3]
-                    }
+                    },
+                    "aggregateFunction": "standardDeviation"
                 },
                 "sources": {
                     "raster": {
@@ -365,25 +385,21 @@ mod tests {
             serialized
         );
 
-        serde_json::from_value::<RasterKernel>(serialized).unwrap();
+        serde_json::from_value::<NeighborhoodAggregate>(serialized).unwrap();
     }
 
     #[test]
     fn test_initialized_raster_kernel_method() {
-        let kernel_method = RasterKernelMethod::Convolution {
-            matrix: vec![vec![1.0], vec![3.0], vec![5.0]],
-        };
-        let initialized_kernel_method =
-            InitializedRasterKernelMethod::try_from(kernel_method).unwrap();
-
-        if let InitializedRasterKernelMethod::Convolution { matrix } = initialized_kernel_method {
-            assert_eq!(
-                matrix,
-                Grid2D::new([3, 1].into(), vec![1.0, 3.0, 5.0]).unwrap()
-            );
-        } else {
-            panic!("Wrong kernel method");
+        let neighborhood: Neighborhood = NeighborhoodParams::WeightsMatrix {
+            weights: vec![vec![1.0], vec![3.0], vec![5.0]],
         }
+        .try_into()
+        .unwrap();
+
+        assert_eq!(
+            neighborhood.matrix(),
+            &Grid2D::new([3, 1].into(), vec![1.0, 3.0, 5.0]).unwrap()
+        );
     }
 
     #[tokio::test]
@@ -395,11 +411,12 @@ mod tests {
 
         let raster = make_raster();
 
-        let operator = RasterKernel {
-            params: RasterKernelParams {
-                kernel: RasterKernelMethod::Convolution {
-                    matrix: vec![vec![1. / 9.; 3]; 3],
+        let operator = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::WeightsMatrix {
+                    weights: vec![vec![1. / 9.; 3]; 3],
                 },
+                aggregate_function: AggregateFunctionParams::Sum,
             },
             sources: SingleRasterSource { raster },
         }
@@ -604,15 +621,16 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
 
-        let operator = RasterKernel {
-            params: RasterKernelParams {
-                kernel: RasterKernelMethod::Convolution {
-                    matrix: vec![
+        let operator = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::WeightsMatrix {
+                    weights: vec![
                         vec![1. / 16., 1. / 8., 1. / 16.],
                         vec![1. / 8., 1. / 4., 1. / 8.],
                         vec![1. / 16., 1. / 8., 1. / 16.],
                     ],
                 },
+                aggregate_function: AggregateFunctionParams::Sum,
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
@@ -670,15 +688,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ndvi_sobel_filter() {
+    async fn test_ndvi_partial_derivative() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
 
-        let operator = RasterKernel {
-            params: RasterKernelParams {
-                kernel: RasterKernelMethod::Convolution {
-                    matrix: vec![vec![1., 0., -1.], vec![2., 0., -2.], vec![1., 0., -1.]],
+        let operator = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::WeightsMatrix {
+                    weights: vec![vec![1., 0., -1.], vec![2., 0., -2.], vec![1., 0., -1.]],
                 },
+                aggregate_function: AggregateFunctionParams::Sum,
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
@@ -728,7 +747,7 @@ mod tests {
 
         assert_eq!(
             bytes,
-            include_bytes!("../../../../test_data/wms/sobel_filter.png")
+            include_bytes!("../../../../test_data/wms/partial_derivative.png")
         );
 
         // Use for getting the image to compare against

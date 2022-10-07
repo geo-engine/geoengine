@@ -303,7 +303,7 @@ pub enum Error {
 
     #[snafu(context(false))]
     RasterKernelError {
-        source: crate::processing::RasterKernelError,
+        source: crate::processing::NeighborhoodAggregateError,
     },
 }
 
