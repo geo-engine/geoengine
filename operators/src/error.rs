@@ -298,6 +298,13 @@ pub enum Error {
     },
 
     AlphaBandAsMaskNotAllowed,
+
+    SpatialReferenceMustNotBeUnreferenced,
+
+    #[snafu(context(false))]
+    RasterKernelError {
+        source: crate::processing::NeighborhoodAggregateError,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

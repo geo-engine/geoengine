@@ -52,6 +52,8 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     zones: Vec<Zone>,
     #[serde(default)]
     stac_api_retries: StacApiRetries,
+    #[serde(default)]
+    gdal_retries: GdalRetries,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -73,6 +75,22 @@ impl Default for StacApiRetries {
     }
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalRetries {
+    number_of_retries: usize,
+    delay_s: u64,
+}
+
+impl Default for GdalRetries {
+    fn default() -> Self {
+        Self {
+            number_of_retries: 3,
+            delay_s: 5,
+        }
+    }
+}
+
 #[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
@@ -83,6 +101,7 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
             &self.bands,
             &self.zones,
             self.stac_api_retries,
+            self.gdal_retries,
         )))
     }
 
@@ -129,6 +148,7 @@ pub struct SentinelS2L2aCogsDataProvider {
     datasets: HashMap<LayerId, SentinelDataset>,
 
     stac_api_retries: StacApiRetries,
+    gdal_retries: GdalRetries,
 }
 
 impl SentinelS2L2aCogsDataProvider {
@@ -138,12 +158,14 @@ impl SentinelS2L2aCogsDataProvider {
         bands: &[Band],
         zones: &[Zone],
         stac_api_retries: StacApiRetries,
+        gdal_retries: GdalRetries,
     ) -> Self {
         Self {
             id,
             api_url,
             datasets: Self::create_datasets(&id, bands, zones),
             stac_api_retries,
+            gdal_retries,
         }
     }
 
@@ -308,7 +330,8 @@ pub struct SentinelS2L2aCogsMetaData {
     api_url: String,
     zone: Zone,
     band: Band,
-    stac_api_retires: StacApiRetries,
+    stac_api_retries: StacApiRetries,
+    gdal_retries: GdalRetries,
 }
 
 impl SentinelS2L2aCogsMetaData {
@@ -422,7 +445,10 @@ impl SentinelS2L2aCogsMetaData {
         Ok(GdalLoadingInfoTemporalSlice {
             time: time_interval,
             params: Some(GdalDatasetParameters {
-                file_path: PathBuf::from(format!("/vsicurl/{}", asset.href)),
+                file_path: PathBuf::from(format!(
+                    "/vsicurl?max_retry={}&retry_delay={}&url={}",
+                    self.gdal_retries.number_of_retries, self.gdal_retries.delay_s, asset.href
+                )),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform::from(
                     asset
@@ -508,9 +534,9 @@ impl SentinelS2L2aCogsMetaData {
         let client = Client::builder().build()?;
 
         retry(
-            self.stac_api_retires.number_of_retries,
-            self.stac_api_retires.initial_delay_ms,
-            self.stac_api_retires.exponential_backoff_factor,
+            self.stac_api_retries.number_of_retries,
+            self.stac_api_retries.initial_delay_ms,
+            self.stac_api_retries.exponential_backoff_factor,
             || async {
                 let text = client
                     .get(&self.api_url)
@@ -628,7 +654,8 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             api_url: self.api_url.clone(),
             zone: dataset.zone.clone(),
             band: dataset.band.clone(),
-            stac_api_retires: self.stac_api_retries,
+            stac_api_retries: self.stac_api_retries,
+            gdal_retries: self.gdal_retries,
         }))
     }
 }
@@ -677,12 +704,13 @@ mod tests {
     use crate::test_data;
     use futures::StreamExt;
     use geoengine_datatypes::{
+        dataset::DatasetId,
         primitives::{SpatialPartition2D, SpatialResolution},
-        util::test::TestDefault,
+        util::{test::TestDefault, Identifier},
     };
     use geoengine_operators::{
         engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator},
-        source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
+        source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     };
     use httptest::{
         all_of,
@@ -732,7 +760,7 @@ mod tests {
         let expected = vec![GdalLoadingInfoTemporalSlice {
             time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_747_000),
             params: Some(GdalDatasetParameters {
-                file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
+                file_path: "/vsicurl?max_retry=3&retry_delay=5&url=https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (600_000.0, 3_400_020.0).into(),
@@ -844,6 +872,8 @@ mod tests {
     async fn query_data_with_failing_requests() {
         // util::tests::initialize_debugging_in_test; // use for debugging
 
+        let num_gdal_retries = 3;
+
         let stac_response =
             std::fs::read_to_string(test_data!("pro/stac_responses/items_page_1_limit_500.json"))
                 .unwrap();
@@ -878,6 +908,24 @@ mod tests {
             ]),
         );
 
+        server.expect(
+            Expectation::matching(all_of![request::method_path(
+                "HEAD",
+                "/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif",
+            ),])
+            .times(1 + num_gdal_retries)
+            .respond_with(responders::status_code(500)),
+        );
+
+        server.expect(
+            Expectation::matching(all_of![request::method_path(
+                "GET",
+                "/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/",
+            ),])
+            .times(1)
+            .respond_with(responders::status_code(500)),
+        );
+
         let provider_id: DataProviderId = "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".parse().unwrap();
 
         let provider_def: Box<dyn DataProviderDefinition> =
@@ -895,6 +943,10 @@ mod tests {
                     epsg: 32736,
                 }],
                 stac_api_retries: Default::default(),
+                gdal_retries: GdalRetries {
+                    number_of_retries: num_gdal_retries,
+                    delay_s: 5,
+                },
             });
 
         let provider = provider_def.initialize().await.unwrap();
@@ -934,7 +986,7 @@ mod tests {
             vec![GdalLoadingInfoTemporalSlice {
                 time: TimeInterval::new_unchecked(1_632_384_644_000, 1_632_384_645_000),
                 params: Some(GdalDatasetParameters {
-                    file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif".into(),
+                    file_path: format!("/vsicurl?max_retry={}&retry_delay=5&url=https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif", num_gdal_retries).into(),
                     rasterband_channel: 1,
                     geo_transform: GdalDatasetGeoTransform {
                         origin_coordinate: (499_980.0,9_800_020.00).into(),
@@ -952,6 +1004,71 @@ mod tests {
                 }),
             }]
         );
+
+        let mut params = parts[0].clone().params.unwrap();
+        params.file_path = params
+            .file_path
+            .to_str()
+            .unwrap()
+            .replace(
+                "https://sentinel-cogs.s3.us-west-2.amazonaws.com/",
+                &server.url_str(""),
+            )
+            .into();
+
+        let mut execution_context = MockExecutionContext::test_default();
+        let id: geoengine_datatypes::dataset::DataId = DatasetId::new().into();
+        execution_context.add_meta_data(
+            id.clone(),
+            Box::new(GdalMetaDataStatic {
+                time: None,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U16,
+                    spatial_reference: SpatialReference::from_str("EPSG:32736").unwrap().into(),
+                    measurement: Measurement::Unitless,
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                },
+                params,
+            }),
+        );
+
+        let gdal_source = GdalSource {
+            params: GdalSourceParameters { data: id },
+        }
+        .boxed()
+        .initialize(&execution_context)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .get_u16()
+        .unwrap();
+
+        let query_context = MockQueryContext::test_default();
+
+        let stream = gdal_source
+            .raster_query(
+                RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (499_980., 9_804_800.).into(),
+                        (501_760., 9_799_680.).into(),
+                    ),
+                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
+                        2014, 3, 1, 0, 0, 0,
+                    ))
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::new(10., 10.).unwrap(),
+                },
+                &query_context,
+            )
+            .await
+            .unwrap();
+
+        let result = stream.collect::<Vec<_>>().await;
+
+        assert_eq!(result.len(), 1);
     }
 
     #[test]
