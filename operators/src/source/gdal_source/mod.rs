@@ -1,9 +1,8 @@
 use crate::adapters::SparseTilesFillAdapter;
-use crate::engine::{MetaData, OperatorData, OperatorName, QueryProcessor};
+use crate::engine::{CreateSpan, MetaData, OperatorData, OperatorName, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::util::TemporaryGdalThreadLocalConfigOptions;
-use crate::meta::statistics::InitializedProcessorStatistics;
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -50,6 +49,7 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Instant;
+use tracing::{span, Level, Span};
 mod loading_info;
 
 /// Parameters for the GDAL Source Operator
@@ -678,12 +678,16 @@ impl RasterOperator for GdalSource {
             tiling_specification: context.tiling_specification(),
         };
 
-        Ok(Box::new(
-            InitializedProcessorStatistics::statistics_with_id(
-                op.boxed(),
-                "gdal_source".to_string(),
-            ),
-        ))
+        Ok(context.initialize_operator(op.boxed(), Box::new(GdalSourceSpan {})))
+    }
+}
+
+#[derive(Clone)]
+struct GdalSourceSpan {}
+
+impl CreateSpan for GdalSourceSpan {
+    fn create_span(&self) -> Span {
+        span!(Level::TRACE, "GdalSource")
     }
 }
 

@@ -5,6 +5,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use tracing::Span;
 
 #[pin_project(project = StreamStatisticsAdapterProjection)]
 pub struct StreamStatisticsAdapter<S> {
@@ -13,14 +14,16 @@ pub struct StreamStatisticsAdapter<S> {
     poll_next_count: u64,
     element_count: u64,
     id: String,
+    span: Span,
 }
 
 impl<S> StreamStatisticsAdapter<S> {
-    pub fn statistics_with_id(stream: S, id: String) -> StreamStatisticsAdapter<S> {
+    pub fn statistics_with_id(stream: S, id: String, span: Span) -> StreamStatisticsAdapter<S> {
         StreamStatisticsAdapter {
             stream,
             poll_next_count: 0,
             element_count: 0,
+            span,
             id,
         }
     }
@@ -51,11 +54,15 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut this = self.project();
         *this.poll_next_count += 1;
+
+        let _enter = this.span.enter();
+
         trace!(
             "[{}] | poll_next_count: {}",
             *this.id,
             *this.poll_next_count
         );
+
         let v = ready!(this.stream.as_mut().poll_next(cx));
         match v {
             Some(_) => {
@@ -83,6 +90,7 @@ where
 #[cfg(test)]
 mod tests {
     use futures::StreamExt;
+    use tracing::{span, Level};
 
     use super::*;
 
@@ -90,8 +98,11 @@ mod tests {
     async fn simple() {
         let v = vec![1, 2, 3];
         let v_stream = futures::stream::iter(v);
-        let mut v_stat_stream =
-            StreamStatisticsAdapter::statistics_with_id(v_stream, "v_stream".to_string());
+        let mut v_stat_stream = StreamStatisticsAdapter::statistics_with_id(
+            v_stream,
+            "v_stream".to_string(),
+            span!(Level::TRACE, "test"),
+        );
 
         assert_eq!(v_stat_stream.id_ref(), "v_stream");
 

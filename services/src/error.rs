@@ -56,6 +56,9 @@ pub enum Error {
     Proj {
         source: proj::ProjError,
     },
+    Trace {
+        source: opentelemetry::trace::TraceError,
+    },
 
     TokioChannelSend,
 
@@ -519,5 +522,11 @@ impl From<tonic::transport::Error> for Error {
 impl From<tokio::task::JoinError> for Error {
     fn from(source: tokio::task::JoinError) -> Self {
         Error::TokioJoin { source }
+    }
+}
+
+impl From<opentelemetry::trace::TraceError> for Error {
+    fn from(source: opentelemetry::trace::TraceError) -> Self {
+        Error::Trace { source }
     }
 }

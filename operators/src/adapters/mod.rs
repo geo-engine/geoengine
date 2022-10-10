@@ -3,7 +3,6 @@ mod raster_subquery;
 mod raster_time;
 mod raster_time_substream;
 mod sparse_tiles_fill_adapter;
-mod stream_statistics_adapter;
 
 pub use feature_collection_merger::FeatureCollectionChunkMerger;
 pub use raster_subquery::{
@@ -22,7 +21,6 @@ use geoengine_datatypes::{
     raster::{Pixel, RasterTile2D},
     util::arrow::ArrowTyped,
 };
-pub use stream_statistics_adapter::StreamStatisticsAdapter;
 
 /// This trait extends `RasterTile2D` `Stream`s with Geo-Engine-specific functionality.
 ///
@@ -50,14 +48,6 @@ where
     {
         RasterTimeMultiFold::new(self, accum_init_fn, fold_fn)
     }
-
-    /// Wraps a `Stream` with a `StreamStatisticsAdapter`.
-    fn statistics_with_id(self, id: String) -> StreamStatisticsAdapter<Self>
-    where
-        Self: Stream + Sized,
-    {
-        StreamStatisticsAdapter::statistics_with_id(self, id)
-    }
 }
 
 impl<T: ?Sized, P: Pixel> RasterStreamExt<P> for T where T: Stream<Item = Result<RasterTile2D<P>>> {}
@@ -79,14 +69,6 @@ where
         Self: Sized,
     {
         FeatureCollectionChunkMerger::new(self.fuse(), chunk_size_bytes)
-    }
-
-    /// Wraps a `Stream` with a `StreamStatisticsAdapter`.
-    fn statistics_with_id(self, id: String) -> StreamStatisticsAdapter<Self>
-    where
-        Self: Stream + Sized,
-    {
-        StreamStatisticsAdapter::statistics_with_id(self, id)
     }
 }
 

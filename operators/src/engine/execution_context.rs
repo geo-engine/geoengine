@@ -1,4 +1,4 @@
-use super::MockQueryContext;
+use super::{CreateSpan, InitializedRasterOperator, MockQueryContext};
 use crate::engine::{
     ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
 };
@@ -28,6 +28,12 @@ pub trait ExecutionContext: Send
 {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;
+
+    fn initialize_operator(
+        &self,
+        op: Box<dyn InitializedRasterOperator>,
+        span: Box<dyn CreateSpan>,
+    ) -> Box<dyn InitializedRasterOperator>;
 }
 
 #[async_trait]
@@ -119,6 +125,14 @@ impl ExecutionContext for MockExecutionContext {
 
     fn tiling_specification(&self) -> TilingSpecification {
         self.tiling_specification
+    }
+
+    fn initialize_operator(
+        &self,
+        op: Box<dyn InitializedRasterOperator>,
+        _span: Box<dyn CreateSpan>,
+    ) -> Box<dyn InitializedRasterOperator> {
+        op
     }
 }
 

@@ -20,6 +20,6 @@ pub use point_in_polygon::{
     PointInPolygonTester,
 };
 pub use raster_type_conversion::{RasterTypeConversionParams, RasterTypeConversionQueryProcessor};
-pub use reprojection::{Reprojection, ReprojectionParams};
+pub use reprojection::{RasterReprojectionProcessor, Reprojection, ReprojectionParams};
 pub use time_projection::{TimeProjection, TimeProjectionError, TimeProjectionParams};
 pub use time_shift::{TimeShift, TimeShiftError, TimeShiftParams};

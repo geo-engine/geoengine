@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use serde::Deserialize;
 
 use crate::util::config::ConfigElement;
@@ -34,4 +36,14 @@ pub struct Oidc {
 
 impl ConfigElement for Oidc {
     const KEY: &'static str = "oidc";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OpenTelemetry {
+    pub enabled: bool,
+    pub endpoint: SocketAddr,
+}
+
+impl ConfigElement for OpenTelemetry {
+    const KEY: &'static str = "open_telemetry";
 }

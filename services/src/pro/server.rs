@@ -152,6 +152,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let session_config: crate::util::config::Session = get_config_element()?;
     let user_config: crate::pro::util::config::User = get_config_element()?;
     let oidc_config: crate::pro::util::config::Oidc = get_config_element()?;
+    let open_telemetry: crate::pro::util::config::OpenTelemetry = get_config_element()?;
 
     if session_config.anonymous_access {
         info!("Anonymous access is enabled");
@@ -173,6 +174,15 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         info!("OIDC is enabled");
     } else {
         info!("OIDC is disabled");
+    }
+
+    if open_telemetry.enabled {
+        info!(
+            "OpenTelemetry Tracing is enabled and will send traces to {}",
+            open_telemetry.endpoint
+        );
+    } else {
+        info!("OpenTelemetry Tracing is disabled");
     }
 
     let data_path_config: config::DataProvider = get_config_element()?;

@@ -151,6 +151,14 @@ where
     fn tiling_specification(&self) -> TilingSpecification {
         self.tiling_specification
     }
+
+    fn initialize_operator(
+        &self,
+        op: Box<dyn geoengine_operators::engine::InitializedRasterOperator>,
+        _span: Box<dyn geoengine_operators::engine::CreateSpan>,
+    ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
+        op
+    }
 }
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code

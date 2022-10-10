@@ -26,7 +26,6 @@ pub mod adapters;
 #[macro_use]
 pub mod engine;
 pub mod error;
-pub mod meta;
 pub mod mock;
 pub mod plot;
 pub mod processing;

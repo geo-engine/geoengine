@@ -4,13 +4,12 @@ use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterSubQueryAdapter, TileReprojectionSubQuery},
     engine::{
-        ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-        QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-        SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-        VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        CreateSpan, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
+        Operator, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     error::{self, Error},
-    meta::statistics::InitializedProcessorStatistics,
     util::{input::RasterOrVectorOperator, Result},
 };
 use async_trait::async_trait;
@@ -27,6 +26,7 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use serde::{Deserialize, Serialize};
+use tracing::{span, Level, Span};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -261,17 +261,22 @@ impl RasterOperator for Reprojection {
             tiling_spec: context.tiling_specification(),
         };
 
-        let initialized_operator = InitializedRasterReprojection {
+        let op = InitializedRasterReprojection {
             result_descriptor: out_desc,
             source: raster_operator,
             state,
         };
 
-        Ok(InitializedProcessorStatistics::statistics_with_id(
-            initialized_operator.boxed(),
-            "raster_reprojection".to_string(),
-        )
-        .boxed())
+        Ok(context.initialize_operator(op.boxed(), Box::new(ReprojectionSpan {})))
+    }
+}
+
+#[derive(Clone)]
+struct ReprojectionSpan {}
+
+impl CreateSpan for ReprojectionSpan {
+    fn create_span(&self) -> Span {
+        span!(Level::TRACE, "Reprojection")
     }
 }
 
@@ -383,7 +388,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
     }
 }
 
-struct RasterReprojectionProcessor<Q, P>
+pub struct RasterReprojectionProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
 {
@@ -480,14 +485,21 @@ where
         };
 
         // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
-        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+        let stream_filled = RasterSubQueryAdapter::<'a, P, _, _>::new(
             &self.source,
             query,
             self.tiling_spec,
             ctx,
             sub_query_spec,
         )
-        .filter_and_fill())
+        .filter_and_fill();
+
+        Ok(stream_filled.boxed())
+
+        //TODO: use stream.instrumented instead?
+        // let stream_span = SpanAdapter::new(stream_filled, span!(Level::TRACE, "Reprojection"));
+
+        // Ok(stream_span.boxed())
     }
 }
 
