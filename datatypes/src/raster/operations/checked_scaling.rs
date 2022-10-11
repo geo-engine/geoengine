@@ -4,61 +4,61 @@ use crate::raster::{
 use num_traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 use std::ops::{Add, Div, Mul, Sub};
 
-/// scales the value with `(value - offset_by) / scale_with`.
+/// scales the value with `(value - offset) / slope`.
 #[inline]
 #[allow(clippy::unnecessary_wraps)]
-fn scale<T>(value: T, scale_with: T, offset_by: T) -> Option<T>
+fn scale<T>(value: T, slope: T, offset: T) -> Option<T>
 where
     T: Copy + 'static + Sub<Output = T> + Div<Output = T>,
 {
-    Some((value - offset_by) / scale_with)
+    Some((value - offset) / slope)
 }
 
-/// unscales the value with `value * scale_with + offset_by`.
+/// unscales the value with `value * slope + offset`.
 #[inline]
 #[allow(clippy::unnecessary_wraps)]
-fn unscale<T>(value: T, scale_with: T, offset_by: T) -> Option<T>
+fn unscale<T>(value: T, slope: T, offset: T) -> Option<T>
 where
     T: Copy + 'static + Add<Output = T> + Mul<Output = T>,
 {
-    Some(value * scale_with + offset_by)
+    Some(value * slope + offset)
 }
-/// scales the value with `(value - offset_by) / scale_with`. Overflows produce `None`.
+/// scales the value with `(value - offset) / slope`. Overflows produce `None`.
 #[inline]
-fn scale_checked<T>(value: T, scale_with: T, offset_by: T) -> Option<T>
+fn scale_checked<T>(value: T, slope: T, offset: T) -> Option<T>
 where
     T: Copy + 'static + CheckedSub<Output = T> + CheckedDiv<Output = T>,
 {
     value
-        .checked_sub(&offset_by)
-        .and_then(|f| f.checked_div(&scale_with))
+        .checked_sub(&offset)
+        .and_then(|f| f.checked_div(&slope))
 }
 
-/// unscales the value with ``value * scale_with + offset_by``. Overflows produce `None`.
+/// unscales the value with ``value * slope + offset``. Overflows produce `None`.
 #[inline]
-fn unscale_checked<T>(value: T, scale_with: T, offset_by: T) -> Option<T>
+fn unscale_checked<T>(value: T, slope: T, offset: T) -> Option<T>
 where
     T: Copy + 'static + CheckedAdd<Output = T> + CheckedMul<Output = T>,
 {
     value
-        .checked_mul(&scale_with)
-        .and_then(|f| f.checked_add(&offset_by))
+        .checked_mul(&slope)
+        .and_then(|f| f.checked_add(&offset))
 }
 
 pub trait Scale
 where
     Self: Sized,
 {
-    /// scales with `(self - offset_by) / scale_with`. Overflows produce `None`.
-    fn scale(self, scale_with: Self, offset_by: Self) -> Option<Self>;
+    /// scales with `(self - offset) / slope`. Overflows produce `None`.
+    fn scale(self, slope: Self, offset: Self) -> Option<Self>;
 }
 
 macro_rules! impl_scale_conv {
     ($T:ty, $conv:ident) => {
         impl Scale for $T {
             #[inline]
-            fn scale(self, scale_with: Self, offset_by: Self) -> Option<Self> {
-                $conv(self, scale_with, offset_by)
+            fn scale(self, slope: Self, offset: Self) -> Option<Self> {
+                $conv(self, slope, offset)
             }
         }
     };
@@ -76,8 +76,8 @@ impl_scale_conv!(f32, scale);
 impl_scale_conv!(f64, scale);
 
 pub trait Unscale {
-    /// unscales with `self * scale_with + offset_by`. Overflows produce `None`.
-    fn unscale(self, scale_with: Self, offset_by: Self) -> Option<Self>
+    /// unscales with `self * slope + offset`. Overflows produce `None`.
+    fn unscale(self, slope: Self, offset: Self) -> Option<Self>
     where
         Self: Sized;
 }
@@ -86,8 +86,8 @@ macro_rules! impl_unscale_conv {
     ($T:ty, $conv:ident) => {
         impl Unscale for $T {
             #[inline]
-            fn unscale(self, scale_with: Self, offset_by: Self) -> Option<Self> {
-                $conv(self, scale_with, offset_by)
+            fn unscale(self, slope: Self, offset: Self) -> Option<Self> {
+                $conv(self, slope, offset)
             }
         }
     };
@@ -105,30 +105,30 @@ impl_unscale_conv!(f32, unscale);
 impl_unscale_conv!(f64, unscale);
 
 pub trait ScalingTransformation<T> {
-    fn transform(value: T, scale_with: T, offset_by: T) -> Option<T>;
+    fn transform(value: T, slope: T, offset: T) -> Option<T>;
 }
 
-/// scales the value with `(value - offset_by) / scale_with`. Overflows produce `None`.
+/// scales the value with `(value - offset) / slope`. Overflows produce `None`.
 pub struct ScaleTransformation;
 
 impl<T> ScalingTransformation<T> for ScaleTransformation
 where
     T: Scale,
 {
-    fn transform(value: T, scale_with: T, offset_by: T) -> Option<T> {
-        value.scale(scale_with, offset_by)
+    fn transform(value: T, slope: T, offset: T) -> Option<T> {
+        value.scale(slope, offset)
     }
 }
 
-/// unscales with `self * scale_with + offset_by`. Overflows produce `None`.
+/// unscales with `self * slope + offset`. Overflows produce `None`.
 pub struct UnscaleTransformation;
 
 impl<T> ScalingTransformation<T> for UnscaleTransformation
 where
     T: Unscale,
 {
-    fn transform(value: T, scale_with: T, offset_by: T) -> Option<T> {
-        value.unscale(scale_with, offset_by)
+    fn transform(value: T, slope: T, offset: T) -> Option<T> {
+        value.unscale(slope, offset)
     }
 }
 
@@ -136,11 +136,7 @@ where
 pub trait ElementScaling<T> {
     type Output;
     /// applies a transformation to the elements of the grid.
-    fn transform_elements<F: ScalingTransformation<T>>(
-        self,
-        scale_with: T,
-        offset_by: T,
-    ) -> Self::Output;
+    fn transform_elements<F: ScalingTransformation<T>>(self, slope: T, offset: T) -> Self::Output;
 }
 
 impl<P, G> ElementScaling<P> for MaskedGrid<G, P>
@@ -150,12 +146,8 @@ where
 {
     type Output = MaskedGrid<G, P>;
 
-    fn transform_elements<F: ScalingTransformation<P>>(
-        self,
-        scale_with: P,
-        offset_by: P,
-    ) -> Self::Output {
-        let map_fn = |vo: Option<P>| vo.and_then(|v| F::transform(v, scale_with, offset_by));
+    fn transform_elements<F: ScalingTransformation<P>>(self, slope: P, offset: P) -> Self::Output {
+        let map_fn = |vo: Option<P>| vo.and_then(|v| F::transform(v, slope, offset));
         self.map_elements(map_fn)
     }
 }
@@ -168,15 +160,9 @@ where
 {
     type Output = GridOrEmpty<G, P>;
 
-    fn transform_elements<F: ScalingTransformation<P>>(
-        self,
-        scale_with: P,
-        offset_by: P,
-    ) -> Self::Output {
+    fn transform_elements<F: ScalingTransformation<P>>(self, slope: P, offset: P) -> Self::Output {
         match self {
-            GridOrEmpty::Grid(g) => {
-                GridOrEmpty::Grid(g.transform_elements::<F>(scale_with, offset_by))
-            }
+            GridOrEmpty::Grid(g) => GridOrEmpty::Grid(g.transform_elements::<F>(slope, offset)),
             GridOrEmpty::Empty(e) => GridOrEmpty::Empty(EmptyGrid::new(e.shape)),
         }
     }
@@ -189,15 +175,9 @@ where
 {
     type Output = RasterTile2D<P>;
 
-    fn transform_elements<F: ScalingTransformation<P>>(
-        self,
-        scale_with: P,
-        offset_by: P,
-    ) -> Self::Output {
+    fn transform_elements<F: ScalingTransformation<P>>(self, slope: P, offset: P) -> Self::Output {
         RasterTile2D {
-            grid_array: self
-                .grid_array
-                .transform_elements::<F>(scale_with, offset_by),
+            grid_array: self.grid_array.transform_elements::<F>(slope, offset),
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             tile_position: self.tile_position,

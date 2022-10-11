@@ -23,8 +23,8 @@ use std::sync::Arc;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterScalingParams {
-    scale_with: PropertiesKeyOrValue,
-    offset_by: PropertiesKeyOrValue,
+    slope: PropertiesKeyOrValue,
+    offset: PropertiesKeyOrValue,
     output_measurement: Option<Measurement>,
     scaling_mode: ScalingMode,
 }
@@ -63,8 +63,8 @@ enum PropertiesKeyOrValue {
 pub type RasterScaling = Operator<RasterScalingParams, SingleRasterSource>;
 
 pub struct InitializedRasterScalingOperator {
-    scale_with: PropertiesKeyOrValue,
-    offset_by: PropertiesKeyOrValue,
+    slope: PropertiesKeyOrValue,
+    offset: PropertiesKeyOrValue,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     scaling_mode: ScalingMode,
@@ -93,8 +93,8 @@ impl RasterOperator for RasterScaling {
         };
 
         let initialized_operator = InitializedRasterScalingOperator {
-            scale_with: self.params.scale_with,
-            offset_by: self.params.offset_by,
+            slope: self.params.slope,
+            offset: self.params.offset,
             result_descriptor: out_desc,
             source: input,
             scaling_mode: self.params.scaling_mode,
@@ -110,17 +110,17 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        let scale_with = self.scale_with.clone();
-        let offset_by = self.offset_by.clone();
+        let slope = self.slope.clone();
+        let offset = self.offset.clone();
         let source = self.source.query_processor()?;
         let scaling_mode = self.scaling_mode;
 
         let res = match scaling_mode {
             ScalingMode::Scale => {
-                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, ScaleTransformation>(scale_with, offset_by,  source_proc)) })
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, ScaleTransformation>(slope, offset,  source_proc)) })
             }
             ScalingMode::Unscale => {
-                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, UnscaleTransformation>(scale_with, offset_by,  source_proc)) })
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, UnscaleTransformation>(slope, offset,  source_proc)) })
             }
         };
 
@@ -133,14 +133,14 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
-    scale_with: PropertiesKeyOrValue,
-    offset_by: PropertiesKeyOrValue,
+    slope: PropertiesKeyOrValue,
+    offset: PropertiesKeyOrValue,
     _transformation: PhantomData<S>,
 }
 
 fn create_boxed_processor<Q, P, S>(
-    scale_with: PropertiesKeyOrValue,
-    offset_by: PropertiesKeyOrValue,
+    slope: PropertiesKeyOrValue,
+    offset: PropertiesKeyOrValue,
     source: Q,
 ) -> Box<dyn RasterQueryProcessor<RasterType = P>>
 where
@@ -149,7 +149,7 @@ where
     f64: AsPrimitive<P>,
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
-    RasterTransformationProcessor::<Q, P, S>::create(scale_with, offset_by, source).boxed()
+    RasterTransformationProcessor::<Q, P, S>::create(slope, offset, source).boxed()
 }
 
 impl<Q, P, S> RasterTransformationProcessor<Q, P, S>
@@ -160,14 +160,14 @@ where
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
     pub fn create(
-        scale_with: PropertiesKeyOrValue,
-        offset_by: PropertiesKeyOrValue,
+        slope: PropertiesKeyOrValue,
+        offset: PropertiesKeyOrValue,
         source: Q,
     ) -> RasterTransformationProcessor<Q, P, S> {
         RasterTransformationProcessor {
             source,
-            scale_with,
-            offset_by,
+            slope,
+            offset,
             _transformation: PhantomData,
         }
     }
@@ -177,13 +177,12 @@ where
         tile: RasterTile2D<P>,
         _pool: Arc<ThreadPool>,
     ) -> Result<RasterTile2D<P>> {
-        let offset_by = Self::prop_value(&self.offset_by, &tile.properties)?;
-        let scale_with = Self::prop_value(&self.scale_with, &tile.properties)?;
+        let offset = Self::prop_value(&self.offset, &tile.properties)?;
+        let slope = Self::prop_value(&self.slope, &tile.properties)?;
 
-        let res_tile = crate::util::spawn_blocking(move || {
-            tile.transform_elements::<S>(scale_with, offset_by)
-        })
-        .await?;
+        let res_tile =
+            crate::util::spawn_blocking(move || tile.transform_elements::<S>(slope, offset))
+                .await?;
 
         Ok(res_tile)
     }
@@ -289,11 +288,11 @@ mod tests {
         }
         .boxed();
 
-        let scale_with = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
+        let slope = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
             domain: None,
             key: "scale".to_string(),
         });
-        let offset_by = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
+        let offset = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
             domain: None,
             key: "offset".to_string(),
         });
@@ -304,8 +303,8 @@ mod tests {
 
         let op = RasterScaling {
             params: RasterScalingParams {
-                scale_with,
-                offset_by,
+                slope,
+                offset,
                 output_measurement,
                 scaling_mode,
             },
@@ -404,11 +403,11 @@ mod tests {
         }
         .boxed();
 
-        let scale_with = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
+        let slope = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
             domain: None,
             key: "scale".to_string(),
         });
-        let offset_by = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
+        let offset = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
             domain: None,
             key: "offset".to_string(),
         });
@@ -418,8 +417,8 @@ mod tests {
         let output_measurement = None;
 
         let params = RasterScalingParams {
-            scale_with,
-            offset_by,
+            slope,
+            offset,
             output_measurement,
             scaling_mode,
         };
