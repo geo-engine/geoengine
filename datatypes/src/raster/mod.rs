@@ -23,8 +23,8 @@ pub use self::operations::{
     interpolation::NearestNeighbor,
 };
 pub use self::raster_tile::{
-    BaseTile, MaterializedRasterTile, MaterializedRasterTile2D, MaterializedRasterTile3D,
-    RasterTile, RasterTile2D, RasterTile3D,
+    display_raster_tile_2d, BaseTile, MaterializedRasterTile, MaterializedRasterTile2D,
+    MaterializedRasterTile3D, RasterTile, RasterTile2D, RasterTile3D,
 };
 pub use self::tiling::{TileInformation, TilingSpecification, TilingStrategy};
 pub use self::typed_raster_conversion::TypedRasterConversion;

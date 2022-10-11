@@ -4,6 +4,7 @@ mod expression;
 mod interpolation;
 mod map_query;
 mod meteosat;
+mod neighborhood_aggregate;
 mod point_in_polygon;
 mod raster_scaling;
 mod raster_type_conversion;
@@ -16,6 +17,9 @@ mod vector_join;
 
 pub use expression::{Expression, ExpressionError, ExpressionParams, ExpressionSources};
 pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
+pub use neighborhood_aggregate::{
+    NeighborhoodAggregate, NeighborhoodAggregateError, NeighborhoodAggregateParams,
+};
 pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,

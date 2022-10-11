@@ -43,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - https://github.com/geo-engine/geoengine/pull/614
 
+- Added a `RasterKernel` operator
+
+  - https://github.com/geo-engine/geoengine/pull/644
+
 ### Changed
 
 - The Interpolation operator's input resolution can now be set to `native` to take the best available resolution, if it is known.
@@ -96,3 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - https://github.com/geo-engine/geoengine/pull/614
   - The input parameters now include a field `column_names` to select vector columns/alias raster inputs
   - The output was changed to a map from column names/raster aliases to the respective statistics
+
+- The Expression uses a Pratt Parser instead of the previously used PrecClimber from `pest.rs`.
+
+  - https://github.com/geo-engine/geoengine/pull/641
