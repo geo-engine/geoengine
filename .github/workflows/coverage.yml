@@ -42,6 +42,10 @@ jobs:
       - name: init rust-toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
+      - name: Install coverage dependencies
+        run: |
+          rustup component add llvm-tools-preview
+          cargo install grcov
       - name: setup rust build cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -81,9 +85,10 @@ jobs:
           LLVM_PROFILE_FILE: grcov-%p-%m.profraw
           RUSTFLAGS: -Cinstrument-coverage
         run: cargo test
+      - run:
       - name: Generate code coverage
         run: |
-          ./target/debug/grcov $(find . -name "grcov-*.profraw" -print) \
+          grcov $(find . -name "grcov-*.profraw" -print) \
             --branch \
             --ignore-not-existing \
             --binary-path ./target/debug/ \
