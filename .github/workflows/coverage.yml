@@ -85,7 +85,6 @@ jobs:
           LLVM_PROFILE_FILE: grcov-%p-%m.profraw
           RUSTFLAGS: -Cinstrument-coverage
         run: cargo test
-      - run:
       - name: Generate code coverage
         run: |
           grcov $(find . -name "grcov-*.profraw" -print) \
