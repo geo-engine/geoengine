@@ -85,7 +85,10 @@ jobs:
           LLVM_PROFILE_FILE: grcov-%p-%m.profraw
           RUSTFLAGS: -C instrument-coverage
           RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins"
-        run: cargo test --all-features
+        run: |
+          cargo test --all-features --package geoengine-datatypes
+          cargo test --all-features --package geoengine-operators
+          cargo test --all-features --package geoengine-services
       - name: Generate code coverage
         run: |
           grcov $(find . -name "grcov-*.profraw" -print) \
