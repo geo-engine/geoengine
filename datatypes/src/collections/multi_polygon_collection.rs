@@ -27,7 +27,7 @@ impl GeometryCollection for MultiPolygonCollection {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There should exist a geometry column");
+            .expect("There should exist a geometry column because it is added during creation of the collection");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let polygons_ref = geometries.values();
@@ -57,7 +57,7 @@ impl GeometryCollection for MultiPolygonCollection {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There should exist a geometry column");
+            .expect("There should exist a geometry column because it is added during creation of the collection");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let data = geometries.data();
@@ -73,7 +73,7 @@ impl MultiPolygonCollection {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There should exist a geometry column");
+            .expect("There should exist a geometry column because it is added during creation of the collection");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let polygons_ref = geometries.values();
@@ -90,7 +90,7 @@ impl MultiPolygonCollection {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There should exist a geometry column");
+            .expect("There should exist a geometry column because it is added during creation of the collection");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let polygons_ref = geometries.values();

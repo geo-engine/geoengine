@@ -23,7 +23,7 @@ impl GeometryCollection for MultiLineStringCollection {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There should exist a geometry column");
+            .expect("There should exist a geometry column because it is added during creation of the collection");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let line_strings_ref = geometries.values();
@@ -50,7 +50,7 @@ impl GeometryCollection for MultiLineStringCollection {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There should exist a geometry column");
+            .expect("There should exist a geometry column because it is added during creation of the collection");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let data = geometries.data();
@@ -66,7 +66,7 @@ impl MultiLineStringCollection {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There should exist a geometry column");
+            .expect("There should exist a geometry column because it is added during creation of the collection");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let line_strings_ref = geometries.values();
@@ -87,7 +87,7 @@ impl<'l> IntoGeometryIterator<'l> for MultiLineStringCollection {
         let geometry_column: &ListArray = downcast_array(
             self.table
                 .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-                .expect("Column must exist since it is in the metadata"),
+                .expect("There should exist a geometry column because it is added during creation of the collection"),
         );
 
         Self::GeometryIterator::new(geometry_column, self.len())

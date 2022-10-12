@@ -223,7 +223,9 @@ where
             .map(|column_name| {
                 (
                     column_name.clone(),
-                    self.left.data(column_name).expect("should exist"),
+                    self.left.data(column_name).expect(
+                        "column should exist because it was checked during operator initialization",
+                    ),
                 )
             })
             .collect();
@@ -233,7 +235,9 @@ where
             .map(|(old_column_name, new_column_name)| {
                 (
                     new_column_name.clone(),
-                    self.right.data(old_column_name).expect("should exist"),
+                    self.right.data(old_column_name).expect(
+                        "column should exist because it was checked during operator initialization",
+                    ),
                 )
             })
             .collect();
@@ -242,7 +246,7 @@ where
             let geometry: G = self
                 .left
                 .geometry_at(left_idx)
-                .expect("index should exist")
+                .expect("geometry should exist because `left_idx` < `len`")
                 .into();
 
             let join_inner_batch_matches = Self::join_inner_batch_matches(

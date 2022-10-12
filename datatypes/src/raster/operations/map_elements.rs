@@ -269,12 +269,14 @@ where
             .unzip_into_vecs(out_data.as_mut(), out_validity.as_mut());
 
         MaskedGrid::new(
-            Grid::new(shape.clone(), out_data)
-                .expect("the shape of the grid and the data size should match"),
-            Grid::new(shape, out_validity)
-                .expect("the shape of the grid and the data size should match"),
+            Grid::new(shape.clone(), out_data).expect(
+                "Grid creation shoud work because the shape of the grid and the data size match",
+            ),
+            Grid::new(shape, out_validity).expect(
+                "Grid creation shoud work because the shape of the grid and the data size match",
+            ),
         )
-        .expect("the shape of the grid and the data size should match")
+        .expect("Grid creation shoud work because the shape of the data and validity grid match")
     }
 }
 

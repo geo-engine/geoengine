@@ -247,10 +247,10 @@ where
             })
             .unzip_into_vecs(out_data.as_mut(), out_validity.as_mut());
 
-        let inner_grid =
-            Grid::new(grid_shape.clone(), out_data).expect("grid shape should be valid");
-        let validity_mask =
-            Grid::new(grid_shape.clone(), out_validity).expect("grid shape should be valid");
+        let inner_grid = Grid::new(grid_shape.clone(), out_data)
+            .expect("grid creation should work because the shape is valid");
+        let validity_mask = Grid::new(grid_shape.clone(), out_validity)
+            .expect("grid creation should work because the shape is valid");
 
         MaskedGrid {
             inner_grid,
