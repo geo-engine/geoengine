@@ -37,7 +37,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
       - name: Add UbuntuGIS ppa
-        run: sudo add-apt-repository ppa:ubuntugis/ppa
+        run: sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable
       - name: APT update
         run: sudo apt-get update
       - name: Install lld & GDAL

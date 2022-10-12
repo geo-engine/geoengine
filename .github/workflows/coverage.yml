@@ -30,7 +30,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
       - name: Add UbuntuGIS ppa
-        run: sudo add-apt-repository ppa:ubuntugis/ppa
+        run: sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable
       - name: APT update
         run: sudo apt-get update
       - name: Install lld & GDAL
@@ -72,12 +72,25 @@ jobs:
           # Determines if the cache should be saved even when the workflow has failed.
           # Default: "false"
           #cache-on-failure: ""
+      - name: Build
+        env:
+          RUSTFLAGS: -Cinstrument-coverage
+        run: cargo build
+      - name: Test
+        env:
+          LLVM_PROFILE_FILE: grcov-%p-%m.profraw
+          RUSTFLAGS: -Cinstrument-coverage
+        run: cargo test
       - name: Generate code coverage
         run: |
-          cargo install cargo-tarpaulin
-          cargo tarpaulin --verbose --workspace --timeout 240 --out Lcov --all-features --tests  --implicit-test-threads --run-types Tests  --skip-clean
-        env:
-          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
+          ./target/debug/grcov $(find . -name "grcov-*.profraw" -print) \
+            --branch \
+            --ignore-not-existing \
+            --binary-path ./target/debug/ \
+            -s . \
+            -t lcov \
+            --ignore "/*" \
+            -o lcov.info
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v1.1.1
         with:

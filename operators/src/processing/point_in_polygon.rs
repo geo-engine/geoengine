@@ -520,6 +520,7 @@ mod tests {
         Ok(())
     }
 
+    // #[async::main]
     #[tokio::test]
     async fn multiple_inputs() -> Result<()> {
         let points1 = MultiPointCollection::from_data(
