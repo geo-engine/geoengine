@@ -78,13 +78,14 @@ jobs:
           #cache-on-failure: ""
       - name: Build
         env:
-          RUSTFLAGS: -Cinstrument-coverage
-        run: cargo build
+          RUSTFLAGS: -C instrument-coverage
+        run: cargo build --all-features
       - name: Test
         env:
           LLVM_PROFILE_FILE: grcov-%p-%m.profraw
-          RUSTFLAGS: -Cinstrument-coverage
-        run: cargo test
+          RUSTFLAGS: -C instrument-coverage
+          RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins"
+        run: cargo test --all-features
       - name: Generate code coverage
         run: |
           grcov $(find . -name "grcov-*.profraw" -print) \
