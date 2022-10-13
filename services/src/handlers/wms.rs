@@ -463,13 +463,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_fields() {
-        let res = test_test_helper(Method::GET, Some("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?service=WMS&version=1.3.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")).await;
+        let res = test_test_helper(Method::GET, Some("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?service=WMS&request=GetMap&version=1.3.0&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png")).await;
 
         ErrorResponse::assert(
             res,
             400,
             "UnableToParseQueryString",
-            "Unable to parse query string: missing field `request`",
+            "Unable to parse query string: missing field `layers`",
         )
         .await;
     }
@@ -610,7 +610,7 @@ mod tests {
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=XML&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, ctx).await;
 
         assert_eq!(
