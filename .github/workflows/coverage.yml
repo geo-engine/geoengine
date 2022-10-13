@@ -74,7 +74,7 @@ jobs:
           #cache-on-failure: ""
       - name: Generate code coverage
         run: |
-          cargo install cargo-tarpaulin@0.21
+          cargo install -version ~0.21 cargo-tarpaulin
           cargo tarpaulin \
             --verbose \
             --workspace \
