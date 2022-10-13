@@ -78,13 +78,13 @@ jobs:
         env:
           CARGO_INCREMENTAL: 0
           RUSTFLAGS: -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=unwind
-          RUSTDOCFLAGS: -Cpanic=abort
+          RUSTDOCFLAGS: -Cpanic=unwind
         run: cargo build --all-features
       - name: Test
         env:
           CARGO_INCREMENTAL: 0
           RUSTFLAGS: -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=unwind
-          RUSTDOCFLAGS: -Cpanic=abort
+          RUSTDOCFLAGS: -Cpanic=unwind
         run: cargo test --all-features
       - name: Generate code coverage
         run: |
