@@ -43,9 +43,7 @@ jobs:
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
       - name: Install coverage dependencies
-        run: |
-          rustup component add llvm-tools-preview
-          cargo install grcov
+        run: cargo install grcov
       - name: setup rust build cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -78,25 +76,24 @@ jobs:
           #cache-on-failure: ""
       - name: Build
         env:
-          RUSTFLAGS: -C instrument-coverage
+          CARGO_INCREMENTAL: 0
+          RUSTFLAGS: -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort
+          RUSTDOCFLAGS: -Cpanic=abort
         run: cargo build --all-features
       - name: Test
         env:
-          LLVM_PROFILE_FILE: grcov-%p-%m.profraw
-          RUSTFLAGS: -C instrument-coverage
-          RUSTDOCFLAGS: -C instrument-coverage -Z unstable-options --persist-doctests target/debug/doctestbins"
-        run: |
-          cargo test --all-features --package geoengine-datatypes
-          cargo test --all-features --package geoengine-operators
-          cargo test --all-features --package geoengine-services
+          CARGO_INCREMENTAL: 0
+          RUSTFLAGS: -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort
+          RUSTDOCFLAGS: -Cpanic=abort
+        run: cargo test --all-features
       - name: Generate code coverage
         run: |
-          grcov $(find . -name "grcov-*.profraw" -print) \
+          zip -0 ccov.zip `find . \( -name "*geoengine*.gc*" \) -print`
+          grcov ccov.zip -s . \
+            -t lcov \
+            --llvm \
             --branch \
             --ignore-not-existing \
-            --binary-path ./target/debug/ \
-            -s . \
-            -t lcov \
             --ignore "/*" \
             -o lcov.info
       - name: Upload coverage to Coveralls
