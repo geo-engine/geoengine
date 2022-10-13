@@ -5,23 +5,20 @@ use snafu::{ensure, ResultExt};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
-use geoengine_datatypes::{
-    operations::image::Colorizer, primitives::SpatialResolution,
-    spatial_reference::SpatialReference,
-};
+use geoengine_datatypes::{operations::image::Colorizer, primitives::SpatialResolution};
 
+use crate::api::model::datatypes::{SpatialReference, SpatialReferenceOption, TimeInterval};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
-use crate::ogc::util::{ogc_endpoint_url, OgcProtocol};
-use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WmsRequest};
+use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
+use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::user_input::QueryEx;
+use crate::util::server::not_implemented_handler;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
-use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::engine::{RasterOperator, ResultDescriptor};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::{
@@ -34,87 +31,169 @@ where
     C: Context,
     C::Session: FromRequest,
 {
-    cfg.service(web::resource("/wms/{workflow}").route(web::get().to(wms_handler::<C>)));
+    cfg.service(
+        web::resource("/wms/{workflow}")
+            .route(
+                web::get()
+                    .guard(OgcRequestGuard::new("GetCapabilities"))
+                    .to(wms_capabilities_handler::<C>),
+            )
+            .route(
+                web::get()
+                    .guard(OgcRequestGuard::new("GetMap"))
+                    .to(wms_map_handler::<C>),
+            )
+            .route(
+                web::get()
+                    .guard(OgcRequestGuard::new("GetLegendGraphic"))
+                    .to(wms_legend_graphic_handler::<C>),
+            )
+            .route(web::get().to(not_implemented_handler)),
+    );
 }
 
-async fn wms_handler<C: Context>(
+/// Get WMS Capabilities
+#[utoipa::path(
+    tag = "OGC WMS",
+    get,
+    path = "/wms/{workflow}?request=GetCapabilities",
+    responses(
+        (status = 200, description = "OK", content_type = "text/xml", body = String,
+            // TODO: add example when utoipa supports more than just json examples
+            // example = r#"<WMS_Capabilities 
+            // xmlns="http://www.opengis.net/wms" 
+            // xmlns:sld="http://www.opengis.net/sld" 
+            // xmlns:xlink="http://www.w3.org/1999/xlink" 
+            // xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3.0" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd">
+            // <Service>
+            //   <Name>WMS</Name>
+            //   <Title>Geo Engine WMS</Title>
+            //   <OnlineResource 
+            //     xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://127.0.0.1:3030/wms/b709b27b-dea5-5a27-a074-ae3366c49498"/>
+            //   </Service>
+            //   <Capability>
+            //     <Request>
+            //       <GetCapabilities>
+            //         <Format>text/xml</Format>
+            //         <DCPType>
+            //           <HTTP>
+            //             <Get>
+            //               <OnlineResource xlink:href="http://127.0.0.1:3030/wms/b709b27b-dea5-5a27-a074-ae3366c49498"/>
+            //             </Get>
+            //           </HTTP>
+            //         </DCPType>
+            //       </GetCapabilities>
+            //       <GetMap>
+            //         <Format>image/png</Format>
+            //         <DCPType>
+            //           <HTTP>
+            //             <Get>
+            //               <OnlineResource xlink:href="http://127.0.0.1:3030/wms/b709b27b-dea5-5a27-a074-ae3366c49498"/>
+            //             </Get>
+            //           </HTTP>
+            //         </DCPType>
+            //       </GetMap>
+            //     </Request>
+            //     <Exception>
+            //       <Format>XML</Format>
+            //       <Format>INIMAGE</Format>
+            //       <Format>BLANK</Format>
+            //     </Exception>
+            //     <Layer queryable="1">
+            //       <Name>b709b27b-dea5-5a27-a074-ae3366c49498</Name>
+            //       <Title>Workflow b709b27b-dea5-5a27-a074-ae3366c49498</Title>
+            //       <CRS>EPSG:3857</CRS>
+            //       <EX_GeographicBoundingBox>
+            //         <westBoundLongitude>-180</westBoundLongitude>
+            //         <eastBoundLongitude>180</eastBoundLongitude>
+            //         <southBoundLatitude>-90</southBoundLatitude>
+            //         <northBoundLatitude>90</northBoundLatitude>
+            //       </EX_GeographicBoundingBox>
+            //       <BoundingBox CRS="EPSG:4326" minx="-90.0" miny="-180.0" maxx="90.0" maxy="180.0"/>
+            //     </Layer>
+            //   </Capability>
+            // </WMS_Capabilities>"#
+        )
+    ),
+    params(
+        ("workflow" = WorkflowId, description = "Workflow id"),
+        GetCapabilities
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn wms_capabilities_handler<C: Context>(
     workflow: web::Path<WorkflowId>,
-    request: QueryEx<WmsRequest>,
+    request: web::Query<GetCapabilities>,
     ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    match request.into_inner() {
-        WmsRequest::GetCapabilities(request) => {
-            get_capabilities(&request, ctx.get_ref(), session, workflow.into_inner()).await
-        }
-        WmsRequest::GetMap(request) => {
-            get_map(&request, ctx.get_ref(), session, workflow.into_inner()).await
-        }
-        WmsRequest::GetLegendGraphic(request) => {
-            get_legend_graphic(&request, ctx.get_ref(), workflow.into_inner())
-        }
-        _ => Ok(HttpResponse::NotImplemented().finish()),
-    }
+    get_capabilities(
+        &request.into_inner(),
+        ctx.get_ref(),
+        session,
+        workflow.into_inner(),
+    )
+    .await
 }
 
-/// Gets details about the web map service provider and lists available operations.
-///
-/// # Example
-///
-/// ```text
-/// GET /wms?request=GetCapabilities&service=WMS
-/// ```
-/// Response:
-/// ```xml
-/// <WMS_Capabilities xmlns="http://www.opengis.net/wms" xmlns:sld="http://www.opengis.net/sld" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3.0" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd">
-///   <Service>
-///   <Name>WMS</Name>
-///   <Title>Geo Engine WMS</Title>
-///   <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://localhost"/>
-/// </Service>
-/// <Capability>
-///   <Request>
-///     <GetCapabilities>
-///       <Format>text/xml</Format>
-///       <DCPType>
-///         <HTTP>
-///           <Get>
-///             <OnlineResource xlink:href="http://localhost/wms/df756642-c5a3-4d72-8ad7-629d312ae993"/>
-///           </Get>
-///         </HTTP>
-///       </DCPType>
-///     </GetCapabilities>
-///     <GetMap>
-///       <Format>image/png</Format>
-///       <DCPType>
-///         <HTTP>
-///           <Get>
-///             <OnlineResource xlink:href="http://localhost/wms/df756642-c5a3-4d72-8ad7-629d312ae993"/>
-///           </Get>
-///         </HTTP>
-///       </DCPType>
-///     </GetMap>
-///   </Request>
-///   <Exception>
-///     <Format>XML</Format>
-///     <Format>INIMAGE</Format>
-///     <Format>BLANK</Format>
-///   </Exception>
-///   <Layer queryable="1">
-///     <Name>df756642-c5a3-4d72-8ad7-629d312ae993</Name>
-///     <Title>Workflow df756642-c5a3-4d72-8ad7-629d312ae993</Title>
-///     <CRS>EPSG:4326</CRS>
-///     <EX_GeographicBoundingBox>
-///       <westBoundLongitude>-180</westBoundLongitude>
-///       <eastBoundLongitude>180</eastBoundLongitude>
-///       <southBoundLatitude>-90</southBoundLatitude>
-///       <northBoundLatitude>90</northBoundLatitude>
-///     </EX_GeographicBoundingBox>
-///     <BoundingBox CRS="EPSG:4326" minx="-90.0" miny="-180.0" maxx="90.0" maxy="180.0"/>
-///   </Layer>
-/// </Capability>
-/// </WMS_Capabilities>
-/// ```
+/// Get WMS Map
+#[utoipa::path(
+    tag = "OGC WMS",
+    get,
+    path = "/wms/{workflow}?request=GetMap",
+    responses(
+        (status = 200, description = "OK", content_type= "image/png", body = Vec<u8>, example = json!("image bytes")),
+    ),
+    params(
+        ("workflow" = WorkflowId, description = "Workflow id"),
+        GetMap
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn wms_map_handler<C: Context>(
+    workflow: web::Path<WorkflowId>,
+    request: web::Query<GetMap>,
+    ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<HttpResponse> {
+    get_map(
+        &request.into_inner(),
+        ctx.get_ref(),
+        session,
+        workflow.into_inner(),
+    )
+    .await
+}
+
+/// Get WMS Legend Graphic
+#[utoipa::path(
+    tag = "OGC WMS",
+    get,
+    path = "/wms/{workflow}?request=GetLegendGraphic",
+    responses(
+        (status = 200, description = "OK")
+    ),
+    params(
+        ("workflow" = WorkflowId, description = "Workflow id"),
+        GetLegendGraphic
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn wms_legend_graphic_handler<C: Context>(
+    workflow: web::Path<WorkflowId>,
+    request: web::Query<GetLegendGraphic>,
+    ctx: web::Data<C>,
+    _session: C::Session,
+) -> Result<HttpResponse> {
+    get_legend_graphic(&request.into_inner(), ctx.get_ref(), workflow.into_inner()).await
+}
+
 async fn get_capabilities<C>(
     _request: &GetCapabilities,
     ctx: &C,
@@ -139,7 +218,8 @@ where
 
     let result_descriptor = operator.result_descriptor();
 
-    let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
+    let spatial_reference: SpatialReferenceOption = result_descriptor.spatial_reference.into();
+    let spatial_reference: Option<SpatialReference> = spatial_reference.into();
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
 
     let response = format!(
@@ -211,15 +291,6 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
     ogc_endpoint_url(&base, OgcProtocol::Wms, workflow)
 }
 
-/// Renders a map as raster image.
-///
-/// # Example
-///
-/// ```text
-/// GET /wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=2.0.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=100&height=100&crs=EPSG%3A4326&styles=ssss&format=image%2Fpng
-/// ```
-/// Response:
-/// PNG image
 async fn get_map<C: Context>(
     request: &GetMap,
     ctx: &C,
@@ -251,8 +322,9 @@ async fn get_map<C: Context>(
         .context(error::Operator)?;
 
     // handle request and workflow crs matching
-    let workflow_spatial_ref: Option<SpatialReference> =
+    let workflow_spatial_ref: SpatialReferenceOption =
         initialized.result_descriptor().spatial_reference().into();
+    let workflow_spatial_ref: Option<SpatialReference> = workflow_spatial_ref.into();
     let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
 
     // TODO: use a default spatial reference if it is not set?
@@ -265,7 +337,7 @@ async fn get_map<C: Context>(
     } else {
         let proj = Reprojection {
             params: ReprojectionParams {
-                target_spatial_reference: request_spatial_ref,
+                target_spatial_reference: request_spatial_ref.into(),
             },
             sources: operator.into(),
         };
@@ -279,13 +351,13 @@ async fn get_map<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
+    let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref.into())?;
     let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
     let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 
     let query_rect = RasterQueryRectangle {
         spatial_bounds: query_bbox,
-        time_interval: request.time.unwrap_or_else(default_time_from_config),
+        time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
         spatial_resolution: SpatialResolution::new_unchecked(
             x_query_resolution,
             y_query_resolution,
@@ -299,7 +371,7 @@ async fn get_map<C: Context>(
     let image_bytes = call_on_generic_raster_processor!(
         processor,
         p =>
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time, colorizer).await
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), colorizer).await
     ).map_err(error::Error::from)?;
 
     Ok(HttpResponse::Ok()
@@ -314,8 +386,9 @@ fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
     }
 }
 
-#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_legend_graphic<C: Context>(
+#[allow(clippy::unnecessary_wraps, clippy::unused_async)]
+// TODO: remove line once implemented fully
+async fn get_legend_graphic<C: Context>(
     _request: &GetLegendGraphic,
     _ctx: &C,
     _endpoint: WorkflowId,
@@ -335,8 +408,11 @@ fn default_time_from_config() -> TimeInterval {
                     .and_then(|ogc| ogc.default_time)
                     .map_or_else(
                         || {
-                            TimeInterval::new_instant(TimeInstance::now())
-                                .expect("is a valid time interval")
+                            geoengine_datatypes::primitives::TimeInterval::new_instant(
+                                geoengine_datatypes::primitives::TimeInstance::now(),
+                            )
+                            .expect("is a valid time interval")
+                            .into()
                         },
                         |time| time.time_interval(),
                     )
@@ -465,8 +541,11 @@ mod tests {
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_partition,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
+                time_interval: geoengine_datatypes::primitives::TimeInterval::new(
+                    1_388_534_400_000,
+                    1_388_534_400_000 + 1000,
+                )
+                .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
             },
             ctx.query_context().unwrap(),

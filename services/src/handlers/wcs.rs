@@ -14,6 +14,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 
+use crate::api::model::datatypes::TimeInterval;
 use crate::error::Result;
 use crate::error::{self, Error};
 use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
@@ -26,7 +27,6 @@ use crate::util::user_input::QueryEx;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
-use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::ResultDescriptor;
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
@@ -341,7 +341,7 @@ async fn get_coverage<C: Context>(
 
     let query_rect = RasterQueryRectangle {
         spatial_bounds: request_partition,
-        time_interval: request.time.unwrap_or_else(default_time_from_config),
+        time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
         spatial_resolution,
     };
 
@@ -381,8 +381,11 @@ fn default_time_from_config() -> TimeInterval {
                     .and_then(|ogc| ogc.default_time)
                     .map_or_else(
                         || {
-                            TimeInterval::new_instant(TimeInstance::now())
-                                .expect("is a valid time interval")
+                            geoengine_datatypes::primitives::TimeInterval::new_instant(
+                                geoengine_datatypes::primitives::TimeInstance::now(),
+                            )
+                            .expect("is a valid time interval")
+                            .into()
                         },
                         |time| time.time_interval(),
                     )

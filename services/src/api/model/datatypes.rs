@@ -180,6 +180,34 @@ pub enum SpatialReferenceAuthority {
     Esri,
 }
 
+impl From<geoengine_datatypes::spatial_reference::SpatialReferenceAuthority>
+    for SpatialReferenceAuthority
+{
+    fn from(value: geoengine_datatypes::spatial_reference::SpatialReferenceAuthority) -> Self {
+        match value {
+            geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg => Self::Epsg,
+            geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::SrOrg => Self::SrOrg,
+            geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Iau2000 => {
+                Self::Iau2000
+            }
+            geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Esri => Self::Esri,
+        }
+    }
+}
+
+impl From<SpatialReferenceAuthority>
+    for geoengine_datatypes::spatial_reference::SpatialReferenceAuthority
+{
+    fn from(value: SpatialReferenceAuthority) -> Self {
+        match value {
+            SpatialReferenceAuthority::Epsg => Self::Epsg,
+            SpatialReferenceAuthority::SrOrg => Self::SrOrg,
+            SpatialReferenceAuthority::Iau2000 => Self::Iau2000,
+            SpatialReferenceAuthority::Esri => Self::Esri,
+        }
+    }
+}
+
 impl FromStr for SpatialReferenceAuthority {
     type Err = error::Error;
 
@@ -214,15 +242,47 @@ impl std::fmt::Display for SpatialReferenceAuthority {
 }
 
 /// A spatial reference consists of an authority and a code
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ToSchema)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct SpatialReference {
     authority: SpatialReferenceAuthority,
     code: u32,
 }
 
+impl ToSchema for SpatialReference {
+    fn schema() -> utoipa::openapi::schema::Schema {
+        ObjectBuilder::new().schema_type(SchemaType::String).into()
+    }
+}
+
+impl From<geoengine_datatypes::spatial_reference::SpatialReference> for SpatialReference {
+    fn from(value: geoengine_datatypes::spatial_reference::SpatialReference) -> Self {
+        Self {
+            authority: (*value.authority()).into(),
+            code: value.code(),
+        }
+    }
+}
+
+impl From<SpatialReference> for geoengine_datatypes::spatial_reference::SpatialReference {
+    fn from(value: SpatialReference) -> Self {
+        geoengine_datatypes::spatial_reference::SpatialReference::new(
+            value.authority.into(),
+            value.code,
+        )
+    }
+}
+
 impl SpatialReference {
     pub fn new(authority: SpatialReferenceAuthority, code: u32) -> Self {
         Self { authority, code }
+    }
+
+    pub fn authority(&self) -> &SpatialReferenceAuthority {
+        &self.authority
+    }
+
+    pub fn code(self) -> u32 {
+        self.code
     }
 }
 
@@ -259,10 +319,52 @@ impl Serialize for SpatialReference {
     }
 }
 
+/// Helper struct for deserializing a `SpatialReferencce`
+struct SpatialReferenceDeserializeVisitor;
+
+impl<'de> Visitor<'de> for SpatialReferenceDeserializeVisitor {
+    type Value = SpatialReference;
+
+    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        formatter.write_str("a spatial reference in the form authority:code")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        v.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+impl<'de> Deserialize<'de> for SpatialReference {
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(SpatialReferenceDeserializeVisitor)
+    }
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ToSchema)]
 pub enum SpatialReferenceOption {
     SpatialReference(SpatialReference),
     Unreferenced,
+}
+
+impl From<geoengine_datatypes::spatial_reference::SpatialReferenceOption>
+    for SpatialReferenceOption
+{
+    fn from(value: geoengine_datatypes::spatial_reference::SpatialReferenceOption) -> Self {
+        match value {
+            geoengine_datatypes::spatial_reference::SpatialReferenceOption::SpatialReference(s) => {
+                Self::SpatialReference(s.into())
+            }
+            geoengine_datatypes::spatial_reference::SpatialReferenceOption::Unreferenced => {
+                Self::Unreferenced
+            }
+        }
+    }
 }
 
 impl From<SpatialReference> for SpatialReferenceOption {
@@ -319,6 +421,24 @@ impl<'de> Deserialize<'de> for SpatialReferenceOption {
         D: Deserializer<'de>,
     {
         deserializer.deserialize_str(SpatialReferenceOptionDeserializeVisitor)
+    }
+}
+
+impl From<Option<SpatialReference>> for SpatialReferenceOption {
+    fn from(option: Option<SpatialReference>) -> Self {
+        match option {
+            Some(p) => SpatialReferenceOption::SpatialReference(p),
+            None => SpatialReferenceOption::Unreferenced,
+        }
+    }
+}
+
+impl From<SpatialReferenceOption> for Option<SpatialReference> {
+    fn from(option: SpatialReferenceOption) -> Self {
+        match option {
+            SpatialReferenceOption::SpatialReference(p) => Some(p),
+            SpatialReferenceOption::Unreferenced => None,
+        }
     }
 }
 
@@ -537,6 +657,12 @@ impl From<geoengine_datatypes::primitives::TimeInstance> for TimeInstance {
     }
 }
 
+impl From<TimeInstance> for geoengine_datatypes::primitives::TimeInstance {
+    fn from(value: TimeInstance) -> Self {
+        geoengine_datatypes::primitives::TimeInstance::from_millis_unchecked(value.inner())
+    }
+}
+
 impl From<DateTime> for TimeInstance {
     fn from(datetime: DateTime) -> Self {
         Self::from(&datetime)
@@ -601,10 +727,34 @@ impl<'de> Deserialize<'de> for TimeInstance {
 }
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSchema)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub struct TimeInterval {
     start: TimeInstance,
     end: TimeInstance,
+}
+
+impl ToSchema for TimeInterval {
+    fn schema() -> utoipa::openapi::schema::Schema {
+        ObjectBuilder::new().schema_type(SchemaType::String).into()
+    }
+}
+
+impl From<TimeInterval> for geoengine_datatypes::primitives::TimeInterval {
+    fn from(value: TimeInterval) -> Self {
+        geoengine_datatypes::primitives::TimeInterval::new_unchecked::<
+            geoengine_datatypes::primitives::TimeInstance,
+            geoengine_datatypes::primitives::TimeInstance,
+        >(value.start.into(), value.end.into())
+    }
+}
+
+impl From<geoengine_datatypes::primitives::TimeInterval> for TimeInterval {
+    fn from(value: geoengine_datatypes::primitives::TimeInterval) -> Self {
+        Self {
+            start: value.start().into(),
+            end: value.end().into(),
+        }
+    }
 }
 
 impl core::fmt::Debug for TimeInterval {

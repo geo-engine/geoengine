@@ -3,6 +3,7 @@ use geoengine_datatypes::primitives::VectorQueryRectangle;
 use reqwest::Url;
 use snafu::{ensure, ResultExt};
 
+use crate::api::model::datatypes::TimeInterval;
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
@@ -20,7 +21,7 @@ use geoengine_datatypes::{
     primitives::SpatialResolution,
 };
 use geoengine_datatypes::{
-    primitives::{FeatureData, Geometry, MultiPoint, TimeInstance, TimeInterval},
+    primitives::{FeatureData, Geometry, MultiPoint},
     spatial_reference::SpatialReference,
 };
 use geoengine_operators::engine::{
@@ -463,7 +464,7 @@ async fn get_feature<C: Context>(
 
     let query_rect = VectorQueryRectangle {
         spatial_bounds: request.bbox,
-        time_interval: request.time.unwrap_or_else(default_time_from_config),
+        time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
         spatial_resolution: request
             .query_resolution
             // TODO: find a reasonable fallback, e.g., dependent on the SRS or BBox
@@ -552,7 +553,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
             (4.0, 4.1),
         ])
         .unwrap(),
-        vec![TimeInterval::new_unchecked(0, 1); 5],
+        vec![geoengine_datatypes::primitives::TimeInterval::new_unchecked(0, 1); 5],
         [(
             "foo".to_string(),
             FeatureData::NullableInt(vec![Some(0), None, Some(2), Some(3), Some(4)]),
@@ -579,8 +580,11 @@ fn default_time_from_config() -> TimeInterval {
                     .and_then(|ogc| ogc.default_time)
                     .map_or_else(
                         || {
-                            TimeInterval::new_instant(TimeInstance::now())
-                                .expect("is a valid time interval")
+                            geoengine_datatypes::primitives::TimeInterval::new_instant(
+                                geoengine_datatypes::primitives::TimeInstance::now(),
+                            )
+                            .expect("is a valid time interval")
+                            .into()
                         },
                         |time| time.time_interval(),
                     )

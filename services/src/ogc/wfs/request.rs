@@ -1,6 +1,7 @@
+use crate::api::model::datatypes::TimeInterval;
 use crate::ogc::util::{parse_bbox, parse_spatial_resolution_option, parse_time_option};
 use crate::util::from_str_option;
-use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
+use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 
@@ -196,7 +197,7 @@ mod tests {
 
         let request = WfsRequest::GetFeature(GetFeature {
             version: "2.0.0".into(),
-            time: Some(TimeInterval::new(946_684_800_000, 946_771_200_000).unwrap()),
+            time: Some(geoengine_datatypes::primitives::TimeInterval::new(946_684_800_000, 946_771_200_000).unwrap().into()),
             srs_name: Some(SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)),
             namespaces: Some("xmlns(dog=http://www.example.com/namespaces/dog)".into()),
             count: Some(10),

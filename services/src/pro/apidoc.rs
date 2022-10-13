@@ -20,6 +20,11 @@ use crate::layers::layer::{
     ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::LayerCollectionId;
+use crate::ogc::util::OgcBoundingBox;
+use crate::ogc::wms::request::{
+    GetCapabilitiesFormat, GetCapabilitiesRequest, GetLegendGraphic, GetMap, GetMapExceptionFormat,
+    GetMapFormat, WmsService, WmsVersion,
+};
 use crate::pro;
 use crate::projects::{
     ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
@@ -46,6 +51,9 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::tasks::abort_handler,
         handlers::tasks::list_handler,
         handlers::tasks::status_handler,
+        handlers::wms::wms_capabilities_handler,
+        handlers::wms::wms_legend_graphic_handler,
+        handlers::wms::wms_map_handler,
         handlers::workflows::dataset_from_workflow_handler,
         handlers::workflows::get_workflow_metadata_handler,
         handlers::workflows::get_workflow_provenance_handler,
@@ -146,6 +154,16 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             StrokeParam,
             Symbology,
             TextSymbology,
+
+            WmsService,
+            WmsVersion,
+            GetCapabilitiesFormat,
+            GetCapabilitiesRequest,
+            GetMap,
+            OgcBoundingBox,
+            GetMapExceptionFormat,
+            GetMapFormat,
+            GetLegendGraphic
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

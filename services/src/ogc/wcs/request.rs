@@ -1,3 +1,4 @@
+use crate::api::model::datatypes::TimeInterval;
 use crate::error::{self, Result};
 use crate::ogc::util::{
     parse_time_option, parse_wcs_bbox, parse_wcs_crs, rectangle_from_ogc_params,
@@ -5,7 +6,7 @@ use crate::ogc::util::{
 };
 use crate::util::from_str_option;
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution};
-use geoengine_datatypes::{primitives::TimeInterval, spatial_reference::SpatialReference};
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -234,7 +235,11 @@ mod tests {
                     x_step: -18.,
                     y_step: 36.
                 }),
-                time: Some(TimeInterval::new_instant(1_388_534_400_000).unwrap()),
+                time: Some(
+                    geoengine_datatypes::primitives::TimeInterval::new_instant(1_388_534_400_000)
+                        .unwrap()
+                        .into()
+                ),
                 resx: None,
                 resy: None,
                 nodatavalue: None,
