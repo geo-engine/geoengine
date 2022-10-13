@@ -72,18 +72,6 @@ jobs:
           # Determines if the cache should be saved even when the workflow has failed.
           # Default: "false"
           #cache-on-failure: ""
-      - name: Build
-        env:
-          CARGO_INCREMENTAL: 0
-          RUSTFLAGS: -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=unwind
-          RUSTDOCFLAGS: -Cpanic=unwind
-        run: cargo build --all-features --jobs 1
-      - name: Test
-        env:
-          CARGO_INCREMENTAL: 0
-          RUSTFLAGS: -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=unwind
-          RUSTDOCFLAGS: -Cpanic=unwind
-        run: cargo test --all-features --jobs 1
       - name: Generate code coverage
         run: |
           cargo install cargo-tarpaulin@0.21
