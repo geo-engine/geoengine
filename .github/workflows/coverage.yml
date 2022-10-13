@@ -79,13 +79,13 @@ jobs:
           CARGO_INCREMENTAL: 0
           RUSTFLAGS: -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=unwind
           RUSTDOCFLAGS: -Cpanic=unwind
-        run: cargo build --all-features
+        run: cargo build --all-features --jobs 1
       - name: Test
         env:
           CARGO_INCREMENTAL: 0
           RUSTFLAGS: -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=unwind
           RUSTDOCFLAGS: -Cpanic=unwind
-        run: cargo test --all-features
+        run: cargo test --all-features --jobs 1
       - name: Generate code coverage
         run: |
           zip -0 ccov.zip `find . \( -name "*geoengine*.gc*" \) -print`
