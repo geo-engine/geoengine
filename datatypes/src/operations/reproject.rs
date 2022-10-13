@@ -399,6 +399,8 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection, B: AxisAligne
 }
 
 /// A version of `suggest_pixel_size_from_diag_cross` that takes a `partition` and a projected counterpart as input
+/// The `spatial_resolution` corresponds to the `bbox`. The output of the function is the suggested resolution for
+/// the `bbox_projected` rectangle.
 pub fn suggest_pixel_size_from_diag_cross_projected<B: AxisAlignedRectangle>(
     bbox: B,
     bbox_projected: B,
@@ -474,10 +476,26 @@ pub fn reproject_query<S: AxisAlignedRectangle>(
     })
 }
 
+/// Reproject a bounding box to the `target` projection and return the input and output bounding box
+/// as a pair where both elements cover the same area of the original `source_bbox` in WGS84.
+pub fn reproject_and_unify_bbox<T: AxisAlignedRectangle>(
+    source_bbox: T,
+    source: SpatialReference,
+    target: SpatialReference,
+) -> Result<(T, T)> {
+    let proj_from_to = CoordinateProjector::from_known_srs(source, target)?;
+    let proj_to_from = CoordinateProjector::from_known_srs(target, source)?;
+
+    let bounds_out = source_bbox.reproject_clipped(&proj_from_to)?;
+    let bounds_in = bounds_out.reproject_clipped(&proj_to_from)?;
+
+    Ok((bounds_in, bounds_out))
+}
+
 #[cfg(test)]
 mod tests {
 
-    use crate::primitives::BoundingBox2D;
+    use crate::primitives::{BoundingBox2D, SpatialPartition2D};
     use crate::spatial_reference::SpatialReferenceAuthority;
     use crate::util::well_known_data::{
         COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
@@ -783,5 +801,30 @@ mod tests {
             79.088_974_450_690_5, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
             epsilon = 0.000_000_1
         ));
+    }
+
+    #[test]
+    fn it_reprojects_and_unifies_bbox() {
+        let bbox = SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
+
+        let (input, output) = reproject_and_unify_bbox(
+            bbox,
+            SpatialReference::epsg_4326(),
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
+        )
+        .unwrap();
+
+        assert_eq!(
+            input,
+            SpatialPartition2D::new_unchecked((-180., 85.06).into(), (180., -85.06).into())
+        );
+
+        assert_eq!(
+            output,
+            SpatialPartition2D::new_unchecked(
+                (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+                (20_037_508.342_789_244, -20_048_966.104_014_6).into()
+            )
+        );
     }
 }

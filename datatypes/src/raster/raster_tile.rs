@@ -323,6 +323,58 @@ where
     }
 }
 
+/// Pretty printer for raster tiles with 2D ASCII grids
+pub fn display_raster_tile_2d<P: Pixel + std::fmt::Debug>(
+    raster_tile_2d: &RasterTile2D<P>,
+) -> impl std::fmt::Debug + '_ {
+    struct DebugTile<'a, P>(&'a RasterTile2D<P>);
+
+    impl<P: Pixel> std::fmt::Debug for DebugTile<'_, P> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let tile = self.0;
+            let mut fmt = f.debug_struct(stringify!(RasterTile2D));
+            fmt.field("time", &tile.time);
+            fmt.field("tile_position", &tile.tile_position);
+            fmt.field("global_geo_transform", &tile.global_geo_transform);
+            fmt.field("properties", &tile.properties);
+
+            let grid = if let Some(grid) = tile.grid_array.as_masked_grid() {
+                let values: Vec<String> = grid
+                    .masked_element_ref_iterator()
+                    .map(|v| v.map_or('_'.to_string(), |v| format!("{:?}", v)))
+                    .collect();
+                let max_digits = values.iter().map(String::len).max().unwrap_or(0);
+
+                let mut s = vec![String::new()];
+
+                let last_value_index = values.len() - 1;
+                for (i, value) in values.into_iter().enumerate() {
+                    let str_ref = s.last_mut().unwrap();
+
+                    str_ref.push_str(&format!("{value:max_digits$}"));
+
+                    let is_new_line = (i + 1) % grid.grid_shape().axis_size_x() == 0;
+                    if is_new_line && i < last_value_index {
+                        s.push(String::new());
+                    } else {
+                        str_ref.push(' ');
+                    }
+                }
+
+                s
+            } else {
+                vec!["empty".to_string()]
+            };
+
+            fmt.field("grid", &grid);
+
+            fmt.finish()
+        }
+    }
+
+    DebugTile(raster_tile_2d)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{primitives::Coordinate2D, util::test::TestDefault};

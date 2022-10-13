@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::handlers::ErrorResponse;
+use crate::util::config::get_config_element;
 
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::uri::PathAndQuery;
@@ -9,8 +10,10 @@ use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, HttpResponse};
 use log::debug;
 use std::num::NonZeroUsize;
+use tracing::log::info;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
+use url::Url;
 use utoipa::{openapi::OpenApi, ToSchema};
 
 /// Custom root span for web requests that paste a request id to all logs.
@@ -151,28 +154,40 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
 
 #[derive(serde::Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct VersionInfo {
-    build_date: Option<String>,
-    commit_hash: Option<String>,
+pub(crate) struct ServerInfo {
+    pub(crate) build_date: &'static str,
+    pub(crate) commit_hash: &'static str,
+    pub(crate) version: &'static str,
+    pub(crate) features: &'static str,
 }
 
 /// Shows information about the server software version.
 #[utoipa::path(
     tag = "General",
     get,
-    path = "/version",
+    path = "/info",
     responses(
-        (status = 200, description = "Server software information", body = VersionInfo,
-            example = json!({"buildDate": "2021-05-17", "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"}))
+        (status = 200, description = "Server software information", body = ServerInfo,
+            example = json!({
+                "buildDate": "2022-09-29",
+                "commitHash": "555dc6d84d3682c37490a145d53c5097d0b81b27",
+                "version": "0.7.0",
+                "features": "default"
+              }))
     )
 )]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn show_version_handler() -> impl actix_web::Responder {
-    use std::string::ToString;
-    web::Json(VersionInfo {
-        build_date: option_env!("VERGEN_BUILD_DATE").map(ToString::to_string),
-        commit_hash: option_env!("VERGEN_GIT_SHA").map(ToString::to_string),
-    })
+pub(crate) async fn server_info_handler() -> impl actix_web::Responder {
+    web::Json(server_info())
+}
+
+pub(crate) fn server_info() -> ServerInfo {
+    ServerInfo {
+        build_date: env!("VERGEN_BUILD_DATE"),
+        commit_hash: env!("VERGEN_GIT_SHA"),
+        version: env!("CARGO_PKG_VERSION"),
+        features: env!("VERGEN_CARGO_FEATURES"),
+    }
 }
 
 #[allow(clippy::unnecessary_wraps)]
@@ -235,4 +250,41 @@ pub fn serve_openapi_json<
             async move { web::Json(openapi) }
         }),
     )
+}
+
+pub(crate) fn log_server_info() -> Result<()> {
+    let web_config: crate::util::config::Web = get_config_element()?;
+
+    let external_address = web_config.external_address()?;
+
+    info!("Starting server…");
+
+    let version = server_info();
+    info!(
+        "Version: {} (commit: {}, build date: {})",
+        version.version, version.commit_hash, version.build_date
+    );
+    info!("Features: {}", version.features);
+
+    info!(
+        "Local Address: {} ",
+        Url::parse(&format!("http://{}/", web_config.bind_address))?,
+    );
+
+    info!("External Address: {} ", external_address);
+
+    info!(
+        "API Documentation: {}",
+        external_address.join("swagger-ui/")?
+    );
+
+    let session_config: crate::util::config::Session = get_config_element()?;
+
+    if session_config.anonymous_access {
+        info!("Anonymous Access: enabled");
+    } else {
+        info!("Anonymous Access: disabled");
+    }
+
+    Ok(())
 }

@@ -26,8 +26,7 @@ use crate::projects::{
     TextSymbology,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
-use crate::util::server::VersionInfo;
-use crate::util::{apidoc::ServerInfo, IdResponse};
+use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo, IdResponse};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -35,7 +34,7 @@ use utoipa::{Modify, OpenApi};
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        crate::util::server::show_version_handler,
+        crate::util::server::server_info_handler,
         handlers::layers::layer_handler,
         handlers::layers::list_collection_handler,
         handlers::layers::list_root_collections_handler,
@@ -93,7 +92,7 @@ use utoipa::{Modify, OpenApi};
             FeatureDataType,
             RasterDataType,
 
-            VersionInfo,
+            ServerInfo,
 
             Workflow,
             TypedOperator,
@@ -137,7 +136,7 @@ use utoipa::{Modify, OpenApi};
             TextSymbology,
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &ServerInfo),
+    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]
 pub struct ApiDoc;
