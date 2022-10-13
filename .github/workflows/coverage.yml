@@ -42,8 +42,6 @@ jobs:
       - name: init rust-toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
-      - name: Install coverage dependencies
-        run: cargo install grcov
       - name: setup rust build cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -88,14 +86,19 @@ jobs:
         run: cargo test --all-features --jobs 1
       - name: Generate code coverage
         run: |
-          zip -0 ccov.zip `find . \( -name "*geoengine*.gc*" \) -print`
-          grcov ccov.zip -s . \
-            -t lcov \
-            --llvm \
-            --branch \
-            --ignore-not-existing \
-            --ignore "/*" \
-            -o lcov.info
+          cargo install cargo-tarpaulin@0.21
+          cargo tarpaulin \
+            --verbose \
+            --workspace \
+            --timeout 240 \
+            --out Lcov \
+            --all-features \
+            --tests \
+            --implicit-test-threads \
+            --run-types Tests \
+            --skip-clean
+        env:
+          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v1.1.1
         with:
