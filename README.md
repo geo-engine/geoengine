@@ -22,7 +22,7 @@ This workspace contains the Geo Engine crates.
 apt install build-essential
 # lld linker
 apt install clang lld
-# GDAL (>= 3.2.1), Ubuntu 22.04 ships GDAL 3.4.1
+# GDAL (>=  3.4.1)
 apt install libgdal-dev gdal-bin
 # Proj build dependencies (if libproj >= 7.2 not installed)
 apt install cmake sqlite3
