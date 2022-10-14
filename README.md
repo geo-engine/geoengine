@@ -12,19 +12,8 @@ This workspace contains the Geo Engine crates.
 
 ## Development
 
-- While Geo Engine should build on Linux and Windows environments, we currently only support Ubuntu Linux 20.04 LTS.
+- While Geo Engine should build on Linux and Windows environments, we currently only support Ubuntu Linux 22.04 LTS.
 - You need a recent Rust environment with a Rust nightly compiler. We recommend rustup to manage Rust `https://rustup.rs/`.
-
-### Ubuntu Users
-
-We suggest to add the [UbuntuGIS PPA](https://wiki.ubuntu.com/UbuntuGIS) for a recent version of GDAL.
-
-```
-# Add ppa
-add-apt-repository ppa:ubuntugis/ubuntugis-unstable
-# Update
-apt update
-```
 
 ### Dependencies
 
@@ -33,7 +22,7 @@ apt update
 apt install build-essential
 # lld linker
 apt install clang lld
-# GDAL (>= 3.2.1)
+# GDAL (>= 3.2.1), Ubuntu 22.04 ships GDAL 3.4.1
 apt install libgdal-dev gdal-bin
 # Proj build dependencies (if libproj >= 7.2 not installed)
 apt install cmake sqlite3
