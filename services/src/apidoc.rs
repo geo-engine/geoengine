@@ -14,6 +14,7 @@ use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::datasets::upload::UploadId;
 use crate::handlers;
 use crate::handlers::tasks::TaskAbortOptions;
+use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
 use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
@@ -23,7 +24,7 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::LayerCollectionId;
 use crate::ogc::util::OgcBoundingBox;
-use crate::ogc::{wfs, wms};
+use crate::ogc::{wcs, wfs, wms};
 use crate::projects::{
     ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
     PolygonSymbology, ProjectId, RasterSymbology, STRectangle, StrokeParam, Symbology,
@@ -49,6 +50,9 @@ use utoipa::{Modify, OpenApi};
         handlers::tasks::abort_handler,
         handlers::tasks::list_handler,
         handlers::tasks::status_handler,
+        handlers::wcs::wcs_capabilities_handler,
+        handlers::wcs::wcs_describe_coverage_handler,
+        handlers::wcs::wcs_get_coverage_handler,
         handlers::wfs::wfs_capabilities_handler,
         handlers::wfs::wfs_feature_handler,
         handlers::wms::wms_capabilities_handler,
@@ -146,6 +150,15 @@ use utoipa::{Modify, OpenApi};
 
             OgcBoundingBox,
             MapResponse,
+            CoverageResponse,
+
+            wcs::request::WcsService,
+            wcs::request::WcsVersion,
+            wcs::request::GetCapabilitiesRequest,
+            wcs::request::DescribeCoverageRequest,
+            wcs::request::GetCoverageRequest,
+            wcs::request::GetCoverageFormat,
+            wcs::request::WcsBoundingbox,
 
             wms::request::WmsService,
             wms::request::WmsVersion,

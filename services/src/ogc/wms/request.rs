@@ -90,7 +90,7 @@ pub struct GetMap {
     #[serde(alias = "SLD")]
     pub sld: Option<String>,
     #[serde(alias = "SLD_BODY")]
-    pub sldBody: Option<String>,
+    pub sld_body: Option<String>,
     #[serde(alias = "ELEVATION")]
     pub elevation: Option<String>,
     #[serde(alias = "EXCEPTIONS")]
@@ -169,7 +169,7 @@ mod tests {
             transparent: Some(true),
             bgcolor: Some("#000000".into()),
             sld: Some("sld_spec".into()),
-            sldBody: Some("sld_body".into()),
+            sld_body: Some("sld_body".into()),
             elevation: Some("elevation".into()),
             bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,
@@ -197,7 +197,7 @@ mod tests {
             transparent: None,
             bgcolor: None,
             sld: None,
-            sldBody: None,
+            sld_body: None,
             elevation: None,
             bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,

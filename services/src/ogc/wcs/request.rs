@@ -1,3 +1,4 @@
+use crate::api::model::datatypes::SpatialReference;
 use crate::api::model::datatypes::TimeInterval;
 use crate::error::{self, Result};
 use crate::ogc::util::{
@@ -6,60 +7,90 @@ use crate::ogc::util::{
 };
 use crate::util::from_str_option;
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution};
-use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use utoipa::{IntoParams, ToSchema};
 
-// TODO: ignore case for field names
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+pub enum WcsService {
+    #[serde(rename = "WCS")]
+    Wcs,
+}
 
-/// WCS 1.1.x
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
-#[serde(tag = "request")]
-pub enum WcsRequest {
-    GetCapabilities(GetCapabilities),
-    DescribeCoverage(DescribeCoverage),
-    GetCoverage(GetCoverage),
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+pub enum WcsVersion {
+    #[serde(rename = "1.1.0")]
+    V1_1_0,
+    #[serde(rename = "1.1.1")]
+    V1_1_1,
 }
 
 // sample: SERVICE=WCS&request=GetCapabilities&VERSION=1.0.0
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct GetCapabilities {
     #[serde(alias = "VERSION")]
-    pub version: Option<String>,
+    pub version: Option<WcsVersion>,
+    #[serde(alias = "SERVICE")]
+    pub service: WcsService,
+    #[serde(alias = "REQUEST")]
+    pub request: GetCapabilitiesRequest,
 }
 
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+pub enum GetCapabilitiesRequest {
+    GetCapabilities,
+}
 // sample: SERVICE=WCS&request=DescribeCoverage&VERSION=1.1.1&IDENTIFIERS=nurc:Arc_Sample
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct DescribeCoverage {
     #[serde(alias = "VERSION")]
-    pub version: String,
+    pub version: WcsVersion,
+    #[serde(alias = "SERVICE")]
+    pub service: WcsService,
+    #[serde(alias = "REQUEST")]
+    pub request: DescribeCoverageRequest,
     #[serde(alias = "IDENTIFIERS")]
+    #[param(example = "<Workflow Id>")]
     pub identifiers: String,
 }
 
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+pub enum DescribeCoverageRequest {
+    DescribeCoverage,
+}
+
 // sample: SERVICE=WCS&VERSION=1.1.1&request=GetCoverage&FORMAT=image/tiff&IDENTIFIER=nurc:Arc_Sample&BOUNDINGBOX=-81,-162,81,162,urn:ogc:def:crs:EPSG::4326&GRIDBASECRS=urn:ogc:def:crs:EPSG::4326&GRIDCS=urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS&GRIDTYPE=urn:ogc:def:method:WCS:1.1:2dSimpleGrid&GRIDORIGIN=81,-162&GRIDOFFSETS=-18,36
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct GetCoverage {
     #[serde(alias = "VERSION")]
-    pub version: String,
+    pub version: WcsVersion,
+    #[serde(alias = "SERVICE")]
+    pub service: WcsService,
+    #[serde(alias = "REQUEST")]
+    pub request: GetCoverageRequest,
     #[serde(alias = "FORMAT")]
     pub format: GetCoverageFormat,
     #[serde(alias = "IDENTIFIER")]
+    #[param(example = "<Workflow Id>")]
     pub identifier: String,
     #[serde(alias = "BOUNDINGBOX")]
     #[serde(deserialize_with = "parse_wcs_bbox")]
+    #[param(value_type = String, example = "-90,-180,90,180,urn:ogc:def:crs:EPSG::4326")]
     pub boundingbox: WcsBoundingbox, // TODO: optional?
     #[serde(alias = "GRIDBASECRS", alias = "CRS", alias = "crs")]
     #[serde(deserialize_with = "parse_wcs_crs")]
+    #[param(example = "urn:ogc:def:crs:EPSG::4326")]
     pub gridbasecrs: SpatialReference,
     #[serde(default)]
     #[serde(alias = "GRIDORIGIN")]
     #[serde(deserialize_with = "parse_grid_origin_option")]
+    #[param(value_type = String, example="90,-180")]
     pub gridorigin: Option<GridOrigin>,
     #[serde(alias = "GRIDOFFSETS")]
     #[serde(default)]
     #[serde(deserialize_with = "parse_grid_offset_option")]
+    #[param(value_type = String, example="-0.1,0.1")]
     pub gridoffsets: Option<GridOffsets>,
 
     // ignored for now:
@@ -83,6 +114,11 @@ pub struct GetCoverage {
     #[serde(default)]
     #[serde(deserialize_with = "from_str_option")]
     pub nodatavalue: Option<f64>,
+}
+
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+pub enum GetCoverageRequest {
+    GetCoverage,
 }
 
 impl GetCoverage {
@@ -113,7 +149,7 @@ impl GetCoverage {
     }
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Debug, Deserialize, Serialize, ToSchema)]
 pub struct WcsBoundingbox {
     pub bbox: [f64; 4],
     pub spatial_reference: Option<SpatialReference>,
@@ -144,7 +180,7 @@ impl GridOrigin {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GetCoverageFormat {
     #[serde(rename = "image/tiff")]
     ImageTiff,
@@ -194,6 +230,8 @@ where
 mod tests {
     use serde::de::{value::StringDeserializer, IntoDeserializer};
 
+    use crate::api::model::datatypes::SpatialReferenceAuthority;
+
     use super::*;
 
     fn to_deserializer(s: &str) -> StringDeserializer<serde::de::value::Error> {
@@ -222,14 +260,19 @@ mod tests {
 
         assert_eq!(
             GetCoverage {
-                version: "1.1.1".to_owned(),
+                version: WcsVersion::V1_1_1,
+                service: WcsService::Wcs,
+                request: GetCoverageRequest::GetCoverage,
                 format: GetCoverageFormat::ImageTiff,
                 identifier: "nurc:Arc_Sample".to_owned(),
                 boundingbox: WcsBoundingbox {
                     bbox: [-81., -162., 81., 162.],
-                    spatial_reference: Some(SpatialReference::epsg_4326()),
+                    spatial_reference: Some(SpatialReference::new(
+                        SpatialReferenceAuthority::Epsg,
+                        4326
+                    )),
                 },
-                gridbasecrs: SpatialReference::epsg_4326(),
+                gridbasecrs: SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326),
                 gridorigin: Some(GridOrigin { x: 81., y: -162. }),
                 gridoffsets: Some(GridOffsets {
                     x_step: -18.,

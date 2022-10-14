@@ -173,7 +173,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
 
     #[test]

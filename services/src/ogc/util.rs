@@ -1,7 +1,7 @@
+use crate::api::model::datatypes::SpatialReference;
 use actix_web::guard::{Guard, GuardContext};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, DateTime};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution};
-use geoengine_datatypes::spatial_reference::SpatialReference;
 use reqwest::Url;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
@@ -324,7 +324,7 @@ impl Guard for OgcRequestGuard<'_> {
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
+    use crate::api::model::datatypes::SpatialReferenceAuthority;
     use serde::de::value::StringDeserializer;
     use serde::de::IntoDeserializer;
 
@@ -503,7 +503,7 @@ mod tests {
 
         assert_eq!(
             parse_wcs_crs(to_deserializer(s)).unwrap(),
-            SpatialReference::epsg_4326(),
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326),
         );
     }
 

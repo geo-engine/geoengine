@@ -56,7 +56,7 @@ where
     );
 }
 
-// Get WFS Capabilities
+/// Get WFS Capabilities
 #[utoipa::path(
     tag = "OGC WFS",
     get,
