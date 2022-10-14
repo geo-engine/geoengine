@@ -709,6 +709,11 @@ mod tests {
         .await
         .unwrap();
 
+        // util::test::save_test_bytes(
+        //     &bytes,
+        //     "../test_data/raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff",
+        // );
+
         assert_eq!(
             include_bytes!(
                 "../../../test_data/raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff"
@@ -760,6 +765,11 @@ mod tests {
         )
         .await
         .unwrap();
+
+        // util::test::save_test_bytes(
+        //     &bytes,
+        //     "../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff",
+        // );
 
         assert_eq!(
             include_bytes!(
