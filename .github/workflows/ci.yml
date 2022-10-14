@@ -36,8 +36,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-      # - name: Add UbuntuGIS ppa
-      #   run: sudo add-apt-repository ppa:ubuntugis/ppa
       - name: APT update
         run: sudo apt-get update
       - name: Install lld & GDAL
@@ -118,8 +116,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-      # - name: Add UbuntuGIS ppa
-      #  run: sudo add-apt-repository ppa:ubuntugis/ppa
       - name: APT update
         run: sudo apt-get update
       - name: Install lld & GDAL

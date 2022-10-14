@@ -5,6 +5,10 @@
 # Rust artifacts
 Cargo.lock
 
+# Build artifacts
+*.profraw
+lcov.info
+
 # IDE files
 /.idea
 /.vscode
