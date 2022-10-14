@@ -6,6 +6,8 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::{operations::image::Colorizer, primitives::SpatialResolution};
+use utoipa::openapi::{ObjectBuilder, SchemaFormat, SchemaType};
+use utoipa::ToSchema;
 
 use crate::api::model::datatypes::{SpatialReference, SpatialReferenceOption, TimeInterval};
 use crate::error;
@@ -123,86 +125,16 @@ where
         ("session_token" = [])
     )
 )]
-async fn wms_capabilities_handler<C: Context>(
+async fn wms_capabilities_handler<C>(
     workflow: web::Path<WorkflowId>,
-    request: web::Query<GetCapabilities>,
+    _request: web::Query<GetCapabilities>,
     ctx: web::Data<C>,
     session: C::Session,
-) -> Result<HttpResponse> {
-    get_capabilities(
-        &request.into_inner(),
-        ctx.get_ref(),
-        session,
-        workflow.into_inner(),
-    )
-    .await
-}
-
-/// Get WMS Map
-#[utoipa::path(
-    tag = "OGC WMS",
-    get,
-    path = "/wms/{workflow}?request=GetMap",
-    responses(
-        (status = 200, description = "OK", content_type= "image/png", body = Vec<u8>, example = json!("image bytes")),
-    ),
-    params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
-        GetMap
-    ),
-    security(
-        ("session_token" = [])
-    )
-)]
-async fn wms_map_handler<C: Context>(
-    workflow: web::Path<WorkflowId>,
-    request: web::Query<GetMap>,
-    ctx: web::Data<C>,
-    session: C::Session,
-) -> Result<HttpResponse> {
-    get_map(
-        &request.into_inner(),
-        ctx.get_ref(),
-        session,
-        workflow.into_inner(),
-    )
-    .await
-}
-
-/// Get WMS Legend Graphic
-#[utoipa::path(
-    tag = "OGC WMS",
-    get,
-    path = "/wms/{workflow}?request=GetLegendGraphic",
-    responses(
-        (status = 200, description = "OK")
-    ),
-    params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
-        GetLegendGraphic
-    ),
-    security(
-        ("session_token" = [])
-    )
-)]
-async fn wms_legend_graphic_handler<C: Context>(
-    workflow: web::Path<WorkflowId>,
-    request: web::Query<GetLegendGraphic>,
-    ctx: web::Data<C>,
-    _session: C::Session,
-) -> Result<HttpResponse> {
-    get_legend_graphic(&request.into_inner(), ctx.get_ref(), workflow.into_inner()).await
-}
-
-async fn get_capabilities<C>(
-    _request: &GetCapabilities,
-    ctx: &C,
-    session: C::Session,
-    workflow_id: WorkflowId,
 ) -> Result<HttpResponse>
 where
     C: Context,
 {
+    let workflow_id = workflow.into_inner();
     let wms_url = wms_url(workflow_id)?;
 
     let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
@@ -291,12 +223,29 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
     ogc_endpoint_url(&base, OgcProtocol::Wms, workflow)
 }
 
-async fn get_map<C: Context>(
-    request: &GetMap,
-    ctx: &C,
+/// Get WMS Map
+#[utoipa::path(
+    tag = "OGC WMS",
+    get,
+    path = "/wms/{workflow}?request=GetMap",
+    responses(
+        (status = 200, description = "OK", content_type= "image/png", body = MapResponse, example = json!("image bytes")),
+    ),
+    params(
+        ("workflow" = WorkflowId, description = "Workflow id"),
+        GetMap
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn wms_map_handler<C: Context>(
+    workflow: web::Path<WorkflowId>,
+    request: web::Query<GetMap>,
+    ctx: web::Data<C>,
     session: C::Session,
-    endpoint: WorkflowId,
 ) -> Result<HttpResponse> {
+    let endpoint = workflow.into_inner();
     let layer = WorkflowId::from_str(&request.layers)?;
 
     ensure!(
@@ -379,6 +328,17 @@ async fn get_map<C: Context>(
         .body(image_bytes))
 }
 
+pub struct MapResponse {}
+
+impl ToSchema for MapResponse {
+    fn schema() -> utoipa::openapi::schema::Schema {
+        ObjectBuilder::new()
+            .schema_type(SchemaType::String)
+            .format(Some(SchemaFormat::Binary))
+            .into()
+    }
+}
+
 fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
     match styles.strip_prefix("custom:") {
         None => Ok(None),
@@ -386,14 +346,29 @@ fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
     }
 }
 
-#[allow(clippy::unnecessary_wraps, clippy::unused_async)]
-// TODO: remove line once implemented fully
-async fn get_legend_graphic<C: Context>(
-    _request: &GetLegendGraphic,
-    _ctx: &C,
-    _endpoint: WorkflowId,
+/// Get WMS Legend Graphic
+#[utoipa::path(
+    tag = "OGC WMS",
+    get,
+    path = "/wms/{workflow}?request=GetLegendGraphic",
+    responses(
+        (status = 200, description = "OK")
+    ),
+    params(
+        ("workflow" = WorkflowId, description = "Workflow id"),
+        GetLegendGraphic
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+#[allow(clippy::unused_async)] // required by handler signature
+async fn wms_legend_graphic_handler<C: Context>(
+    _workflow: web::Path<WorkflowId>,
+    _request: web::Query<GetLegendGraphic>,
+    _ctx: web::Data<C>,
+    _session: C::Session,
 ) -> Result<HttpResponse> {
-    // TODO: implement
     Ok(HttpResponse::InternalServerError().finish())
 }
 

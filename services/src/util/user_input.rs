@@ -43,6 +43,7 @@ impl<T: UserInput + Clone> Deref for Validated<T> {
     }
 }
 
+// TODO: remove
 pub struct QueryEx<T>(pub T);
 
 impl<T> QueryEx<T> {

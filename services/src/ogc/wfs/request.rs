@@ -1,33 +1,42 @@
+#![allow(non_snake_case)]
+// TODO: remove this and use rename_all once utoipa supports this for `IntoParams`: https://github.com/juhaku/utoipa/issues/270
+
 use crate::api::model::datatypes::TimeInterval;
-use crate::ogc::util::{parse_bbox, parse_spatial_resolution_option, parse_time_option};
+use crate::ogc::util::{
+    parse_ogc_bbox, parse_time_option, parse_wfs_resolution_option, OgcBoundingBox,
+};
 use crate::util::from_str_option;
-use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
+use utoipa::openapi::{ObjectBuilder, SchemaType};
+use utoipa::{IntoParams, ToSchema};
 
-// TODO: ignore case for field names
-
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
-#[serde(tag = "request")]
-// TODO: evaluate overhead of large enum variant and maybe refactor it
-#[allow(clippy::large_enum_variant)]
-pub enum WfsRequest {
-    GetCapabilities(GetCapabilities),
-    DescribeFeatureType(DescribeFeatureType),
-    GetFeature(GetFeature),
-    LockFeature(LockFeature),
-    Transaction(Transaction),
-    GetPropertyValue(GetPropertyValue),
-    GetFeatureWithLock(GetFeatureWithLock),
-    CreateStoredQuery(CreateStoredQuery),
-    DropStoredQuery(DropStoredQuery),
-    ListStoredQueries(ListStoredQueries),
-    DescribeStoredQueries(DescribeStoredQueries),
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+pub enum WfsService {
+    #[serde(rename = "WFS")]
+    Wfs,
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+pub enum WfsVersion {
+    #[serde(rename = "2.0.0")]
+    V2_0_0,
+}
+
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct GetCapabilities {
-    pub version: Option<String>,
+    #[serde(alias = "VERSION")]
+    pub version: Option<WfsVersion>,
+    #[serde(alias = "SERVICE")]
+    pub service: WfsService,
+    #[serde(alias = "REQUEST")]
+    pub request: GetCapabilitiesRequest,
+}
+
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+pub enum GetCapabilitiesRequest {
+    GetCapabilities,
 }
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
@@ -36,6 +45,11 @@ pub struct TypeNames {
     pub feature_type: String,
 }
 
+impl ToSchema for TypeNames {
+    fn schema() -> utoipa::openapi::schema::Schema {
+        ObjectBuilder::new().schema_type(SchemaType::String).into()
+    }
+}
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct DescribeFeatureType {
     pub version: String,
@@ -45,32 +59,52 @@ pub struct DescribeFeatureType {
     pub output_format: String, // TODO
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Debug, Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub struct GetFeature {
-    pub version: String,
+    pub version: Option<WfsVersion>,
+    pub service: WfsService,
+    pub request: GetFeatureRequest,
     #[serde(deserialize_with = "parse_type_names")]
-    pub type_names: TypeNames,
+    #[param(example = "<Workflow Id>")]
+    pub typeNames: TypeNames,
     // TODO: fifths parameter can be CRS
-    #[serde(deserialize_with = "parse_bbox")]
-    pub bbox: BoundingBox2D,
+    #[serde(deserialize_with = "parse_ogc_bbox")]
+    #[param(example = "-90,-180,90,180")]
+    pub bbox: OgcBoundingBox,
     #[serde(default)]
     #[serde(deserialize_with = "parse_time_option")]
+    #[param(example = "2014-04-01T12:00:00.000Z")]
     pub time: Option<TimeInterval>,
-    pub srs_name: Option<SpatialReference>,
+    #[param(example = "EPSG:4326")]
+    pub srsName: Option<SpatialReference>,
     pub namespaces: Option<String>, // TODO e.g. xmlns(dog=http://www.example.com/namespaces/dog)
     #[serde(default)]
     #[serde(deserialize_with = "from_str_option")]
     pub count: Option<u64>,
-    pub sort_by: Option<String>,       // TODO: Name[+A|+D] (asc/desc)
-    pub result_type: Option<String>,   // TODO: enum: results/hits?
-    pub filter: Option<String>,        // TODO: parse filters
-    pub property_name: Option<String>, // TODO comma separated list
+    pub sortBy: Option<String>,       // TODO: Name[+A|+D] (asc/desc)
+    pub resultType: Option<String>,   // TODO: enum: results/hits?
+    pub filter: Option<String>,       // TODO: parse filters
+    pub propertyName: Option<String>, // TODO comma separated list
     // TODO: feature_id, ...
     /// Vendor parameter for specifying a spatial query resolution
     #[serde(default)]
-    #[serde(deserialize_with = "parse_spatial_resolution_option")]
-    pub query_resolution: Option<SpatialResolution>,
+    #[serde(deserialize_with = "parse_wfs_resolution_option")]
+    pub queryResolution: Option<WfsResolution>,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct WfsResolution(pub SpatialResolution);
+
+impl ToSchema for WfsResolution {
+    fn schema() -> utoipa::openapi::schema::Schema {
+        ObjectBuilder::new().schema_type(SchemaType::String).into()
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+pub enum GetFeatureRequest {
+    GetFeature,
 }
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
@@ -145,25 +179,27 @@ mod tests {
     #[test]
     fn deserialize_get_feature() {
         let query = "request=GetFeature&service=WFS&version=2.0.0&typeNames=ns:test&bbox=1,2,3,4";
-        let parsed: WfsRequest = serde_urlencoded::from_str(query).unwrap();
+        let parsed: GetFeature = serde_urlencoded::from_str(query).unwrap();
 
-        let request = WfsRequest::GetFeature(GetFeature {
-            version: "2.0.0".into(),
+        let request = GetFeature {
+            service: WfsService::Wfs,
+            request: GetFeatureRequest::GetFeature,
+            version: Some(WfsVersion::V2_0_0),
             time: None,
-            srs_name: None,
+            srsName: None,
             namespaces: None,
             count: None,
-            sort_by: None,
-            result_type: None,
+            sortBy: None,
+            resultType: None,
             filter: None,
-            bbox: BoundingBox2D::new(Coordinate2D::new(1., 2.), Coordinate2D::new(3., 4.)).unwrap(),
-            type_names: TypeNames {
+            bbox: OgcBoundingBox::new(1., 2., 3., 4.),
+            typeNames: TypeNames {
                 namespace: Some("ns".into()),
                 feature_type: "test".into(),
             },
-            property_name: None,
-            query_resolution: None,
-        });
+            propertyName: None,
+            queryResolution: None,
+        };
 
         assert_eq!(parsed, request);
     }
@@ -193,30 +229,32 @@ mod tests {
             ("queryResolution","0.1,0.1"),
         ];
         let query = serde_urlencoded::to_string(params).unwrap();
-        let parsed: WfsRequest = serde_urlencoded::from_str(&query).unwrap();
+        let parsed: GetFeature = serde_urlencoded::from_str(&query).unwrap();
 
-        let request = WfsRequest::GetFeature(GetFeature {
-            version: "2.0.0".into(),
+        let request =GetFeature {
+            service: WfsService::Wfs,
+            request: GetFeatureRequest::GetFeature,
+            version: Some(WfsVersion::V2_0_0),
             time: Some(geoengine_datatypes::primitives::TimeInterval::new(946_684_800_000, 946_771_200_000).unwrap().into()),
-            srs_name: Some(SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)),
+            srsName: Some(SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)),
             namespaces: Some("xmlns(dog=http://www.example.com/namespaces/dog)".into()),
             count: Some(10),
-            sort_by: Some("Name[+A]".into()),
-            result_type: Some("results".into()),
+            sortBy: Some("Name[+A]".into()),
+            resultType: Some("results".into()),
             filter: Some("<Filter>
   <And>
     <PropertyIsEqualTo><ValueReference>dog:age</ValueReference><Literal>2</Literal></PropertyIsEqualTo>
     <PropertyIsEqualTo><ValueReference>dog:weight</ValueReference><Literal>5</Literal></PropertyIsEqualTo>
   </And>
 </Filter>".into()),
-            bbox: BoundingBox2D::new(Coordinate2D::new(1., 2.), Coordinate2D::new(3., 4.)).unwrap(),
-            type_names: TypeNames {
+            bbox: OgcBoundingBox::new(1., 2., 3., 4.),
+            typeNames: TypeNames {
                 namespace: Some("ns".into()),
                 feature_type: "test".into(),
             },
-            property_name: Some("P1,P2".into()),
-            query_resolution: Some(SpatialResolution::zero_point_one()),
-        });
+            propertyName: Some("P1,P2".into()),
+            queryResolution: Some(WfsResolution(SpatialResolution::zero_point_one())),
+        };
 
         assert_eq!(parsed, request);
     }
@@ -235,26 +273,27 @@ mod tests {
         ];
         let url = serde_urlencoded::to_string(params).unwrap();
 
-        let parsed: WfsRequest = serde_urlencoded::from_str(&url).unwrap();
+        let parsed: GetFeature = serde_urlencoded::from_str(&url).unwrap();
 
-        let request = WfsRequest::GetFeature(GetFeature {
-            version: "2.0.0".into(),
+        let request = GetFeature {
+            service: WfsService::Wfs,
+            request: GetFeatureRequest::GetFeature,
+            version: Some(WfsVersion::V2_0_0),
             time: None,
-            srs_name: None,
+            srsName: None,
             namespaces: None,
             count: None,
-            sort_by: None,
-            result_type: None,
+            sortBy: None,
+            resultType: None,
             filter: None,
-            bbox: BoundingBox2D::new(Coordinate2D::new(-90., -180.), Coordinate2D::new(90., 180.))
-                .unwrap(),
-            type_names: TypeNames {
+            bbox: OgcBoundingBox::new(-90., -180., 90., 180.),
+            typeNames: TypeNames {
                 namespace: Some("json".into()),
                 feature_type: op,
             },
-            property_name: None,
-            query_resolution: None,
-        });
+            propertyName: None,
+            queryResolution: None,
+        };
 
         assert_eq!(parsed, request);
     }

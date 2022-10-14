@@ -11,6 +11,7 @@ use utoipa::openapi::{ObjectBuilder, SchemaType};
 use utoipa::ToSchema;
 
 use super::wcs::request::WcsBoundingbox;
+use super::wfs::request::WfsResolution;
 use crate::api::model::datatypes::TimeInterval;
 use crate::error::{self, Result};
 use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
@@ -36,6 +37,14 @@ impl OgcBoundingBox {
 
     pub fn bounds<A: AxisAlignedRectangle>(self, spatial_reference: SpatialReference) -> Result<A> {
         rectangle_from_ogc_params(self.values, spatial_reference)
+    }
+
+    pub fn bounds_naive<A: AxisAlignedRectangle>(self) -> Result<A> {
+        A::from_min_max(
+            (self.values[0], self.values[1]).into(),
+            (self.values[2], self.values[3]).into(),
+        )
+        .context(error::DataType)
     }
 }
 
@@ -127,9 +136,9 @@ where
 }
 
 /// Parse a spatial resolution, format is: "resolution" or "xResolution,yResolution"
-pub fn parse_spatial_resolution_option<'de, D>(
+pub fn parse_wfs_resolution_option<'de, D>(
     deserializer: D,
-) -> Result<Option<SpatialResolution>, D::Error>
+) -> Result<Option<WfsResolution>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -151,7 +160,7 @@ where
         _ => return Err(D::Error::custom("Invalid spatial resolution")),
     };
 
-    Ok(Some(spatial_resolution))
+    Ok(Some(WfsResolution(spatial_resolution)))
 }
 
 /// Parse wcs 1.1.1 bbox, format is: "x1,y1,x2,y2,crs", crs format is like `urn:ogc:def:crs:EPSG::4326`
@@ -450,26 +459,26 @@ mod tests {
     #[test]
     fn it_parses_spatial_resolution_options() {
         assert_eq!(
-            parse_spatial_resolution_option(to_deserializer("")).unwrap(),
+            parse_wfs_resolution_option(to_deserializer("")).unwrap(),
             None
         );
 
         assert_eq!(
-            parse_spatial_resolution_option(to_deserializer("0.1")).unwrap(),
-            Some(SpatialResolution::zero_point_one())
+            parse_wfs_resolution_option(to_deserializer("0.1")).unwrap(),
+            Some(WfsResolution(SpatialResolution::zero_point_one()))
         );
         assert_eq!(
-            parse_spatial_resolution_option(to_deserializer("1")).unwrap(),
-            Some(SpatialResolution::one())
+            parse_wfs_resolution_option(to_deserializer("1")).unwrap(),
+            Some(WfsResolution(SpatialResolution::one()))
         );
 
         assert_eq!(
-            parse_spatial_resolution_option(to_deserializer("0.1,0.2")).unwrap(),
-            Some(SpatialResolution::new(0.1, 0.2).unwrap())
+            parse_wfs_resolution_option(to_deserializer("0.1,0.2")).unwrap(),
+            Some(WfsResolution(SpatialResolution::new(0.1, 0.2).unwrap()))
         );
 
-        assert!(parse_spatial_resolution_option(to_deserializer(",")).is_err());
-        assert!(parse_spatial_resolution_option(to_deserializer("0.1,0.2,0.3")).is_err());
+        assert!(parse_wfs_resolution_option(to_deserializer(",")).is_err());
+        assert!(parse_wfs_resolution_option(to_deserializer("0.1,0.2,0.3")).is_err());
     }
 
     #[test]

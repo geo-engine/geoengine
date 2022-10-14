@@ -1,3 +1,6 @@
+#![allow(non_snake_case)]
+// TODO: remove this and use rename_all once utoipa supports this for `IntoParams`: https://github.com/juhaku/utoipa/issues/270
+
 use crate::api::model::datatypes::{SpatialReference, TimeInterval};
 use crate::ogc::util::{parse_ogc_bbox, parse_time_option, OgcBoundingBox};
 use crate::util::{bool_option_case_insensitive, from_str};
@@ -16,7 +19,7 @@ pub enum WmsVersion {
     V1_3_0,
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams, ToSchema)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct GetCapabilities {
     #[serde(alias = "VERSION")]
     pub version: Option<WmsVersion>,
@@ -40,12 +43,14 @@ pub enum GetCapabilitiesFormat {
 }
 
 // TODO: remove serde aliases and use serde-aux and case insensitive keys
-#[derive(PartialEq, Debug, Deserialize, Serialize, IntoParams, ToSchema)]
+#[derive(PartialEq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct GetMap {
     #[serde(alias = "VERSION")]
     pub version: WmsVersion,
     #[serde(alias = "SERVICE")]
     pub service: WmsService,
+    #[serde(alias = "REQUEST")]
+    pub request: GetMapRequest,
     #[serde(alias = "WIDTH")]
     #[serde(deserialize_with = "from_str")]
     #[param(example = 256)]
@@ -61,6 +66,7 @@ pub struct GetMap {
     #[serde(alias = "FORMAT")]
     pub format: GetMapFormat,
     #[serde(alias = "LAYERS")]
+    #[param(example = "<Workflow Id>")]
     pub layers: String,
     #[serde(alias = "CRS")]
     #[param(example = "EPSG:4326")]
@@ -84,12 +90,17 @@ pub struct GetMap {
     #[serde(alias = "SLD")]
     pub sld: Option<String>,
     #[serde(alias = "SLD_BODY")]
-    pub sld_body: Option<String>,
+    pub sldBody: Option<String>,
     #[serde(alias = "ELEVATION")]
     pub elevation: Option<String>,
     #[serde(alias = "EXCEPTIONS")]
     pub exceptions: Option<GetMapExceptionFormat>, // TODO: parse Option<GetMapExceptionFormat>
                                                    // TODO: DIM_<name>
+}
+
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+pub enum GetMapRequest {
+    GetMap,
 }
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
@@ -142,6 +153,7 @@ mod tests {
         let request = GetMap {
             service: WmsService::Wms,
             version: WmsVersion::V1_3_0,
+            request: GetMapRequest::GetMap,
             width: 2,
             layers: "modis_ndvi".into(),
             crs: Some(geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326().into()),
@@ -157,7 +169,7 @@ mod tests {
             transparent: Some(true),
             bgcolor: Some("#000000".into()),
             sld: Some("sld_spec".into()),
-            sld_body: Some("sld_body".into()),
+            sldBody: Some("sld_body".into()),
             elevation: Some("elevation".into()),
             bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,
@@ -176,6 +188,7 @@ mod tests {
         let request = GetMap {
             service: WmsService::Wms,
             version: WmsVersion::V1_3_0,
+            request: GetMapRequest::GetMap,
             width: 2,
             layers: "modis_ndvi".into(),
             crs: Some(geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326().into()),
@@ -184,7 +197,7 @@ mod tests {
             transparent: None,
             bgcolor: None,
             sld: None,
-            sld_body: None,
+            sldBody: None,
             elevation: None,
             bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,

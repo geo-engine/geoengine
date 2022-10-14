@@ -14,6 +14,8 @@ use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::datasets::upload::UploadId;
 use crate::handlers;
 use crate::handlers::tasks::TaskAbortOptions;
+use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
+use crate::handlers::wms::MapResponse;
 use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListing, LayerListing, Property,
@@ -21,10 +23,8 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::LayerCollectionId;
 use crate::ogc::util::OgcBoundingBox;
-use crate::ogc::wms::request::{
-    GetCapabilitiesFormat, GetCapabilitiesRequest, GetLegendGraphic, GetMap, GetMapExceptionFormat,
-    GetMapFormat, WmsService, WmsVersion,
-};
+
+use crate::ogc::{wfs, wms};
 use crate::pro;
 use crate::projects::{
     ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
@@ -51,6 +51,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::tasks::abort_handler,
         handlers::tasks::list_handler,
         handlers::tasks::status_handler,
+        handlers::wfs::wfs_capabilities_handler,
+        handlers::wfs::wfs_feature_handler,
         handlers::wms::wms_capabilities_handler,
         handlers::wms::wms_legend_graphic_handler,
         handlers::wms::wms_map_handler,
@@ -155,15 +157,30 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             Symbology,
             TextSymbology,
 
-            WmsService,
-            WmsVersion,
-            GetCapabilitiesFormat,
-            GetCapabilitiesRequest,
-            GetMap,
             OgcBoundingBox,
-            GetMapExceptionFormat,
-            GetMapFormat,
-            GetLegendGraphic
+            MapResponse,
+
+            wms::request::WmsService,
+            wms::request::WmsVersion,
+            wms::request::GetCapabilitiesFormat,
+            wms::request::GetCapabilitiesRequest,
+            wms::request::GetMapRequest,
+            wms::request::GetMapExceptionFormat,
+            wms::request::GetMapFormat,
+            wms::request::GetLegendGraphic,
+
+            wfs::request::WfsService,
+            wfs::request::WfsVersion,
+            wfs::request::GetCapabilitiesRequest,
+            wfs::request::WfsResolution,
+            wfs::request::GetFeatureRequest,
+            wfs::request::TypeNames,
+
+            GeoJson,
+            CollectionType,
+            Feature,
+            FeatureType,
+            Coordinates,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
