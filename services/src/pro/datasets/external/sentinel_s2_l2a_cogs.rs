@@ -78,14 +78,17 @@ impl Default for StacApiRetries {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalRetries {
+    /// retry at most `number_of_retries` times with exponential backoff
     number_of_retries: usize,
+
+    /// start with an `number_of_retries` second retry delay
     delay_s: u64,
 }
 
 impl Default for GdalRetries {
     fn default() -> Self {
         Self {
-            number_of_retries: 3,
+            number_of_retries: 10,
             delay_s: 5,
         }
     }
@@ -445,10 +448,7 @@ impl SentinelS2L2aCogsMetaData {
         Ok(GdalLoadingInfoTemporalSlice {
             time: time_interval,
             params: Some(GdalDatasetParameters {
-                file_path: PathBuf::from(format!(
-                    "/vsicurl?max_retry={}&retry_delay={}&url={}",
-                    self.gdal_retries.number_of_retries, self.gdal_retries.delay_s, asset.href
-                )),
+                file_path: PathBuf::from(format!("/vsicurl/{}", asset.href)),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform::from(
                     asset
@@ -461,7 +461,30 @@ impl SentinelS2L2aCogsMetaData {
                 no_data_value: self.band.no_data_value,
                 properties_mapping: None,
                 gdal_open_options: None,
-                gdal_config_options: None,
+                gdal_config_options: Some(vec![
+                    // only read the tif file and no aux files, etc.
+                    (
+                        "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_string(),
+                        ".tif".to_string(),
+                    ),
+                    // do not perform a directory scan on the AWS bucket
+                    (
+                        "GDAL_DISABLE_READDIR_ON_OPEN".to_string(),
+                        "EMPTY_DIR".to_string(),
+                    ),
+                    // do not try to read credentials from home directory
+                    ("GDAL_HTTP_NETRC".to_string(), "NO".to_string()),
+                    // start with an X second retry delay
+                    (
+                        "GDAL_HTTP_RETRY_DELAY".to_string(),
+                        self.gdal_retries.delay_s.to_string(),
+                    ),
+                    // retry at most X times with exponential backoff
+                    (
+                        "GDAL_HTTP_MAX_RETRY".to_string(),
+                        self.gdal_retries.number_of_retries.to_string(),
+                    ),
+                ]),
                 allow_alphaband_as_mask: true,
             }),
         })
@@ -706,7 +729,7 @@ mod tests {
     use geoengine_datatypes::{
         dataset::DatasetId,
         primitives::{SpatialPartition2D, SpatialResolution},
-        util::{test::TestDefault, Identifier},
+        util::{gdal::hide_gdal_errors, test::TestDefault, Identifier},
     };
     use geoengine_operators::{
         engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator},
@@ -760,7 +783,7 @@ mod tests {
         let expected = vec![GdalLoadingInfoTemporalSlice {
             time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_747_000),
             params: Some(GdalDatasetParameters {
-                file_path: "/vsicurl?max_retry=3&retry_delay=5&url=https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
+                file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (600_000.0, 3_400_020.0).into(),
@@ -773,7 +796,13 @@ mod tests {
                 no_data_value: Some(0.),
                 properties_mapping: None,
                 gdal_open_options: None,
-                gdal_config_options: None,
+                gdal_config_options: Some(vec![
+                    ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(), ".tif".to_owned()),
+                    ("GDAL_DISABLE_READDIR_ON_OPEN".to_owned(), "EMPTY_DIR".to_owned()),
+                    ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
+                    ("GDAL_HTTP_RETRY_DELAY".to_owned(), "5".to_owned()),
+                    ("GDAL_HTTP_MAX_RETRY".to_owned(), "10".to_owned())
+                    ]),
                 allow_alphaband_as_mask: true,
             }),
         }];
@@ -870,14 +899,19 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn query_data_with_failing_requests() {
-        // util::tests::initialize_debugging_in_test; // use for debugging
+        // crate::util::tests::initialize_debugging_in_test(); // use for debugging
+        hide_gdal_errors();
 
-        let num_gdal_retries = 3;
+        // each requests does `number_of_retries` retries and waits for it `delay_s` seconds
+        let number_of_retries = 1;
+        let delay_s = 1;
 
         let stac_response =
             std::fs::read_to_string(test_data!("pro/stac_responses/items_page_1_limit_500.json"))
                 .unwrap();
         let server = Server::run();
+
+        // STAC response
         server.expect(
             Expectation::matching(all_of![
                 request::method_path("GET", "/v0/collections/sentinel-s2-l2a-cogs/items",),
@@ -908,22 +942,125 @@ mod tests {
             ]),
         );
 
+        // HEAD request
         server.expect(
-            Expectation::matching(all_of![request::method_path(
-                "HEAD",
-                "/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif",
-            ),])
-            .times(1 + num_gdal_retries)
-            .respond_with(responders::status_code(500)),
+            Expectation::matching(
+                request::method_path("HEAD", "/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif"),
+            )
+            .times(2)
+            .respond_with(responders::cycle![
+                // first fail
+                responders::delay_and_then(
+                    std::time::Duration::from_secs(10),
+                    responders::status_code(500)
+                ),
+                // then succeed
+                responders::status_code(200)
+                    .append_header(
+                        "x-amz-id-2",
+                        "avRd0/ks4ATH99UNXBCfqZAEQ3BckuLJTj7iG1jQrGoxOtwswqHrok10u+VMHO3twVIhUmQKLwg=",
+                    )
+                    .append_header("x-amz-request-id", "VVHWX1P45NP7KNWV")
+                    .append_header("Date", "Tue, 11 Oct 2022 16:06:03 GMT")
+                    .append_header("Last-Modified", "Fri, 09 Sep 2022 00:32:25 GMT")
+                    .append_header("ETag", "\"09a4c36021930e67dd1c71ed303cdf4e-24\"")
+                    .append_header("Cache-Control", "public, max-age=31536000, immutable")
+                    .append_header("Accept-Ranges", "bytes")
+                    .append_header(
+                        "Content-Type",
+                        "image/tiff; application=geotiff; profile=cloud-optimized",
+                    )
+                    .append_header("Server", "AmazonS3")
+                    .append_header("Content-Length", "197770048"),
+            ]),
         );
 
+        // GET request to read contents of COG header
         server.expect(
-            Expectation::matching(all_of![request::method_path(
-                "GET",
-                "/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/",
-            ),])
-            .times(1)
-            .respond_with(responders::status_code(500)),
+            Expectation::matching(all_of![
+                request::method_path(
+                    "GET",
+                    "/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif",
+                ),
+                request::headers(contains(("range", "bytes=0-16383"))),
+            ])
+            .times(2)
+            .respond_with(responders::cycle![
+                // first fail
+                responders::delay_and_then(
+                    std::time::Duration::from_secs(10),
+                    responders::status_code(500)
+                ),
+                // then succeed
+                responders::status_code(206)
+                    .append_header("Content-Type", "application/json")
+                    .body(
+                        include_bytes!(
+                            "../../../../../test_data/pro/stac_responses/cog-header.bin"
+                        )
+                        .to_vec()
+                    ).append_header(
+                        "x-amz-id-2",
+                        "avRd0/ks4ATH99UNXBCfqZAEQ3BckuLJTj7iG1jQrGoxOtwswqHrok10u+VMHO3twVIhUmQKLwg=",
+                    )
+                    .append_header("x-amz-request-id", "VVHWX1P45NP7KNWV")
+                    .append_header("Date", "Tue, 11 Oct 2022 16:06:03 GMT")
+                    .append_header("Last-Modified", "Fri, 09 Sep 2022 00:32:25 GMT")
+                    .append_header("ETag", "\"09a4c36021930e67dd1c71ed303cdf4e-24\"")
+                    .append_header("Cache-Control", "public, max-age=31536000, immutable")
+                    .append_header("Accept-Ranges", "bytes")
+                    .append_header("Content-Range", "bytes 0-16383/197770048")
+                    .append_header(
+                        "Content-Type",
+                        "image/tiff; application=geotiff; profile=cloud-optimized",
+                    )
+                    .append_header("Server", "AmazonS3")
+                    .append_header("Content-Length", "16384"),
+            ]),
+        );
+
+        // GET request of the COG tile
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path(
+                    "GET",
+                    "/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif",
+                ),
+                request::headers(contains(("range", "bytes=46170112-46186495"))),
+            ])
+            .times(2)
+            .respond_with(responders::cycle![
+                // first fail
+                responders::delay_and_then(
+                    std::time::Duration::from_secs(10),
+                    responders::status_code(500)
+                ),
+                // then succeed
+                responders::status_code(206)
+                    .append_header("Content-Type", "application/json")
+                    .body(
+                        include_bytes!(
+                            "../../../../../test_data/pro/stac_responses/cog-tile.bin"
+                        )
+                        .to_vec()
+                    ).append_header(
+                        "x-amz-id-2",
+                        "avRd0/ks4ATH99UNXBCfqZAEQ3BckuLJTj7iG1jQrGoxOtwswqHrok10u+VMHO3twVIhUmQKLwg=",
+                    )
+                    .append_header("x-amz-request-id", "VVHWX1P45NP7KNWV")
+                    .append_header("Date", "Tue, 11 Oct 2022 16:06:03 GMT")
+                    .append_header("Last-Modified", "Fri, 09 Sep 2022 00:32:25 GMT")
+                    .append_header("ETag", "\"09a4c36021930e67dd1c71ed303cdf4e-24\"")
+                    .append_header("Cache-Control", "public, max-age=31536000, immutable")
+                    .append_header("Accept-Ranges", "bytes")
+                    .append_header("Content-Range", "bytes 46170112-46186495/173560205")
+                    .append_header(
+                        "Content-Type",
+                        "image/tiff; application=geotiff; profile=cloud-optimized",
+                    )
+                    .append_header("Server", "AmazonS3")
+                    .append_header("Content-Length", "16384"),
+            ]),
         );
 
         let provider_id: DataProviderId = "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".parse().unwrap();
@@ -944,8 +1081,8 @@ mod tests {
                 }],
                 stac_api_retries: Default::default(),
                 gdal_retries: GdalRetries {
-                    number_of_retries: num_gdal_retries,
-                    delay_s: 5,
+                    number_of_retries,
+                    delay_s,
                 },
             });
 
@@ -986,7 +1123,7 @@ mod tests {
             vec![GdalLoadingInfoTemporalSlice {
                 time: TimeInterval::new_unchecked(1_632_384_644_000, 1_632_384_645_000),
                 params: Some(GdalDatasetParameters {
-                    file_path: format!("/vsicurl?max_retry={}&retry_delay=5&url=https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif", num_gdal_retries).into(),
+                    file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif".into(),
                     rasterband_channel: 1,
                     geo_transform: GdalDatasetGeoTransform {
                         origin_coordinate: (499_980.0,9_800_020.00).into(),
@@ -999,7 +1136,13 @@ mod tests {
                     no_data_value: Some(0.),
                     properties_mapping: None,
                     gdal_open_options: None,
-                    gdal_config_options: None,
+                    gdal_config_options: Some(vec![
+                        ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(), ".tif".to_owned()),
+                        ("GDAL_DISABLE_READDIR_ON_OPEN".to_owned(), "EMPTY_DIR".to_owned()),
+                        ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
+                        ("GDAL_HTTP_RETRY_DELAY".to_owned(), delay_s.to_string()),
+                        ("GDAL_HTTP_MAX_RETRY".to_owned(), number_of_retries.to_string())
+                        ]),
                     allow_alphaband_as_mask: true,
                 }),
             }]
@@ -1015,6 +1158,11 @@ mod tests {
                 &server.url_str(""),
             )
             .into();
+        // add a low `GDAL_HTTP_TIMEOUT` value to test timeouts
+        params.gdal_config_options = params.gdal_config_options.map(|mut options| {
+            options.push(("GDAL_HTTP_TIMEOUT".to_owned(), "1".to_owned()));
+            options
+        });
 
         let mut execution_context = MockExecutionContext::test_default();
         let id: geoengine_datatypes::dataset::DataId = DatasetId::new().into();
@@ -1053,7 +1201,7 @@ mod tests {
                 RasterQueryRectangle {
                     spatial_bounds: SpatialPartition2D::new_unchecked(
                         (499_980., 9_804_800.).into(),
-                        (501_760., 9_799_680.).into(),
+                        (499_990., 9_804_810.).into(),
                     ),
                     time_interval: TimeInterval::new_instant(DateTime::new_utc(
                         2014, 3, 1, 0, 0, 0,
@@ -1069,6 +1217,7 @@ mod tests {
         let result = stream.collect::<Vec<_>>().await;
 
         assert_eq!(result.len(), 1);
+        assert!(result[0].is_ok());
     }
 
     #[test]
