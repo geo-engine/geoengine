@@ -53,7 +53,7 @@ pub struct GetMap {
     pub request: GetMapRequest,
     #[serde(alias = "WIDTH")]
     #[serde(deserialize_with = "from_str")]
-    #[param(example = 256)]
+    #[param(example = 512)]
     pub width: u32,
     #[serde(alias = "HEIGHT")]
     #[serde(deserialize_with = "from_str")]
@@ -134,11 +134,22 @@ pub struct GetStyles {
     pub layer: String,
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams, ToSchema)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct GetLegendGraphic {
-    pub version: Option<WmsVersion>,
+    #[serde(alias = "VERSION")]
+    pub version: WmsVersion,
+    #[serde(alias = "SERVICE")]
+    pub service: WmsService,
+    #[serde(alias = "REQUEST")]
+    pub request: GetLegendGraphicRequest,
+    #[param(example = "<Workflow Id>")]
     pub layer: String,
     // TODO: remaining fields
+}
+
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+pub enum GetLegendGraphicRequest {
+    GetLegendGraphic,
 }
 
 #[cfg(test)]

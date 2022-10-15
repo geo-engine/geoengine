@@ -167,7 +167,7 @@ use utoipa::{Modify, OpenApi};
             wms::request::GetMapRequest,
             wms::request::GetMapExceptionFormat,
             wms::request::GetMapFormat,
-            wms::request::GetLegendGraphic,
+            wms::request::GetLegendGraphicRequest,
 
             wfs::request::WfsService,
             wfs::request::WfsVersion,

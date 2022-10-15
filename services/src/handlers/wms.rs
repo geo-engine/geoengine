@@ -352,7 +352,7 @@ fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
     get,
     path = "/wms/{workflow}?request=GetLegendGraphic",
     responses(
-        (status = 200, description = "OK")
+        (status = 501, description = "Not implemented")
     ),
     params(
         ("workflow" = WorkflowId, description = "Workflow id"),
@@ -368,8 +368,8 @@ async fn wms_legend_graphic_handler<C: Context>(
     _request: web::Query<GetLegendGraphic>,
     _ctx: web::Data<C>,
     _session: C::Session,
-) -> Result<HttpResponse> {
-    Ok(HttpResponse::InternalServerError().finish())
+) -> HttpResponse {
+    HttpResponse::NotImplemented().finish()
 }
 
 fn default_time_from_config() -> TimeInterval {
