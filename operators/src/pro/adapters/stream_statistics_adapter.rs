@@ -1,5 +1,4 @@
 use futures::{ready, Stream};
-use log::{debug, trace};
 use pin_project::pin_project;
 use std::{
     pin::Pin,
@@ -57,25 +56,31 @@ where
 
         let _enter = this.span.enter();
 
-        trace!(
-            "[{}] | poll_next_count: {}",
-            *this.id,
-            *this.poll_next_count
+        tracing::trace!(
+            event = "poll_next",
+            id = *this.id,
+            poll_next_count = *this.poll_next_count
         );
 
         let v = ready!(this.stream.as_mut().poll_next(cx));
         match v {
             Some(_) => {
                 *this.element_count += 1;
-                debug!(
-                    "[{}] | poll_next_count: {} | element_count: {} | next",
-                    *this.id, *this.poll_next_count, *this.element_count
+                tracing::debug!(
+                    event = "poll_next",
+                    id = *this.id,
+                    poll_next_count = *this.poll_next_count,
+                    element_count = *this.element_count,
+                    empty = false
                 );
             }
             None => {
-                debug!(
-                    "[{}] | poll_next_count: {} | element_count: {} | empty",
-                    *this.id, *this.poll_next_count, *this.element_count
+                tracing::debug!(
+                    event = "poll_next",
+                    id = *this.id,
+                    poll_next_count = *this.poll_next_count,
+                    element_count = *this.element_count,
+                    empty = true
                 );
             }
         }

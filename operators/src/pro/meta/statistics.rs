@@ -9,7 +9,6 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle};
-use log::{debug, trace};
 
 pub struct InitializedProcessorStatistics<S> {
     source: S,
@@ -27,12 +26,12 @@ impl InitializedRasterOperator
     for InitializedProcessorStatistics<Box<dyn InitializedRasterOperator>>
 {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
-        debug!("[{}] | raster result descriptor", self.id);
+        tracing::debug!(event = "raster result descriptor", id = self.id);
         self.source.result_descriptor()
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        debug!("[{}] | query processor", self.id);
+        tracing::debug!(event = "query processor", id = self.id);
         let processor_result = self.source.query_processor();
         match processor_result {
             Ok(p) => {
@@ -108,11 +107,11 @@ impl InitializedRasterOperator
                         ),
                     )),
                 };
-                debug!("[{}] | query processor created", self.id);
+                tracing::debug!(event = "query processor created", id = self.id);
                 Ok(res_processor)
             }
             Err(err) => {
-                debug!("[{}] | query processor failed", self.id);
+                tracing::debug!(event = "query processor failed", id = self.id);
                 Err(err)
             }
         }
@@ -123,12 +122,12 @@ impl InitializedVectorOperator
     for InitializedProcessorStatistics<Box<dyn InitializedVectorOperator>>
 {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
-        debug!("[{}] | vector result descriptor", self.id);
+        tracing::debug!(event = "vector result descriptor", id = self.id);
         self.source.result_descriptor()
     }
 
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        debug!("[{}] | query processor", self.id);
+        tracing::debug!(event = "query processor", id = self.id);
         let processor_result = self.source.query_processor();
         match processor_result {
             Ok(p) => {
@@ -137,11 +136,11 @@ impl InitializedVectorOperator
                     p => Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone(),
                     self.span.clone()))
                 );
-                debug!("[{}] | query processor created", self.id);
+                tracing::debug!(event = "query processor created", id = self.id);
                 Ok(result)
             }
             Err(err) => {
-                debug!("[{}] | query processor failed", self.id);
+                tracing::debug!(event = "query processor failed", id = self.id);
                 Err(err)
             }
         }
@@ -185,12 +184,12 @@ where
         query: QueryRectangle<Self::SpatialBounds>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        trace!("[{}] | query", self.id);
+        tracing::trace!(event = "query", id = self.id);
         let stream_result = self.processor.query(query, ctx).await;
-        debug!("[{}] | query ready", self.id);
+        tracing::debug!(event = "query ready", id = self.id);
         match stream_result {
             Ok(stream) => {
-                debug!("[{}] | query ok", self.id);
+                tracing::debug!(event = "query ok", id = self.id);
                 Ok(StreamStatisticsAdapter::statistics_with_id(
                     stream,
                     self.id.clone(),
@@ -199,7 +198,7 @@ where
                 .boxed())
             }
             Err(err) => {
-                debug!("[{}] | query error", self.id);
+                tracing::debug!(event = "query error", id = self.id);
                 Err(err)
             }
         }
