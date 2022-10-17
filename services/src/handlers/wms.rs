@@ -22,8 +22,8 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
-use geoengine_operators::engine::{RasterOperator, ResultDescriptor};
-use geoengine_operators::processing::{Reprojection, ReprojectionParams};
+use geoengine_operators::engine::{ExecutionContext, ResultDescriptor};
+use geoengine_operators::processing::{InitializedRasterReprojection, ReprojectionParams};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
@@ -263,18 +263,21 @@ async fn get_map<C: Context>(
     let initialized = if request_spatial_ref == workflow_spatial_ref {
         initialized
     } else {
-        let proj = Reprojection {
-            params: ReprojectionParams {
+        log::debug!(
+            "WMS Reprojecting from {} to {}",
+            request_spatial_ref,
+            workflow_spatial_ref
+        );
+        let irp = InitializedRasterReprojection::try_new_with_input(
+            ReprojectionParams {
                 target_spatial_reference: request_spatial_ref,
             },
-            sources: operator.into(),
-        };
+            initialized,
+            execution_context.tiling_specification(),
+        )
+        .context(error::Operator)?;
 
-        // TODO: avoid re-initialization of the whole operator graph
-        Box::new(proj)
-            .initialize(&execution_context)
-            .await
-            .context(error::Operator)?
+        Box::new(irp)
     };
 
     let processor = initialized.query_processor().context(error::Operator)?;
@@ -292,9 +295,9 @@ async fn get_map<C: Context>(
         ),
     };
 
-    let query_ctx = ctx.query_context()?;
-
     let colorizer = colorizer_from_style(&request.styles)?;
+
+    let query_ctx = ctx.query_context()?;
 
     let image_bytes = call_on_generic_raster_processor!(
         processor,
