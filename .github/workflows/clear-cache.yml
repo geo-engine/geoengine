@@ -1,0 +1,29 @@
+name: Clear Cache
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  clear-cache:
+    # This strategy has to match the one in `ci.yml`
+    strategy:
+      matrix:
+        os:
+          - ubuntu-20.04
+        features: ["", "--features pro", "--all-features"]
+        build: ["", "--release"]
+
+    runs-on: ${{matrix.os}}
+
+    steps:
+      - name: Clear cache
+        run: |
+          curl \
+            -X DELETE \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/geo-engine/geoengine/actions/caches/ci_${{ matrix.features }}_${{ matrix.build }}
