@@ -49,6 +49,8 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Instant;
+
+mod dataset_pool;
 mod loading_info;
 
 /// Parameters for the GDAL Source Operator
