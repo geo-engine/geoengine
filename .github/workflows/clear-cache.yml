@@ -9,21 +9,30 @@ env:
 
 jobs:
   clear-cache:
-    # This strategy has to match the one in `ci.yml`
-    strategy:
-      matrix:
-        os:
-          - ubuntu-20.04
-        features: ["", "--features pro", "--all-features"]
-        build: ["", "--release"]
-
-    runs-on: ${{matrix.os}}
+    runs-on: ubuntu-22.04
 
     steps:
-      - name: Clear cache
-        run: |
-          curl \
-            -X DELETE \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/geo-engine/geoengine/actions/caches/ci_${{ matrix.features }}_${{ matrix.build }}
+      - name: Clear all caches
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const {GITHUB_TOKEN, GITHUB_REPOSITORY} = process.env
+
+            const [owner, repo] = GITHUB_REPOSITORY.split('/')
+
+            console.log(`Clearing all caches for ${owner}/${repo}`)
+
+            const result = await github.request('GET /repos/{owner}/{repo}/actions/caches', {
+              owner,
+              repo,
+            });
+
+            for (const cache of result.data.actions_caches) {
+              console.log(`Deleting cache ${cache.id}...`);
+
+              await github.request('DELETE /repos/{owner}/{repo}/actions/caches/{cache_id}', {
+                owner,
+                repo,
+                cache_id: cache.id
+              })
+            }
