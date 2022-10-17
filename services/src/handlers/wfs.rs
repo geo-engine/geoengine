@@ -445,6 +445,11 @@ async fn get_feature<C: Context>(
     let initialized = if request_spatial_ref == workflow_spatial_ref {
         initialized
     } else {
+        log::debug!(
+            "WFS reprojecting from {} to {}",
+            request_spatial_ref,
+            workflow_spatial_ref
+        );
         let ivp = InitializedVectorReprojection::try_new_with_input(
             ReprojectionParams {
                 target_spatial_reference: request_spatial_ref,
