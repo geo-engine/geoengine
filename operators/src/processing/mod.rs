@@ -6,6 +6,7 @@ mod map_query;
 mod meteosat;
 mod neighborhood_aggregate;
 mod point_in_polygon;
+mod raster_scaling;
 mod raster_type_conversion;
 mod raster_vector_join;
 mod reprojection;

@@ -34,6 +34,10 @@ pub use masked_grid::{MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
 pub use no_data_value_grid::{
     NoDataValueGrid, NoDataValueGrid1D, NoDataValueGrid2D, NoDataValueGrid3D,
 };
+pub use operations::checked_scaling::{
+    ElementScaling, Scale, ScaleTransformation, ScalingTransformation, Unscale,
+    UnscaleTransformation,
+};
 pub use operations::from_index_fn::{FromIndexFn, FromIndexFnParallel};
 pub use operations::map_elements::{MapElements, MapElementsParallel};
 pub use operations::map_indexed_elements::{MapIndexedElements, MapIndexedElementsParallel};

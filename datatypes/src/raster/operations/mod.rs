@@ -1,4 +1,5 @@
 pub mod blit;
+pub mod checked_scaling;
 pub mod convert_data_type;
 pub mod from_index_fn;
 pub mod grid_blit;
