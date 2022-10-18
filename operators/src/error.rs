@@ -305,6 +305,11 @@ pub enum Error {
     RasterKernelError {
         source: crate::processing::NeighborhoodAggregateError,
     },
+
+    #[snafu(context(false))]
+    GdalSource {
+        source: crate::source::GdalSourceError,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
