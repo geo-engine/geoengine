@@ -47,14 +47,6 @@ impl ToSchema for TypeNames {
         ObjectBuilder::new().schema_type(SchemaType::String).into()
     }
 }
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub struct DescribeFeatureType {
-    pub version: String,
-    #[serde(deserialize_with = "parse_type_names")]
-    pub type_names: TypeNames,
-    pub exceptions: String,    // TODO
-    pub output_format: String, // TODO
-}
 
 #[derive(PartialEq, Debug, Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
@@ -104,46 +96,6 @@ impl ToSchema for WfsResolution {
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GetFeatureRequest {
     GetFeature,
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub struct LockFeature {
-    // TODO
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub struct Transaction {
-    // TODO
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub struct GetPropertyValue {
-    // TODO
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub struct GetFeatureWithLock {
-    // TODO
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub struct CreateStoredQuery {
-    // TODO
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub struct DropStoredQuery {
-    // TODO
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub struct ListStoredQueries {
-    // TODO
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub struct DescribeStoredQueries {
-    // TODO
 }
 
 #[allow(clippy::option_if_let_else)]
