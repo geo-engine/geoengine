@@ -1,6 +1,3 @@
-#![allow(non_snake_case)]
-// TODO: remove this and use rename_all once utoipa supports this for `IntoParams`: https://github.com/juhaku/utoipa/issues/270
-
 use crate::api::model::datatypes::TimeInterval;
 use crate::ogc::util::{
     parse_ogc_bbox, parse_time_option, parse_wfs_resolution_option, OgcBoundingBox,
@@ -61,6 +58,8 @@ pub struct DescribeFeatureType {
 
 #[derive(PartialEq, Debug, Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
+#[allow(non_snake_case)]
+// TODO: remove this and use rename_all once utoipa supports this for `IntoParams`: https://github.com/juhaku/utoipa/issues/270
 pub struct GetFeature {
     pub version: Option<WfsVersion>,
     pub service: WfsService,

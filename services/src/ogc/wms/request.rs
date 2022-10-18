@@ -1,6 +1,3 @@
-#![allow(non_snake_case)]
-// TODO: remove this and use rename_all once utoipa supports this for `IntoParams`: https://github.com/juhaku/utoipa/issues/270
-
 use crate::api::model::datatypes::{SpatialReference, TimeInterval};
 use crate::ogc::util::{parse_ogc_bbox, parse_time_option, OgcBoundingBox};
 use crate::util::{bool_option_case_insensitive, from_str};
