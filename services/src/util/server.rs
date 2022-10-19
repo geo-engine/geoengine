@@ -4,12 +4,18 @@ use crate::util::config::get_config_element;
 
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::uri::PathAndQuery;
-use actix_http::HttpMessage;
+use actix_http::{Extensions, HttpMessage};
+use actix_rt::net::TcpStream;
 use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
-use actix_web::{http, middleware, web, HttpResponse};
+use actix_web::{http, middleware, web, HttpRequest, HttpResponse};
 use log::debug;
-use std::num::NonZeroUsize;
+use nix::errno::Errno;
+use nix::sys::socket::MsgFlags;
+use std::any::Any;
+use std::num::{NonZeroI32, NonZeroUsize};
+use std::os::unix::prelude::{AsRawFd, RawFd};
+use tokio::task::JoinHandle;
 use tracing::log::info;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
@@ -293,4 +299,48 @@ pub(crate) fn log_server_info() -> Result<()> {
 // async is required for the request handler signature
 pub async fn not_implemented_handler() -> HttpResponse {
     HttpResponse::NotImplemented().finish()
+}
+
+pub struct SocketFd(pub RawFd);
+
+// attach the connections socket file descriptor to the connection data
+// TODO: the socket file descriptor might be re-used by a subsequent connection before we notice that
+//       the connections was closed. We maybe need a global list of all open connections and their socket file descriptors
+//       or some other way to invalidate the socket file descriptor in the old connection when a new one arrives.
+pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
+    if let Some(sock) = connection.downcast_ref::<TcpStream>() {
+        let fd = sock.as_raw_fd();
+        if let Ok(fd) = NonZeroI32::try_from(fd) {
+            let fd = RawFd::from(fd);
+            data.insert(SocketFd(fd));
+        }
+    }
+}
+
+// start a new task that monitors the request's socket file descriptor and tries to detect when the connection is closed.
+// The returned join handle can be awaited to get notified when the connection is closed.
+// TODO: further verify the heuristic used here to determine the socket status from the `recv` return value
+pub fn connection_closed(req: &HttpRequest) -> Option<JoinHandle<()>> {
+    info!("<< Monitoring req conn >>"); // TODO: remove
+    req.conn_data::<SocketFd>().map(|fd| {
+        let fd = fd.0;
+        crate::util::spawn(async move {
+            let mut data = vec![];
+            // TODO: add a timeout to avoid infinite looping
+            loop {
+                let r = nix::sys::socket::recv(fd, data.as_mut_slice(), MsgFlags::MSG_PEEK);
+
+                match r {
+                    Ok(0) | Err(Errno::EBADF) => {
+                        info!(">> A connection closed"); // TODO: remove
+                        return;
+                    }
+                    _ => (),
+                }
+
+                // TODO: make the sleep duration configurable?
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        })
+    })
 }

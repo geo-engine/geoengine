@@ -168,7 +168,7 @@ Accept: application/json
 
 
 POST http://localhost:3030/workflow
-Authorization: Bearer 89960ca7-94b3-4630-9469-4338231343c4
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Content-Type: application/json
 
 {
@@ -190,7 +190,7 @@ Content-Type: application/json
 ###
 
 GET http://localhost:3030/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:ca6e5cb9-51bd-5e78-a723-ab2613457b33&bbox=-90,-180,90,180&srsName=EPSG:4326&time02014-04-01T12:00:00.000Z/2014-04-01T12:00:00.000Z
-Authorization: Bearer 7d82fc9e-ef0d-4c53-a12d-faa309b4b3e4
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Accept: application/json
 
 ###
@@ -259,3 +259,16 @@ Content-Type: application/json
 Accept: application/json
 
 ###
+
+# @name anonymousSession
+POST http://localhost:3030/anonymous
+Content-Type: application/json
+
+
+###
+
+curl 'http://localhost:3030/workflow' -X POST -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0' -H 'Accept: application/json, text/plain, */*' -H 'Accept-Language: de,en-US;q=0.7,en;q=0.3' -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer {{anonymousSession.response.body.$.id}}' -H 'Content-Type: application/json' -H 'Origin: http://localhost:4200' -H 'Connection: keep-alive' -H 'Referer: http://localhost:4200/' -H 'Cookie: default-theme=ngax' -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: cors' -H 'Sec-Fetch-Site: same-origin' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' --data-raw '{"type":"Raster","operator":{"type":"GdalSource","params":{"data":{"type":"internal","datasetId":"36574dc3-560a-4b09-9d22-d5945f2b8093"}}}}'
+
+###
+
+curl 'http://localhost:3030/wms/c7b7c5c8-ee11-5418-bd1f-9e5889f6e04a?REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&FORMAT=image%2Fpng&TRANSPARENT=true&layers=c7b7c5c8-ee11-5418-bd1f-9e5889f6e04a&time=2014-04-01T12%3A00%3A00.000Z&STYLES=custom%3A%7B%22type%22%3A%22linearGradient%22%2C%22breakpoints%22%3A%5B%7B%22value%22%3A1%2C%22color%22%3A%5B0%2C0%2C0%2C255%5D%7D%2C%7B%22value%22%3A255%2C%22color%22%3A%5B255%2C255%2C255%2C255%5D%7D%5D%2C%22noDataColor%22%3A%5B0%2C0%2C0%2C0%5D%2C%22defaultColor%22%3A%5B0%2C0%2C0%2C0%5D%7D&WIDTH=256&HEIGHT=256&CRS=EPSG%3A4326&BBOX=45%2C90%2C90%2C135' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:105.0) Gecko/20100101 Firefox/105.0' -H 'Accept: */*' -H 'Accept-Language: de,en-US;q=0.7,en;q=0.3' -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer {{anonymousSession.response.body.$.id}}' -H 'Connection: keep-alive' -H 'Referer: http://localhost:4200/' -H 'Cookie: default-theme=ngax' -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: cors' -H 'Sec-Fetch-Site: same-origin' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache'

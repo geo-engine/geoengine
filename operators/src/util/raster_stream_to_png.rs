@@ -4,17 +4,20 @@ use geoengine_datatypes::{
     primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
     raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
+use log::info;
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
+use tokio::task::JoinHandle;
 
 use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor};
 use crate::{error, util::Result};
 
 #[allow(clippy::too_many_arguments)]
-pub async fn raster_stream_to_png_bytes<T, C: QueryContext>(
+pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    conn_close: Option<JoinHandle<()>>,
     query_rect: RasterQueryRectangle,
-    query_ctx: C,
+    mut query_ctx: C,
     width: u32,
     height: u32,
     time: Option<TimeInterval>,
@@ -25,7 +28,20 @@ where
 {
     let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
 
+    let valve_trigger = query_ctx.valve_trigger();
+
     let tile_stream = processor.query(query_rect, &query_ctx).await?;
+
+    conn_close.map(|c| {
+        crate::util::spawn(async move {
+            if c.await.is_ok() {
+                if let Some(trigger) = valve_trigger {
+                    info!("shoot trigger");
+                    trigger.cancel();
+                }
+            }
+        })
+    });
 
     let x_query_resolution = query_rect.spatial_bounds.size_x() / f64::from(width);
     let y_query_resolution = query_rect.spatial_bounds.size_y() / f64::from(height);
@@ -60,9 +76,10 @@ where
                 Err(error) => futures::future::err(error),
             }
         })
-        .await?;
+        .await;
 
-    Ok(output_tile.grid_array.to_png(width, height, &colorizer)?)
+    info!("output tile:  {}", output_tile.is_ok()); // TODO: remove
+    Ok(output_tile?.grid_array.to_png(width, height, &colorizer)?)
 }
 
 /// Method to generate a default `Colorizer`.
@@ -118,6 +135,7 @@ mod tests {
 
         let image_bytes = raster_stream_to_png_bytes(
             gdal_source.boxed(),
+            None,
             RasterQueryRectangle {
                 spatial_bounds: query_partition,
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)

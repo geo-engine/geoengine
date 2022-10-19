@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use rayon::ThreadPool;
 use std::sync::Arc;
+use stream_cancel::{Trigger, Valve};
 use tokio::sync::RwLock;
 
 mod in_memory;
@@ -74,13 +75,18 @@ pub trait Context: 'static + Send + Sync + Clone {
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
     pub thread_pool: Arc<ThreadPool>,
+    valve: Valve,
+    valve_trigger: Option<Trigger>,
 }
 
 impl QueryContextImpl {
     pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: Arc<ThreadPool>) -> Self {
+        let (trigger, valve) = Valve::new();
         QueryContextImpl {
             chunk_byte_size,
             thread_pool,
+            valve,
+            valve_trigger: Some(trigger),
         }
     }
 }
@@ -92,6 +98,14 @@ impl QueryContext for QueryContextImpl {
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
+    }
+
+    fn valve(&self) -> &Valve {
+        &self.valve
+    }
+
+    fn valve_trigger(&mut self) -> Option<Trigger> {
+        self.valve_trigger.take()
     }
 }
 

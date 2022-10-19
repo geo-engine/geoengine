@@ -4,6 +4,7 @@ use crate::util::create_rayon_thread_pool;
 use geoengine_datatypes::util::test::TestDefault;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+use stream_cancel::{Trigger, Valve};
 
 /// Defines the size in bytes of a vector data chunk
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
@@ -43,27 +44,38 @@ impl TestDefault for ChunkByteSize {
 pub trait QueryContext: Send + Sync {
     fn chunk_byte_size(&self) -> ChunkByteSize;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
+
+    fn valve(&self) -> &Valve;
+    fn valve_trigger(&mut self) -> Option<Trigger>;
 }
 
 pub struct MockQueryContext {
     pub chunk_byte_size: ChunkByteSize,
     pub thread_pool: Arc<ThreadPool>,
+    pub valve: Valve,
+    pub valve_trigger: Option<Trigger>,
 }
 
 impl TestDefault for MockQueryContext {
     fn test_default() -> Self {
+        let (trigger, valve) = Valve::new();
         Self {
             chunk_byte_size: ChunkByteSize::test_default(),
             thread_pool: create_rayon_thread_pool(0),
+            valve,
+            valve_trigger: Some(trigger),
         }
     }
 }
 
 impl MockQueryContext {
     pub fn new(chunk_byte_size: ChunkByteSize) -> Self {
+        let (trigger, valve) = Valve::new();
         Self {
             chunk_byte_size,
             thread_pool: create_rayon_thread_pool(0),
+            valve,
+            valve_trigger: Some(trigger),
         }
     }
 
@@ -71,9 +83,12 @@ impl MockQueryContext {
         chunk_byte_size: ChunkByteSize,
         num_threads: usize,
     ) -> Self {
+        let (trigger, valve) = Valve::new();
         Self {
             chunk_byte_size,
             thread_pool: create_rayon_thread_pool(num_threads),
+            valve,
+            valve_trigger: Some(trigger),
         }
     }
 }
@@ -85,5 +100,13 @@ impl QueryContext for MockQueryContext {
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
+    }
+
+    fn valve(&self) -> &Valve {
+        &self.valve
+    }
+
+    fn valve_trigger(&mut self) -> Option<Trigger> {
+        self.valve_trigger.take()
     }
 }

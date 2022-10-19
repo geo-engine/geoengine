@@ -1,4 +1,4 @@
-use actix_web::{web, FromRequest, HttpResponse};
+use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use reqwest::Url;
 use snafu::{ensure, ResultExt};
 
@@ -17,7 +17,7 @@ use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::server::not_implemented_handler;
+use crate::util::server::{connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -240,6 +240,7 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
     )
 )]
 async fn wms_map_handler<C: Context>(
+    req: HttpRequest,
     workflow: web::Path<WorkflowId>,
     request: web::Query<GetMap>,
     ctx: web::Data<C>,
@@ -320,7 +321,7 @@ async fn wms_map_handler<C: Context>(
     let image_bytes = call_on_generic_raster_processor!(
         processor,
         p =>
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), colorizer).await
+            raster_stream_to_png_bytes(p, connection_closed(&req), query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), colorizer).await
     ).map_err(error::Error::from)?;
 
     Ok(HttpResponse::Ok()
@@ -514,6 +515,7 @@ mod tests {
 
         let image_bytes = raster_stream_to_png_bytes(
             gdal_source.boxed(),
+            None,
             RasterQueryRectangle {
                 spatial_bounds: query_partition,
                 time_interval: geoengine_datatypes::primitives::TimeInterval::new(

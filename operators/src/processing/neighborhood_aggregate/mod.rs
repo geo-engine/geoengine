@@ -660,6 +660,7 @@ mod tests {
 
         let bytes = raster_stream_to_png_bytes(
             processor,
+            None,
             query_rect,
             query_ctx,
             360,
@@ -727,6 +728,7 @@ mod tests {
 
         let bytes = raster_stream_to_png_bytes(
             processor,
+            None,
             query_rect,
             query_ctx,
             360,

@@ -41,7 +41,7 @@ pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
-use log::debug;
+use log::{debug, info};
 use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
@@ -431,6 +431,8 @@ impl GdalRasterLoader {
         tile_information: TileInformation,
         tile_time: TimeInterval,
     ) -> Result<RasterTile2D<T>> {
+        info!("inb4 sleep"); // TODO: remove
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await; // TODO: remove
         match dataset_params {
             // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
             Some(ds)
@@ -576,7 +578,7 @@ where
     async fn query<'a>(
         &'a self,
         query: RasterQueryRectangle,
-        _ctx: &'a dyn crate::engine::QueryContext,
+        ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
         let start = Instant::now();
         debug!(
@@ -653,7 +655,10 @@ where
             tiling_strategy.tile_size_in_pixels,
         );
 
-        Ok(filled_stream.boxed())
+        // TODO: automatically wrap in all operators. Doing it like for the statistics opeator is not possible
+        //       because the cancellation should be per query and not per QueryProcessor. Thus the cancellation
+        //       must be part of the QueryContext and not the ExecutionContext.
+        Ok(ctx.valve().wrap(filled_stream).boxed())
     }
 }
 
