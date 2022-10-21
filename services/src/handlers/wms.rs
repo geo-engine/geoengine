@@ -21,11 +21,8 @@ use crate::util::server::not_implemented_handler;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
-use geoengine_datatypes::primitives::TimeInstance;
 use geoengine_operators::engine::{ExecutionContext, ResultDescriptor};
-use geoengine_operators::engine::{RasterOperator, ResultDescriptor};
 use geoengine_operators::processing::{InitializedRasterReprojection, ReprojectionParams};
-use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
@@ -294,7 +291,7 @@ async fn wms_map_handler<C: Context>(
         );
         let irp = InitializedRasterReprojection::try_new_with_input(
             ReprojectionParams {
-                target_spatial_reference: request_spatial_ref,
+                target_spatial_reference: request_spatial_ref.into(),
             },
             initialized,
             execution_context.tiling_specification(),
