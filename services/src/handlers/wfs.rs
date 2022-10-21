@@ -446,7 +446,7 @@ async fn get_feature<C: Context>(
         initialized
     } else {
         log::debug!(
-            "WFS reprojecting from {} to {}",
+            "WFS query srs: {}, workflow srs: {} --> injecting reprojection",
             request_spatial_ref,
             workflow_spatial_ref
         );

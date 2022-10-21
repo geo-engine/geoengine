@@ -120,9 +120,9 @@ impl SpatialReference {
         format!("{}:{}", self.authority, self.code)
     }
 
-    /// Compute the bounding box of this spatial reference that is also valid in the `other` spatial reference
+    /// Compute the bounding box of this spatial reference that is also valid in the `other` spatial reference. Might be None.
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub fn valid_bounds<T>(&self, other: &SpatialReference) -> Result<T>
+    pub fn area_of_use_intersection<T>(&self, other: &SpatialReference) -> Result<Option<T>>
     where
         T: AxisAlignedRectangle,
     {
@@ -137,11 +137,8 @@ impl SpatialReference {
 
         area_out
             .intersection(&area_other)
-            .ok_or(error::Error::SpatialReferencesDoNotIntersect {
-                a: *self,
-                b: *other,
-            })?
-            .reproject(&valid_bounds_proj)
+            .map(|x| x.reproject(&valid_bounds_proj))
+            .transpose()
     }
 }
 

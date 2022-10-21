@@ -153,12 +153,14 @@ async fn get_plot_handler<C: Context>(
     };
 
     let query_rect = if request_spatial_ref == workflow_spatial_ref {
-        query_rect
+        Some(query_rect)
     } else {
         reproject_query(query_rect, workflow_spatial_ref, request_spatial_ref)
             .map_err(From::from)
             .context(error::Operator)?
     };
+
+    let query_rect = query_rect.expect("there is no way to return an empty plot, yet."); // TODO: discuss if the graph should be reprojected
 
     let processor = initialized.query_processor().context(error::Operator)?;
 

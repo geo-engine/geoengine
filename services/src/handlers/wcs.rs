@@ -313,7 +313,7 @@ async fn get_coverage<C: Context>(
         initialized
     } else {
         log::debug!(
-            "WCS reprojecting from {} to {}",
+            "WCS query srs: {}, workflow srs: {} --> injecting reprojection",
             request_spatial_ref,
             workflow_spatial_ref
         );

@@ -264,7 +264,7 @@ async fn get_map<C: Context>(
         initialized
     } else {
         log::debug!(
-            "WMS reprojecting from {} to {}",
+            "WMS query srs: {}, workflow srs: {} --> injecting reprojection",
             request_spatial_ref,
             workflow_spatial_ref
         );
