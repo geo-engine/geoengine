@@ -114,8 +114,6 @@ impl InitializedRasterReprojection {
             &in_desc,
         )?;
 
-        dbg!(&in_bounds, &out_bounds, &out_res);
-
         let result_descriptor = RasterResultDescriptor {
             spatial_reference: params.target_spatial_reference.into(),
             data_type: in_desc.data_type,
@@ -487,16 +485,12 @@ where
             let valid_bounds_in = state.valid_in_bounds;
             let valid_bounds_out = state.valid_out_bounds;
 
-            dbg!(query.spatial_bounds, &valid_bounds_in, &valid_bounds_out);
-
             // calculate the spatial resolution the input data should have using the intersection and the requested resolution
             let in_spatial_res = suggest_pixel_size_from_diag_cross_projected(
                 valid_bounds_out,
                 valid_bounds_in,
                 query.spatial_resolution,
             )?;
-
-            dbg!(query.spatial_resolution, in_spatial_res);
 
             // setup the subquery
             let sub_query_spec = TileReprojectionSubQuery {
@@ -1003,8 +997,6 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        dbg!(expected, reprojected);
-
         assert!(approx_eq!(
             BoundingBox2D,
             expected,
@@ -1120,8 +1112,6 @@ mod tests {
 
         // the test must generate 8x4 tiles
         assert_eq!(tiles.len(), 32);
-
-        dbg!(tiles.iter().map(|t| t.is_empty()).collect::<Vec<_>>());
 
         // none of the tiles should be empty
         assert!(tiles.iter().all(|t| !t.is_empty()));
