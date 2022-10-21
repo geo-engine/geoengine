@@ -211,25 +211,36 @@ impl ArrowTyped for Coordinate2D {
         )
     }
 
-    fn concat(
-        _a: &Self::ArrowArray,
-        _b: &Self::ArrowArray,
-    ) -> Result<Self::ArrowArray, ArrowError> {
-        unimplemented!("This is not used by now")
+    fn concat(a: &Self::ArrowArray, b: &Self::ArrowArray) -> Result<Self::ArrowArray, ArrowError> {
+        Ok(arrow::array::FixedSizeListArray::from(
+            arrow::compute::concat(&[a, b])?.data().clone(),
+        ))
     }
 
     fn filter(
-        _data_array: &Self::ArrowArray,
-        _filter_array: &BooleanArray,
+        data_array: &Self::ArrowArray,
+        filter_array: &BooleanArray,
     ) -> Result<Self::ArrowArray, ArrowError> {
-        unimplemented!("This is not used by now")
+        Ok(arrow::array::FixedSizeListArray::from(
+            arrow::compute::filter(data_array, filter_array)?
+                .data()
+                .clone(),
+        ))
     }
 
-    fn from_vec(_data: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
+    fn from_vec(data: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
     where
         Self: Sized,
     {
-        unimplemented!("This is not used by now")
+        let mut builder = Self::ArrowBuilder::new(arrow::array::Float64Builder::new(), 2);
+        for coordinate in data {
+            builder
+                .values()
+                .append_values(&[coordinate.x, coordinate.y], &[true, true]);
+            builder.append(true);
+        }
+
+        Ok(builder.finish())
     }
 }
 
@@ -389,6 +400,46 @@ mod test {
         assert_eq!(
             Coordinate2D::new(0., 0.).euclidean_distance(&(1., 1.).into()),
             2.0_f64.sqrt()
+        );
+    }
+
+    #[test]
+    fn test_concat() {
+        let array_a: arrow::array::FixedSizeListArray =
+            Coordinate2D::from_vec(vec![Coordinate2D::new(0., 0.), Coordinate2D::new(1., 1.)])
+                .unwrap();
+
+        let array_b: arrow::array::FixedSizeListArray =
+            Coordinate2D::from_vec(vec![Coordinate2D::new(2., 2.)]).unwrap();
+
+        let array_c: arrow::array::FixedSizeListArray = Coordinate2D::from_vec(vec![
+            Coordinate2D::new(0., 0.),
+            Coordinate2D::new(1., 1.),
+            Coordinate2D::new(2., 2.),
+        ])
+        .unwrap();
+
+        assert_eq!(Coordinate2D::concat(&array_a, &array_b).unwrap(), array_c);
+    }
+
+    #[test]
+    fn test_filter() {
+        let array: arrow::array::FixedSizeListArray = Coordinate2D::from_vec(vec![
+            Coordinate2D::new(0., 0.),
+            Coordinate2D::new(1., 1.),
+            Coordinate2D::new(2., 2.),
+        ])
+        .unwrap();
+
+        let filter = arrow::array::BooleanArray::from(vec![true, false, true]);
+
+        let result: arrow::array::FixedSizeListArray =
+            Coordinate2D::filter(&array, &filter).unwrap();
+
+        assert_eq!(
+            result,
+            Coordinate2D::from_vec(vec![Coordinate2D::new(0., 0.), Coordinate2D::new(2., 2.),])
+                .unwrap()
         );
     }
 }
