@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor,
+    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -22,6 +22,7 @@ use geoengine_datatypes::raster::{
     GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
+use tracing::{span, Level};
 
 // Output type is always f32
 type PixelOut = f32;
@@ -48,6 +49,10 @@ pub struct ReflectanceParams {
 /// from a given radiance raster.
 pub type Reflectance = Operator<ReflectanceParams, SingleRasterSource>;
 
+impl OperatorName for Reflectance {
+    const TYPE_NAME: &'static str = "Reflectance";
+}
+
 pub struct InitializedReflectance {
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
@@ -57,7 +62,7 @@ pub struct InitializedReflectance {
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for Reflectance {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -116,6 +121,10 @@ impl RasterOperator for Reflectance {
         };
 
         Ok(initialized_operator.boxed())
+    }
+
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, Reflectance::TYPE_NAME)
     }
 }
 

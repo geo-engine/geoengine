@@ -1,4 +1,7 @@
-use super::{CreateSpan, InitializedRasterOperator, MockQueryContext};
+use super::{
+    CreateSpan, InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator,
+    MockQueryContext,
+};
 use crate::engine::{
     ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
 };
@@ -29,11 +32,23 @@ pub trait ExecutionContext: Send
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;
 
-    fn initialize_operator(
+    fn wrap_initialized_raster_operator(
         &self,
         op: Box<dyn InitializedRasterOperator>,
-        span: Box<dyn CreateSpan>,
+        span: CreateSpan,
     ) -> Box<dyn InitializedRasterOperator>;
+
+    fn wrap_initialized_vector_operator(
+        &self,
+        op: Box<dyn InitializedVectorOperator>,
+        span: CreateSpan,
+    ) -> Box<dyn InitializedVectorOperator>;
+
+    fn wrap_initialized_plot_operator(
+        &self,
+        op: Box<dyn InitializedPlotOperator>,
+        span: CreateSpan,
+    ) -> Box<dyn InitializedPlotOperator>;
 }
 
 #[async_trait]
@@ -127,11 +142,27 @@ impl ExecutionContext for MockExecutionContext {
         self.tiling_specification
     }
 
-    fn initialize_operator(
+    fn wrap_initialized_raster_operator(
         &self,
         op: Box<dyn InitializedRasterOperator>,
-        _span: Box<dyn CreateSpan>,
+        _span: CreateSpan,
     ) -> Box<dyn InitializedRasterOperator> {
+        op
+    }
+
+    fn wrap_initialized_vector_operator(
+        &self,
+        op: Box<dyn InitializedVectorOperator>,
+        _span: CreateSpan,
+    ) -> Box<dyn InitializedVectorOperator> {
+        op
+    }
+
+    fn wrap_initialized_plot_operator(
+        &self,
+        op: Box<dyn InitializedPlotOperator>,
+        _span: CreateSpan,
+    ) -> Box<dyn InitializedPlotOperator> {
         op
     }
 }

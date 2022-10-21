@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, QueryContext, SingleVectorSource,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    CreateSpan, ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
+    SingleVectorSource, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -19,6 +20,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
+use tracing::{span, Level};
 
 /// Projection of time information in queries and data
 ///
@@ -26,6 +28,10 @@ use snafu::{ensure, ResultExt, Snafu};
 /// In order to query all valid data, it is necessary to change the query rectangle as well.
 ///
 pub type TimeProjection = Operator<TimeProjectionParams, SingleVectorSource>;
+
+impl OperatorName for TimeProjection {
+    const TYPE_NAME: &'static str = "TimeProjection";
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeProjectionParams {
@@ -56,7 +62,7 @@ pub enum TimeProjectionError {
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for TimeProjection {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -83,6 +89,10 @@ impl VectorOperator for TimeProjection {
         };
 
         Ok(initialized_operator.boxed())
+    }
+
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, TimeProjection::TYPE_NAME)
     }
 }
 

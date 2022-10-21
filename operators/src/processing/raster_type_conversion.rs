@@ -5,11 +5,12 @@ use geoengine_datatypes::{
     raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
+use tracing::{span, Level};
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor,
+    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 
@@ -23,6 +24,10 @@ pub struct RasterTypeConversionParams {
 /// In case the value range is to small the operator will clip the values at the bounds of the data range. An example is this: The `u32` value `10000_u32` is converted to `u8`, which has a value range of 0..256. The result is `255_u8` since this is the highest value a `u8` can represent.
 pub type RasterTypeConversion = Operator<RasterTypeConversionParams, SingleRasterSource>;
 
+impl OperatorName for RasterTypeConversion {
+    const TYPE_NAME: &'static str = "RasterTypeConversion";
+}
+
 pub struct InitializedRasterTypeConversionOperator {
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
@@ -31,7 +36,7 @@ pub struct InitializedRasterTypeConversionOperator {
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for RasterTypeConversion {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -55,6 +60,10 @@ impl RasterOperator for RasterTypeConversion {
         };
 
         Ok(initialized_operator.boxed())
+    }
+
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, RasterTypeConversion::TYPE_NAME)
     }
 }
 

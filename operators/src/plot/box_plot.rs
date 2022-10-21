@@ -12,9 +12,9 @@ use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
 use geoengine_datatypes::raster::GridOrEmpty;
 
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, PlotOperator,
-    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
+    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
+    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error::{self, Error};
@@ -22,6 +22,7 @@ use crate::util::input::MultiRasterOrVectorOperator;
 use crate::util::statistics::PSquareQuantileEstimator;
 use crate::util::Result;
 use snafu::ensure;
+use tracing::{span, Level};
 
 pub const BOXPLOT_OPERATOR_NAME: &str = "BoxPlot";
 const EXACT_CALC_BOUND: usize = 10_000;
@@ -30,6 +31,10 @@ const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
 /// A box plot about vector data attribute values
 pub type BoxPlot = Operator<BoxPlotParams, MultipleRasterOrSingleVectorSource>;
+
+impl OperatorName for BoxPlot {
+    const TYPE_NAME: &'static str = "BoxPlot";
+}
 
 /// The parameter spec for `BoxPlot`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,7 +48,7 @@ pub struct BoxPlotParams {
 #[typetag::serde]
 #[async_trait]
 impl PlotOperator for BoxPlot {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
@@ -149,6 +154,10 @@ impl PlotOperator for BoxPlot {
                 .boxed())
             }
         }
+    }
+
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, BoxPlot::TYPE_NAME)
     }
 }
 

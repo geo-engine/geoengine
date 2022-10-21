@@ -12,18 +12,16 @@ pub struct StreamStatisticsAdapter<S> {
     stream: S,
     poll_next_count: u64,
     element_count: u64,
-    id: String,
     span: Span,
 }
 
 impl<S> StreamStatisticsAdapter<S> {
-    pub fn statistics_with_id(stream: S, id: String, span: Span) -> StreamStatisticsAdapter<S> {
+    pub fn new(stream: S, span: Span) -> StreamStatisticsAdapter<S> {
         StreamStatisticsAdapter {
             stream,
             poll_next_count: 0,
             element_count: 0,
             span,
-            id,
         }
     }
 
@@ -37,10 +35,6 @@ impl<S> StreamStatisticsAdapter<S> {
 
     pub fn not_ready_count(&self) -> u64 {
         self.poll_next_count - self.element_count
-    }
-
-    pub fn id_ref(&self) -> &str {
-        &self.id
     }
 }
 
@@ -56,11 +50,7 @@ where
 
         let _enter = this.span.enter();
 
-        tracing::trace!(
-            event = "poll_next",
-            id = *this.id,
-            poll_next_count = *this.poll_next_count
-        );
+        tracing::trace!(event = "poll_next", poll_next_count = *this.poll_next_count);
 
         let v = ready!(this.stream.as_mut().poll_next(cx));
         match v {
@@ -68,7 +58,6 @@ where
                 *this.element_count += 1;
                 tracing::debug!(
                     event = "poll_next",
-                    id = *this.id,
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,
                     empty = false
@@ -77,7 +66,6 @@ where
             None => {
                 tracing::debug!(
                     event = "poll_next",
-                    id = *this.id,
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,
                     empty = true
@@ -103,13 +91,7 @@ mod tests {
     async fn simple() {
         let v = vec![1, 2, 3];
         let v_stream = futures::stream::iter(v);
-        let mut v_stat_stream = StreamStatisticsAdapter::statistics_with_id(
-            v_stream,
-            "v_stream".to_string(),
-            span!(Level::TRACE, "test"),
-        );
-
-        assert_eq!(v_stat_stream.id_ref(), "v_stream");
+        let mut v_stat_stream = StreamStatisticsAdapter::new(v_stream, span!(Level::TRACE, "test"));
 
         let one = v_stat_stream.next().await;
         assert_eq!(one, Some(1));

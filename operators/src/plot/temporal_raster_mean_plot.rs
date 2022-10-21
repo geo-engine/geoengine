@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, Operator, PlotOperator,
-    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, RasterQueryProcessor,
-    SingleRasterSource, TypedPlotQueryProcessor,
+    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, Operator,
+    OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
+    QueryProcessor, RasterQueryProcessor, SingleRasterSource, TypedPlotQueryProcessor,
 };
 use crate::util::math::average_floor;
 use crate::util::Result;
@@ -15,12 +15,17 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use tracing::{span, Level};
 
 pub const MEAN_RASTER_PIXEL_VALUES_OVER_TIME_NAME: &str = "Mean Raster Pixel Values over Time";
 
 /// A plot that shows the mean values of rasters over time as an area plot.
 pub type MeanRasterPixelValuesOverTime =
     Operator<MeanRasterPixelValuesOverTimeParams, SingleRasterSource>;
+
+impl OperatorName for MeanRasterPixelValuesOverTime {
+    const TYPE_NAME: &'static str = "MeanRasterPixelValuesOverTime";
+}
 
 /// The parameter spec for `MeanRasterPixelValuesOverTime`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,7 +55,7 @@ pub enum MeanRasterPixelValuesOverTimePosition {
 #[typetag::serde]
 #[async_trait]
 impl PlotOperator for MeanRasterPixelValuesOverTime {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
@@ -65,6 +70,10 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         };
 
         Ok(initialized_operator.boxed())
+    }
+
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, MeanRasterPixelValuesOverTime::TYPE_NAME)
     }
 }
 

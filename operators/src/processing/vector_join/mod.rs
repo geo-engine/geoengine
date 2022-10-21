@@ -3,10 +3,11 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use geoengine_datatypes::collections::VectorDataType;
+use tracing::{span, Level};
 
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, OperatorData, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    CreateSpan, ExecutionContext, InitializedVectorOperator, Operator, OperatorData, OperatorName,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -21,6 +22,10 @@ mod util;
 
 /// The vector join operator requires two inputs and the join type.
 pub type VectorJoin = Operator<VectorJoinParams, VectorJoinSources>;
+
+impl OperatorName for VectorJoin {
+    const TYPE_NAME: &'static str = "VectorJoin";
+}
 
 /// A set of parameters for the `VectorJoin`
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -61,7 +66,7 @@ pub enum VectorJoinType {
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for VectorJoin {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -125,6 +130,10 @@ impl VectorOperator for VectorJoin {
         };
 
         Ok(initialized_operator.boxed())
+    }
+
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, VectorJoin::TYPE_NAME)
     }
 }
 

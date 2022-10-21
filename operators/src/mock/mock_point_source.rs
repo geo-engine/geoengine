@@ -1,8 +1,8 @@
-use crate::engine::{OperatorData, QueryContext};
+use crate::engine::{CreateSpan, OperatorData, QueryContext};
 use crate::{
     engine::{
-        ExecutionContext, InitializedVectorOperator, SourceOperator, TypedVectorQueryProcessor,
-        VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        ExecutionContext, InitializedVectorOperator, OperatorName, SourceOperator,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     util::Result,
 };
@@ -18,6 +18,7 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tracing::{span, Level};
 
 pub struct MockPointSourceProcessor {
     points: Vec<Coordinate2D>,
@@ -52,6 +53,10 @@ pub struct MockPointSourceParams {
 
 pub type MockPointSource = SourceOperator<MockPointSourceParams>;
 
+impl OperatorName for MockPointSource {
+    const TYPE_NAME: &'static str = "MockPointSource";
+}
+
 impl OperatorData for MockPointSource {
     fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
 }
@@ -59,7 +64,7 @@ impl OperatorData for MockPointSource {
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for MockPointSource {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         _context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -74,6 +79,10 @@ impl VectorOperator for MockPointSource {
             points: self.params.points,
         }
         .boxed())
+    }
+
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, MockPointSource::TYPE_NAME)
     }
 }
 

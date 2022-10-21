@@ -12,13 +12,12 @@ use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle};
 
 pub struct InitializedProcessorStatistics<S> {
     source: S,
-    id: String,
-    span: Box<dyn CreateSpan>,
+    span: CreateSpan,
 }
 
 impl<S> InitializedProcessorStatistics<S> {
-    pub fn statistics_with_id(source: S, id: String, span: Box<dyn CreateSpan>) -> Self {
-        Self { source, id, span }
+    pub fn new(source: S, span: CreateSpan) -> Self {
+        Self { source, span }
     }
 }
 
@@ -26,92 +25,52 @@ impl InitializedRasterOperator
     for InitializedProcessorStatistics<Box<dyn InitializedRasterOperator>>
 {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
-        tracing::debug!(event = "raster result descriptor", id = self.id);
+        tracing::debug!(event = "raster result descriptor");
         self.source.result_descriptor()
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        tracing::debug!(event = "query processor", id = self.id);
+        tracing::debug!(event = "query processor");
         let processor_result = self.source.query_processor();
         match processor_result {
             Ok(p) => {
                 let res_processor = match p {
                     TypedRasterQueryProcessor::U8(p) => TypedRasterQueryProcessor::U8(Box::new(
-                        ProcessorStatisticsProcessor::statistics_with_id(
-                            p,
-                            self.id.clone(),
-                            self.span.clone(),
-                        ),
+                        ProcessorStatisticsProcessor::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::U16(p) => TypedRasterQueryProcessor::U16(Box::new(
-                        ProcessorStatisticsProcessor::statistics_with_id(
-                            p,
-                            self.id.clone(),
-                            self.span.clone(),
-                        ),
+                        ProcessorStatisticsProcessor::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::U32(p) => TypedRasterQueryProcessor::U32(Box::new(
-                        ProcessorStatisticsProcessor::statistics_with_id(
-                            p,
-                            self.id.clone(),
-                            self.span.clone(),
-                        ),
+                        ProcessorStatisticsProcessor::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::U64(p) => TypedRasterQueryProcessor::U64(Box::new(
-                        ProcessorStatisticsProcessor::statistics_with_id(
-                            p,
-                            self.id.clone(),
-                            self.span.clone(),
-                        ),
+                        ProcessorStatisticsProcessor::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::I8(p) => TypedRasterQueryProcessor::I8(Box::new(
-                        ProcessorStatisticsProcessor::statistics_with_id(
-                            p,
-                            self.id.clone(),
-                            self.span.clone(),
-                        ),
+                        ProcessorStatisticsProcessor::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::I16(p) => TypedRasterQueryProcessor::I16(Box::new(
-                        ProcessorStatisticsProcessor::statistics_with_id(
-                            p,
-                            self.id.clone(),
-                            self.span.clone(),
-                        ),
+                        ProcessorStatisticsProcessor::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::I32(p) => TypedRasterQueryProcessor::I32(Box::new(
-                        ProcessorStatisticsProcessor::statistics_with_id(
-                            p,
-                            self.id.clone(),
-                            self.span.clone(),
-                        ),
+                        ProcessorStatisticsProcessor::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::I64(p) => TypedRasterQueryProcessor::I64(Box::new(
-                        ProcessorStatisticsProcessor::statistics_with_id(
-                            p,
-                            self.id.clone(),
-                            self.span.clone(),
-                        ),
+                        ProcessorStatisticsProcessor::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::F32(p) => TypedRasterQueryProcessor::F32(Box::new(
-                        ProcessorStatisticsProcessor::statistics_with_id(
-                            p,
-                            self.id.clone(),
-                            self.span.clone(),
-                        ),
+                        ProcessorStatisticsProcessor::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::F64(p) => TypedRasterQueryProcessor::F64(Box::new(
-                        ProcessorStatisticsProcessor::statistics_with_id(
-                            p,
-                            self.id.clone(),
-                            self.span.clone(),
-                        ),
+                        ProcessorStatisticsProcessor::new(p, self.span),
                     )),
                 };
-                tracing::debug!(event = "query processor created", id = self.id);
+                tracing::debug!(event = "query processor created");
                 Ok(res_processor)
             }
             Err(err) => {
-                tracing::debug!(event = "query processor failed", id = self.id);
+                tracing::debug!(event = "query processor failed");
                 Err(err)
             }
         }
@@ -122,25 +81,25 @@ impl InitializedVectorOperator
     for InitializedProcessorStatistics<Box<dyn InitializedVectorOperator>>
 {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
-        tracing::debug!(event = "vector result descriptor", id = self.id);
+        tracing::debug!(event = "vector result descriptor");
         self.source.result_descriptor()
     }
 
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        tracing::debug!(event = "query processor", id = self.id);
+        tracing::debug!(event = "query processor");
         let processor_result = self.source.query_processor();
         match processor_result {
             Ok(p) => {
                 let result = map_typed_query_processor!(
                     p,
-                    p => Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone(),
-                    self.span.clone()))
+                    p => Box::new(ProcessorStatisticsProcessor::new(p,
+                    self.span))
                 );
-                tracing::debug!(event = "query processor created", id = self.id);
+                tracing::debug!(event = "query processor created");
                 Ok(result)
             }
             Err(err) => {
-                tracing::debug!(event = "query processor failed", id = self.id);
+                tracing::debug!(event = "query processor failed");
                 Err(err)
             }
         }
@@ -152,20 +111,15 @@ where
     Q: QueryProcessor<Output = T>,
 {
     processor: Q,
-    id: String,
-    span: Box<dyn CreateSpan>,
+    span: CreateSpan,
 }
 
 impl<Q, T> ProcessorStatisticsProcessor<Q, T>
 where
     Q: QueryProcessor<Output = T> + Sized,
 {
-    pub fn statistics_with_id(processor: Q, id: String, span: Box<dyn CreateSpan>) -> Self {
-        ProcessorStatisticsProcessor {
-            processor,
-            id,
-            span,
-        }
+    pub fn new(processor: Q, span: CreateSpan) -> Self {
+        ProcessorStatisticsProcessor { processor, span }
     }
 }
 
@@ -184,21 +138,16 @@ where
         query: QueryRectangle<Self::SpatialBounds>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        tracing::trace!(event = "query", id = self.id);
+        tracing::trace!(event = "query");
         let stream_result = self.processor.query(query, ctx).await;
-        tracing::debug!(event = "query ready", id = self.id);
+        tracing::debug!(event = "query ready");
         match stream_result {
             Ok(stream) => {
-                tracing::debug!(event = "query ok", id = self.id);
-                Ok(StreamStatisticsAdapter::statistics_with_id(
-                    stream,
-                    self.id.clone(),
-                    self.span.create_span(),
-                )
-                .boxed())
+                tracing::debug!(event = "query ok");
+                Ok(StreamStatisticsAdapter::new(stream, (self.span)()).boxed())
             }
             Err(err) => {
-                tracing::debug!(event = "query error", id = self.id);
+                tracing::debug!(event = "query error");
                 Err(err)
             }
         }

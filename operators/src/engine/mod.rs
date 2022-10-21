@@ -168,25 +168,4 @@ macro_rules! call_on_bi_generic_raster_processor {
 
 }
 
-pub trait CreateSpan: CloneableCreateSpan + 'static + Send + Sync {
-    fn create_span(&self) -> Span;
-}
-
-pub trait CloneableCreateSpan {
-    fn clone_create_span(&self) -> Box<dyn CreateSpan>;
-}
-
-impl<T> CloneableCreateSpan for T
-where
-    T: 'static + CreateSpan + Clone,
-{
-    fn clone_create_span(&self) -> Box<dyn CreateSpan> {
-        Box::new(self.clone())
-    }
-}
-
-impl Clone for Box<dyn CreateSpan> {
-    fn clone(&self) -> Box<dyn CreateSpan> {
-        self.clone_create_span()
-    }
-}
+pub type CreateSpan = fn() -> Span;

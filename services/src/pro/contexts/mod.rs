@@ -9,7 +9,8 @@ use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
-    ExecutionContext, MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
+    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, MetaData,
+    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::pro::meta::statistics::InitializedProcessorStatistics;
@@ -95,16 +96,29 @@ where
         self.tiling_specification
     }
 
-    fn initialize_operator(
+    fn wrap_initialized_raster_operator(
         &self,
         op: Box<dyn geoengine_operators::engine::InitializedRasterOperator>,
-        span: Box<dyn geoengine_operators::engine::CreateSpan>,
+        span: CreateSpan,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
-        Box::new(InitializedProcessorStatistics::statistics_with_id(
-            op,
-            "gdal_source".to_string(),
-            span,
-        ))
+        Box::new(InitializedProcessorStatistics::new(op, span))
+    }
+
+    fn wrap_initialized_vector_operator(
+        &self,
+        op: Box<dyn InitializedVectorOperator>,
+        span: CreateSpan,
+    ) -> Box<dyn InitializedVectorOperator> {
+        Box::new(InitializedProcessorStatistics::new(op, span))
+    }
+
+    fn wrap_initialized_plot_operator(
+        &self,
+        op: Box<dyn InitializedPlotOperator>,
+        _span: CreateSpan,
+    ) -> Box<dyn InitializedPlotOperator> {
+        // as plots do not produce a stream of results, we have nothing to count for now
+        op
     }
 }
 

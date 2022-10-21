@@ -1,8 +1,8 @@
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, QueryContext,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
-    SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    CreateSpan, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
+    OperatorName, QueryContext, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    ResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
@@ -21,9 +21,14 @@ use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use tracing::{span, Level};
 
 /// Project the query rectangle to a new time interval.
 pub type TimeShift = Operator<TimeShiftParams, SingleRasterOrVectorSource>;
+
+impl OperatorName for TimeShift {
+    const TYPE_NAME: &'static str = "TimeShift";
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -158,7 +163,7 @@ pub enum TimeShiftError {
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for TimeShift {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -224,12 +229,16 @@ impl VectorOperator for TimeShift {
             (RasterOrVectorOperator::Raster(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
         }
     }
+
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, TimeShift::TYPE_NAME)
+    }
 }
 
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for TimeShift {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -294,6 +303,10 @@ impl RasterOperator for TimeShift {
             }
             (RasterOrVectorOperator::Vector(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
         }
+    }
+
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, TimeShift::TYPE_NAME)
     }
 }
 

@@ -5,7 +5,7 @@ use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterSubQueryAdapter, TileReprojectionSubQuery},
     engine::{
         CreateSpan, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
-        Operator, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+        Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
         RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
         TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
@@ -25,7 +25,7 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use serde::{Deserialize, Serialize};
-use tracing::{span, Level, Span};
+use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +47,10 @@ pub struct RasterReprojectionState {
 }
 
 pub type Reprojection = Operator<ReprojectionParams, SingleRasterOrVectorSource>;
+
+impl OperatorName for Reprojection {
+    const TYPE_NAME: &'static str = "Reprojection";
+}
 
 impl Reprojection {
     fn derive_raster_result_descriptor(
@@ -96,7 +100,7 @@ pub struct InitializedRasterReprojection {
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for Reprojection {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -146,6 +150,10 @@ impl VectorOperator for Reprojection {
         };
 
         Ok(initialized_operator.boxed())
+    }
+
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, Reprojection::TYPE_NAME)
     }
 }
 
@@ -249,7 +257,7 @@ where
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for Reprojection {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -282,16 +290,11 @@ impl RasterOperator for Reprojection {
             state,
         };
 
-        Ok(context.initialize_operator(op.boxed(), Box::new(ReprojectionSpan {})))
+        Ok(op.boxed())
     }
-}
 
-#[derive(Clone)]
-struct ReprojectionSpan {}
-
-impl CreateSpan for ReprojectionSpan {
-    fn create_span(&self) -> Span {
-        span!(Level::TRACE, "Reprojection")
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, Reprojection::TYPE_NAME)
     }
 }
 

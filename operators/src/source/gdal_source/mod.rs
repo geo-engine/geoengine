@@ -49,7 +49,7 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Instant;
-use tracing::{span, Level, Span};
+use tracing::{span, Level};
 mod loading_info;
 
 /// Parameters for the GDAL Source Operator
@@ -664,7 +664,7 @@ impl OperatorName for GdalSource {
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for GdalSource {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -678,16 +678,11 @@ impl RasterOperator for GdalSource {
             tiling_specification: context.tiling_specification(),
         };
 
-        Ok(context.initialize_operator(op.boxed(), Box::new(GdalSourceSpan {})))
+        Ok(op.boxed())
     }
-}
 
-#[derive(Clone)]
-struct GdalSourceSpan {}
-
-impl CreateSpan for GdalSourceSpan {
-    fn create_span(&self) -> Span {
-        span!(Level::TRACE, "GdalSource")
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, GdalSource::TYPE_NAME)
     }
 }
 

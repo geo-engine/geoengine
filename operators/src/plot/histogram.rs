@@ -1,4 +1,4 @@
-use crate::engine::QueryProcessor;
+use crate::engine::{CreateSpan, QueryProcessor};
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
@@ -6,7 +6,7 @@ use crate::util::Result;
 use crate::{
     engine::{
         ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-        InitializedVectorOperator, Operator, PlotOperator, PlotQueryProcessor,
+        InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
         PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
         TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     },
@@ -29,6 +29,7 @@ use geoengine_datatypes::{
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt};
 use std::convert::TryFrom;
+use tracing::{span, Level};
 
 pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
 
@@ -37,6 +38,10 @@ pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
 /// For vector inputs, it calculates the histogram on one of its attributes.
 ///
 pub type Histogram = Operator<HistogramParams, SingleRasterOrVectorSource>;
+
+impl OperatorName for Histogram {
+    const TYPE_NAME: &'static str = "Histogram";
+}
 
 /// The parameter spec for `Histogram`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -67,7 +72,7 @@ pub enum HistogramBounds {
 #[typetag::serde]
 #[async_trait]
 impl PlotOperator for Histogram {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
@@ -140,6 +145,10 @@ impl PlotOperator for Histogram {
                 InitializedHistogram::new(in_desc.into(), self.params, vector_source).boxed()
             }
         })
+    }
+
+    fn span(&self) -> CreateSpan {
+        || span!(Level::TRACE, Histogram::TYPE_NAME)
     }
 }
 
