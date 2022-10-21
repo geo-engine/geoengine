@@ -1,10 +1,4 @@
-use crate::error;
 use crate::error::Result;
-use actix_http::Payload;
-use actix_web::{FromRequest, HttpRequest};
-use futures::future::{err, ok, Ready};
-use log::debug;
-use serde::de;
 use std::ops::Deref;
 
 pub trait UserInput: Clone {
@@ -40,37 +34,5 @@ impl<T: UserInput + Clone> Deref for Validated<T> {
 
     fn deref(&self) -> &T {
         &self.user_input
-    }
-}
-
-pub struct QueryEx<T>(pub T);
-
-impl<T> QueryEx<T> {
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-impl<T> FromRequest for QueryEx<T>
-where
-    T: de::DeserializeOwned,
-{
-    type Error = error::Error;
-    type Future = Ready<Result<Self, Self::Error>>;
-
-    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let query_string = req.query_string().replace("REQUEST", "request");
-        serde_urlencoded::from_str::<T>(&query_string).map_or_else(
-            move |e| {
-                debug!(
-                    "Failed during Query extractor deserialization. \
-                     Request path: {:?}",
-                    req.path()
-                );
-
-                err(error::Error::UnableToParseQueryString { source: e })
-            },
-            |val| ok(QueryEx(val)),
-        )
     }
 }

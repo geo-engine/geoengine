@@ -20,7 +20,12 @@
     clippy::wildcard_imports
 )]
 // enable some restriction lints
-#![warn(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
+#![warn(
+    clippy::dbg_macro,
+    clippy::print_stderr,
+    clippy::print_stdout,
+    clippy::unimplemented
+)]
 
 pub mod collections;
 pub mod dataset;

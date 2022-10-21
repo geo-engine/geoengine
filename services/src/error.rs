@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{
-    DataProviderId, DatasetId, LayerId, SpatialReferenceOption, TimeInstance,
+    DataProviderId, DatasetId, LayerId, SpatialReference, SpatialReferenceOption, TimeInstance,
 };
 #[cfg(feature = "ebv")]
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
@@ -395,6 +395,14 @@ pub enum Error {
     #[snafu(context(false))]
     OidcError {
         source: crate::pro::users::OidcError,
+    },
+
+    #[snafu(display(
+        "Could not resolve a Proj string for this SpatialReference: {}",
+        spatial_ref
+    ))]
+    ProjStringUnresolvable {
+        spatial_ref: SpatialReference,
     },
 }
 

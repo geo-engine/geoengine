@@ -33,7 +33,7 @@ bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.13"
 erased-serde = "0.3"
-flexi_logger = { version = "0.23", features = ["trc"] }
+flexi_logger = { version = "0.24", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
@@ -58,7 +58,7 @@ postgres-types = { version = "0.2", features = ["derive"], optional = true }
 proj = "0.22"
 proj-sys = "0.19"
 pwhash = "1.0"
-quick-xml = { version = "0.23", optional = true }
+quick-xml = { version = "0.25", optional = true }
 rayon = "1.5"
 regex = "1.5"
 reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }

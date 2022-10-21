@@ -288,3 +288,9 @@ pub(crate) fn log_server_info() -> Result<()> {
 
     Ok(())
 }
+
+#[allow(clippy::unused_async)]
+// async is required for the request handler signature
+pub async fn not_implemented_handler() -> HttpResponse {
+    HttpResponse::NotImplemented().finish()
+}
