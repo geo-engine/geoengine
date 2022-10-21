@@ -13,7 +13,7 @@ env:
 
 jobs:
   coveralls:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     services:
       postgres:
@@ -29,8 +29,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-      - name: Add UbuntuGIS ppa
-        run: sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable
       - name: APT update
         run: sudo apt-get update
       - name: Install lld & GDAL
@@ -53,7 +51,7 @@ jobs:
           # An additional cache key that is added alongside the automatic `job`-based
           # cache key and can be used to further differentiate jobs.
           # Default: empty
-          key: ""
+          key: "ci_coverage"
 
           # A whitespace separated list of env-var *prefixes* who's value contributes
           # to the environment cache key.
