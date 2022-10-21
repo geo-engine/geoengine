@@ -2,15 +2,15 @@
 # TODO: use only wildcard once it works
 status = [
     
-    "test (ubuntu-20.04)",
-    "test (ubuntu-20.04, --features pro)",
-    "test (ubuntu-20.04, --all-features)",
-    "build (ubuntu-20.04)",
-    "build (ubuntu-20.04, --release)",
-    "build (ubuntu-20.04, --features pro)",
-    "build (ubuntu-20.04, --features pro, --release)",
-    "build (ubuntu-20.04, --all-features)",
-    "build (ubuntu-20.04, --all-features, --release)",
+    "test (ubuntu-22.04)",
+    "test (ubuntu-22.04, --features pro)",
+    "test (ubuntu-22.04, --all-features)",
+    "build (ubuntu-22.04)",
+    "build (ubuntu-22.04, --release)",
+    "build (ubuntu-22.04, --features pro)",
+    "build (ubuntu-22.04, --features pro, --release)",
+    "build (ubuntu-22.04, --all-features)",
+    "build (ubuntu-22.04, --all-features, --release)",
     "clippy",
     "coveralls"
 ]
