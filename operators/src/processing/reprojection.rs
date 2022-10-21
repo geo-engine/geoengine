@@ -65,18 +65,24 @@ pub struct InitializedRasterReprojection {
 }
 
 impl InitializedVectorReprojection {
+    /// Create a new `InitializedVectorReprojection` instance.
+    /// The `source` must have the same `SpatialReference` as `source_srs`.
+    ///
+    /// # Errors
+    /// This function errors if the `source`'s `SpatialReference` is `None`.
+    /// This function errors if the source's bounding box cannot be reprojected to the target's `SpatialReference`.
     pub fn try_new_with_input(
         params: ReprojectionParams,
         source_vector_operator: Box<dyn InitializedVectorOperator>,
     ) -> Result<Self> {
         let in_desc: VectorResultDescriptor = source_vector_operator.result_descriptor().clone();
 
+        let in_srs = Into::<Option<SpatialReference>>::into(in_desc.spatial_reference)
+            .ok_or(Error::AllSourcesMustHaveSameSpatialReference)?;
+
         let bbox = if let Some(bbox) = in_desc.bbox {
-            let in_srs: Option<SpatialReference> = in_desc.spatial_reference.into();
-            let projector = CoordinateProjector::from_known_srs(
-                in_srs.ok_or(Error::AllSourcesMustHaveSameSpatialReference)?,
-                params.target_spatial_reference,
-            )?;
+            let projector =
+                CoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
 
             bbox.reproject_clipped(&projector)? // TODO: if this is none then we could skip the whole reprojection similar to raster?
         } else {
@@ -94,7 +100,7 @@ impl InitializedVectorReprojection {
         Ok(InitializedVectorReprojection {
             result_descriptor: out_desc,
             source: source_vector_operator,
-            source_srs: Option::from(in_desc.spatial_reference).unwrap(),
+            source_srs: in_srs,
             target_srs: params.target_spatial_reference,
         })
     }
@@ -108,10 +114,15 @@ impl InitializedRasterReprojection {
     ) -> Result<Self> {
         let in_desc: RasterResultDescriptor = source_raster_operator.result_descriptor().clone();
 
+        let in_srs = Into::<Option<SpatialReference>>::into(in_desc.spatial_reference)
+            .ok_or(Error::AllSourcesMustHaveSameSpatialReference)?;
+
         // calculate the intersection of input and output srs in both coordinate systems
         let (in_bounds, out_bounds, out_res) = Self::derive_raster_in_bounds_out_bounds_out_res(
+            in_srs,
             params.target_spatial_reference,
-            &in_desc,
+            in_desc.resolution,
+            in_desc.bbox,
         )?;
 
         let result_descriptor = RasterResultDescriptor {
@@ -135,34 +146,33 @@ impl InitializedRasterReprojection {
             result_descriptor,
             source: source_raster_operator,
             state,
-            source_srs: Option::from(in_desc.spatial_reference).unwrap(),
+            source_srs: in_srs,
             target_srs: params.target_spatial_reference,
             tiling_spec,
         })
     }
 
     fn derive_raster_in_bounds_out_bounds_out_res(
-        target_sref: SpatialReference,
-        in_desc: &RasterResultDescriptor,
+        source_srs: SpatialReference,
+        target_srs: SpatialReference,
+        source_spatial_resolution: Option<SpatialResolution>,
+        source_bbox: Option<SpatialPartition2D>,
     ) -> Result<(
         Option<SpatialPartition2D>,
         Option<SpatialPartition2D>,
         Option<SpatialResolution>,
     )> {
-        let source_sref: Option<SpatialReference> = in_desc.spatial_reference.into();
-        let source_sref = source_sref.ok_or(Error::SpatialReferenceMustNotBeUnreferenced)?;
-
-        let (in_bbox, out_bbox) = if let Some(bbox) = in_desc.bbox {
-            reproject_and_unify_bbox(bbox, source_sref, target_sref)?
+        let (in_bbox, out_bbox) = if let Some(bbox) = source_bbox {
+            reproject_and_unify_bbox(bbox, source_srs, target_srs)?
         } else {
             // use the parts of the area of use that are valid in both spatial references
-            let valid_bounds_in = source_sref.area_of_use_intersection(&target_sref)?;
-            let valid_bounds_out = target_sref.area_of_use_intersection(&source_sref)?;
+            let valid_bounds_in = source_srs.area_of_use_intersection(&target_srs)?;
+            let valid_bounds_out = target_srs.area_of_use_intersection(&source_srs)?;
 
             (valid_bounds_in, valid_bounds_out)
         };
 
-        let out_res = match (in_desc.resolution, in_bbox, out_bbox) {
+        let out_res = match (source_spatial_resolution, in_bbox, out_bbox) {
             (Some(in_res), Some(in_bbox), Some(out_bbox)) => {
                 suggest_pixel_size_from_diag_cross_projected(in_bbox, out_bbox, in_res).ok()
             }
@@ -498,7 +508,7 @@ where
                 out_srs: self.to,
                 fold_fn: fold_by_coordinate_lookup_future,
                 in_spatial_res,
-                valid_bounds_in, // TODO: handle missing bounds and empty intersections differently?
+                valid_bounds_in,
                 valid_bounds_out,
                 _phantom_data: PhantomData,
             };
@@ -515,7 +525,7 @@ where
         } else {
             log::debug!("No intersection between source data / srs and target srs");
 
-            let tiling_strat = self // TODO: move this into the adapter
+            let tiling_strat = self
                 .tiling_spec
                 .strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
 
@@ -1326,22 +1336,16 @@ mod tests {
     fn it_derives_raster_result_descriptor() {
         let in_proj = SpatialReference::epsg_4326();
         let out_proj = SpatialReference::from_str("EPSG:3857").unwrap();
+        let bbox = Some(SpatialPartition2D::new_unchecked(
+            (-180., 90.).into(),
+            (180., -90.).into(),
+        ));
 
-        let in_desc = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: in_proj.into(),
-            measurement: Measurement::Unitless,
-            time: None,
-            bbox: Some(SpatialPartition2D::new_unchecked(
-                (-180., 90.).into(),
-                (180., -90.).into(),
-            )),
-            resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
-        };
+        let resolution = Some(SpatialResolution::new_unchecked(0.1, 0.1));
 
         let (in_bounds, out_bounds, out_res) =
             InitializedRasterReprojection::derive_raster_in_bounds_out_bounds_out_res(
-                out_proj, &in_desc,
+                in_proj, out_proj, resolution, bbox,
             )
             .unwrap();
 
@@ -1355,13 +1359,12 @@ mod tests {
             out_proj
                 .area_of_use_projected::<SpatialPartition2D>()
                 .unwrap()
-                .into()
         );
 
         // TODO: y resolution should be double the x resolution, but currently we only compute a uniform resolution
         assert_eq!(
             out_res.unwrap(),
             SpatialResolution::new_unchecked(14_237.781_884_528_267, 14_237.781_884_528_267),
-        )
+        );
     }
 }
