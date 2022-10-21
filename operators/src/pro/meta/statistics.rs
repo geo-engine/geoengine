@@ -138,13 +138,17 @@ where
         query: QueryRectangle<Self::SpatialBounds>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        let span = (self.span)();
+        let _enter = span.enter();
+
         tracing::trace!(event = "query");
         let stream_result = self.processor.query(query, ctx).await;
         tracing::debug!(event = "query ready");
+
         match stream_result {
             Ok(stream) => {
                 tracing::debug!(event = "query ok");
-                Ok(StreamStatisticsAdapter::new(stream, (self.span)()).boxed())
+                Ok(StreamStatisticsAdapter::new(stream, span.clone()).boxed())
             }
             Err(err) => {
                 tracing::debug!(event = "query error");
