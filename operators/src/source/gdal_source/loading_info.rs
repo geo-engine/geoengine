@@ -412,10 +412,14 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
             return None;
         }
 
-        let steps_between = self
+        let steps_between = match self
             .step
             .num_steps_in_interval(TimeInterval::new_unchecked(self.dataset_time_start, t1))
-            .unwrap(); // TODO: what to do if this fails?
+        {
+            Ok(num_steps) => num_steps,
+            // should only happen when time intervals are faulty
+            Err(error) => return Some(Err(error.into())),
+        };
 
         // our first band is the reference time
         let mut params = self.params.clone();

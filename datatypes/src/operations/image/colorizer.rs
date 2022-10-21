@@ -288,7 +288,17 @@ impl Colorizer {
         let breakpoints = match self {
             Self::LinearGradient { breakpoints, .. }
             | Self::LogarithmicGradient { breakpoints, .. } => breakpoints,
-            _ => unimplemented!("Must never call `color_table` for types without breakpoints"),
+
+            _ => {
+                // return empty color table for potential wrong usage
+
+                debug_assert!(
+                    false,
+                    "Must never call `color_table` for types without breakpoints"
+                );
+
+                return Vec::new();
+            }
         };
 
         let smallest_breakpoint_value = *breakpoints[0].value;

@@ -1,3 +1,4 @@
+use crate::api::model::datatypes::TimeInterval;
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
@@ -8,9 +9,7 @@ use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, Responder};
 use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
-};
+use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{ResultDescriptor, TypedPlotQueryProcessor};
 use serde::{Deserialize, Serialize};
@@ -148,7 +147,7 @@ async fn get_plot_handler<C: Context>(
 
     let query_rect = VectorQueryRectangle {
         spatial_bounds: params.bbox,
-        time_interval: params.time,
+        time_interval: params.time.into(),
         spatial_resolution: params.spatial_resolution,
     };
 
@@ -240,7 +239,7 @@ mod tests {
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
-                    TimeInterval::default(),
+                    geoengine_datatypes::primitives::TimeInterval::default(),
                     TileInformation {
                         global_geo_transform: TestDefault::test_default(),
                         global_tile_position: [0, 0].into(),
@@ -441,11 +440,12 @@ mod tests {
             GetPlot {
                 bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 crs: SpatialReference::epsg_4326().into(),
-                time: TimeInterval::new(
+                time: geoengine_datatypes::primitives::TimeInterval::new(
                     DateTime::new_utc(2020, 1, 1, 0, 0, 0),
                     DateTime::new_utc(2020, 1, 1, 0, 0, 0),
                 )
-                .unwrap(),
+                .unwrap()
+                .into(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
             }
         );
