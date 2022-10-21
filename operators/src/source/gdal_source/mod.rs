@@ -8,10 +8,11 @@ use crate::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
         SourceOperator, TypedRasterQueryProcessor,
     },
-    error::{self, Error},
+    error::Error,
     util::Result,
 };
 use async_trait::async_trait;
+pub use error::GdalSourceError;
 use float_cmp::{approx_eq, ApproxEq};
 use futures::{
     stream::{self, BoxStream, StreamExt},
@@ -49,6 +50,8 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Instant;
+
+mod error;
 mod loading_info;
 
 /// Parameters for the GDAL Source Operator
@@ -310,7 +313,7 @@ impl TryFrom<GdalDatasetGeoTransform> for GeoTransform {
     fn try_from(dataset_geo_transform: GdalDatasetGeoTransform) -> Result<Self> {
         ensure!(
             dataset_geo_transform.x_pixel_size > 0.0 && dataset_geo_transform.y_pixel_size < 0.0,
-            error::GeoTransformOrigin
+            crate::error::GeoTransformOrigin
         );
 
         Ok(GeoTransform::new(
@@ -420,7 +423,7 @@ impl GdalRasterLoader {
             Self::load_tile_data(&dataset_params, tile_information, tile_time)
         })
         .await
-        .context(error::TokioJoin)?
+        .context(crate::error::TokioJoin)?
     }
 
     async fn load_tile_async<T: Pixel + GdalType + FromPrimitive>(
@@ -717,8 +720,16 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 }
                 .boxed(),
             ),
-            RasterDataType::U64 => unimplemented!("implement U64 type"), // TypedRasterQueryProcessor::U64(self.create_processor()),
-            RasterDataType::I8 => unimplemented!("I8 type is not supported"),
+            RasterDataType::U64 => {
+                return Err(GdalSourceError::UnsupportedRasterType {
+                    raster_type: RasterDataType::U64,
+                })?
+            }
+            RasterDataType::I8 => {
+                return Err(GdalSourceError::UnsupportedRasterType {
+                    raster_type: RasterDataType::I8,
+                })?
+            }
             RasterDataType::I16 => TypedRasterQueryProcessor::I16(
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,
@@ -735,7 +746,11 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 }
                 .boxed(),
             ),
-            RasterDataType::I64 => unimplemented!("implement I64 type"), // TypedRasterQueryProcessor::I64(self.create_processor()),
+            RasterDataType::I64 => {
+                return Err(GdalSourceError::UnsupportedRasterType {
+                    raster_type: RasterDataType::I64,
+                })?
+            }
             RasterDataType::F32 => TypedRasterQueryProcessor::F32(
                 GdalSourceProcessor {
                     tiling_specification: self.tiling_specification,

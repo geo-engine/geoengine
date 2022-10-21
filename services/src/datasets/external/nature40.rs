@@ -364,7 +364,13 @@ impl Nature40DataProvider {
     }
 
     fn parse_band_labels(dataset: &gdal::Dataset) -> Result<Vec<String>> {
-        let mut reader = Reader::from_file(&dataset.description()?)?;
+        let file_str = std::fs::read_to_string(&dataset.description()?)?;
+        let mut reader = Reader::from_str(&file_str);
+
+        // TODO: use Reader<BufReader<File>> once `read_text_into`it is implemented for buffered readers
+        //       cf. https://github.com/tafia/quick-xml/blob/687942ef3a9efd1fe14bc2f7a86c90b1a8e6dd89/examples/read_texts.rs
+        // let mut reader = Reader::from_file(&dataset.description()?)?;
+
         reader.trim_text(true);
         let mut txt = Vec::new();
         let mut buf = Vec::new();
@@ -372,16 +378,23 @@ impl Nature40DataProvider {
         let mut first = true;
 
         loop {
-            match reader.read_event(&mut buf) {
+            match reader.read_event_into(&mut buf) {
                 Ok(Event::Start(ref e)) => {
-                    if e.name() == b"label" {
+                    if e.name().as_ref() == b"label" {
                         if first {
                             first = false; // skip first label which is the coverage label
                         } else {
+                            // TODO: use `read_text_into`, cf. comment above
+                            // txt.push(
+                            //     reader
+                            //         .read_text_into(e.name(), &mut Vec::new())
+                            //         .unwrap_or_else(|_| String::new()),
+                            // );
+
                             txt.push(
                                 reader
-                                    .read_text(e.name(), &mut Vec::new())
-                                    .unwrap_or_else(|_| String::new()),
+                                    .read_text(e.name())
+                                    .map_or_else(|_| String::new(), |c| c.to_string()),
                             );
                         }
                     }
