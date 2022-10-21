@@ -8,24 +8,24 @@ use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle
 use geoengine_datatypes::raster::{RasterTile2D, TilingSpecification};
 
 /// This `QueryProcessor` allows to rewrite a query. It does not change the data. Results of the children are forwarded.
-pub(crate) struct MapQueryProcessor<S, Q> {
+pub(crate) struct MapQueryProcessor<S, Q, A> {
     source: S,
     query_fn: Q,
-    tiling_spec: TilingSpecification,
+    additional_data: A,
 }
 
-impl<S, Q> MapQueryProcessor<S, Q> {
-    pub fn new(source: S, query_fn: Q, tiling_spec: TilingSpecification) -> Self {
+impl<S, Q, A> MapQueryProcessor<S, Q, A> {
+    pub fn new(source: S, query_fn: Q, additional_data: A) -> Self {
         Self {
             source,
             query_fn,
-            tiling_spec,
+            additional_data,
         }
     }
 }
 
 #[async_trait]
-impl<S, Q> RasterQueryProcessor for MapQueryProcessor<S, Q>
+impl<S, Q> RasterQueryProcessor for MapQueryProcessor<S, Q, TilingSpecification>
 where
     S: RasterQueryProcessor,
     Q: Fn(RasterQueryRectangle) -> Result<Option<RasterQueryRectangle>> + Sync + Send,
@@ -44,13 +44,13 @@ where
             log::debug!("Query was rewritten to empty query. Returning empty / filled stream.");
             let s = futures::stream::empty();
 
-            Ok(SparseTilesFillAdapter::new_like_subquery(s, query, self.tiling_spec).boxed())
+            Ok(SparseTilesFillAdapter::new_like_subquery(s, query, self.additional_data).boxed())
         }
     }
 }
 
 #[async_trait]
-impl<S, Q> VectorQueryProcessor for MapQueryProcessor<S, Q>
+impl<S, Q> VectorQueryProcessor for MapQueryProcessor<S, Q, ()>
 where
     S: VectorQueryProcessor,
     Q: Fn(VectorQueryRectangle) -> Result<Option<VectorQueryRectangle>> + Sync + Send,

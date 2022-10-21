@@ -39,13 +39,7 @@ pub struct ReprojectionParams {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct VectorReprojectionState {
-    source_srs: SpatialReference,
-    target_srs: SpatialReference,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct RasterReprojectionState {
+pub struct ReprojectionBounds {
     valid_in_bounds: SpatialPartition2D,
     valid_out_bounds: SpatialPartition2D,
 }
@@ -57,13 +51,14 @@ impl Reprojection {}
 pub struct InitializedVectorReprojection {
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedVectorOperator>,
-    state: VectorReprojectionState,
+    source_srs: SpatialReference,
+    target_srs: SpatialReference,
 }
 
 pub struct InitializedRasterReprojection {
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
-    state: Option<RasterReprojectionState>,
+    state: Option<ReprojectionBounds>,
     source_srs: SpatialReference,
     target_srs: SpatialReference,
     tiling_spec: TilingSpecification,
@@ -74,7 +69,7 @@ impl InitializedVectorReprojection {
         params: ReprojectionParams,
         source_vector_operator: Box<dyn InitializedVectorOperator>,
     ) -> Result<Self> {
-        let in_desc: &VectorResultDescriptor = source_vector_operator.result_descriptor();
+        let in_desc: VectorResultDescriptor = source_vector_operator.result_descriptor().clone();
 
         let bbox = if let Some(bbox) = in_desc.bbox {
             let in_srs: Option<SpatialReference> = in_desc.spatial_reference.into();
@@ -83,7 +78,7 @@ impl InitializedVectorReprojection {
                 params.target_spatial_reference,
             )?;
 
-            bbox.reproject_clipped(&projector)? // TODO: if this is none then we can should skip any query
+            bbox.reproject_clipped(&projector)? // TODO: if this is none then we could skip the whole reprojection similar to raster?
         } else {
             None
         };
@@ -96,15 +91,11 @@ impl InitializedVectorReprojection {
             bbox,
         };
 
-        let state = VectorReprojectionState {
-            source_srs: Option::from(in_desc.spatial_reference).unwrap(),
-            target_srs: params.target_spatial_reference,
-        };
-
         Ok(InitializedVectorReprojection {
             result_descriptor: out_desc,
             source: source_vector_operator,
-            state,
+            source_srs: Option::from(in_desc.spatial_reference).unwrap(),
+            target_srs: params.target_spatial_reference,
         })
     }
 }
@@ -135,7 +126,7 @@ impl InitializedRasterReprojection {
         };
 
         let state = match (in_bounds, out_bounds) {
-            (Some(in_bounds), Some(out_bounds)) => Some(RasterReprojectionState {
+            (Some(in_bounds), Some(out_bounds)) => Some(ReprojectionBounds {
                 valid_in_bounds: in_bounds,
                 valid_out_bounds: out_bounds,
             }),
@@ -216,50 +207,30 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
     }
 
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        let state = self.state;
+        let source_srs = self.source_srs;
+        let target_srs = self.target_srs;
         match self.source.query_processor()? {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(
                     source,
-                    move |query| {
-                        reproject_query(query, state.source_srs, state.target_srs)
-                            .map_err(From::from)
-                    },
-                    TilingSpecification::new(
-                        geoengine_datatypes::primitives::Coordinate2D::new(0., 0.), // TODO: remove the need for a dummy tiling spec on vector data
-                        geoengine_datatypes::raster::GridShape2D::new([512, 512]),
-                    ),
+                    move |query| reproject_query(query, source_srs, target_srs).map_err(From::from),
+                    (),
                 )
                 .boxed(),
             )),
             TypedVectorQueryProcessor::MultiPoint(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPoint(
-                    VectorReprojectionProcessor::new(
-                        source,
-                        self.state.source_srs,
-                        self.state.target_srs,
-                    )
-                    .boxed(),
+                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiLineString(source) => {
                 Ok(TypedVectorQueryProcessor::MultiLineString(
-                    VectorReprojectionProcessor::new(
-                        source,
-                        self.state.source_srs,
-                        self.state.target_srs,
-                    )
-                    .boxed(),
+                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiPolygon(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPolygon(
-                    VectorReprojectionProcessor::new(
-                        source,
-                        self.state.source_srs,
-                        self.state.target_srs,
-                    )
-                    .boxed(),
+                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
                 ))
             }
         }
@@ -471,7 +442,7 @@ where
     from: SpatialReference,
     to: SpatialReference,
     tiling_spec: TilingSpecification,
-    state: Option<RasterReprojectionState>,
+    state: Option<ReprojectionBounds>,
     _phantom_data: PhantomData<P>,
 }
 
@@ -485,7 +456,7 @@ where
         from: SpatialReference,
         to: SpatialReference,
         tiling_spec: TilingSpecification,
-        state: Option<RasterReprojectionState>,
+        state: Option<ReprojectionBounds>,
     ) -> Self {
         Self {
             source,
