@@ -520,28 +520,27 @@ impl SentinelS2L2aCogsMetaData {
 
         Ok(bbox.map(|bbox| {
             vec![
-            (
-                "collections[]".to_owned(),
-                "sentinel-s2-l2a-cogs".to_owned(),
-            ),
-            (
-                "bbox".to_owned(),
-                format!(
-                    "[{},{},{},{}]", // array-brackets are not used in standard but required here for unknkown reason
-                    bbox.lower_left().x,
-                    bbox.lower_left().y,
-                    bbox.upper_right().x,
-                    bbox.upper_right().y
+                (
+                    "collections[]".to_owned(),
+                    "sentinel-s2-l2a-cogs".to_owned(),
                 ),
-            ), // TODO: order coordinates depending on projection
-            (
-                "datetime".to_owned(),
-                format!("{}/{}", t_start.to_rfc3339(), t_end.to_rfc3339()),
-            ),
-            ("limit".to_owned(), "500".to_owned()),
-        ]
-    }))
- 
+                (
+                    "bbox".to_owned(),
+                    format!(
+                        "[{},{},{},{}]", // array-brackets are not used in standard but required here for unknkown reason
+                        bbox.lower_left().x,
+                        bbox.lower_left().y,
+                        bbox.upper_right().x,
+                        bbox.upper_right().y
+                    ),
+                ), // TODO: order coordinates depending on projection
+                (
+                    "datetime".to_owned(),
+                    format!("{}/{}", t_start.to_rfc3339(), t_end.to_rfc3339()),
+                ),
+                ("limit".to_owned(), "500".to_owned()),
+            ]
+        }))
     }
 
     async fn load_all_features<T: Serialize + ?Sized + Debug>(
