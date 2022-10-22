@@ -153,6 +153,9 @@ jobs:
           # relative to the `$workspace` and defaults to "target" if not explicitly given.
           # Default: ". -> target"
           #workspaces: ""
+          
+          # Additional non workspace directories, separated by newlines
+          cache-directories: "/home/runner/work/geoengine/geoengine/target/swagger-ui-4.14.0"
 
           # Determines if the cache should be saved even when the workflow has failed.
           # Default: "false"
