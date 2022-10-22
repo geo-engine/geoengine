@@ -93,15 +93,15 @@ jobs:
           # However, utoipa tries to access the UI files and this crashes the test/build process.
           # Using the CARGO_TARGET_DIR we can force cargo to move all build dependecies into a specific folder.
           # TODO: remove this when utoipa is fixed
-          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
+          # CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: ${{ matrix.features }} ${{ matrix.build }} --verbose
-        env:
-          # TODO: remove this when utoipa is fixed
-          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
+        #env:
+        # TODO: remove this when utoipa is fixed
+        # CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
 
   build:
     runs-on: ${{matrix.os}}
@@ -153,9 +153,9 @@ jobs:
           # relative to the `$workspace` and defaults to "target" if not explicitly given.
           # Default: ". -> target"
           #workspaces: ""
-          
+
           # Additional non workspace directories, separated by newlines
-          cache-directories: "/home/runner/work/geoengine/geoengine/target/swagger-ui-4.14.0"
+          # cache-directories: "/home/runner/work/geoengine/geoengine/target/swagger-ui-4.14.0"
 
           # Determines if the cache should be saved even when the workflow has failed.
           # Default: "false"
@@ -165,6 +165,6 @@ jobs:
         with:
           command: build
           args: ${{ matrix.features }} ${{ matrix.build }} --verbose
-        env:
-          # TODO: remove this when utoipa is fixed
-          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
+        #env:
+        # TODO: remove this when utoipa is fixed
+        # CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
