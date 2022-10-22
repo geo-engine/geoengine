@@ -161,7 +161,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: ${{ matrix.features }} ${{ matrix.build }} --verbose --target-dir=target
+          args: ${{ matrix.features }} ${{ matrix.build }} --verbose
         env:
           # TODO: remove this when utoipa is fixed
           CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
