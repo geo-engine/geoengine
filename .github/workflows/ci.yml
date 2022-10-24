@@ -76,7 +76,7 @@ jobs:
           #workspaces: ""
 
           # Additional non workspace directories, separated by newlines
-          cache-directories: "$UTOIPA_SWAGGER_DIR"
+          cache-directories: "/home/runner/work/geoengine/utiopa_swagger_ui_assets"
 
           # Determines if the cache should be saved even when the workflow has failed.
           # Default: "false"
@@ -159,7 +159,7 @@ jobs:
           #workspaces: ""
 
           # Additional non workspace directories, separated by newlines
-          cache-directories: "$UTOIPA_SWAGGER_DIR"
+          cache-directories: "/home/runner/work/geoengine/utiopa_swagger_ui_assets"
 
           # Determines if the cache should be saved even when the workflow has failed.
           # Default: "false"
