@@ -9,8 +9,8 @@ use crate::util::config::{self, get_config_element, Backend};
 
 use super::projects::ProProjectDb;
 use crate::util::server::{
-    calculate_max_blocking_threads_per_worker, configure_extractors, log_server_info, render_404,
-    render_405, serve_openapi_json,
+    calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
+    log_server_info, render_404, render_405, serve_openapi_json,
 };
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
@@ -110,6 +110,7 @@ where
         app
     })
     .worker_max_blocking_threads(calculate_max_blocking_threads_per_worker())
+    .on_connect(connection_init)
     .bind(bind_address)?
     .run()
     .await

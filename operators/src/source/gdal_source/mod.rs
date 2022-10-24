@@ -41,7 +41,7 @@ pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
-use log::{debug, info};
+use log::debug;
 use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
