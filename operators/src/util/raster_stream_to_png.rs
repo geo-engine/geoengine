@@ -24,7 +24,6 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext>(
 where
     T: Pixel,
 {
-    // TODO: rather use `span.in_scope` because it is safer inside async functions (cf. https://docs.rs/tracing/latest/tracing/span/struct.Span.html#method.enter)
     let span = span!(Level::TRACE, "raster_stream_to_png_bytes");
     let _enter = span.enter();
 

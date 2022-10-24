@@ -495,21 +495,14 @@ where
         };
 
         // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
-        let stream_filled = RasterSubQueryAdapter::<'a, P, _, _>::new(
+        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
             &self.source,
             query,
             self.tiling_spec,
             ctx,
             sub_query_spec,
         )
-        .filter_and_fill();
-
-        Ok(stream_filled.boxed())
-
-        //TODO: use stream.instrumented instead?
-        // let stream_span = SpanAdapter::new(stream_filled, span!(Level::TRACE, "Reprojection"));
-
-        // Ok(stream_span.boxed())
+        .filter_and_fill())
     }
 }
 
