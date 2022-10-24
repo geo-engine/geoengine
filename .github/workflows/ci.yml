@@ -48,7 +48,7 @@ jobs:
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
       - name: setup rust build cache
-        uses: Swatinem/rust-cache@v2.0.1
+        uses: Swatinem/rust-cache@v2
         with:
           # An explicit cache key that is used instead of the automatic `job`-based
           # cache key and is thus stable across jobs.
