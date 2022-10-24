@@ -182,6 +182,7 @@ async fn get_plot_handler<C: Context>(
         crate::util::spawn(async move {
             if c.await.is_ok() {
                 if let Some(trigger) = abort_trigger {
+                    // TODO: only output this message if the query wasn't already finished at the time of aborting
                     debug!("Connection closed, cancelling workflow");
                     trigger.abort();
                 }
