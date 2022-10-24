@@ -15,6 +15,7 @@ use nix::sys::socket::MsgFlags;
 use std::any::Any;
 use std::num::{NonZeroI32, NonZeroUsize};
 use std::os::unix::prelude::{AsRawFd, RawFd};
+use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
 use tracing::log::info;
 use tracing::Span;
@@ -303,10 +304,8 @@ pub async fn not_implemented_handler() -> HttpResponse {
 
 pub struct SocketFd(pub RawFd);
 
-// attach the connections socket file descriptor to the connection data
-// TODO: the socket file descriptor might be re-used by a subsequent connection before we notice that
-//       the connections was closed. We maybe need a global list of all open connections and their socket file descriptors
-//       or some other way to invalidate the socket file descriptor in the old connection when a new one arrives.
+/// attach the connection's socket file descriptor to the connection data
+#[cfg(target_os = "linux")]
 pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
     if let Some(sock) = connection.downcast_ref::<TcpStream>() {
         let fd = sock.as_raw_fd();
@@ -317,30 +316,49 @@ pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
     }
 }
 
-// start a new task that monitors the request's socket file descriptor and tries to detect when the connection is closed.
-// The returned join handle can be awaited to get notified when the connection is closed.
-// TODO: further verify the heuristic used here to determine the socket status from the `recv` return value
-pub fn connection_closed(req: &HttpRequest) -> Option<JoinHandle<()>> {
-    info!("<< Monitoring req conn >>"); // TODO: remove
+/// start a new task that monitors the request's socket file descriptor and tries to detect when the connection is closed.
+/// The returned join handle can be awaited to get notified when the connection is closed (or, if given, when the timeout is reached).
+// TODO: the socket file descriptor might be re-used by a subsequent connection before we notice that
+//       the connections was closed. We maybe need a global list of all open connections and their socket file descriptors
+//       or some other way to invalidate the socket file descriptor in the old connection when a new one arrives.
+//       idea: have a global map of sockets being monitored for connection close. When a new connection arrives: get its fd and
+//       check whether this fd is currently being monitored. If so: notify the monitor channel of the new connection via a channel.
+#[cfg(target_os = "linux")]
+pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> Option<JoinHandle<()>> {
+    const CONNECTION_MONITOR_INTERVAL_SECONDS: u64 = 1;
+
     req.conn_data::<SocketFd>().map(|fd| {
         let fd = fd.0;
         crate::util::spawn(async move {
             let mut data = vec![];
-            // TODO: add a timeout to avoid infinite looping
-            loop {
+            let start = Instant::now();
+
+            while timeout.map_or(true, |t| start.elapsed() >= t) {
                 let r = nix::sys::socket::recv(fd, data.as_mut_slice(), MsgFlags::MSG_PEEK);
 
                 match r {
                     Ok(0) | Err(Errno::EBADF) => {
-                        info!(">> A connection closed"); // TODO: remove
+                        // the connection seems to be closed
                         return;
                     }
-                    _ => (),
+                    _ => (), // the connection seems to be still valid
                 }
 
-                // TODO: make the sleep duration configurable?
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(
+                    CONNECTION_MONITOR_INTERVAL_SECONDS,
+                ))
+                .await;
             }
         })
     })
+}
+
+// on non-linux systems we do not monitor the connections because they would require a different implementation
+
+#[cfg(not(target_os = "linux"))]
+pub fn connection_init(_connection: &dyn Any, _data: &mut Extensions) {}
+
+#[cfg(not(target_os = "linux"))]
+pub fn connection_closed(_req: &HttpRequest, timeout: Option<Duration>) -> Option<JoinHandle<()>> {
+    None
 }

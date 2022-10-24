@@ -228,7 +228,7 @@ where
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
 
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -660,13 +660,13 @@ mod tests {
 
         let bytes = raster_stream_to_png_bytes(
             processor,
-            None,
             query_rect,
             query_ctx,
             360,
             180,
             None,
             Some(colorizer),
+            None,
         )
         .await
         .unwrap();
@@ -728,13 +728,13 @@ mod tests {
 
         let bytes = raster_stream_to_png_bytes(
             processor,
-            None,
             query_rect,
             query_ctx,
             360,
             180,
             None,
             Some(colorizer),
+            None,
         )
         .await
         .unwrap();

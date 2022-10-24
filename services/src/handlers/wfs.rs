@@ -1,5 +1,6 @@
-use actix_web::{web, FromRequest, HttpResponse};
+use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
+use log::debug;
 use reqwest::Url;
 use serde::Deserialize;
 use snafu::{ensure, ResultExt};
@@ -14,7 +15,7 @@ use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::server::not_implemented_handler;
+use crate::util::server::{connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
@@ -34,6 +35,8 @@ use geoengine_operators::engine::{QueryProcessor, VectorOperator};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use serde_json::json;
 use std::str::FromStr;
+use std::time::Duration;
+use tokio::task::JoinHandle;
 
 pub(crate) fn init_wfs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -411,6 +414,7 @@ fn wfs_url(workflow: WorkflowId) -> Result<Url> {
     )
 )]
 async fn wfs_feature_handler<C: Context>(
+    req: HttpRequest,
     endpoint: web::Path<WorkflowId>,
     request: web::Query<GetFeature>,
     ctx: web::Data<C>,
@@ -439,6 +443,13 @@ async fn wfs_feature_handler<C: Context>(
     if request.typeNames.feature_type == "93d6785e-5eea-4e0e-8074-e7f78733d988" {
         return get_feature_mock(&request);
     }
+
+    let conn_closed = connection_closed(
+        &req,
+        config::get_config_element::<config::Ogc>()?
+            .request_timeout_seconds
+            .map(Duration::from_secs),
+    );
 
     let workflow: Workflow = ctx.workflow_registry_ref().load(&type_names).await?;
 
@@ -493,16 +504,16 @@ async fn wfs_feature_handler<C: Context>(
 
     let json = match processor {
         TypedVectorQueryProcessor::Data(p) => {
-            vector_stream_to_geojson(p, query_rect, &query_ctx).await
+            vector_stream_to_geojson(p, query_rect, query_ctx, conn_closed).await
         }
         TypedVectorQueryProcessor::MultiPoint(p) => {
-            vector_stream_to_geojson(p, query_rect, &query_ctx).await
+            vector_stream_to_geojson(p, query_rect, query_ctx, conn_closed).await
         }
         TypedVectorQueryProcessor::MultiLineString(p) => {
-            vector_stream_to_geojson(p, query_rect, &query_ctx).await
+            vector_stream_to_geojson(p, query_rect, query_ctx, conn_closed).await
         }
         TypedVectorQueryProcessor::MultiPolygon(p) => {
-            vector_stream_to_geojson(p, query_rect, &query_ctx).await
+            vector_stream_to_geojson(p, query_rect, query_ctx, conn_closed).await
         }
     }?;
 
@@ -548,10 +559,11 @@ pub enum FeatureType {
     MultiPolygon,
 }
 
-async fn vector_stream_to_geojson<G>(
+async fn vector_stream_to_geojson<G, C: QueryContext + 'static>(
     processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     query_rect: VectorQueryRectangle,
-    query_ctx: &dyn QueryContext,
+    mut query_ctx: C,
+    conn_close: Option<JoinHandle<()>>,
 ) -> Result<serde_json::Value>
 where
     G: Geometry + 'static,
@@ -559,8 +571,21 @@ where
 {
     let features: Vec<serde_json::Value> = Vec::new();
 
+    let abort_trigger = query_ctx.abort_trigger();
+
     // TODO: more efficient merging of the partial feature collections
-    let stream = processor.query(query_rect, query_ctx).await?;
+    let stream = processor.query(query_rect, &query_ctx).await?;
+
+    conn_close.map(|c| {
+        crate::util::spawn(async move {
+            if c.await.is_ok() {
+                if let Some(trigger) = abort_trigger {
+                    debug!("Connection closed, cancelling workflow");
+                    trigger.cancel();
+                }
+            }
+        })
+    });
 
     let features = stream
         .fold(

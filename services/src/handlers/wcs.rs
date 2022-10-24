@@ -1,6 +1,7 @@
 use std::str::FromStr;
+use std::time::Duration;
 
-use actix_web::{web, FromRequest, HttpResponse};
+use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
@@ -25,7 +26,7 @@ use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::server::not_implemented_handler;
+use crate::util::server::{connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -308,6 +309,7 @@ async fn wcs_describe_coverage_handler<C: Context>(
 )]
 #[allow(clippy::too_many_lines)]
 async fn wcs_get_coverage_handler<C: Context>(
+    req: HttpRequest,
     workflow: web::Path<WorkflowId>,
     request: web::Query<GetCoverage>,
     ctx: web::Data<C>,
@@ -330,6 +332,13 @@ async fn wcs_get_coverage_handler<C: Context>(
     ensure!(
         request.version == WcsVersion::V1_1_0 || request.version == WcsVersion::V1_1_1,
         error::WcsVersionNotSupported
+    );
+
+    let conn_closed = connection_closed(
+        &req,
+        config::get_config_element::<config::Ogc>()?
+            .request_timeout_seconds
+            .map(Duration::from_secs),
     );
 
     let request_partition = request.spatial_partition()?;
@@ -422,6 +431,7 @@ async fn wcs_get_coverage_handler<C: Context>(
                 force_big_tiff: false,
             },
             Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
+            conn_closed
             
         )
         .await)?

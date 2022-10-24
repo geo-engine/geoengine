@@ -284,6 +284,7 @@ pub struct TimeStartEnd {
 #[derive(Debug, Deserialize)]
 pub struct Ogc {
     pub default_time: Option<OgcDefaultTime>,
+    pub request_timeout_seconds: Option<u64>,
 }
 
 impl ConfigElement for Ogc {

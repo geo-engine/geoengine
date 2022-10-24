@@ -1,17 +1,22 @@
+use std::time::Duration;
+
 use crate::api::model::datatypes::TimeInterval;
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::util::{parse_bbox, parse_time};
+use crate::util::config;
 use crate::util::parsing::parse_spatial_resolution;
+use crate::util::server::connection_closed;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
-use actix_web::{web, FromRequest, Responder};
+use actix_web::{web, FromRequest, HttpRequest, Responder};
 use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::{ResultDescriptor, TypedPlotQueryProcessor};
+use geoengine_operators::engine::{QueryContext, ResultDescriptor, TypedPlotQueryProcessor};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use uuid::Uuid;
@@ -117,11 +122,19 @@ pub(crate) struct GetPlot {
 /// }
 /// ```
 async fn get_plot_handler<C: Context>(
+    req: HttpRequest,
     id: web::Path<Uuid>,
     params: web::Query<GetPlot>,
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
+    let conn_closed = connection_closed(
+        &req,
+        config::get_config_element::<config::Ogc>()?
+            .request_timeout_seconds
+            .map(Duration::from_secs),
+    );
+
     let workflow = ctx
         .workflow_registry_ref()
         .load(&WorkflowId(id.into_inner()))
@@ -161,7 +174,20 @@ async fn get_plot_handler<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let query_ctx = ctx.query_context()?;
+    let mut query_ctx = ctx.query_context()?;
+
+    let abort_trigger = query_ctx.abort_trigger();
+
+    conn_closed.map(|c| {
+        crate::util::spawn(async move {
+            if c.await.is_ok() {
+                if let Some(trigger) = abort_trigger {
+                    debug!("Connection closed, cancelling workflow");
+                    trigger.cancel();
+                }
+            }
+        })
+    });
 
     let output_format = PlotOutputFormat::from(&processor);
     let plot_type = processor.plot_type();

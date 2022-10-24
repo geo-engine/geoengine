@@ -216,7 +216,7 @@ where
     type SpatialBounds = SpatialPartition2D;
 
     #[allow(clippy::too_many_lines)]
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,

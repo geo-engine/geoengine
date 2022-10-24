@@ -223,7 +223,7 @@ where
     type Output = G::Out;
     type SpatialBounds = BoundingBox2D;
 
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -447,7 +447,7 @@ where
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
 
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,

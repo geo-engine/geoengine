@@ -454,6 +454,7 @@ async fn dataset_from_workflow_handler<C: Context>(
                 force_big_tiff: false,
             },
             tile_limit,
+            None, // datasets shall continue to be built in the background and not cancelled
         ).await)?
     .map_err(crate::error::Error::from)?;
 
@@ -1146,6 +1147,7 @@ mod tests {
                 as_cog: false,
                 force_big_tiff: false,
             },
+            None,
             None,
         )
         .await

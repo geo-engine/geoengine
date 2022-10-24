@@ -100,11 +100,11 @@ impl QueryContext for QueryContextImpl {
         &self.thread_pool
     }
 
-    fn valve(&self) -> &Valve {
+    fn abort_registration(&self) -> &Valve {
         &self.valve
     }
 
-    fn valve_trigger(&mut self) -> Option<Trigger> {
+    fn abort_trigger(&mut self) -> Option<Trigger> {
         self.valve_trigger.take()
     }
 }

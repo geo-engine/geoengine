@@ -45,8 +45,8 @@ pub trait QueryContext: Send + Sync {
     fn chunk_byte_size(&self) -> ChunkByteSize;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
 
-    fn valve(&self) -> &Valve;
-    fn valve_trigger(&mut self) -> Option<Trigger>;
+    fn abort_registration(&self) -> &Valve;
+    fn abort_trigger(&mut self) -> Option<Trigger>;
 }
 
 pub struct MockQueryContext {
@@ -102,11 +102,11 @@ impl QueryContext for MockQueryContext {
         &self.thread_pool
     }
 
-    fn valve(&self) -> &Valve {
+    fn abort_registration(&self) -> &Valve {
         &self.valve
     }
 
-    fn valve_trigger(&mut self) -> Option<Trigger> {
+    fn abort_trigger(&mut self) -> Option<Trigger> {
         self.valve_trigger.take()
     }
 }

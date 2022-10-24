@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
+use tokio::task::JoinHandle;
 
 pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
@@ -27,6 +28,7 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
+    conn_closed: Option<JoinHandle<()>>,
 ) -> Result<Vec<u8>>
 where
     T: Pixel + GdalType,
@@ -41,6 +43,7 @@ where
         gdal_tiff_metadata,
         gdal_tiff_options,
         tile_limit,
+        conn_closed,
     )
     .await?;
 
@@ -55,14 +58,16 @@ pub struct GdalGeoTiffDatasetMetadata {
     pub spatial_reference: SpatialReference,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
     file_path: &Path,
     processor: Box<dyn RasterQueryProcessor<RasterType = P>>,
     query_rect: RasterQueryRectangle,
-    query_ctx: C,
+    mut query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
+    conn_closed: Option<JoinHandle<()>>,
 ) -> Result<()>
 where
     P: Pixel + GdalType,
@@ -95,7 +100,20 @@ where
     })
     .await?;
 
+    let abort_trigger = query_ctx.abort_trigger();
+
     let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
+
+    conn_closed.map(|c| {
+        crate::util::spawn(async move {
+            if c.await.is_ok() {
+                if let Some(trigger) = abort_trigger {
+                    debug!("Connection closed, cancelling workflow");
+                    trigger.cancel();
+                }
+            }
+        })
+    });
 
     let dataset_writer = tile_stream
         .enumerate()
@@ -557,6 +575,7 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
+            None,
         )
         .await
         .unwrap();
@@ -605,6 +624,7 @@ mod tests {
                 compression_num_threads: GdalCompressionNumThreads::NumThreads(2),
                 force_big_tiff: false,
             },
+            None,
             None,
         )
         .await
@@ -656,6 +676,7 @@ mod tests {
                 force_big_tiff: true,
             },
             None,
+            None,
         )
         .await
         .unwrap();
@@ -704,6 +725,7 @@ mod tests {
                 compression_num_threads: GdalCompressionNumThreads::AllCpus,
                 force_big_tiff: true,
             },
+            None,
             None,
         )
         .await
@@ -762,6 +784,7 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
+            None,
         )
         .await
         .unwrap();
@@ -819,6 +842,7 @@ mod tests {
                 force_big_tiff: false,
             },
             Some(1),
+            None,
         )
         .await;
 
@@ -864,6 +888,7 @@ mod tests {
                 compression_num_threads: GdalCompressionNumThreads::AllCpus,
                 force_big_tiff: false,
             },
+            None,
             None,
         )
         .await;

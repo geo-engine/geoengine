@@ -27,6 +27,7 @@ use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
 use std::str::FromStr;
+use std::time::Duration;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -256,6 +257,13 @@ async fn wms_map_handler<C: Context>(
 
     // TODO: validate request further
 
+    let conn_closed = connection_closed(
+        &req,
+        config::get_config_element::<config::Ogc>()?
+            .request_timeout_seconds
+            .map(Duration::from_secs),
+    );
+
     let workflow = ctx
         .workflow_registry_ref()
         .load(&WorkflowId::from_str(&request.layers)?)
@@ -321,7 +329,7 @@ async fn wms_map_handler<C: Context>(
     let image_bytes = call_on_generic_raster_processor!(
         processor,
         p =>
-            raster_stream_to_png_bytes(p, connection_closed(&req), query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), colorizer).await
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), colorizer, conn_closed).await
     ).map_err(error::Error::from)?;
 
     Ok(HttpResponse::Ok()
@@ -515,7 +523,6 @@ mod tests {
 
         let image_bytes = raster_stream_to_png_bytes(
             gdal_source.boxed(),
-            None,
             RasterQueryRectangle {
                 spatial_bounds: query_partition,
                 time_interval: geoengine_datatypes::primitives::TimeInterval::new(
@@ -528,6 +535,7 @@ mod tests {
             ctx.query_context().unwrap(),
             360,
             180,
+            None,
             None,
             None,
         )
