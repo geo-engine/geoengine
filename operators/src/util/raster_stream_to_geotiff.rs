@@ -109,7 +109,7 @@ where
             if c.await.is_ok() {
                 if let Some(trigger) = abort_trigger {
                     debug!("Connection closed, cancelling workflow");
-                    trigger.cancel();
+                    trigger.abort();
                 }
             }
         })

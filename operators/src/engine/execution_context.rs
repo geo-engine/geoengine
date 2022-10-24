@@ -1,3 +1,4 @@
+use super::query::QueryAbortRegistration;
 use super::MockQueryContext;
 use crate::engine::{
     ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
@@ -18,7 +19,6 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use stream_cancel::Valve;
 
 /// A context that provides certain utility access during operator initialization
 pub trait ExecutionContext: Send
@@ -106,12 +106,12 @@ impl MockExecutionContext {
     }
 
     pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
-        let (trigger, valve) = Valve::new();
+        let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         MockQueryContext {
             chunk_byte_size,
             thread_pool: self.thread_pool.clone(),
-            valve,
-            valve_trigger: Some(trigger),
+            abort_registration,
+            abort_trigger: Some(abort_trigger),
         }
     }
 }

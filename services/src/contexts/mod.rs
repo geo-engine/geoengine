@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use rayon::ThreadPool;
 use std::sync::Arc;
-use stream_cancel::{Trigger, Valve};
 use tokio::sync::RwLock;
 
 mod in_memory;
@@ -19,8 +18,8 @@ use geoengine_datatypes::dataset::DataId;
 
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
-    ChunkByteSize, ExecutionContext, MetaData, MetaDataProvider, QueryContext,
-    RasterResultDescriptor, VectorResultDescriptor,
+    ChunkByteSize, ExecutionContext, MetaData, MetaDataProvider, QueryAbortRegistration,
+    QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -75,18 +74,18 @@ pub trait Context: 'static + Send + Sync + Clone {
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
     pub thread_pool: Arc<ThreadPool>,
-    valve: Valve,
-    valve_trigger: Option<Trigger>,
+    abort_registration: QueryAbortRegistration,
+    abort_trigger: Option<QueryAbortTrigger>,
 }
 
 impl QueryContextImpl {
     pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: Arc<ThreadPool>) -> Self {
-        let (trigger, valve) = Valve::new();
+        let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
             thread_pool,
-            valve,
-            valve_trigger: Some(trigger),
+            abort_registration,
+            abort_trigger: Some(abort_trigger),
         }
     }
 }
@@ -100,12 +99,12 @@ impl QueryContext for QueryContextImpl {
         &self.thread_pool
     }
 
-    fn abort_registration(&self) -> &Valve {
-        &self.valve
+    fn abort_registration(&self) -> &QueryAbortRegistration {
+        &self.abort_registration
     }
 
-    fn abort_trigger(&mut self) -> Option<Trigger> {
-        self.valve_trigger.take()
+    fn abort_trigger(&mut self) -> Option<QueryAbortTrigger> {
+        self.abort_trigger.take()
     }
 }
 
