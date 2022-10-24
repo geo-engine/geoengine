@@ -1520,6 +1520,7 @@ mod tests {
         let params = None;
 
         let tile = GDAL_RASTER_LOADER
+            .clone()
             .load_tile_async::<f64>(params, tile_info, time_interval)
             .await;
 

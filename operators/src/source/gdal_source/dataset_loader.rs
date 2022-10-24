@@ -1,5 +1,3 @@
-use std::{sync::Arc, time::Instant};
-
 use super::{GdalDatasetParameters, GdalLoadingInfoTemporalSlice};
 use crate::{
     source::{
@@ -8,26 +6,84 @@ use crate::{
     },
     util::{gdal::gdal_open_dataset_ex, Result, TemporaryGdalThreadLocalConfigOptions},
 };
-use futures::{stream, Future, Stream, StreamExt, TryStreamExt};
-use gdal::{raster::GdalType, DatasetOptions, GdalOpenFlags};
+use futures::{
+    lock::{Mutex, MutexGuard, OwnedMutexGuard},
+    stream, Future, Stream, StreamExt, TryStreamExt,
+};
+use gdal::{raster::GdalType, Dataset, DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInterval},
     raster::{Pixel, RasterTile2D, TileInformation, TilingStrategy},
 };
 use log::debug;
+use lru::LruCache;
 use num::FromPrimitive;
 use snafu::ResultExt;
+use std::{
+    num::NonZeroUsize,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Instant,
+};
 
 // TODO: this should probably be part of the query context
 lazy_static::lazy_static! {
     pub(crate) static ref GDAL_RASTER_LOADER: Arc<GdalRasterLoader> = Arc::new(GdalRasterLoader::new());
 }
 
-pub(crate) struct GdalRasterLoader {}
+pub(crate) struct GdalRasterLoader {
+    // TODO: enhance to vector of datasets
+    datasets_cache: Mutex<LruCache<GdalRasterLoaderKey, Arc<Mutex<Dataset>>>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct GdalRasterLoaderKey {
+    file_path: PathBuf,
+    gdal_open_options: GdalDatasetOptions,
+    gdal_config_options: Option<Vec<(String, String)>>,
+}
+
+// struct LendedDataset<'l> {
+//     dataset: MutexGuard<'l, Dataset>,
+// }
 
 impl GdalRasterLoader {
     fn new() -> Self {
-        Self {}
+        let LRU_LIMIT: NonZeroUsize = NonZeroUsize::new(10).expect("LRU limit should be non-zero"); // TODO: config parameter
+        Self {
+            datasets_cache: Mutex::new(LruCache::new(LRU_LIMIT)),
+        }
+    }
+
+    async fn open_dataset(
+        &self,
+        file_path: PathBuf,
+        gdal_open_options: GdalDatasetOptions,
+        gdal_config_options: Option<Vec<(String, String)>>,
+    ) -> OwnedMutexGuard<Dataset> {
+        let key = GdalRasterLoaderKey {
+            file_path,
+            gdal_open_options,
+            gdal_config_options,
+        };
+
+        let mut datasets_cache = self.datasets_cache.lock().await;
+
+        if let Some(dataset) = datasets_cache.get(&key) {
+            if let Some(dataset_lock) = dataset.try_lock_owned() {
+                return dataset_lock;
+            }
+        }
+
+        // datasets_cache.push(k, v)
+
+        // if datasets_cache.len() >= datasets_cache.cap().into() {
+        //     // try to remove the oldest dataset
+        //     datasets_cache.pu
+        // }
+
+        // optoins.op
+        todo!("wait")
     }
 
     ///
@@ -189,5 +245,57 @@ impl GdalRasterLoader {
             })
             .try_flatten()
             .try_buffered(16) // TODO: make this configurable
+    }
+}
+
+/// A variante of `gdal::DatasetOptions` without a lifetime and with `Hash` and `Eq` implemented.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GdalDatasetOptions {
+    pub open_flags: GdalOpenFlags,
+    pub allowed_drivers: Option<Vec<String>>,
+    pub open_options: Option<Vec<String>>,
+    pub sibling_files: Option<Vec<String>>,
+}
+
+impl From<DatasetOptions<'_>> for GdalDatasetOptions {
+    fn from(options: DatasetOptions) -> Self {
+        Self {
+            open_flags: options.open_flags,
+            allowed_drivers: options
+                .allowed_drivers
+                .map(|v| v.iter().map(|s| (*s).to_owned()).collect()),
+            open_options: options
+                .open_options
+                .map(|v| v.iter().map(|s| (*s).to_owned()).collect()),
+            sibling_files: options
+                .sibling_files
+                .map(|v| v.iter().map(|s| (*s).to_owned()).collect()),
+        }
+    }
+}
+
+impl GdalDatasetOptions {
+    pub fn open(&self, path: &Path) -> Result<Dataset> {
+        let allowed_drivers: Option<Vec<&str>> = self
+            .allowed_drivers
+            .as_ref()
+            .map(|v| v.iter().map(String::as_str).collect());
+        let open_options: Option<Vec<&str>> = self
+            .open_options
+            .as_ref()
+            .map(|v| v.iter().map(String::as_str).collect());
+        let sibling_files: Option<Vec<&str>> = self
+            .sibling_files
+            .as_ref()
+            .map(|v| v.iter().map(String::as_str).collect());
+
+        let dataset_options = DatasetOptions {
+            open_flags: self.open_flags,
+            allowed_drivers: allowed_drivers.as_deref(),
+            open_options: open_options.as_deref(),
+            sibling_files: sibling_files.as_deref(),
+        };
+
+        gdal_open_dataset_ex(path, dataset_options)
     }
 }
