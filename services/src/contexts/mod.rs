@@ -73,7 +73,7 @@ pub trait Context: 'static + Send + Sync + Clone {
 
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
-    pub thread_pool: Arc<ThreadPool>,
+    thread_pool: Arc<ThreadPool>,
     abort_registration: QueryAbortRegistration,
     abort_trigger: Option<QueryAbortTrigger>,
 }
