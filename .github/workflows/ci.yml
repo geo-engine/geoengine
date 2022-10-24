@@ -10,6 +10,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  UTOIPA_SWAGGER_DIR: /home/runner/work/geoengine/utiopa_swagger_ui_assets
 
 jobs:
   test:
@@ -73,6 +74,9 @@ jobs:
           # relative to the `$workspace` and defaults to "target" if not explicitly given.
           # Default: ". -> target"
           #workspaces: ""
+
+          # Additional non workspace directories, separated by newlines
+          cache-directories: "$UTOIPA_SWAGGER_DIR"
 
           # Determines if the cache should be saved even when the workflow has failed.
           # Default: "false"
@@ -155,7 +159,7 @@ jobs:
           #workspaces: ""
 
           # Additional non workspace directories, separated by newlines
-          # cache-directories: "/home/runner/work/geoengine/geoengine/target/swagger-ui-4.14.0"
+          cache-directories: "$UTOIPA_SWAGGER_DIR"
 
           # Determines if the cache should be saved even when the workflow has failed.
           # Default: "false"
