@@ -436,9 +436,7 @@ impl ToSchema for CoverageResponse {
     fn schema() -> utoipa::openapi::schema::Schema {
         ObjectBuilder::new()
             .schema_type(SchemaType::String)
-            .format(Some(SchemaFormat::KnownFormat(
-                utoipa::openapi::KnownFormat::Binary,
-            )))
+            .format(Some(SchemaFormat::Binary))
             .into()
     }
 }

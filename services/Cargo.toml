@@ -76,8 +76,8 @@ tracing-actix-web = "0.6"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi"] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
-utoipa = { git = "https://github.com/jdroenner/utoipa.git", rev = "e696063ac7b0a10c5fdb7b1aab0a03f326edcff8", features = ["actix_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { git = "https://github.com/jdroenner/utoipa.git", rev = "e696063ac7b0a10c5fdb7b1aab0a03f326edcff8", features = ["actix-web"] }
+utoipa = { version = "2.2", features = ["actix_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "2.0.1", features = ["actix-web"] }
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
 walkdir = "2.3"
 zip = "0.6"
