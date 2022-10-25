@@ -29,12 +29,16 @@ pub trait OperatorData {
 pub trait RasterOperator:
     CloneableRasterOperator + OperatorData + Send + Sync + std::fmt::Debug
 {
-    // internal logic of the operator
+    /// Internal initialization logic of the operator
     async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>>;
 
+    /// Initialize the operator
+    ///
+    /// This method should not be overriden because it handles wrapping the operator using the
+    /// execution context. Instead, `_initialize` should be implemented.
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,

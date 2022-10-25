@@ -168,4 +168,5 @@ macro_rules! call_on_bi_generic_raster_processor {
 
 }
 
+/// Shorthand type for a function that creates a `Span` for tracing
 pub type CreateSpan = fn() -> Span;
