@@ -103,8 +103,10 @@ impl QueryContext for QueryContextImpl {
         &self.abort_registration
     }
 
-    fn abort_trigger(&mut self) -> Option<QueryAbortTrigger> {
-        self.abort_trigger.take()
+    fn abort_trigger(&mut self) -> geoengine_operators::util::Result<QueryAbortTrigger> {
+        self.abort_trigger
+            .take()
+            .ok_or(geoengine_operators::error::Error::AbortTriggerAlreadyUsed)
     }
 }
 

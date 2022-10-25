@@ -16,7 +16,7 @@ use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{QueryContext, ResultDescriptor, TypedPlotQueryProcessor};
-use log::debug;
+use geoengine_operators::util::abortable_query_execution;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use uuid::Uuid;
@@ -176,41 +176,29 @@ async fn get_plot_handler<C: Context>(
 
     let mut query_ctx = ctx.query_context()?;
 
-    let abort_trigger = query_ctx.abort_trigger();
-
-    conn_closed.map(|c| {
-        crate::util::spawn(async move {
-            if c.await.is_ok() {
-                if let Some(trigger) = abort_trigger {
-                    // TODO: only output this message if the query wasn't already finished at the time of aborting
-                    debug!("Connection closed, cancelling workflow");
-                    trigger.abort();
-                }
-            }
-        })
-    });
+    let query_abort_trigger = query_ctx.abort_trigger()?;
 
     let output_format = PlotOutputFormat::from(&processor);
     let plot_type = processor.plot_type();
 
     let data = match processor {
-        TypedPlotQueryProcessor::JsonPlain(processor) => processor
-            .plot_query(query_rect, &query_ctx)
-            .await
-            .context(error::Operator)?,
+        TypedPlotQueryProcessor::JsonPlain(processor) => {
+            let json = processor.plot_query(query_rect, &query_ctx);
+            let result = abortable_query_execution(json, conn_closed, query_abort_trigger).await;
+            result.context(error::Operator)?
+        }
         TypedPlotQueryProcessor::JsonVega(processor) => {
-            let chart = processor
-                .plot_query(query_rect, &query_ctx)
-                .await
-                .context(error::Operator)?;
+            let chart = processor.plot_query(query_rect, &query_ctx);
+            let chart = abortable_query_execution(chart, conn_closed, query_abort_trigger).await;
+            let chart = chart.context(error::Operator)?;
 
             serde_json::to_value(&chart).context(error::SerdeJson)?
         }
         TypedPlotQueryProcessor::ImagePng(processor) => {
-            let png_bytes = processor
-                .plot_query(query_rect, &query_ctx)
-                .await
-                .context(error::Operator)?;
+            let png_bytes = processor.plot_query(query_rect, &query_ctx);
+            let png_bytes =
+                abortable_query_execution(png_bytes, conn_closed, query_abort_trigger).await;
+            let png_bytes = png_bytes.context(error::Operator)?;
 
             let data_uri = format!("data:image/png;base64,{}", base64::encode(png_bytes));
 

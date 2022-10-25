@@ -666,7 +666,7 @@ mod tests {
             180,
             None,
             Some(colorizer),
-            None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -734,7 +734,7 @@ mod tests {
             180,
             None,
             Some(colorizer),
-            None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();

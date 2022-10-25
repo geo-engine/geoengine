@@ -4,7 +4,8 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::util::create_rayon_thread_pool;
+use crate::util::Result;
+use crate::{error, util::create_rayon_thread_pool};
 use futures::Stream;
 use geoengine_datatypes::util::test::TestDefault;
 use pin_project::pin_project;
@@ -52,7 +53,7 @@ pub trait QueryContext: Send + Sync {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
 
     fn abort_registration(&self) -> &QueryAbortRegistration;
-    fn abort_trigger(&mut self) -> Option<QueryAbortTrigger>;
+    fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
 }
 
 pub struct QueryAbortRegistration {
@@ -157,7 +158,9 @@ impl QueryContext for MockQueryContext {
         &self.abort_registration
     }
 
-    fn abort_trigger(&mut self) -> Option<QueryAbortTrigger> {
-        self.abort_trigger.take()
+    fn abort_trigger(&mut self) -> Result<QueryAbortTrigger> {
+        self.abort_trigger
+            .take()
+            .ok_or(error::Error::AbortTriggerAlreadyUsed)
     }
 }

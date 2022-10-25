@@ -1,16 +1,16 @@
-use futures::StreamExt;
+use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
     primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
     raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
-use log::debug;
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
-use tokio::task::JoinHandle;
 
 use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor};
 use crate::{error, util::Result};
+
+use super::abortable_query_execution;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
@@ -21,28 +21,14 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
     height: u32,
     time: Option<TimeInterval>,
     colorizer: Option<Colorizer>,
-    conn_closed: Option<JoinHandle<()>>,
+    conn_closed: BoxFuture<'_, ()>,
 ) -> Result<Vec<u8>>
 where
     T: Pixel,
 {
-    let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
-
-    let abort_trigger = query_ctx.abort_trigger();
+    let query_abort_trigger = query_ctx.abort_trigger()?;
 
     let tile_stream = processor.query(query_rect, &query_ctx).await?;
-
-    conn_closed.map(|c| {
-        crate::util::spawn(async move {
-            if c.await.is_ok() {
-                if let Some(trigger) = abort_trigger {
-                    // TODO: only output this message if the query wasn't already finished at the time of aborting
-                    debug!("Connection closed, cancelling workflow");
-                    trigger.abort();
-                }
-            }
-        })
-    });
 
     let x_query_resolution = query_rect.spatial_bounds.size_x() / f64::from(width);
     let y_query_resolution = query_rect.spatial_bounds.size_y() / f64::from(height);
@@ -61,8 +47,8 @@ where
         GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
     ));
 
-    let output_tile = tile_stream
-        .fold(output_tile, |raster2d, tile| {
+    let output_tile: BoxFuture<Result<RasterTile2D<T>>> =
+        Box::pin(tile_stream.fold(output_tile, |raster2d, tile| {
             let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
                 (Ok(raster2d), Ok(tile)) if tile.is_empty() => Ok(raster2d),
                 (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
@@ -76,10 +62,12 @@ where
                 Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
                 Err(error) => futures::future::err(error),
             }
-        })
-        .await;
+        }));
 
-    Ok(output_tile?.grid_array.to_png(width, height, &colorizer)?)
+    let result = abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+
+    let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
+    Ok(result.grid_array.to_png(width, height, &colorizer)?)
 }
 
 /// Method to generate a default `Colorizer`.
@@ -146,7 +134,7 @@ mod tests {
             600,
             None,
             None,
-            None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();

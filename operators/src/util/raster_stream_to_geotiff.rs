@@ -1,9 +1,11 @@
+use crate::error;
 use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions};
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
     error::Error,
 };
-use futures::StreamExt;
+use futures::future::BoxFuture;
+use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterCreationOption};
 use gdal::{Dataset, Driver};
 use geoengine_datatypes::primitives::{
@@ -19,7 +21,8 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
-use tokio::task::JoinHandle;
+
+use super::abortable_query_execution;
 
 pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
@@ -28,7 +31,7 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
-    conn_closed: Option<JoinHandle<()>>,
+    conn_closed: BoxFuture<'_, ()>,
 ) -> Result<Vec<u8>>
 where
     T: Pixel + GdalType,
@@ -67,11 +70,13 @@ pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
-    conn_closed: Option<JoinHandle<()>>,
+    conn_closed: BoxFuture<'_, ()>,
 ) -> Result<()>
 where
     P: Pixel + GdalType,
 {
+    let query_abort_trigger = query_ctx.abort_trigger()?;
+
     // TODO: create file path if it doesn't exist
     // TODO: handle streams with multiple time steps correctly
 
@@ -100,22 +105,7 @@ where
     })
     .await?;
 
-    let abort_trigger = query_ctx.abort_trigger();
-
     let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
-
-    conn_closed.map(|c| {
-        crate::util::spawn(async move {
-            if c.await.is_ok() {
-                if let Some(trigger) = abort_trigger {
-                    // TODO: only output this message if the query wasn't already finished at the time of aborting
-                    debug!("Connection closed, cancelling workflow");
-                    trigger.abort();
-                }
-            }
-        })
-    });
-
     let dataset_writer = tile_stream
         .enumerate()
         .fold(
@@ -140,7 +130,10 @@ where
         )
         .await?;
 
-    crate::util::spawn_blocking(move || dataset_writer.finish()).await?
+    let written = crate::util::spawn_blocking(move || dataset_writer.finish())
+        .map_err(|e| error::Error::TokioJoin { source: e });
+
+    abortable_query_execution(written, conn_closed, query_abort_trigger).await?
 }
 
 const COG_BLOCK_SIZE: &str = "512";
@@ -576,7 +569,7 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
-            None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -631,7 +624,7 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
-            None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -682,7 +675,7 @@ mod tests {
                 force_big_tiff: true,
             },
             None,
-            None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -737,7 +730,7 @@ mod tests {
                 force_big_tiff: true,
             },
             None,
-            None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -795,7 +788,7 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
-            None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -853,7 +846,7 @@ mod tests {
                 force_big_tiff: false,
             },
             Some(1),
-            None,
+            Box::pin(futures::future::pending()),
         )
         .await;
 
@@ -900,7 +893,7 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
-            None,
+            Box::pin(futures::future::pending()),
         )
         .await;
 

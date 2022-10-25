@@ -9,6 +9,7 @@ use actix_rt::net::TcpStream;
 use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, HttpRequest, HttpResponse};
+use futures::future::BoxFuture;
 use log::debug;
 use nix::errno::Errno;
 use nix::sys::socket::MsgFlags;
@@ -16,7 +17,6 @@ use std::any::Any;
 use std::num::{NonZeroI32, NonZeroUsize};
 use std::os::unix::prelude::{AsRawFd, RawFd};
 use std::time::{Duration, Instant};
-use tokio::task::JoinHandle;
 use tracing::log::info;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
@@ -324,12 +324,14 @@ pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
 //       idea: have a global map of sockets being monitored for connection close. When a new connection arrives: get its fd and
 //       check whether this fd is currently being monitored. If so: notify the monitor channel of the new connection via a channel.
 #[cfg(target_os = "linux")]
-pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> Option<JoinHandle<()>> {
+pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<()> {
+    use futures::TryFutureExt;
+
     const CONNECTION_MONITOR_INTERVAL_SECONDS: u64 = 1;
 
-    req.conn_data::<SocketFd>().map(|fd| {
+    if let Some(fd) = req.conn_data::<SocketFd>() {
         let fd = fd.0;
-        crate::util::spawn(async move {
+        let handle = crate::util::spawn(async move {
             let mut data = vec![];
             let start = Instant::now();
 
@@ -349,8 +351,15 @@ pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> Option
                 ))
                 .await;
             }
-        })
-    })
+        });
+
+        // TODO: return `pending` on JoinError?
+        let handle = handle.unwrap_or_else(|_| ());
+
+        Box::pin(handle)
+    } else {
+        Box::pin(futures::future::pending())
+    }
 }
 
 // on non-linux systems we do not monitor the connections because they would require a different implementation

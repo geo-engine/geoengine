@@ -537,7 +537,7 @@ mod tests {
             180,
             None,
             None,
-            None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();

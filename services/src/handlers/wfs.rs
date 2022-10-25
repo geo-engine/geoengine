@@ -1,6 +1,7 @@
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use futures::future::BoxFuture;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
-use log::debug;
+use geoengine_operators::util::abortable_query_execution;
 use reqwest::Url;
 use serde::Deserialize;
 use snafu::{ensure, ResultExt};
@@ -36,7 +37,6 @@ use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use serde_json::json;
 use std::str::FromStr;
 use std::time::Duration;
-use tokio::task::JoinHandle;
 
 pub(crate) fn init_wfs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -563,34 +563,21 @@ async fn vector_stream_to_geojson<G, C: QueryContext + 'static>(
     processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     query_rect: VectorQueryRectangle,
     mut query_ctx: C,
-    conn_close: Option<JoinHandle<()>>,
+    conn_closed: BoxFuture<'_, ()>,
 ) -> Result<serde_json::Value>
 where
     G: Geometry + 'static,
     for<'c> FeatureCollection<G>: ToGeoJson<'c>,
 {
+    let query_abort_trigger = query_ctx.abort_trigger()?;
+
     let features: Vec<serde_json::Value> = Vec::new();
-
-    let abort_trigger = query_ctx.abort_trigger();
-
     // TODO: more efficient merging of the partial feature collections
     let stream = processor.query(query_rect, &query_ctx).await?;
 
-    conn_close.map(|c| {
-        crate::util::spawn(async move {
-            if c.await.is_ok() {
-                if let Some(trigger) = abort_trigger {
-                    // TODO: only output this message if the query wasn't already finished at the time of aborting
-                    debug!("Connection closed, cancelling workflow");
-                    trigger.abort();
-                }
-            }
-        })
-    });
-
-    let features = stream
-        .fold(
-            Result::<Vec<serde_json::Value>, error::Error>::Ok(features),
+    let features: BoxFuture<geoengine_operators::util::Result<Vec<serde_json::Value>>> =
+        Box::pin(stream.fold(
+            geoengine_operators::util::Result::<Vec<serde_json::Value>>::Ok(features),
             |output, collection| async move {
                 match (output, collection) {
                     (Ok(mut output), Ok(collection)) => {
@@ -607,12 +594,12 @@ where
                         output.append(more_features);
                         Ok(output)
                     }
-                    (Err(error), _) => Err(error),
-                    (_, Err(error)) => Err(error.into()),
+                    (Err(error), _) | (_, Err(error)) => Err(error),
                 }
             },
-        )
-        .await?;
+        ));
+
+    let features = abortable_query_execution(features, conn_closed, query_abort_trigger).await?;
 
     let mut output = json!({
         "type": "FeatureCollection"
