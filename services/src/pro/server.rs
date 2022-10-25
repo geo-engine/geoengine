@@ -18,6 +18,7 @@ use actix_web::{http, middleware, web, App, HttpServer};
 use bb8_postgres::tokio_postgres::NoTls;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::ChunkByteSize;
+use geoengine_operators::util::gdal::register_gdal_drivers_from_list;
 use log::{info, warn};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -163,6 +164,8 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         .into();
 
     let tiling_spec = config::get_config_element::<config::TilingSpecification>()?.into();
+
+    register_gdal_drivers_from_list(config::get_config_element::<config::Gdal>()?.allowed_drivers);
 
     match web_config.backend {
         Backend::InMemory => {

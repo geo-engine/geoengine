@@ -1,10 +1,12 @@
 use std::{
+    collections::HashSet,
     convert::TryInto,
+    hash::BuildHasher,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
-use gdal::{Dataset, DatasetOptions};
+use gdal::{Dataset, DatasetOptions, Driver};
 use geoengine_datatypes::{
     dataset::{DataId, DatasetId},
     hashmap,
@@ -16,6 +18,9 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
     util::Identifier,
 };
+use itertools::Itertools;
+use log::Level::Debug;
+use log::{debug, log_enabled};
 use snafu::ResultExt;
 
 use crate::{
@@ -196,4 +201,70 @@ pub fn gdal_parameters_from_dataset(
         gdal_config_options: None,
         allow_alphaband_as_mask: true,
     })
+}
+
+/// This method registers all GDAL drivers from the `drivers` list.
+/// It also de-registers all other drivers.
+///
+/// It makes sure to call `GDALAllRegister` at least once.
+/// Unfortunately, calling this method does not prevent registering other drivers afterwards.
+///
+pub fn register_gdal_drivers_from_list<S: BuildHasher>(drivers: HashSet<String, S>) {
+    // this calls `GDALAllRegister` internally
+    let number_of_drivers = Driver::count();
+
+    for i in 0..number_of_drivers {
+        let driver = match gdal::Driver::get(i) {
+            Ok(driver) => driver,
+            // it can happen that we cannot fetch a driver, we will skip it then
+            Err(_) => continue,
+        };
+
+        // do not unregister the drivers we want to keep
+        if drivers.contains(&driver.short_name()) {
+            continue;
+        }
+
+        // TODO: add this method to the `gdal` crate
+        unsafe {
+            gdal_sys::GDALDeregisterDriver(driver.c_driver());
+        }
+    }
+
+    if log_enabled!(Debug) {
+        let mut drivers: Vec<String> = drivers.into_iter().collect();
+        drivers.sort();
+        let remaining_drivers = drivers.into_iter().join(", ");
+        debug!("Could not register drivers: {remaining_drivers}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gdal_driver_restriction() {
+        register_gdal_drivers_from_list(HashSet::new());
+
+        let dataset_path = test_data!("raster/geotiff_from_stream_compressed.tiff").to_path_buf();
+
+        assert!(Dataset::open(&dataset_path).is_err());
+
+        unsafe {
+            gdal_sys::GDALAllRegister();
+        }
+
+        register_gdal_drivers_from_list(HashSet::from(["GTiff".to_string()]));
+
+        assert!(Dataset::open(&dataset_path).is_ok());
+
+        // reset for other tests
+
+        unsafe {
+            gdal_sys::GDALAllRegister();
+        }
+
+        assert!(Dataset::open(&dataset_path).is_ok());
+    }
 }

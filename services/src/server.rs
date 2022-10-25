@@ -10,6 +10,7 @@ use crate::util::server::{
 };
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
+use geoengine_operators::util::gdal::register_gdal_drivers_from_list;
 use log::info;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -42,6 +43,8 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         .into();
 
     let tiling_spec = config::get_config_element::<config::TilingSpecification>()?.into();
+
+    register_gdal_drivers_from_list(config::get_config_element::<config::Gdal>()?.allowed_drivers);
 
     let ctx = InMemoryContext::new_with_data(
         data_path_config.dataset_defs_path,
