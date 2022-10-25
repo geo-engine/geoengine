@@ -12,21 +12,9 @@ use actix_web::{http, middleware, web, HttpRequest, HttpResponse};
 use futures::future::BoxFuture;
 use log::debug;
 
-#[cfg(target_os = "linux")]
-use actix_rt::net::TcpStream;
-#[cfg(target_os = "linux")]
-use nix::errno::Errno;
-#[cfg(target_os = "linux")]
-use nix::sys::socket::MsgFlags;
 use std::any::Any;
-#[cfg(target_os = "linux")]
-use std::num::NonZeroI32;
 use std::num::NonZeroUsize;
-#[cfg(target_os = "linux")]
-use std::os::unix::prelude::{AsRawFd, RawFd};
 use std::time::Duration;
-#[cfg(target_os = "linux")]
-use std::time::Instant;
 use tracing::log::info;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
@@ -312,11 +300,15 @@ pub async fn not_implemented_handler() -> HttpResponse {
 }
 
 #[cfg(target_os = "linux")]
-pub struct SocketFd(pub RawFd);
+pub struct SocketFd(pub std::os::unix::prelude::RawFd);
 
 /// attach the connection's socket file descriptor to the connection data
 #[cfg(target_os = "linux")]
 pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
+    use actix_rt::net::TcpStream;
+    use std::num::NonZeroI32;
+    use std::os::unix::prelude::{AsRawFd, RawFd};
+
     if let Some(sock) = connection.downcast_ref::<TcpStream>() {
         let fd = sock.as_raw_fd();
         if let Ok(fd) = NonZeroI32::try_from(fd) {
@@ -336,6 +328,9 @@ pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
 #[cfg(target_os = "linux")]
 pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<()> {
     use futures::TryFutureExt;
+    use nix::errno::Errno;
+    use nix::sys::socket::MsgFlags;
+    use std::time::Instant;
 
     const CONNECTION_MONITOR_INTERVAL_SECONDS: u64 = 1;
 

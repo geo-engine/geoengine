@@ -56,6 +56,8 @@ pub trait QueryContext: Send + Sync {
     fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
 }
 
+/// This type allow wrapping multiple streams with `QueryAbortWrapper`s that
+/// can all be aborted at the same time using the corresponding `QueryAbortTrigger`.
 pub struct QueryAbortRegistration {
     valve: Valve,
 }
@@ -74,6 +76,8 @@ impl QueryAbortRegistration {
     }
 }
 
+/// This type wraps a stream and allows aborting it using the corresponding `QueryAbortTrigger`
+/// from its `QueryAbortRegistration`.
 #[pin_project(project = AbortWrapperProjection)]
 pub struct QueryAbortWrapper<S> {
     #[pin]
@@ -91,6 +95,8 @@ where
     }
 }
 
+/// This type allows aborting all streams that were wrapped using the corresponding
+/// `QueryAbortRegistration`.
 pub struct QueryAbortTrigger {
     trigger: Trigger,
 }
