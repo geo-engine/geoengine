@@ -156,9 +156,7 @@ impl PlotOperator for BoxPlot {
         }
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, BoxPlot::TYPE_NAME)
-    }
+    span_fn!(BoxPlot);
 }
 
 /// The initialization of `BoxPlot`

@@ -123,9 +123,7 @@ impl RasterOperator for Reflectance {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, Reflectance::TYPE_NAME)
-    }
+    span_fn!(Reflectance);
 }
 
 impl InitializedRasterOperator for InitializedReflectance {

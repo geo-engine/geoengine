@@ -684,9 +684,7 @@ impl RasterOperator for GdalSource {
         Ok(op.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, GdalSource::TYPE_NAME)
-    }
+    span_fn!(GdalSource);
 }
 
 pub struct InitializedGdalSourceOperator {

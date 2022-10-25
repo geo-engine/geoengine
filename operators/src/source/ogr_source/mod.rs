@@ -402,9 +402,7 @@ impl VectorOperator for OgrSource {
         Ok(initialized_source.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, OgrSource::TYPE_NAME)
-    }
+    span_fn!(OgrSource);
 }
 
 impl OgrSource {

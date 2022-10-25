@@ -301,9 +301,7 @@ impl RasterOperator for Expression {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, Expression::TYPE_NAME)
-    }
+    span_fn!(Expression);
 }
 
 impl OperatorName for Expression {

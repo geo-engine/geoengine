@@ -153,9 +153,7 @@ impl PlotOperator for Statistics {
         }
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, Statistics::TYPE_NAME)
-    }
+    span_fn!(Statistics);
 }
 
 /// The initialization of `Statistics`

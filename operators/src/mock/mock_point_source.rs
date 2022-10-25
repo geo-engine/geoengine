@@ -81,9 +81,7 @@ impl VectorOperator for MockPointSource {
         .boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, MockPointSource::TYPE_NAME)
-    }
+    span_fn!(MockPointSource);
 }
 
 pub struct InitializedMockPointSource {

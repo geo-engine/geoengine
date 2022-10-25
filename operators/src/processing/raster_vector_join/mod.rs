@@ -176,9 +176,7 @@ impl VectorOperator for RasterVectorJoin {
         .boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, RasterVectorJoin::TYPE_NAME)
-    }
+    span_fn!(RasterVectorJoin);
 }
 
 pub struct InitializedRasterVectorJoin {

@@ -96,9 +96,7 @@ impl RasterOperator for TemporalRasterAggregation {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, TemporalRasterAggregation::TYPE_NAME)
-    }
+    span_fn!(TemporalRasterAggregation);
 }
 
 pub struct InitializedTemporalRasterAggregation {

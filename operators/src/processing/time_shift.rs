@@ -230,9 +230,7 @@ impl VectorOperator for TimeShift {
         }
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, TimeShift::TYPE_NAME)
-    }
+    span_fn!(TimeShift);
 }
 
 #[typetag::serde]
@@ -305,9 +303,7 @@ impl RasterOperator for TimeShift {
         }
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, TimeShift::TYPE_NAME)
-    }
+    span_fn!(TimeShift);
 }
 
 fn shift_result_descriptor<R: ResultDescriptor, S: TimeShiftOperation>(

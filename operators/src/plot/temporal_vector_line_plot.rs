@@ -106,9 +106,7 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
         .boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, FeatureAttributeValuesOverTime::TYPE_NAME)
-    }
+    span_fn!(FeatureAttributeValuesOverTime);
 }
 
 /// The initialization of `FeatureAttributeValuesOverTime`

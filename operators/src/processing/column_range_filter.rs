@@ -54,9 +54,7 @@ impl VectorOperator for ColumnRangeFilter {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, ColumnRangeFilter::TYPE_NAME)
-    }
+    span_fn!(ColumnRangeFilter);
 }
 
 pub struct InitializedColumnRangeFilter {

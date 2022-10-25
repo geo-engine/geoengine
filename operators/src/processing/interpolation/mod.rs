@@ -105,9 +105,7 @@ impl RasterOperator for Interpolation {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, Interpolation::TYPE_NAME)
-    }
+    span_fn!(Interpolation);
 }
 
 pub struct InitializedInterpolation {

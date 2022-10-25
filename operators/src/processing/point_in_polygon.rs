@@ -106,9 +106,7 @@ impl VectorOperator for PointInPolygonFilter {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, PointInPolygonFilter::TYPE_NAME)
-    }
+    span_fn!(PointInPolygonFilter);
 }
 
 pub struct InitializedPointInPolygonFilter {

@@ -201,9 +201,7 @@ macro_rules! impl_mock_feature_collection_source {
                 .boxed())
             }
 
-            fn span(&self) -> CreateSpan {
-                || span!(Level::TRACE, $newtype::TYPE_NAME)
-            }
+            span_fn!($newtype);
         }
 
         impl InitializedVectorOperator

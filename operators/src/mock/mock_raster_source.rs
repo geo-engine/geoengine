@@ -223,9 +223,7 @@ macro_rules! impl_mock_raster_source {
                 .boxed())
             }
 
-            fn span(&self) -> CreateSpan {
-                || span!(Level::TRACE, $newtype::TYPE_NAME)
-            }
+            span_fn!($newtype);
         }
 
         impl OperatorName for $newtype {

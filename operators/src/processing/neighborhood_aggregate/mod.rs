@@ -158,9 +158,7 @@ impl RasterOperator for NeighborhoodAggregate {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, NeighborhoodAggregate::TYPE_NAME)
-    }
+    span_fn!(NeighborhoodAggregate);
 }
 
 pub struct InitializedNeighborhoodAggregate {

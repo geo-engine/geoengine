@@ -117,9 +117,7 @@ impl RasterOperator for Temperature {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, Temperature::TYPE_NAME)
-    }
+    span_fn!(Temperature);
 }
 
 impl InitializedRasterOperator for InitializedTemperature {

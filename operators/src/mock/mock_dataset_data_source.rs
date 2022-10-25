@@ -132,9 +132,7 @@ impl VectorOperator for MockDatasetDataSource {
         .boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, MockDatasetDataSource::TYPE_NAME)
-    }
+    span_fn!(MockDatasetDataSource);
 }
 
 impl OperatorData for MockDatasetDataSource {

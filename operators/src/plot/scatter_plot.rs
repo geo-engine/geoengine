@@ -78,9 +78,7 @@ impl PlotOperator for ScatterPlot {
         Ok(InitializedScatterPlot::new(in_desc.into(), self.params, source).boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, ScatterPlot::TYPE_NAME)
-    }
+    span_fn!(ScatterPlot);
 }
 
 /// The initialization of `Histogram`

@@ -117,9 +117,7 @@ impl RasterOperator for Radiance {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, Radiance::TYPE_NAME)
-    }
+    span_fn!(Radiance);
 }
 
 impl InitializedRasterOperator for InitializedRadiance {

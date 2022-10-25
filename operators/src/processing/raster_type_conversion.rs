@@ -62,9 +62,7 @@ impl RasterOperator for RasterTypeConversion {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, RasterTypeConversion::TYPE_NAME)
-    }
+    span_fn!(RasterTypeConversion);
 }
 
 impl InitializedRasterOperator for InitializedRasterTypeConversionOperator {

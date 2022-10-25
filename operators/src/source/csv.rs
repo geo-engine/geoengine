@@ -175,9 +175,7 @@ impl VectorOperator for CsvSource {
         Ok(initialized_source.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, CsvSource::TYPE_NAME)
-    }
+    span_fn!(CsvSource);
 }
 
 pub struct InitializedCsvSource {

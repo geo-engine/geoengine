@@ -91,9 +91,7 @@ impl VectorOperator for TimeProjection {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, TimeProjection::TYPE_NAME)
-    }
+    span_fn!(TimeProjection);
 }
 
 fn rewrite_result_descriptor(

@@ -182,9 +182,7 @@ impl VectorOperator for VisualPointClustering {
         .boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, VisualPointClustering::TYPE_NAME)
-    }
+    span_fn!(VisualPointClustering);
 }
 
 pub struct InitializedVisualPointClustering {

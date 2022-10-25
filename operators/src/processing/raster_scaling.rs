@@ -109,9 +109,7 @@ impl RasterOperator for RasterScaling {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, RasterScaling::TYPE_NAME)
-    }
+    span_fn!(RasterScaling);
 }
 
 impl InitializedRasterOperator for InitializedRasterScalingOperator {

@@ -152,9 +152,7 @@ impl VectorOperator for Reprojection {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, Reprojection::TYPE_NAME)
-    }
+    span_fn!(Reprojection);
 }
 
 impl InitializedVectorOperator for InitializedVectorReprojection {
@@ -293,9 +291,7 @@ impl RasterOperator for Reprojection {
         Ok(op.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, Reprojection::TYPE_NAME)
-    }
+    span_fn!(Reprojection);
 }
 
 impl InitializedRasterOperator for InitializedRasterReprojection {

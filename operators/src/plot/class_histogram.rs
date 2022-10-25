@@ -147,9 +147,7 @@ impl PlotOperator for ClassHistogram {
         })
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, ClassHistogram::TYPE_NAME)
-    }
+    span_fn!(ClassHistogram);
 }
 
 /// The initialization of `Histogram`

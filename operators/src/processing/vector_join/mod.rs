@@ -132,9 +132,7 @@ impl VectorOperator for VectorJoin {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, VectorJoin::TYPE_NAME)
-    }
+    span_fn!(VectorJoin);
 }
 
 /// A set of parameters for the `VectorJoin`

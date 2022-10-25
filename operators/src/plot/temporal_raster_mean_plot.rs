@@ -72,9 +72,7 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         Ok(initialized_operator.boxed())
     }
 
-    fn span(&self) -> CreateSpan {
-        || span!(Level::TRACE, MeanRasterPixelValuesOverTime::TYPE_NAME)
-    }
+    span_fn!(MeanRasterPixelValuesOverTime);
 }
 
 /// The initialization of `MeanRasterPixelValuesOverTime`
