@@ -74,9 +74,9 @@ compression_num_threads = 8
 compression_z_level = 6
 compression_algorithm = "LZW"
 allowed_drivers = [
-    "Arrow",
     "COG",
     "CSV",
+    "ESRI Shapefile",
     "FlatGeobuf",
     "GeoJSON",
     "GeoJSONSeq",
@@ -85,7 +85,6 @@ allowed_drivers = [
     "HDF4",
     "HDF5Image",
     "HTTP",
-    "JPEG2000",
     "KML",
     "MEM",
     "Memory",
@@ -99,7 +98,6 @@ allowed_drivers = [
     "SAFE",
     "SQLite",
     "STACIT",
-    "TileDB",
     "TopoJSON",
     "WCS",
     "WFS",

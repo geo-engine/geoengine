@@ -209,7 +209,7 @@ pub fn gdal_parameters_from_dataset(
 /// It makes sure to call `GDALAllRegister` at least once.
 /// Unfortunately, calling this method does not prevent registering other drivers afterwards.
 ///
-pub fn register_gdal_drivers_from_list<S: BuildHasher>(drivers: HashSet<String, S>) {
+pub fn register_gdal_drivers_from_list<S: BuildHasher>(mut drivers: HashSet<String, S>) {
     // this calls `GDALAllRegister` internally
     let number_of_drivers = Driver::count();
 
@@ -221,7 +221,7 @@ pub fn register_gdal_drivers_from_list<S: BuildHasher>(drivers: HashSet<String, 
         };
 
         // do not unregister the drivers we want to keep
-        if drivers.contains(&driver.short_name()) {
+        if drivers.remove(&driver.short_name()) {
             continue;
         }
 
@@ -231,7 +231,20 @@ pub fn register_gdal_drivers_from_list<S: BuildHasher>(drivers: HashSet<String, 
         }
     }
 
-    if log_enabled!(Debug) {
+    drivers.retain(|driver_name| {
+        let driver = match Driver::get_by_name(driver_name) {
+            Ok(driver) => driver,
+            // if driver is not found, do not try to register it
+            Err(_) => return true,
+        };
+
+        // register the driver
+        unsafe { gdal_sys::GDALRegisterDriver(driver.c_driver()) };
+
+        false
+    });
+
+    if !drivers.is_empty() && log_enabled!(Debug) {
         let mut drivers: Vec<String> = drivers.into_iter().collect();
         drivers.sort();
         let remaining_drivers = drivers.into_iter().join(", ");
