@@ -284,7 +284,6 @@ pub struct TimeStartEnd {
 #[derive(Debug, Deserialize)]
 pub struct Ogc {
     pub default_time: Option<OgcDefaultTime>,
-    pub request_timeout_seconds: Option<u64>,
 }
 
 impl ConfigElement for Ogc {
@@ -295,6 +294,7 @@ impl ConfigElement for Ogc {
 pub struct Wcs {
     pub tile_limit: usize,
     pub default_time: Option<OgcDefaultTime>,
+    pub request_timeout_seconds: Option<u64>,
 }
 
 impl ConfigElement for Wcs {
@@ -304,6 +304,7 @@ impl ConfigElement for Wcs {
 #[derive(Debug, Deserialize)]
 pub struct Wfs {
     pub default_time: Option<OgcDefaultTime>,
+    pub request_timeout_seconds: Option<u64>,
 }
 
 impl ConfigElement for Wfs {
@@ -313,10 +314,20 @@ impl ConfigElement for Wfs {
 #[derive(Debug, Deserialize)]
 pub struct Wms {
     pub default_time: Option<OgcDefaultTime>,
+    pub request_timeout_seconds: Option<u64>,
 }
 
 impl ConfigElement for Wms {
     const KEY: &'static str = "wms";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Plots {
+    pub request_timeout_seconds: Option<u64>,
+}
+
+impl ConfigElement for Plots {
+    const KEY: &'static str = "plots";
 }
 
 #[derive(Debug, Deserialize)]

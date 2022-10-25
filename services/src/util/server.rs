@@ -5,24 +5,33 @@ use crate::util::config::get_config_element;
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::uri::PathAndQuery;
 use actix_http::{Extensions, HttpMessage};
-use actix_rt::net::TcpStream;
+
 use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, HttpRequest, HttpResponse};
 use futures::future::BoxFuture;
 use log::debug;
+
+#[cfg(target_os = "linux")]
+use actix_rt::net::TcpStream;
+#[cfg(target_os = "linux")]
 use nix::errno::Errno;
+#[cfg(target_os = "linux")]
 use nix::sys::socket::MsgFlags;
 use std::any::Any;
-use std::num::{NonZeroI32, NonZeroUsize};
+#[cfg(target_os = "linux")]
+use std::num::NonZeroI32;
+use std::num::NonZeroUsize;
+#[cfg(target_os = "linux")]
 use std::os::unix::prelude::{AsRawFd, RawFd};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(target_os = "linux")]
+use std::time::Instant;
 use tracing::log::info;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
 use url::Url;
 use utoipa::{openapi::OpenApi, ToSchema};
-
 /// Custom root span for web requests that paste a request id to all logs.
 pub struct CustomRootSpanBuilder;
 
@@ -302,6 +311,7 @@ pub async fn not_implemented_handler() -> HttpResponse {
     HttpResponse::NotImplemented().finish()
 }
 
+#[cfg(target_os = "linux")]
 pub struct SocketFd(pub RawFd);
 
 /// attach the connection's socket file descriptor to the connection data
@@ -357,6 +367,8 @@ pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFut
         let handle = handle.unwrap_or_else(|_| ());
 
         Box::pin(handle)
+    } else if let Some(timeout) = timeout {
+        Box::pin(tokio::time::sleep(timeout))
     } else {
         Box::pin(futures::future::pending())
     }
@@ -368,6 +380,10 @@ pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFut
 pub fn connection_init(_connection: &dyn Any, _data: &mut Extensions) {}
 
 #[cfg(not(target_os = "linux"))]
-pub fn connection_closed(_req: &HttpRequest, timeout: Option<Duration>) -> Option<JoinHandle<()>> {
-    None
+pub fn connection_closed(_req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<()> {
+    if let Some(timeout) = timeout {
+        Box::pin(tokio::time::sleep(timeout))
+    } else {
+        Box::pin(futures::future::pending())
+    }
 }

@@ -51,9 +51,6 @@ filename_prefix = "geo_engine"
 # Use this option if another folder should be used.
 #log_directory = "/var/log/"
 
-[ogc]
-# request_timeout_seconds = 3600
-
 [ogc.default_time]
 # type "Value" with start/end as ISO strings or "Now" for using the current time, use wcs.default_time etc. for override
 type = "Value"
@@ -63,6 +60,16 @@ end = "2014-01-01T00:00:00Z"
 [wcs]
 # max number of tiles to be produced for generating output tiff
 tile_limit = 4 
+# request_timeout_seconds = 3600
+
+[wms]
+# request_timeout_seconds = 3600
+
+[wfs]
+# request_timeout_seconds = 3600
+
+[plots]
+# request_timeout_seconds = 3600
 
 [dataprovider]
 dataset_defs_path = "./test_data/dataset_defs"

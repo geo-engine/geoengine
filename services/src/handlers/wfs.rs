@@ -446,7 +446,7 @@ async fn wfs_feature_handler<C: Context>(
 
     let conn_closed = connection_closed(
         &req,
-        config::get_config_element::<config::Ogc>()?
+        config::get_config_element::<config::Wfs>()?
             .request_timeout_seconds
             .map(Duration::from_secs),
     );

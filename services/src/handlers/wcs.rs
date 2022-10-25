@@ -336,7 +336,7 @@ async fn wcs_get_coverage_handler<C: Context>(
 
     let conn_closed = connection_closed(
         &req,
-        config::get_config_element::<config::Ogc>()?
+        config::get_config_element::<config::Wcs>()?
             .request_timeout_seconds
             .map(Duration::from_secs),
     );

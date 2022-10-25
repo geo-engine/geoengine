@@ -259,7 +259,7 @@ async fn wms_map_handler<C: Context>(
 
     let conn_closed = connection_closed(
         &req,
-        config::get_config_element::<config::Ogc>()?
+        config::get_config_element::<config::Wms>()?
             .request_timeout_seconds
             .map(Duration::from_secs),
     );
