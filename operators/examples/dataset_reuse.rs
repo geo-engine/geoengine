@@ -1,6 +1,6 @@
 #![feature(bench_black_box)]
 
-use gdal::config::{set_config_option, set_thread_local_config_option};
+use gdal::config::set_thread_local_config_option;
 use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::test_data;
 use std::hint::black_box;

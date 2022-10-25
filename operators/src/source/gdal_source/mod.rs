@@ -1,7 +1,7 @@
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{MetaData, OperatorData, OperatorName, QueryProcessor};
 
-use crate::source::gdal_source::dataset_loader::GDAL_RASTER_LOADER;
+use crate::source::gdal_source::dataset_loader::GdalRasterLoader;
 use crate::util::input::float_option_with_nan;
 use crate::{
     engine::{
@@ -483,11 +483,8 @@ where
 
         let source_stream = stream::iter(loading_iter);
 
-        let source_stream = GDAL_RASTER_LOADER.clone().loading_info_to_tile_stream(
-            source_stream,
-            query,
-            tiling_strategy,
-        );
+        let source_stream =
+            GdalRasterLoader::loading_info_to_tile_stream(source_stream, query, tiling_strategy);
 
         // use SparseTilesFillAdapter to fill all the gaps
         let filled_stream = SparseTilesFillAdapter::new(
@@ -914,11 +911,9 @@ fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRa
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
-    use crate::source::gdal_source::dataset_loader::GDAL_RASTER_LOADER;
     use crate::test_data;
     use crate::util::gdal::add_ndvi_dataset;
     use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions};
-
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{EmptyGrid2D, GridBounds, GridIdx2D};
@@ -964,51 +959,56 @@ mod tests {
             .await
     }
 
-    fn load_ndvi_jan_2014(
+    async fn load_ndvi_jan_2014(
         output_shape: GridShape2D,
         output_bounds: SpatialPartition2D,
     ) -> Result<RasterTile2D<u8>> {
-        GDAL_RASTER_LOADER.load_tile_data::<u8>(
-            &GdalDatasetParameters {
-                file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
-                rasterband_channel: 1,
-                geo_transform: GdalDatasetGeoTransform {
-                    origin_coordinate: (-180., 90.).into(),
-                    x_pixel_size: 0.1,
-                    y_pixel_size: -0.1,
-                },
-                width: 3600,
-                height: 1800,
-                file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value: Some(0.),
-                properties_mapping: Some(vec![
-                    GdalMetadataMapping {
-                        source_key: RasterPropertiesKey {
-                            domain: None,
-                            key: "AREA_OR_POINT".to_string(),
-                        },
-                        target_type: RasterPropertiesEntryType::String,
-                        target_key: RasterPropertiesKey {
-                            domain: None,
-                            key: "AREA_OR_POINT".to_string(),
-                        },
-                    },
-                    GdalMetadataMapping {
-                        source_key: RasterPropertiesKey {
-                            domain: Some("IMAGE_STRUCTURE".to_string()),
-                            key: "COMPRESSION".to_string(),
-                        },
-                        target_type: RasterPropertiesEntryType::String,
-                        target_key: RasterPropertiesKey {
-                            domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
-                            key: "COMPRESSION".to_string(),
-                        },
-                    },
-                ]),
-                gdal_open_options: None,
-                gdal_config_options: None,
-                allow_alphaband_as_mask: true,
+        let params = GdalDatasetParameters {
+            file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (-180., 90.).into(),
+                x_pixel_size: 0.1,
+                y_pixel_size: -0.1,
             },
+            width: 3600,
+            height: 1800,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(0.),
+            properties_mapping: Some(vec![
+                GdalMetadataMapping {
+                    source_key: RasterPropertiesKey {
+                        domain: None,
+                        key: "AREA_OR_POINT".to_string(),
+                    },
+                    target_type: RasterPropertiesEntryType::String,
+                    target_key: RasterPropertiesKey {
+                        domain: None,
+                        key: "AREA_OR_POINT".to_string(),
+                    },
+                },
+                GdalMetadataMapping {
+                    source_key: RasterPropertiesKey {
+                        domain: Some("IMAGE_STRUCTURE".to_string()),
+                        key: "COMPRESSION".to_string(),
+                    },
+                    target_type: RasterPropertiesEntryType::String,
+                    target_key: RasterPropertiesKey {
+                        domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
+                        key: "COMPRESSION".to_string(),
+                    },
+                },
+            ]),
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+        };
+
+        let dataset = GdalRasterLoader::open_dataset(&params);
+
+        GdalRasterLoader::load_tile_data::<u8>(
+            &params,
+            &dataset,
             TileInformation::with_partition_and_shape(output_bounds, output_shape),
             TimeInterval::default(),
         )
@@ -1217,8 +1217,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_load_tile_data() {
+    #[tokio::test]
+    async fn test_load_tile_data() {
         let output_shape: GridShape2D = [8, 8].into();
         let output_bounds =
             SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
@@ -1229,7 +1229,9 @@ mod tests {
             tile_position: _,
             time: _,
             properties,
-        } = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
+        } = load_ndvi_jan_2014(output_shape, output_bounds)
+            .await
+            .unwrap();
 
         assert!(!grid.is_empty());
 
@@ -1267,8 +1269,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_load_tile_data_overlaps_dataset_bounds() {
+    #[tokio::test]
+    async fn test_load_tile_data_overlaps_dataset_bounds() {
         let output_shape: GridShape2D = [8, 8].into();
         // shift world bbox one pixel up and to the left
         let (x_size, y_size) = (45., 22.5);
@@ -1283,7 +1285,9 @@ mod tests {
             tile_position: _,
             time: _,
             properties: _,
-        } = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
+        } = load_ndvi_jan_2014(output_shape, output_bounds)
+            .await
+            .unwrap();
 
         assert!(!grid.is_empty());
 
@@ -1301,8 +1305,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_load_tile_data_is_inside_single_pixel() {
+    #[tokio::test]
+    async fn test_load_tile_data_is_inside_single_pixel() {
         let output_shape: GridShape2D = [8, 8].into();
         // shift world bbox one pixel up and to the left
         let (x_size, y_size) = (0.000_000_000_01, 0.000_000_000_01);
@@ -1318,7 +1322,9 @@ mod tests {
             tile_position: _,
             time: _,
             properties: _,
-        } = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
+        } = load_ndvi_jan_2014(output_shape, output_bounds)
+            .await
+            .unwrap();
 
         assert!(!grid.is_empty());
 
@@ -1519,10 +1525,7 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
         let params = None;
 
-        let tile = GDAL_RASTER_LOADER
-            .clone()
-            .load_tile_async::<f64>(params, tile_info, time_interval)
-            .await;
+        let tile = GdalRasterLoader::load_tile_async::<f64>(params, tile_info, time_interval).await;
 
         assert!(tile.is_ok());
 
@@ -1798,8 +1801,8 @@ mod tests {
         assert_eq!(rw, exp);
     }
 
-    #[test]
-    fn read_up_side_down_raster() {
+    #[tokio::test]
+    async fn read_up_side_down_raster() {
         let output_shape: GridShape2D = [8, 8].into();
         let output_bounds =
             SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
@@ -1857,13 +1860,13 @@ mod tests {
             tile_position: _,
             time: _,
             properties: _,
-        } = GDAL_RASTER_LOADER
-            .load_tile_data::<u8>(
-                &up_side_down_params,
-                tile_information,
-                TimeInterval::default(),
-            )
-            .unwrap();
+        } = GdalRasterLoader::load_tile_data::<u8>(
+            &up_side_down_params,
+            &GdalRasterLoader::open_dataset(&up_side_down_params),
+            tile_information,
+            TimeInterval::default(),
+        )
+        .unwrap();
 
         assert!(!grid.is_empty());
 

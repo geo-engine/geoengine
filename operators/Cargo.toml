@@ -14,6 +14,7 @@ pro = ["geoengine-datatypes/pro"]
 
 [dependencies]
 arrow = { version = "25.0", features = ["simd"] }
+async-channel = "1.7"
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"

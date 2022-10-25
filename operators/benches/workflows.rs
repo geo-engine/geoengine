@@ -579,16 +579,16 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
     ];
 
     let tiling_specs = vec![
-        TilingSpecification::new((0., 0.).into(), [32, 32].into()),
-        TilingSpecification::new((0., 0.).into(), [64, 64].into()),
-        TilingSpecification::new((0., 0.).into(), [128, 128].into()),
-        TilingSpecification::new((0., 0.).into(), [256, 256].into()),
+        // TilingSpecification::new((0., 0.).into(), [32, 32].into()),
+        // TilingSpecification::new((0., 0.).into(), [64, 64].into()),
+        // TilingSpecification::new((0., 0.).into(), [128, 128].into()),
+        // TilingSpecification::new((0., 0.).into(), [256, 256].into()),
         TilingSpecification::new((0., 0.).into(), [512, 512].into()),
         // TilingSpecification::new((0., 0.).into(), [600, 600].into()),
         // TilingSpecification::new((0., 0.).into(), [900, 900].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        // TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
+        // TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
+        // TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
@@ -630,15 +630,15 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
 
     let tiling_specs = vec![
         // TilingSpecification::new((0., 0.).into(), [32, 32].into()),
-        TilingSpecification::new((0., 0.).into(), [64, 64].into()),
-        TilingSpecification::new((0., 0.).into(), [128, 128].into()),
-        TilingSpecification::new((0., 0.).into(), [256, 256].into()),
+        // TilingSpecification::new((0., 0.).into(), [64, 64].into()),
+        // TilingSpecification::new((0., 0.).into(), [128, 128].into()),
+        // TilingSpecification::new((0., 0.).into(), [256, 256].into()),
         TilingSpecification::new((0., 0.).into(), [512, 512].into()),
         // TilingSpecification::new((0., 0.).into(), [600, 600].into()),
         // TilingSpecification::new((0., 0.).into(), [900, 900].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        // TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
+        // TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
+        // TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
@@ -692,13 +692,13 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
         // TilingSpecification::new((0., 0.).into(), [32, 32].into()),
         // TilingSpecification::new((0., 0.).into(), [64, 64].into()),
         // TilingSpecification::new((0., 0.).into(), [128, 128].into()),
-        TilingSpecification::new((0., 0.).into(), [256, 256].into()),
+        // TilingSpecification::new((0., 0.).into(), [256, 256].into()),
         TilingSpecification::new((0., 0.).into(), [512, 512].into()),
         // TilingSpecification::new((0., 0.).into(), [600, 600].into()),
         // TilingSpecification::new((0., 0.).into(), [900, 900].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        // TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
+        // TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
+        // TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
@@ -758,9 +758,9 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
         TilingSpecification::new((0., 0.).into(), [512, 512].into()),
         // TilingSpecification::new((0., 0.).into(), [600, 600].into()),
         // TilingSpecification::new((0., 0.).into(), [900, 900].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        // TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
+        // TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
+        // TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
@@ -802,10 +802,10 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
 fn main() {
     let mut bench_collector = BenchmarkCollector::default();
 
-    bench_mock_source_operator(&mut bench_collector);
-    bench_mock_source_operator_with_expression(&mut bench_collector);
-    bench_mock_source_operator_with_identity_reprojection(&mut bench_collector);
-    bench_mock_source_operator_with_4326_to_3857_reprojection(&mut bench_collector);
+    // bench_mock_source_operator(&mut bench_collector);
+    // bench_mock_source_operator_with_expression(&mut bench_collector);
+    // bench_mock_source_operator_with_identity_reprojection(&mut bench_collector);
+    // bench_mock_source_operator_with_4326_to_3857_reprojection(&mut bench_collector);
     bench_gdal_source_operator_tile_size(&mut bench_collector);
     bench_gdal_source_operator_with_expression_tile_size(&mut bench_collector);
     bench_gdal_source_operator_with_identity_reprojection(&mut bench_collector);
