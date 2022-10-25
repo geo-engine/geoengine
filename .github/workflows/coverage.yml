@@ -13,7 +13,14 @@ env:
 
 jobs:
   coveralls:
-    runs-on: ubuntu-22.04
+    runs-on: ${{matrix.os}}
+
+    strategy:
+      matrix:
+        os:
+          - ubuntu-22.04
+        features: ["--all-features"]
+        build: [""]
 
     services:
       postgres:
@@ -51,7 +58,7 @@ jobs:
           # An additional cache key that is added alongside the automatic `job`-based
           # cache key and can be used to further differentiate jobs.
           # Default: empty
-          key: "ci_coverage"
+          key: "ci_coverage_${{ matrix.os }}_${{ matrix.features }}_${{ matrix.build }}"
 
           # A whitespace separated list of env-var *prefixes* who's value contributes
           # to the environment cache key.
@@ -78,7 +85,7 @@ jobs:
             --workspace \
             --timeout 240 \
             --out Lcov \
-            --all-features \
+            ${{ matrix.features }} \
             --tests \
             --implicit-test-threads \
             --run-types Tests \
