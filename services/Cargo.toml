@@ -49,6 +49,8 @@ log = "0.4"
 mime = "0.3"
 oauth2 = "4.2.3"
 openidconnect = "2.3.2"
+opentelemetry = { version = "0.18", default-features = false, features = ["trace"] }
+opentelemetry-jaeger = "0.17"
 ordered-float = { version= "3.0", features = ["serde"] }
 num-traits = "0.2"
 paste = "1.0"
@@ -73,6 +75,7 @@ tokio-util = { version = "0.7", features = ["codec"] }
 tonic = { version = "0.6", features = ["tls", "tls-roots"] } # must be compatible with `scienceobjectsdb_rust_api`
 tracing = "0.1"
 tracing-actix-web = "0.6"
+tracing-opentelemetry = "0.18"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi"] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }

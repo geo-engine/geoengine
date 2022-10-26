@@ -56,6 +56,10 @@ pub enum Error {
     Proj {
         source: proj::ProjError,
     },
+    #[snafu(context(false))]
+    Trace {
+        source: opentelemetry::trace::TraceError,
+    },
 
     TokioChannelSend,
 

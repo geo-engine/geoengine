@@ -18,8 +18,9 @@ use geoengine_datatypes::dataset::DataId;
 
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
-    ChunkByteSize, ExecutionContext, MetaData, MetaDataProvider, QueryContext,
-    RasterResultDescriptor, VectorResultDescriptor,
+    ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
+    InitializedVectorOperator, MetaData, MetaDataProvider, QueryContext, RasterResultDescriptor,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -150,6 +151,30 @@ where
 
     fn tiling_specification(&self) -> TilingSpecification {
         self.tiling_specification
+    }
+
+    fn wrap_initialized_raster_operator(
+        &self,
+        op: Box<dyn geoengine_operators::engine::InitializedRasterOperator>,
+        _span: CreateSpan,
+    ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
+        op
+    }
+
+    fn wrap_initialized_vector_operator(
+        &self,
+        op: Box<dyn InitializedVectorOperator>,
+        _span: CreateSpan,
+    ) -> Box<dyn InitializedVectorOperator> {
+        op
+    }
+
+    fn wrap_initialized_plot_operator(
+        &self,
+        op: Box<dyn InitializedPlotOperator>,
+        _span: CreateSpan,
+    ) -> Box<dyn InitializedPlotOperator> {
+        op
     }
 }
 

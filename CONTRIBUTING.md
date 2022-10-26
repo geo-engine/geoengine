@@ -32,6 +32,10 @@ All PRs run through some steps.
 We require you to sign a contributor license agreement before we can accept your code contribution.
 You can visit [www.geoengine.de/cla](https://www.geoengine.de/cla/) to get more information.
 
+### Code style
+
+Please have a look at our [code style](CODESTYLE.md) where we collect some best practices your code should adhere to.
+
 ### Code reviews
 
 The core team usually performs a code review on each pull request.

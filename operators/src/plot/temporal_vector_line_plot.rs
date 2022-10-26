@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, PlotOperator,
-    PlotQueryProcessor, PlotResultDescriptor, QueryContext, SingleVectorSource,
-    TypedPlotQueryProcessor, VectorQueryProcessor,
+    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator,
+    OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
+    SingleVectorSource, TypedPlotQueryProcessor, VectorQueryProcessor,
 };
 use crate::engine::{QueryProcessor, VectorColumnInfo};
 use crate::error;
@@ -28,6 +28,7 @@ use std::{
     cmp::Ordering,
     collections::hash_map::Entry::{Occupied, Vacant},
 };
+use tracing::{span, Level};
 
 pub const FEATURE_ATTRIBUTE_OVER_TIME_NAME: &str = "Feature Attribute over Time";
 const MAX_FEATURES: usize = 20;
@@ -35,6 +36,10 @@ const MAX_FEATURES: usize = 20;
 /// A plot that shows the value of an feature attribute over time.
 pub type FeatureAttributeValuesOverTime =
     Operator<FeatureAttributeValuesOverTimeParams, SingleVectorSource>;
+
+impl OperatorName for FeatureAttributeValuesOverTime {
+    const TYPE_NAME: &'static str = "FeatureAttributeValuesOverTime";
+}
 
 /// The parameter spec for `FeatureAttributeValuesOverTime`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,7 +52,7 @@ pub struct FeatureAttributeValuesOverTimeParams {
 #[typetag::serde]
 #[async_trait]
 impl PlotOperator for FeatureAttributeValuesOverTime {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
@@ -100,6 +105,8 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
         }
         .boxed())
     }
+
+    span_fn!(FeatureAttributeValuesOverTime);
 }
 
 /// The initialization of `FeatureAttributeValuesOverTime`

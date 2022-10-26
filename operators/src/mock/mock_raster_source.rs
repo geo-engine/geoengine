@@ -1,7 +1,7 @@
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{
-    InitializedRasterOperator, OperatorData, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+    CreateSpan, InitializedRasterOperator, OperatorData, OperatorName, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -13,6 +13,7 @@ use geoengine_datatypes::raster::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use tracing::{span, Level};
 
 #[derive(Debug, Snafu)]
 pub enum MockRasterSourceError {
@@ -195,7 +196,7 @@ macro_rules! impl_mock_raster_source {
         #[typetag::serde]
         #[async_trait]
         impl RasterOperator for $newtype {
-            async fn initialize(
+            async fn _initialize(
                 self: Box<Self>,
                 context: &dyn crate::engine::ExecutionContext,
             ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -221,6 +222,12 @@ macro_rules! impl_mock_raster_source {
                 }
                 .boxed())
             }
+
+            span_fn!($newtype);
+        }
+
+        impl OperatorName for $newtype {
+            const TYPE_NAME: &'static str = "MockRasterSource";
         }
     };
 }

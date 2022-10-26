@@ -1,5 +1,5 @@
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, MetaData, OperatorData, OperatorName,
+    CreateSpan, ExecutionContext, InitializedVectorOperator, MetaData, OperatorData, OperatorName,
     QueryContext, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
@@ -14,6 +14,7 @@ use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, VectorQueryRec
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tracing::{span, Level};
 
 // TODO: generify this to support all data types
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -118,7 +119,7 @@ impl OperatorName for MockDatasetDataSource {
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for MockDatasetDataSource {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -130,6 +131,8 @@ impl VectorOperator for MockDatasetDataSource {
         }
         .boxed())
     }
+
+    span_fn!(MockDatasetDataSource);
 }
 
 impl OperatorData for MockDatasetDataSource {

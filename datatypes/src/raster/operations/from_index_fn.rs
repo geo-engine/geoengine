@@ -47,7 +47,8 @@ where
     fn from_index_fn(g: &G, map_fn: F) -> Grid<G, T> {
         let out_data: Vec<T> = (0..g.number_of_elements()).map(map_fn).collect();
 
-        Grid::new(g.clone(), out_data).expect("Grid shape was invalid before.")
+        Grid::new(g.clone(), out_data)
+            .expect("Grid creation should work because the shape is valid.")
     }
 }
 
@@ -103,9 +104,10 @@ where
             })
             .unzip();
 
-        let inner_grid = Grid::new(g.clone(), out_data).expect("grid shape was invalid before");
-        let validity_mask =
-            Grid::new(g.clone(), out_validity).expect("grid shape was invalid before");
+        let inner_grid = Grid::new(g.clone(), out_data)
+            .expect("Grid creation should work because the shape is valid.");
+        let validity_mask = Grid::new(g.clone(), out_validity)
+            .expect("Grid creation should work because the shape is valid.");
 
         MaskedGrid {
             inner_grid,
@@ -177,7 +179,8 @@ where
             .map(map_fn)
             .collect_into_vec(out_data.as_mut());
 
-        Grid::new(grid_shape.clone(), out_data).expect("Grid shape was invalid before.")
+        Grid::new(grid_shape.clone(), out_data)
+            .expect("Grid creation should work because the shape is valid.")
     }
 }
 
@@ -244,10 +247,10 @@ where
             })
             .unzip_into_vecs(out_data.as_mut(), out_validity.as_mut());
 
-        let inner_grid =
-            Grid::new(grid_shape.clone(), out_data).expect("grid shape was invalid before");
-        let validity_mask =
-            Grid::new(grid_shape.clone(), out_validity).expect("grid shape was invalid before");
+        let inner_grid = Grid::new(grid_shape.clone(), out_data)
+            .expect("grid creation should work because the shape is valid");
+        let validity_mask = Grid::new(grid_shape.clone(), out_validity)
+            .expect("grid creation should work because the shape is valid");
 
         MaskedGrid {
             inner_grid,

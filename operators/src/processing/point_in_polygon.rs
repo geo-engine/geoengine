@@ -11,11 +11,12 @@ use geoengine_datatypes::primitives::VectorQueryRectangle;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use tracing::{span, Level};
 
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, QueryContext, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    CreateSpan, ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::engine::{OperatorData, QueryProcessor};
 use crate::error;
@@ -34,6 +35,10 @@ pub use wrapper::PointInPolygonTesterWithCollection;
 /// 2. a `MultiPolygonCollection` source
 /// Then, it filters the `MultiPolygonCollection`s so that only those features are retained that are in any polygon.
 pub type PointInPolygonFilter = Operator<PointInPolygonFilterParams, PointInPolygonFilterSource>;
+
+impl OperatorName for PointInPolygonFilter {
+    const TYPE_NAME: &'static str = "PointInPolygonFilter";
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PointInPolygonFilterParams {}
@@ -54,7 +59,7 @@ impl OperatorData for PointInPolygonFilterSource {
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for PointInPolygonFilter {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -100,6 +105,8 @@ impl VectorOperator for PointInPolygonFilter {
 
         Ok(initialized_operator.boxed())
     }
+
+    span_fn!(PointInPolygonFilter);
 }
 
 pub struct InitializedPointInPolygonFilter {
