@@ -1,8 +1,9 @@
 use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser};
 use crate::{
     engine::{
-        ExecutionContext, InitializedRasterOperator, Operator, OperatorData, RasterOperator,
-        RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+        CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorData,
+        OperatorName, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        TypedRasterQueryProcessor,
     },
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::Result,
@@ -16,6 +17,7 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use tracing::{span, Level};
 
 pub use self::error::ExpressionError;
 
@@ -216,7 +218,7 @@ fn index_to_parameter(index: usize) -> String {
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for Expression {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -298,6 +300,12 @@ impl RasterOperator for Expression {
 
         Ok(initialized_operator.boxed())
     }
+
+    span_fn!(Expression);
+}
+
+impl OperatorName for Expression {
+    const TYPE_NAME: &'static str = "Expression";
 }
 
 pub struct InitializedExpression {

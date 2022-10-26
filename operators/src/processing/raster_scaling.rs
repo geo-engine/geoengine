@@ -1,6 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, Operator, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
+    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -19,6 +20,7 @@ use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::sync::Arc;
+use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -62,6 +64,10 @@ enum PropertiesKeyOrValue {
 /// - slope: `msg.calibration_slope`
 pub type RasterScaling = Operator<RasterScalingParams, SingleRasterSource>;
 
+impl OperatorName for RasterScaling {
+    const TYPE_NAME: &'static str = "RasterScaling";
+}
+
 pub struct InitializedRasterScalingOperator {
     slope: PropertiesKeyOrValue,
     offset: PropertiesKeyOrValue,
@@ -73,7 +79,7 @@ pub struct InitializedRasterScalingOperator {
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for RasterScaling {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -102,6 +108,8 @@ impl RasterOperator for RasterScaling {
 
         Ok(initialized_operator.boxed())
     }
+
+    span_fn!(RasterScaling);
 }
 
 impl InitializedRasterOperator for InitializedRasterScalingOperator {

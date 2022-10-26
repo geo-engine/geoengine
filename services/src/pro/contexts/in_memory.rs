@@ -1,4 +1,4 @@
-use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
+use crate::contexts::QueryContextImpl;
 use crate::error;
 use crate::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
@@ -21,6 +21,8 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use super::ExecutionContextImpl;
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
