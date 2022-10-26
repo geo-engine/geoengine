@@ -165,10 +165,10 @@ impl Context for InMemoryContext {
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
-        Ok(QueryContextImpl {
-            chunk_byte_size: self.query_ctx_chunk_size,
-            thread_pool: self.thread_pool.clone(),
-        })
+        Ok(QueryContextImpl::new(
+            self.query_ctx_chunk_size,
+            self.thread_pool.clone(),
+        ))
     }
 
     fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {

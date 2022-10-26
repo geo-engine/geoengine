@@ -19,8 +19,8 @@ use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
     ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
-    InitializedVectorOperator, MetaData, MetaDataProvider, QueryContext, RasterResultDescriptor,
-    VectorResultDescriptor,
+    InitializedVectorOperator, MetaData, MetaDataProvider, QueryContext, QueryContextExtensions,
+    RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -75,6 +75,7 @@ pub trait Context: 'static + Send + Sync + Clone {
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
     pub thread_pool: Arc<ThreadPool>,
+    extensions: QueryContextExtensions,
 }
 
 impl QueryContextImpl {
@@ -82,6 +83,19 @@ impl QueryContextImpl {
         QueryContextImpl {
             chunk_byte_size,
             thread_pool,
+            extensions: Default::default(),
+        }
+    }
+
+    pub fn new_with_extensions(
+        chunk_byte_size: ChunkByteSize,
+        thread_pool: Arc<ThreadPool>,
+        extensions: QueryContextExtensions,
+    ) -> Self {
+        QueryContextImpl {
+            chunk_byte_size,
+            thread_pool,
+            extensions,
         }
     }
 }
@@ -93,6 +107,10 @@ impl QueryContext for QueryContextImpl {
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
+    }
+
+    fn extensions(&self) -> &QueryContextExtensions {
+        &self.extensions
     }
 }
 

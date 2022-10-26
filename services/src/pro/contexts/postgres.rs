@@ -7,6 +7,7 @@ use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
 use crate::pro::layers::postgres_layer_db::{PostgresLayerDb, PostgresLayerProviderDb};
 use crate::pro::projects::ProjectPermission;
+use crate::pro::quota::quota_manager;
 use crate::pro::users::{OidcRequestDb, UserDb, UserId, UserSession};
 use crate::pro::util::config::Oidc;
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
@@ -22,7 +23,8 @@ use bb8_postgres::{
     PostgresConnectionManager,
 };
 use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_operators::engine::ChunkByteSize;
+use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
+use geoengine_operators::pro::QuotaTracking;
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, warn};
 use rayon::ThreadPool;
@@ -54,6 +56,7 @@ where
     query_ctx_chunk_size: ChunkByteSize,
     task_manager: Arc<SimpleTaskManager>,
     oidc_request_db: Arc<Option<OidcRequestDb>>,
+    quota: QuotaTracking,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -75,6 +78,10 @@ where
 
         Self::update_schema(pool.get().await?).await?;
 
+        let (quota, receiver) = QuotaTracking::new_pair();
+
+        quota_manager(receiver);
+
         Ok(Self {
             user_db: Arc::new(PostgresUserDb::new(pool.clone())),
             project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
@@ -87,6 +94,7 @@ where
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             oidc_request_db: Arc::new(None),
+            quota,
         })
     }
 
@@ -124,6 +132,10 @@ where
         add_providers_from_directory(&mut layer_provider_db, provider_defs_path.clone()).await;
         add_providers_from_directory(&mut layer_provider_db, provider_defs_path.join("pro")).await;
 
+        let (quota, receiver) = QuotaTracking::new_pair();
+
+        quota_manager(receiver);
+
         Ok(Self {
             user_db: Arc::new(PostgresUserDb::new(pool.clone())),
             project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
@@ -136,6 +148,7 @@ where
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
+            quota,
         })
     }
 
@@ -598,9 +611,14 @@ where
 
     fn query_context(&self) -> Result<Self::QueryContext> {
         // TODO: load config only once
-        Ok(QueryContextImpl::new(
+
+        let mut extensions = QueryContextExtensions::default();
+        extensions.insert(self.quota.clone());
+
+        Ok(QueryContextImpl::new_with_extensions(
             self.query_ctx_chunk_size,
             self.thread_pool.clone(),
+            extensions,
         ))
     }
 

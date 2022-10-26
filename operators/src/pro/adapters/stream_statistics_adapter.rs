@@ -6,6 +6,8 @@ use std::{
 };
 use tracing::Span;
 
+use crate::pro::QuotaTracking;
+
 #[pin_project(project = StreamStatisticsAdapterProjection)]
 pub struct StreamStatisticsAdapter<S> {
     #[pin]
@@ -13,15 +15,17 @@ pub struct StreamStatisticsAdapter<S> {
     poll_next_count: u64,
     element_count: u64,
     span: Span,
+    quota: QuotaTracking,
 }
 
 impl<S> StreamStatisticsAdapter<S> {
-    pub fn new(stream: S, span: Span) -> StreamStatisticsAdapter<S> {
+    pub fn new(stream: S, span: Span, quota: QuotaTracking) -> StreamStatisticsAdapter<S> {
         StreamStatisticsAdapter {
             stream,
             poll_next_count: 0,
             element_count: 0,
             span,
+            quota,
         }
     }
 
@@ -62,6 +66,7 @@ where
                     element_count = *this.element_count,
                     empty = false
                 );
+                let _r = (*this.quota).work_unit_done(); // TODO: handle error => end stream/return error
             }
             None => {
                 tracing::debug!(
@@ -91,7 +96,9 @@ mod tests {
     async fn simple() {
         let v = vec![1, 2, 3];
         let v_stream = futures::stream::iter(v);
-        let mut v_stat_stream = StreamStatisticsAdapter::new(v_stream, span!(Level::TRACE, "test"));
+        let (quota, _rx) = QuotaTracking::new_pair();
+        let mut v_stat_stream =
+            StreamStatisticsAdapter::new(v_stream, span!(Level::TRACE, "test"), quota);
 
         let one = v_stat_stream.next().await;
         assert_eq!(one, Some(1));
