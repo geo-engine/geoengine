@@ -481,6 +481,24 @@ pub struct Coordinate2D {
     pub y: f64,
 }
 
+impl From<geoengine_datatypes::primitives::Coordinate2D> for Coordinate2D {
+    fn from(coordinate: geoengine_datatypes::primitives::Coordinate2D) -> Self {
+        Self {
+            x: coordinate.x,
+            y: coordinate.y,
+        }
+    }
+}
+
+impl From<Coordinate2D> for geoengine_datatypes::primitives::Coordinate2D {
+    fn from(coordinate: Coordinate2D) -> Self {
+        Self {
+            x: coordinate.x,
+            y: coordinate.y,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 /// A bounding box that includes all border points.
@@ -488,6 +506,26 @@ pub struct Coordinate2D {
 pub struct BoundingBox2D {
     lower_left_coordinate: Coordinate2D,
     upper_right_coordinate: Coordinate2D,
+}
+
+impl From<geoengine_datatypes::primitives::BoundingBox2D> for BoundingBox2D {
+    fn from(bbox: geoengine_datatypes::primitives::BoundingBox2D) -> Self {
+        Self {
+            lower_left_coordinate:
+                geoengine_datatypes::primitives::AxisAlignedRectangle::lower_left(&bbox).into(),
+            upper_right_coordinate:
+                geoengine_datatypes::primitives::AxisAlignedRectangle::upper_right(&bbox).into(),
+        }
+    }
+}
+
+impl From<BoundingBox2D> for geoengine_datatypes::primitives::BoundingBox2D {
+    fn from(bbox: BoundingBox2D) -> Self {
+        Self::new_unchecked(
+            bbox.lower_left_coordinate.into(),
+            bbox.upper_right_coordinate.into(),
+        )
+    }
 }
 
 /// An object that composes the date and a timestamp with time zone.

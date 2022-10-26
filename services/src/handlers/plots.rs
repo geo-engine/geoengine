@@ -159,7 +159,15 @@ async fn get_plot_handler<C: Context>(
             .context(error::Operator)?
     };
 
-    let query_rect = query_rect.expect("there is no way to return an empty plot, yet."); // TODO: discuss if the graph should be reprojected
+    let query_rect = match query_rect {
+        Some(query_rect) => query_rect,
+        None => {
+            return Err(error::Error::UnresolvableQueryBoundingBox2DInSrs {
+                query_bbox: params.bbox.into(),
+                query_srs: workflow_spatial_ref.into(),
+            })
+        }
+    };
 
     let processor = initialized.query_processor().context(error::Operator)?;
 

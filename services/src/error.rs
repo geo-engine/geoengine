@@ -401,6 +401,16 @@ pub enum Error {
     ProjStringUnresolvable {
         spatial_ref: SpatialReference,
     },
+
+    #[snafu(display(
+        "Can not resolve the querys BBOX ({:?}) in the selected SRS ({})",
+        query_bbox,
+        query_srs
+    ))]
+    UnresolvableQueryBoundingBox2DInSrs {
+        query_srs: SpatialReference,
+        query_bbox: crate::api::model::datatypes::BoundingBox2D,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
