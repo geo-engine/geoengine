@@ -139,6 +139,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let oidc_config: crate::pro::util::config::Oidc = get_config_element()?;
     let session_config: crate::util::config::Session = get_config_element()?;
     let web_config: crate::util::config::Web = get_config_element()?;
+    let open_telemetry: crate::pro::util::config::OpenTelemetry = get_config_element()?;
 
     if user_config.user_registration {
         info!("User Registration: enabled");
@@ -150,6 +151,16 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         info!("OIDC: enabled");
     } else {
         info!("OIDC: disabled");
+    }
+
+    if open_telemetry.enabled {
+        info!("OpenTelemetry Tracing: enabled");
+        info!(
+            "OpenTelemetry Tracing Endpoint: {}",
+            open_telemetry.endpoint
+        );
+    } else {
+        info!("OpenTelemetry Tracing: disabled");
     }
 
     if session_config.fixed_session_token.is_some() {
