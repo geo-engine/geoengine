@@ -460,14 +460,10 @@ pub fn reproject_query<S: AxisAlignedRectangle>(
     source: SpatialReference,
     target: SpatialReference,
 ) -> Result<Option<QueryRectangle<S>>> {
-    let (s_bbox, p_bbox) = reproject_and_unify_bbox(query.spatial_bounds, target, source)?;
-
-    if s_bbox.is_none() || p_bbox.is_none() {
-        return Ok(None);
-    }
-
-    let s_bbox = s_bbox.expect("the source bbox must be some since the none case is checked above");
-    let p_bbox = p_bbox.expect("the source bbox must be some since the none case is checked above");
+    let (s_bbox, p_bbox) = match reproject_and_unify_bbox(query.spatial_bounds, target, source)? {
+        (Some(s_bbox), Some(p_bbox)) => (s_bbox, p_bbox),
+        _ => return Ok(None),
+    };
 
     let p_spatial_resolution =
         suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
