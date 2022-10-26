@@ -407,7 +407,7 @@ pub enum Error {
     },
 
     #[snafu(display(
-        "Can not resolve the querys BBOX ({:?}) in the selected SRS ({})",
+        "Cannot resolve the query's BBOX ({:?}) in the selected SRS ({})",
         query_bbox,
         query_srs
     ))]
