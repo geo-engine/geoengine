@@ -12,7 +12,7 @@ status = [
     "build (ubuntu-22.04, --all-features)",
     "build (ubuntu-22.04, --all-features, --release)",
     "clippy",
-    "coveralls"
+    "coveralls (ubuntu-22.04, --all-features)"
 ]
 
 # One approval necessary for bors to work
