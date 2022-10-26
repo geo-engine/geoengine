@@ -265,16 +265,18 @@ where
         let area_of_use_proj = area_of_use
             .map(|use_area| use_area.reproject(&area_of_use_projector))
             .transpose()?;
-        if area_of_use_proj.is_none() {
-            return Ok(None);
-        }
-        let clipped_bbox = area_of_use_proj.and_then(|aoup| self.intersection(&aoup));
-        if clipped_bbox.is_none() {
-            return Ok(None);
-        }
 
-        let clipped_bbox =
-            clipped_bbox.expect("clipped bbox is some since the none case was handled above");
+        let area_of_use_proj = match area_of_use_proj {
+            Some(area_of_use_proj) => area_of_use_proj,
+            None => return Ok(None),
+        };
+
+        let clipped_bbox = self.intersection(&area_of_use_proj);
+
+        let clipped_bbox = match clipped_bbox {
+            Some(bbox) => bbox,
+            None => return Ok(None),
+        };
 
         // project points on the bbox
         let upper_line = Line::new(clipped_bbox.upper_left(), clipped_bbox.upper_right())
