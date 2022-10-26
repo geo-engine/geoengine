@@ -2,6 +2,7 @@ use futures::Future;
 use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
+use tracing::{span, Level};
 
 /// A wrapper around `tokio::task::spawn_blocking` that wraps the
 /// function into the parent `Span` from `tracing`.
@@ -11,7 +12,7 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    let current_span = tracing::Span::current();
+    let current_span = span!(Level::TRACE, "spawn_blocking");
 
     tokio::task::spawn_blocking(move || {
         let _entered_span = current_span.enter();
@@ -29,7 +30,7 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    let current_span = tracing::Span::current();
+    let current_span = span!(Level::TRACE, "spawn_blocking_with_thread_pool");
 
     tokio::task::spawn_blocking(move || {
         thread_pool.install(move || {
@@ -48,7 +49,7 @@ where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
 {
-    let current_span = tracing::Span::current();
+    let current_span = span!(Level::TRACE, "spawn");
 
     tokio::task::spawn(async move {
         // TODO: check if we need to move a span into here

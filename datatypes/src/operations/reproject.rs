@@ -72,7 +72,7 @@ impl Clone for CoordinateProjector {
             from: self.from,
             to: self.to,
             p: Proj::new_known_crs(&self.from.to_string(), &self.to.to_string(), None)
-                .expect("worked before"),
+                .expect("the Proj object creation should work because it already worked in the creation of the `CoordinateProjector`"),
         }
     }
 }

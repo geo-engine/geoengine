@@ -18,7 +18,7 @@ lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
         let mut settings = Config::builder();
 
-        let dir: PathBuf = retrieve_settings_dir().expect("settings directory must exist");
+        let dir: PathBuf = retrieve_settings_dir().expect("settings directory should exist");
 
         #[cfg(test)]
         let files = ["Settings-default.toml", "Settings-test.toml"];

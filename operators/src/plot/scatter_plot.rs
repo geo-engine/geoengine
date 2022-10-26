@@ -6,13 +6,14 @@ use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{Histogram2D, HistogramDimension, Plot, PlotData};
 
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, PlotOperator,
-    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, SingleVectorSource,
-    TypedPlotQueryProcessor, TypedVectorQueryProcessor,
+    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator,
+    OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
+    QueryProcessor, SingleVectorSource, TypedPlotQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error::Error;
 use crate::util::Result;
 use geoengine_datatypes::primitives::{Coordinate2D, VectorQueryRectangle};
+use tracing::{span, Level};
 
 pub const SCATTERPLOT_OPERATOR_NAME: &str = "ScatterPlot";
 
@@ -32,6 +33,10 @@ const COLLECTOR_TO_HISTOGRAM_THRESHOLD: usize = BATCH_SIZE * 10;
 /// operator creates a 2D histogram.
 pub type ScatterPlot = Operator<ScatterPlotParams, SingleVectorSource>;
 
+impl OperatorName for ScatterPlot {
+    const TYPE_NAME: &'static str = "ScatterPlot";
+}
+
 /// The parameter spec for `ScatterPlot`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,7 +50,7 @@ pub struct ScatterPlotParams {
 #[typetag::serde]
 #[async_trait]
 impl PlotOperator for ScatterPlot {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
@@ -72,6 +77,8 @@ impl PlotOperator for ScatterPlot {
 
         Ok(InitializedScatterPlot::new(in_desc.into(), self.params, source).boxed())
     }
+
+    span_fn!(ScatterPlot);
 }
 
 /// The initialization of `Histogram`

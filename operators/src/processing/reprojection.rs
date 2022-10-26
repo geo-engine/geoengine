@@ -7,10 +7,10 @@ use crate::{
         TileReprojectionSubQuery,
     },
     engine::{
-        ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-        QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-        SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-        VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        CreateSpan, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
+        Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     error::{self, Error},
     util::{input::RasterOrVectorOperator, Result},
@@ -31,6 +31,7 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use serde::{Deserialize, Serialize};
+use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +48,10 @@ pub struct ReprojectionBounds {
 pub type Reprojection = Operator<ReprojectionParams, SingleRasterOrVectorSource>;
 
 impl Reprojection {}
+
+impl OperatorName for Reprojection {
+    const TYPE_NAME: &'static str = "Reprojection";
+}
 
 pub struct InitializedVectorReprojection {
     result_descriptor: VectorResultDescriptor,
@@ -186,7 +191,7 @@ impl InitializedRasterReprojection {
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for Reprojection {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -207,6 +212,8 @@ impl VectorOperator for Reprojection {
 
         Ok(initialized_operator.boxed())
     }
+
+    span_fn!(Reprojection);
 }
 
 impl InitializedVectorOperator for InitializedVectorReprojection {
@@ -302,7 +309,7 @@ where
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for Reprojection {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -324,6 +331,8 @@ impl RasterOperator for Reprojection {
 
         Ok(initialized_operator.boxed())
     }
+
+    span_fn!(Reprojection);
 }
 
 impl InitializedRasterOperator for InitializedRasterReprojection {
@@ -442,7 +451,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
     }
 }
 
-struct RasterReprojectionProcessor<Q, P>
+pub struct RasterReprojectionProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
 {

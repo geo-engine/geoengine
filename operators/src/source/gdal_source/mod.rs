@@ -1,5 +1,5 @@
 use crate::adapters::SparseTilesFillAdapter;
-use crate::engine::{MetaData, OperatorData, OperatorName, QueryProcessor};
+use crate::engine::{CreateSpan, MetaData, OperatorData, OperatorName, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::util::TemporaryGdalThreadLocalConfigOptions;
@@ -50,6 +50,7 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Instant;
+use tracing::{span, Level};
 
 mod error;
 mod loading_info;
@@ -668,7 +669,7 @@ impl OperatorName for GdalSource {
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for GdalSource {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -676,13 +677,16 @@ impl RasterOperator for GdalSource {
 
         debug!("Initializing GdalSource for {:?}.", &self.params.data);
 
-        Ok(InitializedGdalSourceOperator {
+        let op = InitializedGdalSourceOperator {
             result_descriptor: meta_data.result_descriptor().await?,
             meta_data,
             tiling_specification: context.tiling_specification(),
-        }
-        .boxed())
+        };
+
+        Ok(op.boxed())
     }
+
+    span_fn!(GdalSource);
 }
 
 pub struct InitializedGdalSourceOperator {

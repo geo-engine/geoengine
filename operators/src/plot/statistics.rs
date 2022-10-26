@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, PlotOperator,
-    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
+    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
+    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error;
@@ -24,6 +24,7 @@ use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
+use tracing::{span, Level};
 
 pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 
@@ -32,6 +33,10 @@ pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 /// Does currently not use a weighted computations, so it assumes equally weighted
 /// time steps in the sources.
 pub type Statistics = Operator<StatisticsParams, MultipleRasterOrSingleVectorSource>;
+
+impl OperatorName for Statistics {
+    const TYPE_NAME: &'static str = "Statistics";
+}
 
 /// The parameter spec for `Statistics`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,7 +50,7 @@ pub struct StatisticsParams {
 #[typetag::serde]
 #[async_trait]
 impl PlotOperator for Statistics {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
@@ -147,6 +152,8 @@ impl PlotOperator for Statistics {
             }
         }
     }
+
+    span_fn!(Statistics);
 }
 
 /// The initialization of `Statistics`
