@@ -2,10 +2,10 @@ use futures::{
     channel::mpsc::{channel, Receiver, Sender},
     StreamExt,
 };
+use geoengine_operators::pro::meta::quota::{ComputationContext, ComputationUnit, QuotaTracking};
 use std::sync::Arc;
 
 use geoengine_datatypes::util::test::TestDefault;
-use geoengine_operators::pro::{ComputationId, QuotaTracking};
 
 use crate::pro::users::UserId;
 
@@ -18,17 +18,27 @@ const QUOTA_CHANNEL_SIZE: usize = 1000;
 pub struct QuotaTrackingFactory {
     // user_db: Arc<dyn UserDb>,
     // quota_sender: SyncSender<ComputationId>,
-    quota_sender: Sender<ComputationId>,
+    quota_sender: Sender<ComputationUnit>,
 }
 
 impl QuotaTrackingFactory {
     // pub fn new(quota_sender: SyncSender<ComputationId>) -> Self {
-    pub fn new(quota_sender: Sender<ComputationId>) -> Self {
+    pub fn new(quota_sender: Sender<ComputationUnit>) -> Self {
         Self { quota_sender }
     }
 
-    pub fn create_quota_tracking(&self, session: &UserSession) -> QuotaTracking {
-        QuotaTracking::new(self.quota_sender.clone(), session.user.id.0)
+    pub fn create_quota_tracking(
+        &self,
+        session: &UserSession,
+        context: ComputationContext,
+    ) -> QuotaTracking {
+        QuotaTracking::new(
+            self.quota_sender.clone(),
+            ComputationUnit {
+                issuer: session.user.id.0,
+                context,
+            },
+        )
     }
 }
 
@@ -42,11 +52,11 @@ impl TestDefault for QuotaTrackingFactory {
 
 pub struct QuotaManager<U: UserDb + 'static> {
     user_db: Arc<U>,
-    quota_receiver: Receiver<ComputationId>,
+    quota_receiver: Receiver<ComputationUnit>,
 }
 
 impl<U: UserDb + 'static> QuotaManager<U> {
-    pub fn new(user_db: Arc<U>, quota_receiver: Receiver<ComputationId>) -> Self {
+    pub fn new(user_db: Arc<U>, quota_receiver: Receiver<ComputationUnit>) -> Self {
         Self {
             user_db,
             quota_receiver,
@@ -56,11 +66,18 @@ impl<U: UserDb + 'static> QuotaManager<U> {
     pub fn run(mut self) {
         crate::util::spawn(async move {
             while let Some(computation) = self.quota_receiver.next().await {
-                log::info!("Quota received: {}", computation);
+                // TODO: issue a tracing event instead?
+                // TODO: also log workflow, or connect the computation context to a workflow beforehand.
+                //       However, currently it is possible to reuse a context for multiple queries.
+                //       Also: the operators crate knows nothing about workflows as of yet.
+                log::info!(
+                    "Quota received. User: {}, Context: {}",
+                    computation.issuer,
+                    computation.context
+                );
 
-                let user = UserId(computation);
+                let user = UserId(computation.issuer);
                 // TODO: what to do if this fails (quota can't be recorded)? Try again later?
-                // TODO: do we HAVE to wait for this to finish?
                 let r = self.user_db.increment_quota_used(&user, 1).await;
 
                 if r.is_err() {
@@ -72,7 +89,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
 }
 
 pub fn initialize_quota_tracking<U: UserDb + 'static>(user_db: Arc<U>) -> QuotaTrackingFactory {
-    let (quota_sender, quota_receiver) = channel::<ComputationId>(QUOTA_CHANNEL_SIZE);
+    let (quota_sender, quota_receiver) = channel::<ComputationUnit>(QUOTA_CHANNEL_SIZE);
 
     QuotaManager::new(user_db, quota_receiver).run();
 
@@ -81,6 +98,8 @@ pub fn initialize_quota_tracking<U: UserDb + 'static>(user_db: Arc<U>) -> QuotaT
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::util::Identifier;
+
     use crate::{
         pro::{
             contexts::{ProContext, ProInMemoryContext},
@@ -120,7 +139,7 @@ mod tests {
 
         let quota = initialize_quota_tracking(ctx.user_db());
 
-        let tracking = quota.create_quota_tracking(&session);
+        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
         tracking.work_unit_done().await;
         tracking.work_unit_done().await;

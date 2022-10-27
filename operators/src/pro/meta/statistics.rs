@@ -4,7 +4,7 @@ use crate::engine::{
     VectorResultDescriptor,
 };
 use crate::pro::adapters::stream_statistics_adapter::StreamStatisticsAdapter;
-use crate::pro::QuotaTracking;
+use crate::pro::meta::quota::QuotaTracking;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;

@@ -6,7 +6,7 @@ use std::{
 };
 use tracing::Span;
 
-use crate::pro::QuotaTracking;
+use crate::pro::meta::quota::QuotaTracking;
 
 #[pin_project(project = StreamStatisticsAdapterProjection)]
 pub struct StreamStatisticsAdapter<S> {
@@ -90,9 +90,11 @@ where
 mod tests {
 
     use futures::{channel::mpsc::channel, StreamExt};
+    use geoengine_datatypes::util::Identifier;
     use tracing::{span, Level};
+    use uuid::Uuid;
 
-    use crate::pro::ComputationId;
+    use crate::pro::meta::quota::{ComputationContext, ComputationUnit};
 
     use super::*;
 
@@ -100,11 +102,14 @@ mod tests {
     async fn simple() {
         let v = vec![1, 2, 3];
         let v_stream = futures::stream::iter(v);
-        let (tx, _rx) = channel::<ComputationId>(111);
-        let quota = QuotaTracking {
-            quota_sender: tx,
-            computation: ComputationId::new_v4(),
-        };
+        let (tx, _rx) = channel::<ComputationUnit>(111);
+        let quota = QuotaTracking::new(
+            tx,
+            ComputationUnit {
+                issuer: Uuid::new_v4(),
+                context: ComputationContext::new(),
+            },
+        );
         let mut v_stat_stream =
             StreamStatisticsAdapter::new(v_stream, span!(Level::TRACE, "test"), quota);
 

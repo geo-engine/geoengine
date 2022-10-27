@@ -16,7 +16,9 @@ use crate::{datasets::add_from_directory::add_providers_from_directory, error::R
 use async_trait::async_trait;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
+use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
+use geoengine_operators::pro::meta::quota::ComputationContext;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
 use snafu::ResultExt;
@@ -219,7 +221,10 @@ impl Context for ProInMemoryContext {
 
     fn query_context(&self, session: UserSession) -> Result<Self::QueryContext> {
         let mut extensions = QueryContextExtensions::default();
-        extensions.insert(self.quota.create_quota_tracking(&session));
+        extensions.insert(
+            self.quota
+                .create_quota_tracking(&session, ComputationContext::new()),
+        );
         Ok(QueryContextImpl::new_with_extensions(
             self.query_ctx_chunk_size,
             self.thread_pool.clone(),

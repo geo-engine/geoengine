@@ -23,7 +23,9 @@ use bb8_postgres::{
     PostgresConnectionManager,
 };
 use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
+use geoengine_operators::pro::meta::quota::ComputationContext;
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, warn};
 use rayon::ThreadPool;
@@ -612,7 +614,10 @@ where
         // TODO: load config only once
 
         let mut extensions = QueryContextExtensions::default();
-        extensions.insert(self.quota.create_quota_tracking(&session));
+        extensions.insert(
+            self.quota
+                .create_quota_tracking(&session, ComputationContext::new()),
+        );
 
         Ok(QueryContextImpl::new_with_extensions(
             self.query_ctx_chunk_size,
@@ -2256,7 +2261,7 @@ mod tests {
 
             let quota = initialize_quota_tracking(ctx.user_db());
 
-            let tracking = quota.create_quota_tracking(&session);
+            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
             tracking.work_unit_done().await;
             tracking.work_unit_done().await;
