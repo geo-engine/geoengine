@@ -15,8 +15,9 @@ mod multi_polygon_collection;
 pub(crate) use error::FeatureCollectionError;
 pub(self) use feature_collection::FilterArray;
 pub use feature_collection::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator,
-    FeatureCollectionModifications, FeatureCollectionRow, FilteredColumnNameIter, ToGeoJson,
+    FeatureCollection, FeatureCollectionCreation, FeatureCollectionInfos,
+    FeatureCollectionIterator, FeatureCollectionModifications, FeatureCollectionRow,
+    FilteredColumnNameIter, ToGeoJson,
 };
 pub use feature_collection_builder::{
     BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,

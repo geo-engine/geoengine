@@ -1118,6 +1118,43 @@ impl<'i> Iterator for FilteredColumnNameIter<'i> {
     }
 }
 
+/// A trait for creation of FeatureCollections
+pub trait FeatureCollectionCreation {
+    type CollectionType: Geometry + ArrowTyped;
+
+    /// Create an empty `FeatureCollection`.
+    fn empty() -> Self;
+
+    /// Create a `FeatureCollection` from data
+    fn from_data(
+        features: Vec<Self::CollectionType>,
+        time_intervals: Vec<TimeInterval>,
+        data: HashMap<String, FeatureData>,
+    ) -> Result<Self>
+    where
+        Self: Sized;
+}
+
+impl<CollectionType> FeatureCollectionCreation for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    type CollectionType = CollectionType;
+    fn empty() -> Self {
+        FeatureCollection::<CollectionType>::empty()
+    }
+    fn from_data(
+        features: Vec<CollectionType>,
+        time_intervals: Vec<TimeInterval>,
+        data: HashMap<String, FeatureData>,
+    ) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        FeatureCollection::<CollectionType>::from_data(features, time_intervals, data)
+    }
+}
+
 impl<CollectionType> FeatureCollection<CollectionType>
 where
     CollectionType: Geometry + ArrowTyped,

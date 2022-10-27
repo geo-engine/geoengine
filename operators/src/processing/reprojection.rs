@@ -19,6 +19,7 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{stream, StreamExt};
 use geoengine_datatypes::{
+    collections::FeatureCollectionCreation,
     operations::reproject::{
         reproject_and_unify_bbox, reproject_query, suggest_pixel_size_from_diag_cross_projected,
         CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
@@ -275,7 +276,7 @@ impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
     Q: QueryProcessor<Output = G, SpatialBounds = BoundingBox2D>,
     G: Reproject<CoordinateProjector> + Sync + Send,
-    G::Out: Send,
+    G::Out: Send + FeatureCollectionCreation,
 {
     type Output = G::Out;
     type SpatialBounds = BoundingBox2D;
@@ -301,7 +302,8 @@ where
                 })
                 .boxed())
         } else {
-            Ok(Box::pin(stream::empty())) // TODO: should be empty collection?
+            let res = Ok(G::Out::empty());
+            Ok(Box::pin(stream::once(async { res })))
         }
     }
 }
