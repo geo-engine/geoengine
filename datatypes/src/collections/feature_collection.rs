@@ -1118,7 +1118,7 @@ impl<'i> Iterator for FilteredColumnNameIter<'i> {
     }
 }
 
-/// A trait for creation of FeatureCollections
+/// A trait for creation of `FeatureCollections`.
 pub trait FeatureCollectionCreation {
     type CollectionType: Geometry + ArrowTyped;
 

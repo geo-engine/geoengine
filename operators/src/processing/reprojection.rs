@@ -570,7 +570,9 @@ mod tests {
     use float_cmp::approx_eq;
     use futures::StreamExt;
     use geoengine_datatypes::collections::IntoGeometryIterator;
-    use geoengine_datatypes::primitives::{AxisAlignedRectangle, DateTimeParseFormat};
+    use geoengine_datatypes::primitives::{
+        AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat,
+    };
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -1341,6 +1343,153 @@ mod tests {
                 (499_999.999_999_999_5, 4_649_776.224_819_178).into()
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn points_from_utm36n_to_wgs84() {
+        let exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
+
+        let point_source = MockFeatureCollectionSource::with_collections_and_sref(
+            vec![MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    vec![(166_021.443_080_538_42, 0.0)],
+                    vec![(534_994.655_061_136_1, 9_329_005.182_447_437)],
+                    vec![(499_999.999_999_999_5, 4_649_776.224_819_178)],
+                ])
+                .unwrap(),
+                vec![TimeInterval::default(); 3],
+                HashMap::default(),
+            )
+            .unwrap()],
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n
+        )
+        .boxed();
+
+        let initialized_operator = VectorOperator::boxed(Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::new(
+                    SpatialReferenceAuthority::Epsg,
+                    4326, // utm36n
+                ),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: point_source.into(),
+            },
+        })
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        let qp = initialized_operator
+            .query_processor()
+            .unwrap()
+            .multi_point()
+            .unwrap();
+
+        let spatial_bounds = BoundingBox2D::new(
+            (30.0, 0.0).into(),  // lower left of utm36n area of use
+            (33.0, 42.0).into(), // upper right of utm36n area of use
+        )
+        .unwrap();
+
+        let qs = qp
+            .vector_query(
+                QueryRectangle {
+                    spatial_bounds,
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::zero_point_one(),
+                },
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let points = qs.map(Result::unwrap).collect::<Vec<_>>().await;
+
+        assert_eq!(points.len(), 1);
+
+        let points = &points[0];
+
+        assert!(approx_eq!(
+            &[Coordinate2D],
+            points.coordinates(),
+            &[
+                (30.0, 0.0).into(), // lower left of utm36n area of use
+                (36.0, 84.0).into(),
+                (33.0, 42.0).into(), // upper right of utm36n area of use
+            ]
+        ));
+    }
+
+    #[tokio::test]
+    async fn points_from_utm36n_to_wgs84_out_of_area() {
+        // This test checks that points that are outside the area of use of the target spatial reference are not projected and an empty collection is returned
+
+        let exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
+
+        let point_source = MockFeatureCollectionSource::with_collections_and_sref(
+            vec![MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    vec![(758_565., 4_928_353.)], // (12.25, 44,46)
+                ])
+                .unwrap(),
+                vec![TimeInterval::default(); 1],
+                HashMap::default(),
+            )
+            .unwrap()],
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n
+        )
+        .boxed();
+
+        let initialized_operator = VectorOperator::boxed(Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::new(
+                    SpatialReferenceAuthority::Epsg,
+                    4326, // utm36n
+                ),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: point_source.into(),
+            },
+        })
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        let qp = initialized_operator
+            .query_processor()
+            .unwrap()
+            .multi_point()
+            .unwrap();
+
+        let spatial_bounds = BoundingBox2D::new(
+            (10.0, 0.0).into(),  // -20 x values left of lower left of utm36n area of use
+            (13.0, 42.0).into(), // -20 x values left of upper right of utm36n area of use
+        )
+        .unwrap();
+
+        let qs = qp
+            .vector_query(
+                QueryRectangle {
+                    spatial_bounds,
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::zero_point_one(),
+                },
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let points = qs.map(Result::unwrap).collect::<Vec<_>>().await;
+
+        assert_eq!(points.len(), 1);
+
+        let points = &points[0];
+
+        assert!(geoengine_datatypes::collections::FeatureCollectionInfos::is_empty(points));
+        assert!(points.coordinates().is_empty());
     }
 
     #[test]
