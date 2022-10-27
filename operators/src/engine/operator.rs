@@ -7,8 +7,9 @@ use geoengine_datatypes::dataset::DataId;
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
-    CloneablePlotOperator, CloneableRasterOperator, CloneableVectorOperator, ExecutionContext,
-    PlotResultDescriptor, RasterResultDescriptor, TypedPlotQueryProcessor, VectorResultDescriptor,
+    CloneablePlotOperator, CloneableRasterOperator, CloneableVectorOperator, CreateSpan,
+    ExecutionContext, PlotResultDescriptor, RasterResultDescriptor, TypedPlotQueryProcessor,
+    VectorResultDescriptor,
 };
 
 pub trait OperatorData {
@@ -28,10 +29,24 @@ pub trait OperatorData {
 pub trait RasterOperator:
     CloneableRasterOperator + OperatorData + Send + Sync + std::fmt::Debug
 {
-    async fn initialize(
+    /// Internal initialization logic of the operator
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>>;
+
+    /// Initialize the operator
+    ///
+    /// This method should not be overriden because it handles wrapping the operator using the
+    /// execution context. Instead, `_initialize` should be implemented.
+    async fn initialize(
+        self: Box<Self>,
+        context: &dyn ExecutionContext,
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let span = self.span();
+        let op = self._initialize(context).await?;
+        Ok(context.wrap_initialized_raster_operator(op, span))
+    }
 
     /// Wrap a box around a `RasterOperator`
     fn boxed(self) -> Box<dyn RasterOperator>
@@ -40,6 +55,8 @@ pub trait RasterOperator:
     {
         Box::new(self)
     }
+
+    fn span(&self) -> CreateSpan;
 }
 
 /// Common methods for `VectorOperator`s
@@ -48,10 +65,19 @@ pub trait RasterOperator:
 pub trait VectorOperator:
     CloneableVectorOperator + OperatorData + Send + Sync + std::fmt::Debug
 {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>>;
+
+    async fn initialize(
+        self: Box<Self>,
+        context: &dyn ExecutionContext,
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
+        let span = self.span();
+        let op = self._initialize(context).await?;
+        Ok(context.wrap_initialized_vector_operator(op, span))
+    }
 
     /// Wrap a box around a `VectorOperator`
     fn boxed(self) -> Box<dyn VectorOperator>
@@ -60,6 +86,8 @@ pub trait VectorOperator:
     {
         Box::new(self)
     }
+
+    fn span(&self) -> CreateSpan;
 }
 
 /// Common methods for `PlotOperator`s
@@ -68,10 +96,19 @@ pub trait VectorOperator:
 pub trait PlotOperator:
     CloneablePlotOperator + OperatorData + Send + Sync + std::fmt::Debug
 {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>>;
+
+    async fn initialize(
+        self: Box<Self>,
+        context: &dyn ExecutionContext,
+    ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let span = self.span();
+        let op = self._initialize(context).await?;
+        Ok(context.wrap_initialized_plot_operator(op, span))
+    }
 
     /// Wrap a box around a `PlotOperator`
     fn boxed(self) -> Box<dyn PlotOperator>
@@ -80,6 +117,8 @@ pub trait PlotOperator:
     {
         Box::new(self)
     }
+
+    fn span(&self) -> CreateSpan;
 }
 
 pub trait InitializedRasterOperator: Send + Sync {

@@ -11,6 +11,7 @@ use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
+use tracing::{span, Level};
 
 use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
@@ -20,9 +21,9 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 
-use crate::engine::QueryProcessor;
+use crate::engine::{CreateSpan, QueryProcessor};
 use crate::engine::{
-    InitializedVectorOperator, OperatorData, QueryContext, SourceOperator,
+    InitializedVectorOperator, OperatorData, OperatorName, QueryContext, SourceOperator,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
@@ -145,6 +146,10 @@ pub struct CsvSourceStream {
 
 pub type CsvSource = SourceOperator<CsvSourceParameters>;
 
+impl OperatorName for CsvSource {
+    const TYPE_NAME: &'static str = "CsvSource";
+}
+
 impl OperatorData for CsvSourceParameters {
     fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
 }
@@ -152,7 +157,7 @@ impl OperatorData for CsvSourceParameters {
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for CsvSource {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         _context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -169,6 +174,8 @@ impl VectorOperator for CsvSource {
 
         Ok(initialized_source.boxed())
     }
+
+    span_fn!(CsvSource);
 }
 
 pub struct InitializedCsvSource {

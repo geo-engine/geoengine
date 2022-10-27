@@ -165,11 +165,21 @@ async fn get_plot_handler<C: Context>(
     };
 
     let query_rect = if request_spatial_ref == workflow_spatial_ref {
-        query_rect
+        Some(query_rect)
     } else {
         reproject_query(query_rect, workflow_spatial_ref, request_spatial_ref)
             .map_err(From::from)
             .context(error::Operator)?
+    };
+
+    let query_rect = match query_rect {
+        Some(query_rect) => query_rect,
+        None => {
+            return Err(error::Error::UnresolvableQueryBoundingBox2DInSrs {
+                query_bbox: params.bbox.into(),
+                query_srs: workflow_spatial_ref.into(),
+            })
+        }
     };
 
     let processor = initialized.query_processor().context(error::Operator)?;

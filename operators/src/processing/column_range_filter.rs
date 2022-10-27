@@ -1,6 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    CreateSpan, ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
+    QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::input::StringOrNumberRange;
@@ -19,6 +20,7 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::ops::RangeInclusive;
+use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -30,10 +32,14 @@ pub struct ColumnRangeFilterParams {
 
 pub type ColumnRangeFilter = Operator<ColumnRangeFilterParams, SingleVectorSource>;
 
+impl OperatorName for ColumnRangeFilter {
+    const TYPE_NAME: &'static str = "ColumnRangeFilter";
+}
+
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for ColumnRangeFilter {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -47,6 +53,8 @@ impl VectorOperator for ColumnRangeFilter {
 
         Ok(initialized_operator.boxed())
     }
+
+    span_fn!(ColumnRangeFilter);
 }
 
 pub struct InitializedColumnRangeFilter {

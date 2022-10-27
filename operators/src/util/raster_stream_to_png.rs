@@ -6,6 +6,7 @@ use geoengine_datatypes::{
 };
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
+use tracing::{span, Level};
 
 use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor};
 use crate::{error, util::Result};
@@ -26,6 +27,9 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
 where
     T: Pixel,
 {
+    let span = span!(Level::TRACE, "raster_stream_to_png_bytes");
+    let _enter = span.enter();
+
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
     let tile_stream = processor.query(query_rect, &query_ctx).await?;

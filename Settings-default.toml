@@ -120,3 +120,7 @@ issuer = ""
 client_id = ""
 redirect_uri = ""
 scopes = [ ]
+
+[open_telemetry]
+enabled = false
+endpoint = "127.0.0.1:6831"

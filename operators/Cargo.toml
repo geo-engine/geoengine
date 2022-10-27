@@ -47,6 +47,7 @@ stream-cancel = "0.8"
 tempfile = "3.1"
 tokio = { version = "1.15", features = ["macros", "signal", "sync", "rt-multi-thread", "time"] }
 tracing = "0.1"
+tracing-opentelemetry = "0.18"
 typetag = "0.2"
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
 

@@ -5,9 +5,9 @@ use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
 use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
 use crate::adapters::RasterSubQueryAdapter;
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor,
+    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -21,10 +21,15 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::marker::PhantomData;
+use tracing::{span, Level};
 
 /// A neighborhood aggregate operator applies an aggregate function to each raster pixel and its surrounding.
 /// For each output pixel, the aggregate function is applied to an input pixel plus its neighborhood.
 pub type NeighborhoodAggregate = Operator<NeighborhoodAggregateParams, SingleRasterSource>;
+
+impl OperatorName for NeighborhoodAggregate {
+    const TYPE_NAME: &'static str = "NeighborhoodAggregate";
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -122,7 +127,7 @@ pub enum NeighborhoodAggregateError {
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for NeighborhoodAggregate {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -152,6 +157,8 @@ impl RasterOperator for NeighborhoodAggregate {
 
         Ok(initialized_operator.boxed())
     }
+
+    span_fn!(NeighborhoodAggregate);
 }
 
 pub struct InitializedNeighborhoodAggregate {

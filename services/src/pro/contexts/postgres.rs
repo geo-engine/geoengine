@@ -13,10 +13,7 @@ use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::projects::ProjectId;
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use crate::{contexts::Context, pro::users::PostgresUserDb};
-use crate::{
-    contexts::{ExecutionContextImpl, QueryContextImpl},
-    pro::projects::PostgresProjectDb,
-};
+use crate::{contexts::QueryContextImpl, pro::projects::PostgresProjectDb};
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -33,7 +30,7 @@ use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::ProContext;
+use super::{ExecutionContextImpl, ProContext};
 
 // TODO: do not report postgres error details to user
 

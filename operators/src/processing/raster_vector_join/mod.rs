@@ -4,9 +4,9 @@ mod non_aggregated;
 mod util;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    CreateSpan, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
+    OperatorName, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error::{self, Error};
 use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
@@ -20,6 +20,7 @@ use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::raster::{Pixel, RasterDataType};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use tracing::{span, Level};
 
 use self::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
@@ -28,6 +29,10 @@ use self::aggregator::{
 
 /// An operator that attaches raster values to vector data
 pub type RasterVectorJoin = Operator<RasterVectorJoinParams, SingleVectorMultipleRasterSources>;
+
+impl OperatorName for RasterVectorJoin {
+    const TYPE_NAME: &'static str = "RasterVectorJoin";
+}
 
 const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
@@ -71,7 +76,7 @@ pub enum TemporalAggregationMethod {
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for RasterVectorJoin {
-    async fn initialize(
+    async fn _initialize(
         mut self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -170,6 +175,8 @@ impl VectorOperator for RasterVectorJoin {
         }
         .boxed())
     }
+
+    span_fn!(RasterVectorJoin);
 }
 
 pub struct InitializedRasterVectorJoin {

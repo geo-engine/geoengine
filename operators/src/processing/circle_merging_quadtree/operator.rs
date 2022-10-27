@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::adapters::FeatureCollectionStreamExt;
+use crate::engine::{CreateSpan, OperatorName};
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
     SingleVectorSource, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
@@ -29,6 +30,7 @@ use super::aggregates::{AttributeAggregate, AttributeAggregateType, StringSample
 use super::circle_radius_model::CircleRadiusModel;
 use super::grid::Grid;
 use super::quadtree::CircleMergingQuadtree;
+use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -51,10 +53,14 @@ pub struct AttributeAggregateDef {
 
 pub type VisualPointClustering = Operator<VisualPointClusteringParams, SingleVectorSource>;
 
+impl OperatorName for VisualPointClustering {
+    const TYPE_NAME: &'static str = "VisualPointClustering";
+}
+
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for VisualPointClustering {
-    async fn initialize(
+    async fn _initialize(
         mut self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -175,6 +181,8 @@ impl VectorOperator for VisualPointClustering {
         }
         .boxed())
     }
+
+    span_fn!(VisualPointClustering);
 }
 
 pub struct InitializedVisualPointClustering {

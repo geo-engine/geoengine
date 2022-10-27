@@ -5,9 +5,9 @@ use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor,
+    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -25,6 +25,7 @@ use geoengine_datatypes::raster::{
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
+use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -58,10 +59,14 @@ pub enum InterpolationError {
 
 pub type Interpolation = Operator<InterpolationParams, SingleRasterSource>;
 
+impl OperatorName for Interpolation {
+    const TYPE_NAME: &'static str = "Interpolation";
+}
+
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for Interpolation {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -99,6 +104,8 @@ impl RasterOperator for Interpolation {
 
         Ok(initialized_operator.boxed())
     }
+
+    span_fn!(Interpolation);
 }
 
 pub struct InitializedInterpolation {

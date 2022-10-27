@@ -1,12 +1,12 @@
 use std::marker::PhantomData;
 
 use crate::engine::{
-    ExecutionContext, Operator, QueryProcessor, RasterOperator, SingleRasterSource,
+    CreateSpan, ExecutionContext, Operator, QueryProcessor, RasterOperator, SingleRasterSource,
 };
 use crate::{
     adapters::SubQueryTileAggregator,
     engine::{
-        InitializedRasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        InitializedRasterOperator, OperatorName, RasterQueryProcessor, RasterResultDescriptor,
         TypedRasterQueryProcessor,
     },
     error,
@@ -19,6 +19,7 @@ use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use tracing::{span, Level};
 use typetag;
 
 use super::mean_aggregation_subquery::{
@@ -60,10 +61,14 @@ pub enum Aggregation {
 pub type TemporalRasterAggregation =
     Operator<TemporalRasterAggregationParameters, SingleRasterSource>;
 
+impl OperatorName for TemporalRasterAggregation {
+    const TYPE_NAME: &'static str = "TemporalRasterAggregation";
+}
+
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for TemporalRasterAggregation {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -90,6 +95,8 @@ impl RasterOperator for TemporalRasterAggregation {
 
         Ok(initialized_operator.boxed())
     }
+
+    span_fn!(TemporalRasterAggregation);
 }
 
 pub struct InitializedTemporalRasterAggregation {

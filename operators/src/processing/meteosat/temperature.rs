@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor,
+    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use rayon::ThreadPool;
+use tracing::{span, Level};
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
@@ -42,6 +43,10 @@ pub struct TemperatureParams {
 /// the raw MSG rasters.
 pub type Temperature = Operator<TemperatureParams, SingleRasterSource>;
 
+impl OperatorName for Temperature {
+    const TYPE_NAME: &'static str = "Temperature";
+}
+
 pub struct InitializedTemperature {
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
@@ -51,7 +56,7 @@ pub struct InitializedTemperature {
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for Temperature {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -111,6 +116,8 @@ impl RasterOperator for Temperature {
 
         Ok(initialized_operator.boxed())
     }
+
+    span_fn!(Temperature);
 }
 
 impl InitializedRasterOperator for InitializedTemperature {

@@ -26,6 +26,7 @@ pub use result_descriptor::{
     PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
     VectorColumnInfo, VectorResultDescriptor,
 };
+use tracing::Span;
 
 mod clonable_operator;
 mod execution_context;
@@ -167,4 +168,16 @@ macro_rules! call_on_bi_generic_raster_processor {
         }
     };
 
+}
+
+/// Shorthand type for a function that creates a `Span` for tracing
+pub type CreateSpan = fn() -> Span;
+
+/// Macro for creating a span-fn for a given type, e.g. `span_fn!(MyType)`
+macro_rules! span_fn {
+    ($op: ty) => {
+        fn span(&self) -> CreateSpan {
+            || span!(Level::TRACE, <$op>::TYPE_NAME)
+        }
+    };
 }

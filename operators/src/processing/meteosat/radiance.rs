@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor,
+    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -18,6 +18,7 @@ use geoengine_datatypes::raster::{
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+use tracing::{span, Level};
 
 // Output type is always f32
 type PixelOut = f32;
@@ -44,6 +45,10 @@ pub struct RadianceParams {}
 /// - slope: `msg.calibration_slope`
 pub type Radiance = Operator<RadianceParams, SingleRasterSource>;
 
+impl OperatorName for Radiance {
+    const TYPE_NAME: &'static str = "Radiance";
+}
+
 pub struct InitializedRadiance {
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
@@ -52,7 +57,7 @@ pub struct InitializedRadiance {
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for Radiance {
-    async fn initialize(
+    async fn _initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
@@ -111,6 +116,8 @@ impl RasterOperator for Radiance {
 
         Ok(initialized_operator.boxed())
     }
+
+    span_fn!(Radiance);
 }
 
 impl InitializedRasterOperator for InitializedRadiance {

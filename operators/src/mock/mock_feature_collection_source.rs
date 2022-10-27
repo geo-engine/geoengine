@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use crate::engine::QueryContext;
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, OperatorData, ResultDescriptor, SourceOperator,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    CreateSpan, ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName,
+    ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -19,6 +20,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
+use tracing::{span, Level};
 
 pub struct MockFeatureCollectionSourceProcessor<G>
 where
@@ -82,6 +84,10 @@ where
 }
 
 pub type MockFeatureCollectionSource<G> = SourceOperator<MockFeatureCollectionSourceParams<G>>;
+
+impl<G: Geometry + ArrowTyped> OperatorName for MockFeatureCollectionSource<G> {
+    const TYPE_NAME: &'static str = "MockFeatureCollectionSource";
+}
 
 impl<G> OperatorData for MockFeatureCollectionSource<G>
 where
@@ -156,7 +162,7 @@ macro_rules! impl_mock_feature_collection_source {
         #[typetag::serde]
         #[async_trait]
         impl VectorOperator for $newtype {
-            async fn initialize(
+            async fn _initialize(
                 self: Box<Self>,
                 _context: &dyn ExecutionContext,
             ) -> Result<Box<dyn InitializedVectorOperator>> {
@@ -194,6 +200,8 @@ macro_rules! impl_mock_feature_collection_source {
                 }
                 .boxed())
             }
+
+            span_fn!($newtype);
         }
 
         impl InitializedVectorOperator

@@ -29,11 +29,11 @@ use geoengine_datatypes::{
     primitives::{FeatureData, Geometry, MultiPoint},
     spatial_reference::SpatialReference,
 };
+use geoengine_operators::engine::QueryProcessor;
 use geoengine_operators::engine::{
     QueryContext, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
-use geoengine_operators::engine::{QueryProcessor, VectorOperator};
-use geoengine_operators::processing::{Reprojection, ReprojectionParams};
+use geoengine_operators::processing::{InitializedVectorReprojection, ReprojectionParams};
 use serde_json::json;
 use std::str::FromStr;
 use std::time::Duration;
@@ -476,18 +476,20 @@ async fn wfs_feature_handler<C: Context>(
     let initialized = if request_spatial_ref == workflow_spatial_ref {
         initialized
     } else {
-        let proj = Reprojection {
-            params: ReprojectionParams {
+        log::debug!(
+            "WFS query srs: {}, workflow srs: {} --> injecting reprojection",
+            request_spatial_ref,
+            workflow_spatial_ref
+        );
+        let ivp = InitializedVectorReprojection::try_new_with_input(
+            ReprojectionParams {
                 target_spatial_reference: request_spatial_ref,
             },
-            sources: operator.into(),
-        };
+            initialized,
+        )
+        .context(error::Operator)?;
 
-        // TODO: avoid re-initialization of the whole operator graph
-        Box::new(proj)
-            .initialize(&execution_context)
-            .await
-            .context(error::Operator)?
+        Box::new(ivp)
     };
 
     let processor = initialized.query_processor().context(error::Operator)?;
