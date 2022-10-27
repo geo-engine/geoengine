@@ -9,13 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added a trait for `FeatureCollection` creation. This is very usefull when working with generic collection types.
-
-  - https://github.com/geo-engine/geoengine/pull/656
-
 - Added spatial resolution to the `RasterResultDescriptor` that tracks the native resolution of the raster data through raster operations.
 
-- https://github.com/geo-engine/geoengine/pull/618
+  - https://github.com/geo-engine/geoengine/pull/618
 
 - Added traits and methods for updating / mapping the pixels of grid types. Also added a trait for creating grid types using a function for each pixels location.
 

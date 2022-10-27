@@ -19,17 +19,18 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{stream, StreamExt};
 use geoengine_datatypes::{
-    collections::FeatureCollectionCreation,
+    collections::FeatureCollection,
     operations::reproject::{
         reproject_and_unify_bbox, reproject_query, suggest_pixel_size_from_diag_cross_projected,
         CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
     primitives::{
-        BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+        BoundingBox2D, Geometry, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
         SpatialResolution, VectorQueryRectangle,
     },
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
+    util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{span, Level};
@@ -255,7 +256,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
 
 struct VectorReprojectionProcessor<Q, G>
 where
-    Q: VectorQueryProcessor<VectorType = G>,
+    Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
     source: Q,
     from: SpatialReference,
@@ -264,7 +265,7 @@ where
 
 impl<Q, G> VectorReprojectionProcessor<Q, G>
 where
-    Q: VectorQueryProcessor<VectorType = G>,
+    Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
     pub fn new(source: Q, from: SpatialReference, to: SpatialReference) -> Self {
         Self { source, from, to }
@@ -274,11 +275,11 @@ where
 #[async_trait]
 impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
-    Q: QueryProcessor<Output = G, SpatialBounds = BoundingBox2D>,
-    G: Reproject<CoordinateProjector> + Sync + Send,
-    G::Out: Send + FeatureCollectionCreation,
+    Q: QueryProcessor<Output = FeatureCollection<G>, SpatialBounds = BoundingBox2D>,
+    FeatureCollection<G>: Reproject<CoordinateProjector, Out = FeatureCollection<G>>,
+    G: Geometry + ArrowTyped,
 {
-    type Output = G::Out;
+    type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
 
     async fn query<'a>(
@@ -302,7 +303,7 @@ where
                 })
                 .boxed())
         } else {
-            let res = Ok(G::Out::empty());
+            let res = Ok(FeatureCollection::empty());
             Ok(Box::pin(stream::once(async { res })))
         }
     }
