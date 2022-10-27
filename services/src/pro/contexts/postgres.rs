@@ -7,7 +7,7 @@ use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
 use crate::pro::layers::postgres_layer_db::{PostgresLayerDb, PostgresLayerProviderDb};
 use crate::pro::projects::ProjectPermission;
-use crate::pro::quota::quota_manager;
+use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::users::{OidcRequestDb, UserDb, UserId, UserSession};
 use crate::pro::util::config::Oidc;
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
@@ -24,7 +24,6 @@ use bb8_postgres::{
 };
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
-use geoengine_operators::pro::QuotaTracking;
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, warn};
 use rayon::ThreadPool;
@@ -56,7 +55,7 @@ where
     query_ctx_chunk_size: ChunkByteSize,
     task_manager: Arc<SimpleTaskManager>,
     oidc_request_db: Arc<Option<OidcRequestDb>>,
-    quota: QuotaTracking,
+    quota: QuotaTrackingFactory,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -78,12 +77,11 @@ where
 
         Self::update_schema(pool.get().await?).await?;
 
-        let (quota, receiver) = QuotaTracking::new_pair();
-
-        quota_manager(receiver);
+        let user_db = Arc::new(PostgresUserDb::new(pool.clone()));
+        let quota = initialize_quota_tracking(user_db.clone());
 
         Ok(Self {
-            user_db: Arc::new(PostgresUserDb::new(pool.clone())),
+            user_db,
             project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
             workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
             dataset_db: Arc::new(PostgresDatasetDb::new(pool.clone())),
@@ -132,12 +130,11 @@ where
         add_providers_from_directory(&mut layer_provider_db, provider_defs_path.clone()).await;
         add_providers_from_directory(&mut layer_provider_db, provider_defs_path.join("pro")).await;
 
-        let (quota, receiver) = QuotaTracking::new_pair();
-
-        quota_manager(receiver);
+        let user_db = Arc::new(PostgresUserDb::new(pool.clone()));
+        let quota = initialize_quota_tracking(user_db.clone());
 
         Ok(Self {
-            user_db: Arc::new(PostgresUserDb::new(pool.clone())),
+            user_db,
             project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
             workflow_registry: Arc::new(workflow_db),
             dataset_db: Arc::new(dataset_db),
@@ -204,12 +201,14 @@ where
                             email character varying (256) UNIQUE,
                             password_hash character varying (256),
                             real_name character varying (256),
-                            active boolean NOT NULL
+                            active boolean NOT NULL,
+                            quota_used bigint NOT NULL DEFAULT 0,
                             CONSTRAINT users_anonymous_ck CHECK (
                                (email IS NULL AND password_hash IS NULL AND real_name IS NULL) OR 
                                (email IS NOT NULL AND password_hash IS NOT NULL AND 
                                 real_name IS NOT NULL) 
-                            )
+                            ),
+                            CONSTRAINT users_quota_used_ck CHECK (quota_used >= 0)
                         );
 
                         INSERT INTO users (
@@ -474,7 +473,7 @@ where
                             email character varying (256),
                             real_name character varying (256),
                             active boolean NOT NULL
-                        );
+                        );                     
                         "#
                     ,
                     system_role_id = Role::system_role_id(),
@@ -609,11 +608,11 @@ where
         &self.task_manager
     }
 
-    fn query_context(&self) -> Result<Self::QueryContext> {
+    fn query_context(&self, session: UserSession) -> Result<Self::QueryContext> {
         // TODO: load config only once
 
         let mut extensions = QueryContextExtensions::default();
-        extensions.insert(self.quota.clone());
+        extensions.insert(self.quota.create_quota_tracking(&session));
 
         Ok(QueryContextImpl::new_with_extensions(
             self.query_ctx_chunk_size,
@@ -2225,6 +2224,56 @@ mod tests {
                     properties: vec![],
                 }
             );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_tracks_quota_in_postgres() {
+        with_temp_context(|ctx, _| async move {
+            let _user = ctx
+                .user_db_ref()
+                .register(
+                    UserRegistration {
+                        email: "foo@example.com".to_string(),
+                        password: "secret1234".to_string(),
+                        real_name: "Foo Bar".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let session = ctx
+                .user_db_ref()
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
+
+            let quota = initialize_quota_tracking(ctx.user_db());
+
+            let tracking = quota.create_quota_tracking(&session);
+
+            tracking.work_unit_done().await;
+            tracking.work_unit_done().await;
+
+            // wait for quota to be recorded
+            let mut success = false;
+            for _ in 0..10 {
+                let used = ctx.user_db_ref().quota_used(&session).await.unwrap();
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+                if used == 2 {
+                    success = true;
+                    break;
+                }
+            }
+
+            assert!(success);
         })
         .await;
     }

@@ -7,7 +7,7 @@ use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDb};
 use crate::pro::contexts::{Context, ProContext};
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDb};
 use crate::pro::projects::ProHashMapProjectDb;
-use crate::pro::quota::quota_manager;
+use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::users::{HashMapUserDb, OidcRequestDb, UserDb, UserSession};
 use crate::pro::util::config::Oidc;
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
@@ -17,7 +17,6 @@ use async_trait::async_trait;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
-use geoengine_operators::pro::QuotaTracking;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
 use snafu::ResultExt;
@@ -40,7 +39,7 @@ pub struct ProInMemoryContext {
     query_ctx_chunk_size: ChunkByteSize,
     task_manager: Arc<SimpleTaskManager>,
     oidc_request_db: Arc<Option<OidcRequestDb>>,
-    quota: QuotaTracking,
+    quota: QuotaTrackingFactory,
 }
 
 impl TestDefault for ProInMemoryContext {
@@ -84,12 +83,11 @@ impl ProInMemoryContext {
         add_providers_from_directory(&mut layer_provider_db, provider_defs_path.clone()).await;
         add_providers_from_directory(&mut layer_provider_db, provider_defs_path.join("pro")).await;
 
-        let (quota, receiver) = QuotaTracking::new_pair();
-
-        quota_manager(receiver);
+        let user_db = Arc::new(HashMapUserDb::default());
+        let quota = initialize_quota_tracking(user_db.clone());
 
         Self {
-            user_db: Default::default(),
+            user_db,
             project_db: Default::default(),
             workflow_registry: Default::default(),
             dataset_db: Arc::new(dataset_db),
@@ -108,12 +106,11 @@ impl ProInMemoryContext {
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
-        let (quota, receiver) = QuotaTracking::new_pair();
-
-        quota_manager(receiver);
+        let user_db = Arc::new(HashMapUserDb::default());
+        let quota = initialize_quota_tracking(user_db.clone());
 
         ProInMemoryContext {
-            user_db: Default::default(),
+            user_db,
             project_db: Default::default(),
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
@@ -129,12 +126,11 @@ impl ProInMemoryContext {
     }
 
     pub fn new_with_oidc(oidc_db: OidcRequestDb) -> Self {
-        let (quota, receiver) = QuotaTracking::new_pair();
-
-        quota_manager(receiver);
+        let user_db = Arc::new(HashMapUserDb::default());
+        let quota = initialize_quota_tracking(user_db.clone());
 
         Self {
-            user_db: Default::default(),
+            user_db,
             project_db: Default::default(),
             workflow_registry: Default::default(),
             dataset_db: Default::default(),
@@ -221,9 +217,9 @@ impl Context for ProInMemoryContext {
         &self.task_manager
     }
 
-    fn query_context(&self) -> Result<Self::QueryContext> {
+    fn query_context(&self, session: UserSession) -> Result<Self::QueryContext> {
         let mut extensions = QueryContextExtensions::default();
-        extensions.insert(self.quota.clone());
+        extensions.insert(self.quota.create_quota_tracking(&session));
         Ok(QueryContextImpl::new_with_extensions(
             self.query_ctx_chunk_size,
             self.thread_pool.clone(),

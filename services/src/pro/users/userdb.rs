@@ -77,4 +77,21 @@ pub trait UserDb: Send + Sync {
     /// This call fails if the session is invalid
     ///
     async fn set_session_view(&self, session: &UserSession, view: STRectangle) -> Result<()>;
+
+    /// Increments the users quota by the given amount
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the session is invalid
+    ///
+    // TODO: move this method to some AdminDb?
+    async fn increment_quota_used(&self, user: &UserId, quota_used: u64) -> Result<()>;
+
+    /// Gets the current users used quota
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the session is invalid
+    ///
+    async fn quota_used(&self, session: &UserSession) -> Result<u64>;
 }

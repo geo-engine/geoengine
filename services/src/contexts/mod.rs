@@ -65,7 +65,7 @@ pub trait Context: 'static + Send + Sync + Clone {
     fn tasks(&self) -> Arc<Self::TaskManager>;
     fn tasks_ref(&self) -> &Self::TaskManager;
 
-    fn query_context(&self) -> Result<Self::QueryContext>;
+    fn query_context(&self, session: Self::Session) -> Result<Self::QueryContext>;
 
     fn execution_context(&self, session: Self::Session) -> Result<Self::ExecutionContext>;
 

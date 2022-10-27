@@ -444,7 +444,7 @@ async fn wfs_feature_handler<C: Context>(
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context(session.clone())?;
     let initialized = operator
         .clone()
         .initialize(&execution_context)
@@ -489,7 +489,7 @@ async fn wfs_feature_handler<C: Context>(
             .queryResolution
             .map_or_else(SpatialResolution::zero_point_one, |r| r.0),
     };
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(session)?;
 
     let json = match processor {
         TypedVectorQueryProcessor::Data(p) => {

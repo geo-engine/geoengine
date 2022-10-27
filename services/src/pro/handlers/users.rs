@@ -13,8 +13,10 @@ use crate::util::IdResponse;
 
 use crate::pro::users::OidcError::OidcDisabled;
 use actix_web::{web, HttpResponse, Responder};
+use serde::Serialize;
 use snafu::ensure;
 use snafu::ResultExt;
+use utoipa::ToSchema;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -30,6 +32,7 @@ where
                 .route(web::post().to(session_project_handler::<C>)),
         )
         .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)))
+        .service(web::resource("/quota").route(web::get().to(quota_handler::<C>)))
         .service(web::resource("/oidcInit").route(web::post().to(oidc_init::<C>)))
         .service(web::resource("/oidcLogin").route(web::post().to(oidc_login::<C>)));
 }
@@ -241,6 +244,32 @@ pub(crate) async fn session_view_handler<C: ProContext>(
         .await?;
 
     Ok(HttpResponse::Ok())
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct QuotaUsed {
+    pub used: u64,
+}
+
+// Retrieves the used quota of the user.
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/quota",
+    responses(
+        (status = 200, description = "The used quota of the user", body = QuotaUsed,
+            example = json!({                
+                "used": 1234,
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn quota_handler<C: ProContext>(ctx: web::Data<C>, session: C::Session) -> Result<impl Responder> {
+    let quota_used = ctx.user_db_ref().quota_used(&session).await?;
+    Ok(web::Json(QuotaUsed{used: quota_used}))
 }
 
 /// Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.

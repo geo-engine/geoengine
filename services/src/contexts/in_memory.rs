@@ -164,7 +164,7 @@ impl Context for InMemoryContext {
         &self.task_manager
     }
 
-    fn query_context(&self) -> Result<Self::QueryContext> {
+    fn query_context(&self, _session: SimpleSession) -> Result<Self::QueryContext> {
         Ok(QueryContextImpl::new(
             self.query_ctx_chunk_size,
             self.thread_pool.clone(),

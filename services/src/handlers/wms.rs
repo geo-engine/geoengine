@@ -262,7 +262,7 @@ async fn wms_map_handler<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context(session.clone())?;
 
     let initialized = operator
         .clone()
@@ -313,7 +313,7 @@ async fn wms_map_handler<C: Context>(
         ),
     };
 
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(session)?;
 
     let colorizer = colorizer_from_style(&request.styles)?;
 
@@ -523,7 +523,7 @@ mod tests {
                 .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
             },
-            ctx.query_context().unwrap(),
+            ctx.query_context(SimpleSession::default()).unwrap(),
             360,
             180,
             None,

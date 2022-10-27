@@ -1,32 +1,36 @@
 // This is an inclusion point of Geo Engine Pro
 
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
-
-use geoengine_datatypes::util::test::TestDefault;
-
-use crate::{error, util::Result};
+use futures::{channel::mpsc::Sender, Future, SinkExt};
+use uuid::Uuid;
 
 pub mod adapters;
 pub mod meta;
 
+/// An Id for a computation used for quota tracking
+pub type ComputationId = Uuid;
+
 #[derive(Clone)]
 pub struct QuotaTracking {
-    tx: SyncSender<()>,
+    quota_sender: Sender<ComputationId>,
+    computation: ComputationId,
 }
 
 impl QuotaTracking {
-    pub fn new_pair() -> (Self, Receiver<()>) {
-        let (tx, rx) = sync_channel(100);
-        (Self { tx }, rx)
+    pub fn new(quota_sender: Sender<ComputationId>, computation: ComputationId) -> Self {
+        Self {
+            quota_sender,
+            computation,
+        }
     }
 
-    pub fn work_unit_done(&self) -> Result<()> {
-        self.tx.send(()).map_err(|_| error::Error::MpscSend)
-    }
-}
-
-impl TestDefault for QuotaTracking {
-    fn test_default() -> Self {
-        Self::new_pair().0
+    pub fn work_unit_done(&self) -> impl Future<Output = ()> {
+        let mut sender = self.quota_sender.clone();
+        let computation = self.computation;
+        async move {
+            sender
+                .send(computation)
+                .await
+                .expect("the quota receiver should never close the receiving end of the channel");
+        }
     }
 }

@@ -129,7 +129,7 @@ async fn get_plot_handler<C: Context>(
 
     let operator = workflow.operator.get_plot().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context(session.clone())?;
 
     let initialized = operator
         .initialize(&execution_context)
@@ -161,7 +161,7 @@ async fn get_plot_handler<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(session)?;
 
     let output_format = PlotOutputFormat::from(&processor);
     let plot_type = processor.plot_type();

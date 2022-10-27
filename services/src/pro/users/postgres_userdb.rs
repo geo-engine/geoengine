@@ -432,4 +432,29 @@ where
 
         Ok(())
     }
+
+    async fn increment_quota_used(&self, user: &UserId, quota_used: u64) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare("UPDATE users SET quota_used = quota_used + $1 WHERE id = $2;")
+            .await?;
+
+        conn.execute(&stmt, &[&(quota_used as i64), &user]).await?;
+
+        Ok(())
+    }
+
+    async fn quota_used(&self, session: &UserSession) -> Result<u64> {
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare("SELECT quota_used FROM users WHERE id = $1;")
+            .await?;
+
+        let row = conn
+            .query_one(&stmt, &[&session.user.id])
+            .await
+            .map_err(|_error| error::Error::InvalidSession)?;
+
+        Ok(row.get::<usize, i64>(0) as u64)
+    }
 }

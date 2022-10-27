@@ -352,7 +352,7 @@ async fn wcs_get_coverage_handler<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context(session.clone())?;
 
     let initialized = operator
         .clone()
@@ -405,7 +405,7 @@ async fn wcs_get_coverage_handler<C: Context>(
         spatial_resolution,
     };
 
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(session)?;
 
     let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_geotiff_bytes(

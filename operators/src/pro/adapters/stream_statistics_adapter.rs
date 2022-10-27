@@ -66,7 +66,8 @@ where
                     element_count = *this.element_count,
                     empty = false
                 );
-                let _r = (*this.quota).work_unit_done(); // TODO: handle error => end stream/return error
+                // track quota asynchronously
+                let _r = crate::util::spawn((*this.quota).work_unit_done());
             }
             None => {
                 tracing::debug!(
@@ -87,8 +88,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use futures::StreamExt;
+
+    use futures::{channel::mpsc::channel, StreamExt};
     use tracing::{span, Level};
+
+    use crate::pro::ComputationId;
 
     use super::*;
 
@@ -96,7 +100,11 @@ mod tests {
     async fn simple() {
         let v = vec![1, 2, 3];
         let v_stream = futures::stream::iter(v);
-        let (quota, _rx) = QuotaTracking::new_pair();
+        let (tx, _rx) = channel::<ComputationId>(111);
+        let quota = QuotaTracking {
+            quota_sender: tx,
+            computation: ComputationId::new_v4(),
+        };
         let mut v_stat_stream =
             StreamStatisticsAdapter::new(v_stream, span!(Level::TRACE, "test"), quota);
 
