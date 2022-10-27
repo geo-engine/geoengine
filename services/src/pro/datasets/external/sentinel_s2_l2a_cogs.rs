@@ -342,6 +342,18 @@ impl SentinelS2L2aCogsMetaData {
         // for reference: https://stacspec.org/STAC-ext-api.html#operation/getSearchSTAC
         debug!("create_loading_info with: {:?}", &query);
         let request_params = self.request_params(query)?;
+
+        if request_params.is_none() {
+            log::debug!("Request params are empty -> returning empty loading info");
+            return Ok(GdalLoadingInfo {
+                info: GdalLoadingInfoTemporalSliceIterator::Static {
+                    parts: vec![].into_iter(),
+                },
+            });
+        }
+
+        let request_params = request_params.expect("The none case was checked above");
+
         debug!("queried with: {:?}", &request_params);
         let features = self.load_all_features(&request_params).await?;
         debug!("number of features returned by STAC: {}", features.len());
@@ -490,7 +502,7 @@ impl SentinelS2L2aCogsMetaData {
         })
     }
 
-    fn request_params(&self, query: RasterQueryRectangle) -> Result<Vec<(String, String)>> {
+    fn request_params(&self, query: RasterQueryRectangle) -> Result<Option<Vec<(String, String)>>> {
         let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile
@@ -506,27 +518,29 @@ impl SentinelS2L2aCogsMetaData {
         );
         let bbox = bbox.reproject_clipped(&projector)?; // TODO: use reproject_clipped on SpatialPartition2D
 
-        Ok(vec![
-            (
-                "collections[]".to_owned(),
-                "sentinel-s2-l2a-cogs".to_owned(),
-            ),
-            (
-                "bbox".to_owned(),
-                format!(
-                    "[{},{},{},{}]", // array-brackets are not used in standard but required here for unknkown reason
-                    bbox.lower_left().x,
-                    bbox.lower_left().y,
-                    bbox.upper_right().x,
-                    bbox.upper_right().y
+        Ok(bbox.map(|bbox| {
+            vec![
+                (
+                    "collections[]".to_owned(),
+                    "sentinel-s2-l2a-cogs".to_owned(),
                 ),
-            ), // TODO: order coordinates depending on projection
-            (
-                "datetime".to_owned(),
-                format!("{}/{}", t_start.to_rfc3339(), t_end.to_rfc3339()),
-            ),
-            ("limit".to_owned(), "500".to_owned()),
-        ])
+                (
+                    "bbox".to_owned(),
+                    format!(
+                        "[{},{},{},{}]", // array-brackets are not used in standard but required here for unknkown reason
+                        bbox.lower_left().x,
+                        bbox.lower_left().y,
+                        bbox.upper_right().x,
+                        bbox.upper_right().y
+                    ),
+                ), // TODO: order coordinates depending on projection
+                (
+                    "datetime".to_owned(),
+                    format!("{}/{}", t_start.to_rfc3339(), t_end.to_rfc3339()),
+                ),
+                ("limit".to_owned(), "500".to_owned()),
+            ]
+        }))
     }
 
     async fn load_all_features<T: Serialize + ?Sized + Debug>(

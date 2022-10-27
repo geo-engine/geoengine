@@ -2,7 +2,10 @@ use std::marker::PhantomData;
 
 use super::map_query::MapQueryProcessor;
 use crate::{
-    adapters::{fold_by_coordinate_lookup_future, RasterSubQueryAdapter, TileReprojectionSubQuery},
+    adapters::{
+        fold_by_coordinate_lookup_future, RasterSubQueryAdapter, SparseTilesFillAdapter,
+        TileReprojectionSubQuery,
+    },
     engine::{
         CreateSpan, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
         Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
@@ -14,15 +17,20 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use futures::StreamExt;
+use futures::{stream, StreamExt};
 use geoengine_datatypes::{
+    collections::FeatureCollection,
     operations::reproject::{
         reproject_and_unify_bbox, reproject_query, suggest_pixel_size_from_diag_cross_projected,
         CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
-    primitives::{BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle},
+    primitives::{
+        BoundingBox2D, Geometry, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+        SpatialResolution, VectorQueryRectangle,
+    },
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
+    util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{span, Level};
@@ -34,67 +42,152 @@ pub struct ReprojectionParams {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct VectorReprojectionState {
-    source_srs: SpatialReference,
-    target_srs: SpatialReference,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct RasterReprojectionState {
-    source_srs: SpatialReference,
-    target_srs: SpatialReference,
-    tiling_spec: TilingSpecification,
+pub struct ReprojectionBounds {
+    valid_in_bounds: SpatialPartition2D,
+    valid_out_bounds: SpatialPartition2D,
 }
 
 pub type Reprojection = Operator<ReprojectionParams, SingleRasterOrVectorSource>;
+
+impl Reprojection {}
 
 impl OperatorName for Reprojection {
     const TYPE_NAME: &'static str = "Reprojection";
 }
 
-impl Reprojection {
-    fn derive_raster_result_descriptor(
-        target_sref: SpatialReference,
-        in_desc: &RasterResultDescriptor,
-    ) -> Result<RasterResultDescriptor> {
-        let source_sref: Option<SpatialReference> = in_desc.spatial_reference.into();
-        let source_sref = source_sref.ok_or(Error::SpatialReferenceMustNotBeUnreferenced)?;
-
-        let (in_bbox, out_bbox) = if let Some(bbox) = in_desc.bbox {
-            reproject_and_unify_bbox(bbox, source_sref, target_sref)?
-        } else {
-            // use the parts of the area of use that are valid in both spatial references
-            let valid_bounds_in = source_sref.valid_bounds(&target_sref)?;
-            let valid_bounds_out = target_sref.valid_bounds(&source_sref)?;
-
-            (valid_bounds_in, valid_bounds_out)
-        };
-
-        let out_res = in_desc.resolution.and_then(|res| {
-            suggest_pixel_size_from_diag_cross_projected(in_bbox, out_bbox, res).ok()
-        });
-
-        Ok(RasterResultDescriptor {
-            spatial_reference: target_sref.into(),
-            data_type: in_desc.data_type,
-            measurement: in_desc.measurement.clone(),
-            time: in_desc.time,
-            bbox: in_desc.bbox.map(|_| out_bbox),
-            resolution: out_res,
-        })
-    }
-}
-
 pub struct InitializedVectorReprojection {
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedVectorOperator>,
-    state: VectorReprojectionState,
+    source_srs: SpatialReference,
+    target_srs: SpatialReference,
 }
 
 pub struct InitializedRasterReprojection {
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
-    state: RasterReprojectionState,
+    state: Option<ReprojectionBounds>,
+    source_srs: SpatialReference,
+    target_srs: SpatialReference,
+    tiling_spec: TilingSpecification,
+}
+
+impl InitializedVectorReprojection {
+    /// Create a new `InitializedVectorReprojection` instance.
+    /// The `source` must have the same `SpatialReference` as `source_srs`.
+    ///
+    /// # Errors
+    /// This function errors if the `source`'s `SpatialReference` is `None`.
+    /// This function errors if the source's bounding box cannot be reprojected to the target's `SpatialReference`.
+    pub fn try_new_with_input(
+        params: ReprojectionParams,
+        source_vector_operator: Box<dyn InitializedVectorOperator>,
+    ) -> Result<Self> {
+        let in_desc: VectorResultDescriptor = source_vector_operator.result_descriptor().clone();
+
+        let in_srs = Into::<Option<SpatialReference>>::into(in_desc.spatial_reference)
+            .ok_or(Error::AllSourcesMustHaveSameSpatialReference)?;
+
+        let bbox = if let Some(bbox) = in_desc.bbox {
+            let projector =
+                CoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
+
+            bbox.reproject_clipped(&projector)? // TODO: if this is none then we could skip the whole reprojection similar to raster?
+        } else {
+            None
+        };
+
+        let out_desc = VectorResultDescriptor {
+            spatial_reference: params.target_spatial_reference.into(),
+            data_type: in_desc.data_type,
+            columns: in_desc.columns.clone(),
+            time: in_desc.time,
+            bbox,
+        };
+
+        Ok(InitializedVectorReprojection {
+            result_descriptor: out_desc,
+            source: source_vector_operator,
+            source_srs: in_srs,
+            target_srs: params.target_spatial_reference,
+        })
+    }
+}
+
+impl InitializedRasterReprojection {
+    pub fn try_new_with_input(
+        params: ReprojectionParams,
+        source_raster_operator: Box<dyn InitializedRasterOperator>,
+        tiling_spec: TilingSpecification,
+    ) -> Result<Self> {
+        let in_desc: RasterResultDescriptor = source_raster_operator.result_descriptor().clone();
+
+        let in_srs = Into::<Option<SpatialReference>>::into(in_desc.spatial_reference)
+            .ok_or(Error::AllSourcesMustHaveSameSpatialReference)?;
+
+        // calculate the intersection of input and output srs in both coordinate systems
+        let (in_bounds, out_bounds, out_res) = Self::derive_raster_in_bounds_out_bounds_out_res(
+            in_srs,
+            params.target_spatial_reference,
+            in_desc.resolution,
+            in_desc.bbox,
+        )?;
+
+        let result_descriptor = RasterResultDescriptor {
+            spatial_reference: params.target_spatial_reference.into(),
+            data_type: in_desc.data_type,
+            measurement: in_desc.measurement.clone(),
+            time: in_desc.time,
+            bbox: out_bounds,
+            resolution: out_res,
+        };
+
+        let state = match (in_bounds, out_bounds) {
+            (Some(in_bounds), Some(out_bounds)) => Some(ReprojectionBounds {
+                valid_in_bounds: in_bounds,
+                valid_out_bounds: out_bounds,
+            }),
+            _ => None,
+        };
+
+        Ok(InitializedRasterReprojection {
+            result_descriptor,
+            source: source_raster_operator,
+            state,
+            source_srs: in_srs,
+            target_srs: params.target_spatial_reference,
+            tiling_spec,
+        })
+    }
+
+    fn derive_raster_in_bounds_out_bounds_out_res(
+        source_srs: SpatialReference,
+        target_srs: SpatialReference,
+        source_spatial_resolution: Option<SpatialResolution>,
+        source_bbox: Option<SpatialPartition2D>,
+    ) -> Result<(
+        Option<SpatialPartition2D>,
+        Option<SpatialPartition2D>,
+        Option<SpatialResolution>,
+    )> {
+        let (in_bbox, out_bbox) = if let Some(bbox) = source_bbox {
+            reproject_and_unify_bbox(bbox, source_srs, target_srs)?
+        } else {
+            // use the parts of the area of use that are valid in both spatial references
+            let valid_bounds_in = source_srs.area_of_use_intersection(&target_srs)?;
+            let valid_bounds_out = target_srs.area_of_use_intersection(&source_srs)?;
+
+            (valid_bounds_in, valid_bounds_out)
+        };
+
+        let out_res = match (source_spatial_resolution, in_bbox, out_bbox) {
+            (Some(in_res), Some(in_bbox), Some(out_bbox)) => {
+                suggest_pixel_size_from_diag_cross_projected(in_bbox, out_bbox, in_res).ok()
+            }
+            _ => None,
+        };
+
+        Ok((in_bbox, out_bbox, out_res))
+    }
 }
 
 #[typetag::serde]
@@ -114,40 +207,10 @@ impl VectorOperator for Reprojection {
             }
         };
 
-        let vector_operator = vector_operator.initialize(context).await?;
-
-        let in_desc: &VectorResultDescriptor = vector_operator.result_descriptor();
-
-        let bbox = if let Some(bbox) = in_desc.bbox {
-            let in_srs: Option<SpatialReference> = in_desc.spatial_reference.into();
-            let projector = CoordinateProjector::from_known_srs(
-                in_srs.ok_or(Error::AllSourcesMustHaveSameSpatialReference)?,
-                self.params.target_spatial_reference,
-            )?;
-
-            Some(bbox.reproject_clipped(&projector)?)
-        } else {
-            None
-        };
-
-        let out_desc = VectorResultDescriptor {
-            spatial_reference: self.params.target_spatial_reference.into(),
-            data_type: in_desc.data_type,
-            columns: in_desc.columns.clone(),
-            time: in_desc.time,
-            bbox,
-        };
-
-        let state = VectorReprojectionState {
-            source_srs: Option::from(in_desc.spatial_reference).unwrap(),
-            target_srs: self.params.target_spatial_reference,
-        };
-
-        let initialized_operator = InitializedVectorReprojection {
-            result_descriptor: out_desc,
-            source: vector_operator,
-            state,
-        };
+        let initialized_operator = InitializedVectorReprojection::try_new_with_input(
+            self.params,
+            vector_operator.initialize(context).await?,
+        )?;
 
         Ok(initialized_operator.boxed())
     }
@@ -161,42 +224,30 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
     }
 
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        let state = self.state;
+        let source_srs = self.source_srs;
+        let target_srs = self.target_srs;
         match self.source.query_processor()? {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
-                MapQueryProcessor::new(source, move |query| {
-                    reproject_query(query, state.source_srs, state.target_srs).map_err(From::from)
-                })
+                MapQueryProcessor::new(
+                    source,
+                    move |query| reproject_query(query, source_srs, target_srs).map_err(From::from),
+                    (),
+                )
                 .boxed(),
             )),
             TypedVectorQueryProcessor::MultiPoint(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPoint(
-                    VectorReprojectionProcessor::new(
-                        source,
-                        self.state.source_srs,
-                        self.state.target_srs,
-                    )
-                    .boxed(),
+                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiLineString(source) => {
                 Ok(TypedVectorQueryProcessor::MultiLineString(
-                    VectorReprojectionProcessor::new(
-                        source,
-                        self.state.source_srs,
-                        self.state.target_srs,
-                    )
-                    .boxed(),
+                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiPolygon(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPolygon(
-                    VectorReprojectionProcessor::new(
-                        source,
-                        self.state.source_srs,
-                        self.state.target_srs,
-                    )
-                    .boxed(),
+                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
                 ))
             }
         }
@@ -205,7 +256,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
 
 struct VectorReprojectionProcessor<Q, G>
 where
-    Q: VectorQueryProcessor<VectorType = G>,
+    Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
     source: Q,
     from: SpatialReference,
@@ -214,7 +265,7 @@ where
 
 impl<Q, G> VectorReprojectionProcessor<Q, G>
 where
-    Q: VectorQueryProcessor<VectorType = G>,
+    Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
     pub fn new(source: Q, from: SpatialReference, to: SpatialReference) -> Self {
         Self { source, from, to }
@@ -224,10 +275,11 @@ where
 #[async_trait]
 impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
-    Q: QueryProcessor<Output = G, SpatialBounds = BoundingBox2D>,
-    G: Reproject<CoordinateProjector> + Sync + Send,
+    Q: QueryProcessor<Output = FeatureCollection<G>, SpatialBounds = BoundingBox2D>,
+    FeatureCollection<G>: Reproject<CoordinateProjector, Out = FeatureCollection<G>>,
+    G: Geometry + ArrowTyped,
 {
-    type Output = G::Out;
+    type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
 
     async fn query<'a>(
@@ -237,18 +289,23 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let rewritten_query = reproject_query(query, self.from, self.to)?;
 
-        Ok(self
-            .source
-            .query(rewritten_query, ctx)
-            .await?
-            .map(move |collection_result| {
-                collection_result.and_then(|collection| {
-                    CoordinateProjector::from_known_srs(self.from, self.to)
-                        .and_then(|projector| collection.reproject(projector.as_ref()))
-                        .map_err(Into::into)
+        if let Some(rewritten_query) = rewritten_query {
+            Ok(self
+                .source
+                .query(rewritten_query, ctx)
+                .await?
+                .map(move |collection_result| {
+                    collection_result.and_then(|collection| {
+                        CoordinateProjector::from_known_srs(self.from, self.to)
+                            .and_then(|projector| collection.reproject(projector.as_ref()))
+                            .map_err(Into::into)
+                    })
                 })
-            })
-            .boxed())
+                .boxed())
+        } else {
+            let res = Ok(FeatureCollection::empty());
+            Ok(Box::pin(stream::once(async { res })))
+        }
     }
 }
 
@@ -269,26 +326,13 @@ impl RasterOperator for Reprojection {
             }
         };
 
-        let raster_operator = raster_operator.initialize(context).await?;
+        let initialized_operator = InitializedRasterReprojection::try_new_with_input(
+            self.params,
+            raster_operator.initialize(context).await?,
+            context.tiling_specification(),
+        )?;
 
-        let in_desc: &RasterResultDescriptor = raster_operator.result_descriptor();
-
-        let out_desc =
-            Self::derive_raster_result_descriptor(self.params.target_spatial_reference, in_desc)?;
-
-        let state = RasterReprojectionState {
-            source_srs: Option::from(in_desc.spatial_reference).unwrap(),
-            target_srs: self.params.target_spatial_reference,
-            tiling_spec: context.tiling_specification(),
-        };
-
-        let op = InitializedRasterReprojection {
-            result_descriptor: out_desc,
-            source: raster_operator,
-            state,
-        };
-
-        Ok(op.boxed())
+        Ok(initialized_operator.boxed())
     }
 
     span_fn!(Reprojection);
@@ -304,27 +348,25 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let q = self.source.query_processor()?;
 
-        let s = self.state;
-
         Ok(match self.result_descriptor.data_type {
             geoengine_datatypes::raster::RasterDataType::U8 => {
                 let qt = q.get_u8().unwrap();
                 TypedRasterQueryProcessor::U8(Box::new(RasterReprojectionProcessor::new(
                     qt,
-                    s.source_srs,
-                    s.target_srs,
-                    s.tiling_spec,
-                    self.result_descriptor.bbox,
+                    self.source_srs,
+                    self.target_srs,
+                    self.tiling_spec,
+                    self.state,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
                 let qt = q.get_u16().unwrap();
                 TypedRasterQueryProcessor::U16(Box::new(RasterReprojectionProcessor::new(
                     qt,
-                    s.source_srs,
-                    s.target_srs,
-                    s.tiling_spec,
-                    self.result_descriptor.bbox,
+                    self.source_srs,
+                    self.target_srs,
+                    self.tiling_spec,
+                    self.state,
                 )))
             }
 
@@ -332,80 +374,80 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 let qt = q.get_u32().unwrap();
                 TypedRasterQueryProcessor::U32(Box::new(RasterReprojectionProcessor::new(
                     qt,
-                    s.source_srs,
-                    s.target_srs,
-                    s.tiling_spec,
-                    self.result_descriptor.bbox,
+                    self.source_srs,
+                    self.target_srs,
+                    self.tiling_spec,
+                    self.state,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
                 let qt = q.get_u64().unwrap();
                 TypedRasterQueryProcessor::U64(Box::new(RasterReprojectionProcessor::new(
                     qt,
-                    s.source_srs,
-                    s.target_srs,
-                    s.tiling_spec,
-                    self.result_descriptor.bbox,
+                    self.source_srs,
+                    self.target_srs,
+                    self.tiling_spec,
+                    self.state,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
                 let qt = q.get_i8().unwrap();
                 TypedRasterQueryProcessor::I8(Box::new(RasterReprojectionProcessor::new(
                     qt,
-                    s.source_srs,
-                    s.target_srs,
-                    s.tiling_spec,
-                    self.result_descriptor.bbox,
+                    self.source_srs,
+                    self.target_srs,
+                    self.tiling_spec,
+                    self.state,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
                 let qt = q.get_i16().unwrap();
                 TypedRasterQueryProcessor::I16(Box::new(RasterReprojectionProcessor::new(
                     qt,
-                    s.source_srs,
-                    s.target_srs,
-                    s.tiling_spec,
-                    self.result_descriptor.bbox,
+                    self.source_srs,
+                    self.target_srs,
+                    self.tiling_spec,
+                    self.state,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
                 let qt = q.get_i32().unwrap();
                 TypedRasterQueryProcessor::I32(Box::new(RasterReprojectionProcessor::new(
                     qt,
-                    s.source_srs,
-                    s.target_srs,
-                    s.tiling_spec,
-                    self.result_descriptor.bbox,
+                    self.source_srs,
+                    self.target_srs,
+                    self.tiling_spec,
+                    self.state,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
                 let qt = q.get_i64().unwrap();
                 TypedRasterQueryProcessor::I64(Box::new(RasterReprojectionProcessor::new(
                     qt,
-                    s.source_srs,
-                    s.target_srs,
-                    s.tiling_spec,
-                    self.result_descriptor.bbox,
+                    self.source_srs,
+                    self.target_srs,
+                    self.tiling_spec,
+                    self.state,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
                 let qt = q.get_f32().unwrap();
                 TypedRasterQueryProcessor::F32(Box::new(RasterReprojectionProcessor::new(
                     qt,
-                    s.source_srs,
-                    s.target_srs,
-                    s.tiling_spec,
-                    self.result_descriptor.bbox,
+                    self.source_srs,
+                    self.target_srs,
+                    self.tiling_spec,
+                    self.state,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
                 let qt = q.get_f64().unwrap();
                 TypedRasterQueryProcessor::F64(Box::new(RasterReprojectionProcessor::new(
                     qt,
-                    s.source_srs,
-                    s.target_srs,
-                    s.tiling_spec,
-                    self.result_descriptor.bbox,
+                    self.source_srs,
+                    self.target_srs,
+                    self.tiling_spec,
+                    self.state,
                 )))
             }
         })
@@ -420,7 +462,7 @@ where
     from: SpatialReference,
     to: SpatialReference,
     tiling_spec: TilingSpecification,
-    data_bounds: Option<SpatialPartition2D>,
+    state: Option<ReprojectionBounds>,
     _phantom_data: PhantomData<P>,
 }
 
@@ -434,14 +476,14 @@ where
         from: SpatialReference,
         to: SpatialReference,
         tiling_spec: TilingSpecification,
-        data_bounds: Option<SpatialPartition2D>,
+        state: Option<ReprojectionBounds>,
     ) -> Self {
         Self {
             source,
             from,
             to,
             tiling_spec,
-            data_bounds,
+            state,
             _phantom_data: PhantomData,
         }
     }
@@ -461,44 +503,52 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        // calculate the intersection of input and output srs in both coordinate systems
-        // TODO: do this in initialization?
-        let (valid_bounds_in, valid_bounds_out) = if let Some(data_bounds) = self.data_bounds {
-            reproject_and_unify_bbox(data_bounds, self.from, self.to)?
+        if let Some(state) = &self.state {
+            let valid_bounds_in = state.valid_in_bounds;
+            let valid_bounds_out = state.valid_out_bounds;
+
+            // calculate the spatial resolution the input data should have using the intersection and the requested resolution
+            let in_spatial_res = suggest_pixel_size_from_diag_cross_projected(
+                valid_bounds_out,
+                valid_bounds_in,
+                query.spatial_resolution,
+            )?;
+
+            // setup the subquery
+            let sub_query_spec = TileReprojectionSubQuery {
+                in_srs: self.from,
+                out_srs: self.to,
+                fold_fn: fold_by_coordinate_lookup_future,
+                in_spatial_res,
+                valid_bounds_in,
+                valid_bounds_out,
+                _phantom_data: PhantomData,
+            };
+
+            // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
+            Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+                &self.source,
+                query,
+                self.tiling_spec,
+                ctx,
+                sub_query_spec,
+            )
+            .filter_and_fill())
         } else {
-            let valid_bounds_in = self.from.valid_bounds(&self.to)?;
-            let valid_bounds_out = self.to.valid_bounds(&self.from)?;
+            log::debug!("No intersection between source data / srs and target srs");
 
-            (valid_bounds_in, valid_bounds_out)
-        };
+            let tiling_strat = self
+                .tiling_spec
+                .strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
 
-        // calculate the spatial resolution the input data should have using the intersection and the requested resolution
-        let in_spatial_res = suggest_pixel_size_from_diag_cross_projected(
-            valid_bounds_out,
-            valid_bounds_in,
-            query.spatial_resolution,
-        )?;
-
-        // setup the subquery
-        let sub_query_spec = TileReprojectionSubQuery {
-            in_srs: self.from,
-            out_srs: self.to,
-            fold_fn: fold_by_coordinate_lookup_future,
-            in_spatial_res,
-            valid_bounds_in: Some(valid_bounds_in),
-            valid_bounds_out: Some(valid_bounds_out),
-            _phantom_data: PhantomData,
-        };
-
-        // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
-        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
-            &self.source,
-            query,
-            self.tiling_spec,
-            ctx,
-            sub_query_spec,
-        )
-        .filter_and_fill())
+            let grid_bounds = tiling_strat.tile_grid_box(query.spatial_partition());
+            Ok(Box::pin(SparseTilesFillAdapter::new(
+                stream::empty(),
+                grid_bounds,
+                tiling_strat.geo_transform,
+                self.tiling_spec.tile_size_in_pixels,
+            )))
+        }
     }
 }
 
@@ -521,7 +571,9 @@ mod tests {
     use float_cmp::approx_eq;
     use futures::StreamExt;
     use geoengine_datatypes::collections::IntoGeometryIterator;
-    use geoengine_datatypes::primitives::{AxisAlignedRectangle, DateTimeParseFormat};
+    use geoengine_datatypes::primitives::{
+        AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat,
+    };
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -819,7 +871,7 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
-                    resolution: None,
+                    resolution: Some(SpatialResolution::one()),
                 },
             },
         }
@@ -957,7 +1009,7 @@ mod tests {
         };
 
         let expected = BoundingBox2D::new_unchecked(
-            (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
+            (-20_037_508.342_789_244, -20_048_966.104_014_594).into(),
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
         );
 
@@ -966,6 +1018,7 @@ mod tests {
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
             SpatialReference::epsg_4326(),
         )
+        .unwrap()
         .unwrap();
 
         assert!(approx_eq!(
@@ -1293,42 +1346,186 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn points_from_utm36n_to_wgs84() {
+        let exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
+
+        let point_source = MockFeatureCollectionSource::with_collections_and_sref(
+            vec![MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    vec![(166_021.443_080_538_42, 0.0)],
+                    vec![(534_994.655_061_136_1, 9_329_005.182_447_437)],
+                    vec![(499_999.999_999_999_5, 4_649_776.224_819_178)],
+                ])
+                .unwrap(),
+                vec![TimeInterval::default(); 3],
+                HashMap::default(),
+            )
+            .unwrap()],
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n
+        )
+        .boxed();
+
+        let initialized_operator = VectorOperator::boxed(Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::new(
+                    SpatialReferenceAuthority::Epsg,
+                    4326, // utm36n
+                ),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: point_source.into(),
+            },
+        })
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        let qp = initialized_operator
+            .query_processor()
+            .unwrap()
+            .multi_point()
+            .unwrap();
+
+        let spatial_bounds = BoundingBox2D::new(
+            (30.0, 0.0).into(),  // lower left of utm36n area of use
+            (33.0, 42.0).into(), // upper right of utm36n area of use
+        )
+        .unwrap();
+
+        let qs = qp
+            .vector_query(
+                QueryRectangle {
+                    spatial_bounds,
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::zero_point_one(),
+                },
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let points = qs.map(Result::unwrap).collect::<Vec<_>>().await;
+
+        assert_eq!(points.len(), 1);
+
+        let points = &points[0];
+
+        assert!(approx_eq!(
+            &[Coordinate2D],
+            points.coordinates(),
+            &[
+                (30.0, 0.0).into(), // lower left of utm36n area of use
+                (36.0, 84.0).into(),
+                (33.0, 42.0).into(), // upper right of utm36n area of use
+            ]
+        ));
+    }
+
+    #[tokio::test]
+    async fn points_from_utm36n_to_wgs84_out_of_area() {
+        // This test checks that points that are outside the area of use of the target spatial reference are not projected and an empty collection is returned
+
+        let exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = MockQueryContext::test_default();
+
+        let point_source = MockFeatureCollectionSource::with_collections_and_sref(
+            vec![MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    vec![(758_565., 4_928_353.)], // (12.25, 44,46)
+                ])
+                .unwrap(),
+                vec![TimeInterval::default(); 1],
+                HashMap::default(),
+            )
+            .unwrap()],
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n
+        )
+        .boxed();
+
+        let initialized_operator = VectorOperator::boxed(Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::new(
+                    SpatialReferenceAuthority::Epsg,
+                    4326, // utm36n
+                ),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: point_source.into(),
+            },
+        })
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        let qp = initialized_operator
+            .query_processor()
+            .unwrap()
+            .multi_point()
+            .unwrap();
+
+        let spatial_bounds = BoundingBox2D::new(
+            (10.0, 0.0).into(),  // -20 x values left of lower left of utm36n area of use
+            (13.0, 42.0).into(), // -20 x values left of upper right of utm36n area of use
+        )
+        .unwrap();
+
+        let qs = qp
+            .vector_query(
+                QueryRectangle {
+                    spatial_bounds,
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::zero_point_one(),
+                },
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let points = qs.map(Result::unwrap).collect::<Vec<_>>().await;
+
+        assert_eq!(points.len(), 1);
+
+        let points = &points[0];
+
+        assert!(geoengine_datatypes::collections::FeatureCollectionInfos::is_empty(points));
+        assert!(points.coordinates().is_empty());
+    }
+
     #[test]
     fn it_derives_raster_result_descriptor() {
         let in_proj = SpatialReference::epsg_4326();
         let out_proj = SpatialReference::from_str("EPSG:3857").unwrap();
+        let bbox = Some(SpatialPartition2D::new_unchecked(
+            (-180., 90.).into(),
+            (180., -90.).into(),
+        ));
 
-        let in_desc = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: in_proj.into(),
-            measurement: Measurement::Unitless,
-            time: None,
-            bbox: Some(SpatialPartition2D::new_unchecked(
-                (-180., 90.).into(),
-                (180., -90.).into(),
-            )),
-            resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
-        };
+        let resolution = Some(SpatialResolution::new_unchecked(0.1, 0.1));
 
-        let out_desc = Reprojection::derive_raster_result_descriptor(out_proj, &in_desc).unwrap();
+        let (in_bounds, out_bounds, out_res) =
+            InitializedRasterReprojection::derive_raster_in_bounds_out_bounds_out_res(
+                in_proj, out_proj, resolution, bbox,
+            )
+            .unwrap();
 
         assert_eq!(
-            out_desc,
-            RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: out_proj.into(),
-                measurement: Measurement::Unitless,
-                time: None,
-                bbox: out_proj
-                    .area_of_use_projected::<SpatialPartition2D>()
-                    .unwrap()
-                    .into(),
-                // TODO: y resolution should be double the x resolution, but currently we only compute a uniform resolution
-                resolution: Some(SpatialResolution::new_unchecked(
-                    14_237.781_884_528_267,
-                    14_237.781_884_528_267
-                )),
-            }
+            in_bounds.unwrap(),
+            SpatialPartition2D::new_unchecked((-180., 85.06).into(), (180., -85.06).into(),)
+        );
+
+        assert_eq!(
+            out_bounds.unwrap(),
+            out_proj
+                .area_of_use_projected::<SpatialPartition2D>()
+                .unwrap()
+        );
+
+        // TODO: y resolution should be double the x resolution, but currently we only compute a uniform resolution
+        assert_eq!(
+            out_res.unwrap(),
+            SpatialResolution::new_unchecked(14_237.781_884_528_267, 14_237.781_884_528_267),
         );
     }
 }

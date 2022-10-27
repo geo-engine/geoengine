@@ -29,9 +29,9 @@ use crate::util::server::not_implemented_handler;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
-use geoengine_operators::engine::RasterOperator;
+use geoengine_operators::engine::ExecutionContext;
 use geoengine_operators::engine::ResultDescriptor;
-use geoengine_operators::processing::{Reprojection, ReprojectionParams};
+use geoengine_operators::processing::{InitializedRasterReprojection, ReprojectionParams};
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -372,18 +372,21 @@ async fn wcs_get_coverage_handler<C: Context>(
     let initialized = if request_spatial_ref == workflow_spatial_ref {
         initialized
     } else {
-        let proj = Reprojection {
-            params: ReprojectionParams {
+        log::debug!(
+            "WCS query srs: {}, workflow srs: {} --> injecting reprojection",
+            request_spatial_ref,
+            workflow_spatial_ref
+        );
+        let irp = InitializedRasterReprojection::try_new_with_input(
+            ReprojectionParams {
                 target_spatial_reference: request_spatial_ref,
             },
-            sources: operator.into(),
-        };
+            initialized,
+            execution_context.tiling_specification(),
+        )
+        .context(error::Operator)?;
 
-        // TODO: avoid re-initialization of the whole operator graph
-        Box::new(proj)
-            .initialize(&execution_context)
-            .await
-            .context(error::Operator)?
+        Box::new(irp)
     };
 
     let processor = initialized.query_processor().context(error::Operator)?;

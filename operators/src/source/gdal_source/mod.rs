@@ -614,6 +614,8 @@ where
         let result_descriptor = self.meta_data.result_descriptor().await?;
 
         let mut empty = false;
+        debug!("result descr bbox: {:?}", result_descriptor.bbox);
+        debug!("query bbox: {:?}", query.spatial_bounds);
 
         if let Some(data_spatial_bounds) = result_descriptor.bbox {
             if !data_spatial_bounds.intersects(&query.spatial_bounds) {

@@ -37,8 +37,8 @@ pub struct TileReprojectionSubQuery<T, F> {
     pub out_srs: SpatialReference,
     pub fold_fn: F,
     pub in_spatial_res: SpatialResolution,
-    pub valid_bounds_in: Option<SpatialPartition2D>,
-    pub valid_bounds_out: Option<SpatialPartition2D>,
+    pub valid_bounds_in: SpatialPartition2D,
+    pub valid_bounds_out: SpatialPartition2D,
     pub _phantom_data: PhantomData<T>,
 }
 
@@ -87,7 +87,7 @@ where
         // this is the spatial partition we are interested in
         let valid_spatial_bounds = self
             .valid_bounds_out
-            .and_then(|vo| vo.intersection(&tile_info.spatial_partition()))
+            .intersection(&tile_info.spatial_partition())
             .and_then(|vo| vo.intersection(&query_rect.spatial_partition()));
         if let Some(bounds) = valid_spatial_bounds {
             let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
@@ -119,7 +119,7 @@ fn build_accu<T: Pixel>(
     query_rect: RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tile_info: TileInformation,
-    valid_bounds_out: Option<SpatialPartition2D>,
+    valid_bounds_out: SpatialPartition2D,
     out_srs: SpatialReference,
     in_srs: SpatialReference,
 ) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> {
@@ -129,12 +129,13 @@ fn build_accu<T: Pixel>(
         let pool = pool.clone();
 
         // if there is a valid output spatial partition, we need to reproject the coordinates.
-        let projected_coords = if let Some(valid_out_area) = valid_bounds_out {
-            projected_coordinate_grid_parallel(&pool, tile_info, out_srs, in_srs, &valid_out_area)?
-        } else {
-            debug!("reproject tile outside valid bounds"); // TODO: error?
-            Grid2D::new_filled(tile_info.tile_size_in_pixels, None)
-        };
+        let projected_coords = projected_coordinate_grid_parallel(
+            &pool,
+            tile_info,
+            out_srs,
+            in_srs,
+            &valid_bounds_out,
+        )?;
 
         Ok(TileWithProjectionCoordinates {
             accu_tile: RasterTile2D::new_with_tile_info(
@@ -445,8 +446,8 @@ mod tests {
             out_srs: projection,
             fold_fn: fold_by_coordinate_lookup_future,
             in_spatial_res: query_rect.spatial_resolution,
-            valid_bounds_in: Some(valid_bounds),
-            valid_bounds_out: Some(valid_bounds),
+            valid_bounds_in: valid_bounds,
+            valid_bounds_out: valid_bounds,
             _phantom_data: PhantomData,
         };
         let a = RasterSubQueryAdapter::new(&qp, query_rect, tiling_strat, &query_ctx, state_gen);
