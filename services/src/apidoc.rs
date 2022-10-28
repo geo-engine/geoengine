@@ -1,16 +1,25 @@
 use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, ExternalDataId, FeatureDataType, LayerId,
-    Measurement, Palette, RasterDataType, RasterQueryRectangle, RgbaColor, SpatialPartition2D,
-    SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution,
-    TimeInstance, TimeInterval, VectorDataType,
+    Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, ExternalDataId,
+    FeatureDataType, LayerId, Measurement, Palette, RasterDataType, RasterPropertiesEntryType,
+    RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
+    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, TimeGranularity,
+    TimeInstance, TimeInterval, TimeStep, VectorDataType,
 };
+use crate::api::model::operators::OgrMetaData;
 use crate::api::model::operators::{
-    PlotResultDescriptor, RasterResultDescriptor, TypedOperator, TypedResultDescriptor,
-    VectorColumnInfo, VectorResultDescriptor,
+    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+    GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic,
+    GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
+    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrSourceColumnSpec, OgrSourceDataset,
+    OgrSourceDatasetTimeType, OgrSourceErrorSpec, PlotResultDescriptor, RasterResultDescriptor,
+    TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor, VectorColumnInfo,
+    VectorResultDescriptor,
 };
+use crate::api::model::services::{MetaDataDefinition, MetaDataSuggestion};
 use crate::contexts::{SessionId, SimpleSession};
-use crate::datasets::listing::{Provenance, ProvenanceOutput};
+use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
+use crate::datasets::storage::{AutoCreateDataset, CreateDataset};
 use crate::datasets::upload::UploadId;
 use crate::handlers;
 use crate::handlers::tasks::TaskAbortOptions;
@@ -63,6 +72,11 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::get_workflow_provenance_handler,
         handlers::workflows::load_workflow_handler,
         handlers::workflows::register_workflow_handler,
+        handlers::datasets::list_datasets_handler,
+        handlers::datasets::get_dataset_handler,
+        handlers::datasets::create_dataset_handler,
+        handlers::datasets::auto_create_dataset_handler,
+        handlers::datasets::suggest_meta_data_handler,
     ),
     components(
         schemas(
@@ -182,6 +196,37 @@ use utoipa::{Modify, OpenApi};
             FeatureType,
             Coordinates,
 
+            CreateDataset,
+            AutoCreateDataset,
+            OrderBy,
+            DatasetListing,
+            MetaDataSuggestion,
+            MetaDataDefinition,
+            MockMetaData,
+            GdalMetaDataRegular,
+            GdalMetaDataStatic,
+            GdalMetadataNetCdfCf,
+            GdalMetaDataList,
+            GdalDatasetParameters,
+            TimeStep,
+            GdalSourceTimePlaceholder,
+            GdalDatasetParameters,
+            GdalLoadingInfoTemporalSlice,
+            FileNotFoundHandling,
+            GdalDatasetGeoTransform,
+            GdalMetadataMapping,
+            TimeGranularity,
+            DateTimeParseFormat,
+            TimeReference,
+            RasterPropertiesKey,
+            RasterPropertiesEntryType,
+            OgrMetaData,
+            MockDatasetDataSourceLoadingInfo,
+            OgrSourceDataset,
+            OgrSourceColumnSpec,
+            TypedGeometry,
+            OgrSourceErrorSpec,
+            OgrSourceDatasetTimeType
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

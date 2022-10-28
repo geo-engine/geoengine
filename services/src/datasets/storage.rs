@@ -21,6 +21,7 @@ use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRe
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::fmt::Debug;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use super::listing::Provenance;
@@ -82,14 +83,56 @@ pub struct DatasetDefinition {
     pub meta_data: MetaDataDefinition,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[schema(example = json!({
+  "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+  "definition": {
+    "properties": {
+      "name": "Germany Border",
+      "description": "The Outline of Germany",
+      "sourceOperator": "OgrSource"
+    },
+    "metaData": {
+      "OgrMetaData": {
+        "loadingInfo": {
+          "fileName": "germany_polygon.gpkg",
+          "layerName": "test_germany",
+          "dataType": "MultiPolygon",
+          "time": "none",
+          "columns": {
+            "x": "",
+            "y": null,
+            "text": [],
+            "float": [],
+            "int": [],
+            "bool": [],
+            "datetime": [],
+          },
+          "forceOgrTimeFilter": false,
+          "onError": "ignore"
+        },
+        "resultDescriptor": {
+          "dataType": "MultiPolygon",
+          "spatialReference": "EPSG:4326",
+          "columns": {}
+        }
+      }
+    }
+  }
+}))]
 pub struct CreateDataset {
     pub upload: UploadId,
     pub definition: DatasetDefinition,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(example = json!({
+    "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+    "datasetName": "Germany Border (auto)",
+    "datasetDescription": "The Outline of Germany (auto detected format)",
+    "mainFile": "germany_polygon.gpkg"
+}))]
 pub struct AutoCreateDataset {
     pub upload: UploadId,
     pub dataset_name: String,
@@ -112,14 +155,16 @@ impl UserInput for AutoCreateDataset {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub struct SuggestMetaData {
+    #[param(example = "420b06de-0a7e-45cb-9c1c-ea901b46ab69")]
     pub upload: UploadId,
+    #[param(example = "germany_polygon.gpkg")]
     pub main_file: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MetaDataSuggestion {
     pub main_file: String,
@@ -127,7 +172,7 @@ pub struct MetaDataSuggestion {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(PartialEq, Deserialize, Serialize, Debug, Clone)]
+#[derive(PartialEq, Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(tag = "type")]
 pub enum MetaDataDefinition {
     MockMetaData(

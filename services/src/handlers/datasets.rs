@@ -58,35 +58,40 @@ where
     .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)));
 }
 
-/// Lists available [Datasets](crate::datasets::listing::DatasetListing).
-///
-/// # Example
-///
-/// ```text
-/// GET /datasets?filter=Germany&offset=0&limit=2&order=NameAsc
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-/// Response:
-/// ```text
-/// [
-///   {
-///     "id": {
-///       "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
-///     },
-///     "name": "Germany",
-///     "description": "Boundaries of Germany",
-///     "tags": [],
-///     "sourceOperator": "OgrSource",
-///     "resultDescriptor": {
-///       "vector": {
-///         "dataType": "MultiPolygon",
-///         "spatialReference": "EPSG:4326",
-///         "columns": {}
-///       }
-///     }
-///   }
-/// ]
-/// ```
+/// Lists available datasets.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/datasets",
+    responses(
+        (status = 200, description = "OK", body = [DatasetListing],
+            example = json!([
+                {
+                    "id": {
+                        "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
+                    },
+                    "name": "Germany",
+                    "description": "Boundaries of Germany",
+                    "tags": [],
+                    "sourceOperator": "OgrSource",
+                    "resultDescriptor": {
+                        "vector": {
+                            "dataType": "MultiPolygon",
+                            "spatialReference": "EPSG:4326",
+                            "columns": {}
+                        }
+                    }
+                }
+            ])
+        )
+    ),
+    params(
+        DatasetListOptions
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn list_datasets_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -97,32 +102,37 @@ async fn list_datasets_handler<C: Context>(
     Ok(web::Json(list))
 }
 
-/// Retrieves details about a [Dataset](crate::datasets::listing::DatasetListing) using the internal id.
-///
-/// # Example
-///
-/// ```text
-/// GET /dataset/internal/9c874b9e-cea0-4553-b727-a13cb26ae4bb
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": {
-///     "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
-///   },
-///   "name": "Germany",
-///   "description": "Boundaries of Germany",
-///   "resultDescriptor": {
-///     "vector": {
-///       "dataType": "MultiPolygon",
-///       "spatialReference": "EPSG:4326",
-///       "columns": {}
-///     }
-///   },
-///   "sourceOperator": "OgrSource"
-/// }
-/// ```
+/// Retrieves details about a dataset using the internal id.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/internal/{dataset}",
+    responses(
+        (status = 200, description = "OK", body = Dataset,
+            example = json!({
+                "id": {
+                    "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
+                },
+                "name": "Germany",
+                "description": "Boundaries of Germany",
+                "resultDescriptor": {
+                    "vector": {
+                        "dataType": "MultiPolygon",
+                        "spatialReference": "EPSG:4326",
+                        "columns": {}
+                    }
+                },
+                "sourceOperator": "OgrSource"
+            })
+        )
+    ),
+    params(
+        ("dataset" = DatasetId, description = "Dataset id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn get_dataset_handler<C: Context>(
     dataset: web::Path<DatasetId>,
     session: C::Session,
@@ -135,60 +145,26 @@ async fn get_dataset_handler<C: Context>(
     Ok(web::Json(dataset))
 }
 
-/// Creates a new [Dataset](CreateDataset) using previously uploaded files.
+/// Creates a new dataset using previously uploaded files.
 /// Information about the file contents must be manually supplied.
-///
-/// # Example
-///
-/// ```text
-/// POST /dataset
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
-///   "definition": {
-///     "properties": {
-///       "name": "Germany Border",
-///       "description": "The Outline of Germany",
-///       "sourceOperator": "OgrSource"
-///     },
-///     "metaData": {
-///       "OgrMetaData": {
-///         "loadingInfo": {
-///           "fileName": "germany_polygon.gpkg",
-///           "layerName": "test_germany",
-///           "dataType": "MultiPolygon",
-///           "time": "none",
-///           "columns": {
-///             "x": "",
-///             "y": null,
-///             "text": [],
-///             "float": [],
-///             "int": [],
-///             "bool": [],
-///             "datetime": [],
-///           },
-///           "forceOgrTimeFilter": false,
-///           "onError": "ignore"
-///         },
-///         "resultDescriptor": {
-///           "dataType": "MultiPolygon",
-///           "spatialReference": "EPSG:4326",
-///           "columns": {}
-///         }
-///       }
-///     }
-///   }
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": {
-///     "internal": "8d3471ab-fcf7-4c1b-bbc1-00477adf07c8"
-///   }
-/// }
-/// ```
+#[utoipa::path(
+    tag = "Datasets",
+    post,
+    path = "/dataset",
+    request_body = CreateDataset,
+    responses(
+        (status = 200, description = "OK", body = IdResponse,
+            example = json!({
+                "id": {
+                    "internal": "8d3471ab-fcf7-4c1b-bbc1-00477adf07c8"
+                }
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn create_dataset_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -238,30 +214,26 @@ fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Uploa
     Ok(())
 }
 
-/// Creates a new [Dataset](AutoCreateDataset) using previously uploaded files.
+/// Creates a new dataset using previously uploaded files.
 /// The format of the files will be automatically detected when possible.
-///
-/// # Example
-///
-/// ```text
-/// POST /dataset
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
-///   "datasetName": "Germany Border (auto)",
-///   "datasetDescription": "The Outline of Germany (auto detected format)",
-///   "mainFile": "germany_polygon.gpkg"
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": {
-///     "internal": "664d4b3c-c9d7-4e57-b34d-8c709c1c26e8"
-///   }
-/// }
-/// ```
+#[utoipa::path(
+    tag = "Datasets",
+    post,
+    path = "/dataset/auto",
+    request_body = AutoCreateDataset,
+    responses(
+        (status = 200, description = "OK", body = IdResponse,
+            example = json!({
+                "id": {
+                    "internal": "664d4b3c-c9d7-4e57-b34d-8c709c1c26e8"
+                }
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn auto_create_dataset_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -295,6 +267,60 @@ async fn auto_create_dataset_handler<C: Context>(
     Ok(web::Json(IdResponse::from(id)))
 }
 
+/// Inspects an upload and suggests metadata that can be used when creating a new dataset based on it.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/suggest",
+    responses(
+        (status = 200, description = "OK", body = MetaDataSuggestion,
+            example = json!({
+                "mainFile": "germany_polygon.gpkg",
+                "metaData": {
+                    "type": "OgrMetaData",
+                    "loadingInfo": {
+                        "fileName": "upload/23c9ea9e-15d6-453b-a243-1390967a5669/germany_polygon.gpkg",
+                        "layerName": "test_germany",
+                        "dataType": "MultiPolygon",
+                        "time": {
+                            "type": "none"
+                        },
+                        "defaultGeometry": null,
+                        "columns": {
+                            "formatSpecifics": null,
+                            "x": "",
+                            "y": null,
+                            "int": [],
+                            "float": [],
+                            "text": [],
+                            "bool": [],
+                            "datetime": [],
+                            "rename": null
+                        },
+                        "forceOgrTimeFilter": false,
+                        "forceOgrSpatialFilter": false,
+                        "onError": "ignore",
+                        "sqlQuery": null,
+                        "attributeQuery": null
+                    },
+                    "resultDescriptor": {
+                        "dataType": "MultiPolygon",
+                        "spatialReference": "EPSG:4326",
+                        "columns": {},
+                        "time": null,
+                        "bbox": null
+                    }
+                }
+            })
+        )
+    ),
+    params(
+        SuggestMetaData
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn suggest_meta_data_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Formatter,
@@ -786,6 +787,27 @@ impl<'de> Deserialize<'de> for TimeInstance {
     }
 }
 
+/// A time granularity.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[serde(rename_all = "camelCase")]
+pub enum TimeGranularity {
+    Millis,
+    Seconds,
+    Minutes,
+    Hours,
+    Days,
+    Months,
+    Years,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+pub struct TimeStep {
+    pub granularity: TimeGranularity,
+    pub step: u32, // TODO: ensure on deserialization it is > 0
+}
+
 /// Stores time intervals in ms in close-open semantic [start, end)
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub struct TimeInterval {
@@ -1032,3 +1054,132 @@ impl TryFrom<SerializablePalette> for Palette {
         Ok(Self(inner))
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq, PartialOrd, Ord, ToSchema)]
+pub struct RasterPropertiesKey {
+    pub domain: Option<String>,
+    pub key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub enum RasterPropertiesEntryType {
+    Number,
+    String,
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct DateTimeParseFormat {
+    fmt: String,
+    has_tz: bool,
+    has_time: bool,
+}
+
+impl DateTimeParseFormat {
+    pub fn custom(fmt: String) -> Self {
+        let (has_tz, has_time) = {
+            let mut has_tz = false;
+            let mut has_time = false;
+
+            let has_tz_values: HashSet<&str> = ["%Z", "%z", "%:z"].into();
+            let has_time_values: HashSet<&str> =
+                ["%a", "%A", "%M", "%p", "%S", "%X", "%H", "%I"].into();
+
+            let mut state = FormatStrLoopState::Normal;
+
+            for c in fmt.chars() {
+                match state {
+                    FormatStrLoopState::Normal => {
+                        if c == '%' {
+                            state = FormatStrLoopState::Percent("%".to_string());
+                        }
+                    }
+                    FormatStrLoopState::Percent(ref mut s) => {
+                        s.push(c);
+
+                        if c == '%' {
+                            // was escaped percentage
+                            state = FormatStrLoopState::Normal;
+                        } else if c.is_ascii_alphabetic() {
+                            if has_tz_values.contains(s.as_str()) {
+                                has_tz = true;
+                            }
+                            if has_time_values.contains(s.as_str()) {
+                                has_time = true;
+                            }
+
+                            state = FormatStrLoopState::Normal;
+                        }
+                    }
+                }
+            }
+
+            (has_tz, has_time)
+        };
+
+        DateTimeParseFormat {
+            fmt,
+            has_tz,
+            has_time,
+        }
+    }
+
+    pub fn unix() -> Self {
+        let fmt = "%s".to_owned();
+        Self {
+            fmt,
+            has_tz: false,
+            has_time: true,
+        }
+    }
+
+    pub fn ymd() -> Self {
+        let fmt = "%Y-%m-%d".to_owned();
+        Self {
+            fmt,
+            has_tz: false,
+            has_time: false,
+        }
+    }
+
+    fn has_tz(&self) -> bool {
+        self.has_tz
+    }
+
+    fn has_time(&self) -> bool {
+        self.has_time
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.fmt.is_empty()
+    }
+
+    fn _to_parse_format(&self) -> &str {
+        &self.fmt
+    }
+}
+
+enum FormatStrLoopState {
+    Normal,
+    Percent(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NoGeometry;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MultiPoint {
+    coordinates: Vec<Coordinate2D>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MultiLineString {
+    coordinates: Vec<Vec<Coordinate2D>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MultiPolygon {
+    polygons: Vec<Polygon>,
+}
+
+type Ring = Vec<Coordinate2D>;
+type Polygon = Vec<Ring>;
