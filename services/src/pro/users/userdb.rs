@@ -93,5 +93,13 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn quota_used(&self, session: &UserSession) -> Result<u64>;
+    async fn quota_used_by_session(&self, session: &UserSession) -> Result<u64>;
+
+    /// Gets the current users used quota
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the session is invalid
+    ///
+    async fn quota_used_by_user(&self, user: &UserId) -> Result<u64>;
 }

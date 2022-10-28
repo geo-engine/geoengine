@@ -2269,7 +2269,11 @@ mod tests {
             // wait for quota to be recorded
             let mut success = false;
             for _ in 0..10 {
-                let used = ctx.user_db_ref().quota_used(&session).await.unwrap();
+                let used = ctx
+                    .user_db_ref()
+                    .quota_used_by_session(&session)
+                    .await
+                    .unwrap();
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
                 if used == 2 {

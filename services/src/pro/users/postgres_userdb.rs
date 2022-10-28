@@ -444,7 +444,7 @@ where
         Ok(())
     }
 
-    async fn quota_used(&self, session: &UserSession) -> Result<u64> {
+    async fn quota_used_by_session(&self, session: &UserSession) -> Result<u64> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT quota_used FROM users WHERE id = $1;")
@@ -452,6 +452,20 @@ where
 
         let row = conn
             .query_one(&stmt, &[&session.user.id])
+            .await
+            .map_err(|_error| error::Error::InvalidSession)?;
+
+        Ok(row.get::<usize, i64>(0) as u64)
+    }
+
+    async fn quota_used_by_user(&self, user: &UserId) -> Result<u64> {
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare("SELECT quota_used FROM users WHERE id = $1;")
+            .await?;
+
+        let row = conn
+            .query_one(&stmt, &[&user])
             .await
             .map_err(|_error| error::Error::InvalidSession)?;
 

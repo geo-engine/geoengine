@@ -94,6 +94,7 @@ pub enum Error {
     Authorization {
         source: Box<Error>,
     },
+    AccessDenied,
     #[snafu(display("Failed to create the project."))]
     ProjectCreateFailed,
     #[snafu(display("Failed to list projects."))]

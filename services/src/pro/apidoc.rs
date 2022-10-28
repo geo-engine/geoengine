@@ -71,6 +71,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::login_handler,
         pro::handlers::users::logout_handler,
         pro::handlers::users::quota_handler,
+        pro::handlers::users::user_quota_handler,
         pro::handlers::users::register_user_handler,
         pro::handlers::users::session_handler,
     ),
