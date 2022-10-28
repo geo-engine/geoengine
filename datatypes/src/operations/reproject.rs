@@ -1,5 +1,5 @@
 use crate::{
-    error::{self, Error},
+    error::{self},
     primitives::{
         AxisAlignedRectangle, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
         MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
@@ -242,7 +242,7 @@ where
 pub trait ReprojectClipped<P: CoordinateProjection> {
     type Out;
     /// Reproject and clip with respect to the area of use of the projection
-    fn reproject_clipped(&self, projector: &P) -> Result<Self::Out>;
+    fn reproject_clipped(&self, projector: &P) -> Result<Option<Self::Out>>;
 }
 
 impl<P, A> ReprojectClipped<P> for A
@@ -251,7 +251,7 @@ where
     A: AxisAlignedRectangle,
 {
     type Out = A;
-    fn reproject_clipped(&self, projector: &P) -> Result<A> {
+    fn reproject_clipped(&self, projector: &P) -> Result<Option<A>> {
         const POINTS_PER_LINE: i32 = 7;
 
         // clip bbox to the area of use of the target projection
@@ -261,19 +261,22 @@ where
         )?;
         let source_area_of_use = projector.source_srs().area_of_use::<A>()?;
         let target_area_of_use = projector.target_srs().area_of_use::<A>()?;
-        let area_of_use = source_area_of_use.intersection(&target_area_of_use).ok_or(
-            Error::SpatialBoundsDoNotIntersect {
-                bounds_a: source_area_of_use.as_bbox(),
-                bounds_b: target_area_of_use.as_bbox(),
-            },
-        )?;
-        let area_of_use = area_of_use.reproject(&area_of_use_projector)?;
-        let clipped_bbox =
-            self.intersection(&area_of_use)
-                .ok_or(Error::SpatialBoundsDoNotIntersect {
-                    bounds_a: self.as_bbox(),
-                    bounds_b: area_of_use.as_bbox(),
-                })?;
+        let area_of_use = source_area_of_use.intersection(&target_area_of_use);
+        let area_of_use_proj = area_of_use
+            .map(|use_area| use_area.reproject(&area_of_use_projector))
+            .transpose()?;
+
+        let area_of_use_proj = match area_of_use_proj {
+            Some(area_of_use_proj) => area_of_use_proj,
+            None => return Ok(None),
+        };
+
+        let clipped_bbox = self.intersection(&area_of_use_proj);
+
+        let clipped_bbox = match clipped_bbox {
+            Some(bbox) => bbox,
+            None => return Ok(None),
+        };
 
         // project points on the bbox
         let upper_line = Line::new(clipped_bbox.upper_left(), clipped_bbox.upper_right())
@@ -304,7 +307,7 @@ where
             error::OutputBboxEmpty { bbox: out }
         );
 
-        A::from_min_max(out.lower_left(), out.upper_right())
+        Some(A::from_min_max(out.lower_left(), out.upper_right())).transpose()
     }
 }
 
@@ -458,38 +461,40 @@ pub fn reproject_query<S: AxisAlignedRectangle>(
     query: QueryRectangle<S>,
     source: SpatialReference,
     target: SpatialReference,
-) -> Result<QueryRectangle<S>> {
-    let projector_source_target = CoordinateProjector::from_known_srs(source, target)?;
-    let projector_target_source = CoordinateProjector::from_known_srs(target, source)?;
-
-    let p_bbox = query
-        .spatial_bounds
-        .reproject_clipped(&projector_target_source)?;
-    let s_bbox = p_bbox.reproject(&projector_source_target)?;
+) -> Result<Option<QueryRectangle<S>>> {
+    let (s_bbox, p_bbox) = match reproject_and_unify_bbox(query.spatial_bounds, target, source)? {
+        (Some(s_bbox), Some(p_bbox)) => (s_bbox, p_bbox),
+        _ => return Ok(None),
+    };
 
     let p_spatial_resolution =
         suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
-    Ok(QueryRectangle {
+    Ok(Some(QueryRectangle {
         spatial_bounds: p_bbox,
         spatial_resolution: p_spatial_resolution,
         time_interval: query.time_interval,
-    })
+    }))
 }
 
 /// Reproject a bounding box to the `target` projection and return the input and output bounding box
 /// as a pair where both elements cover the same area of the original `source_bbox` in WGS84.
+/// The pair is structured as `(source_bbox_clipped, target_bbox_clipped)`
 pub fn reproject_and_unify_bbox<T: AxisAlignedRectangle>(
     source_bbox: T,
     source: SpatialReference,
     target: SpatialReference,
-) -> Result<(T, T)> {
+) -> Result<(Option<T>, Option<T>)> {
     let proj_from_to = CoordinateProjector::from_known_srs(source, target)?;
     let proj_to_from = CoordinateProjector::from_known_srs(target, source)?;
 
-    let bounds_out = source_bbox.reproject_clipped(&proj_from_to)?;
-    let bounds_in = bounds_out.reproject_clipped(&proj_to_from)?;
+    let target_bbox_clipped = source_bbox.reproject_clipped(&proj_from_to)?;
 
-    Ok((bounds_in, bounds_out))
+    if let Some(target_b) = target_bbox_clipped {
+        let source_bbox_clipped = target_b.reproject(&proj_to_from)?;
+        Ok((Some(source_bbox_clipped), target_bbox_clipped))
+    } else {
+        Ok((None, None))
+    }
 }
 
 #[cfg(test)]
@@ -675,7 +680,7 @@ mod tests {
         )
         .unwrap();
 
-        let projected = bbox.reproject_clipped(&p).unwrap();
+        let projected = bbox.reproject_clipped(&p).unwrap().unwrap();
         let expected = BoundingBox2D::new_unchecked(
             (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
@@ -701,7 +706,7 @@ mod tests {
         )
         .unwrap();
 
-        let projected = bbox.reproject_clipped(&p).unwrap();
+        let projected = bbox.reproject_clipped(&p).unwrap().unwrap();
         let expected = BoundingBox2D::new_unchecked(
             (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
@@ -815,12 +820,12 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            input,
+            input.unwrap(),
             SpatialPartition2D::new_unchecked((-180., 85.06).into(), (180., -85.06).into())
         );
 
         assert_eq!(
-            output,
+            output.unwrap(),
             SpatialPartition2D::new_unchecked(
                 (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
                 (20_037_508.342_789_244, -20_048_966.104_014_594).into()
