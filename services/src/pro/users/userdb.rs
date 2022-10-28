@@ -95,7 +95,7 @@ pub trait UserDb: Send + Sync {
     ///
     async fn quota_used_by_session(&self, session: &UserSession) -> Result<u64>;
 
-    /// Gets the current users used quota
+    /// Gets a specific users used quota
     ///
     /// # Errors
     ///

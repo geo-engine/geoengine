@@ -310,8 +310,6 @@ pub enum Error {
     GdalSource {
         source: crate::source::GdalSourceError,
     },
-
-    MpscSend,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

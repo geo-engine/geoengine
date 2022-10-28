@@ -16,13 +16,10 @@ const QUOTA_CHANNEL_SIZE: usize = 1000;
 
 #[derive(Debug, Clone)]
 pub struct QuotaTrackingFactory {
-    // user_db: Arc<dyn UserDb>,
-    // quota_sender: SyncSender<ComputationId>,
     quota_sender: Sender<ComputationUnit>,
 }
 
 impl QuotaTrackingFactory {
-    // pub fn new(quota_sender: SyncSender<ComputationId>) -> Self {
     pub fn new(quota_sender: Sender<ComputationUnit>) -> Self {
         Self { quota_sender }
     }
@@ -44,7 +41,6 @@ impl QuotaTrackingFactory {
 
 impl TestDefault for QuotaTrackingFactory {
     fn test_default() -> Self {
-        // let (quota_sender, _quota_receiver) = sync_channel(QUOTA_CHANNEL_SIZE);
         let (quota_sender, _quota_receiver) = channel(QUOTA_CHANNEL_SIZE);
         Self::new(quota_sender)
     }
