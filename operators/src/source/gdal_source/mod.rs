@@ -905,7 +905,7 @@ where
             "GdalDatasetParameters geo transform is different to the one retrieved from GDAL dataset: {:?} != {:?}",
             dataset_params.geo_transform,
             gdal_dataset_geotransform,
-        )
+        );
     };
 
     debug_assert_eq!(gdal_dataset_pixels_x, dataset_params.width);
