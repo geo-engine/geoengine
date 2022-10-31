@@ -84,7 +84,7 @@ jobs:
       - name: Check with Rustfmt
         run: cargo fmt --all -- --check
       - name: Check with Clippy
-        run: cargo check --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
+        run: cargo clippy --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
         env:
           # utoipa packages the UI part of the SwaggerUI and the build.rs of utoipa moves this into a "wrong" folder.
           # The folder where it is moved is not covered by the cache.
