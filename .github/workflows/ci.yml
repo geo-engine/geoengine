@@ -35,16 +35,20 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: APT update
         run: sudo apt-get update
       - name: Install lld & GDAL
         run: |
-          sudo apt-get install lld libgdal-dev gdal-bin build-essential
+          sudo apt-get install lld libgdal-dev gdal-bin build-essential curl
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: init rust-toolchain
+      - name: Install Rustup
+        run: |
+          curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
+      - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
       - name: setup rust build cache
@@ -78,15 +82,9 @@ jobs:
           # Default: "false"
           #cache-on-failure: ""
       - name: Check with Rustfmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+        run: cargo fmt --all -- --check
       - name: Check with Clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
+        run: cargo check --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
         env:
           # utoipa packages the UI part of the SwaggerUI and the build.rs of utoipa moves this into a "wrong" folder.
           # The folder where it is moved is not covered by the cache.
@@ -95,10 +93,7 @@ jobs:
           # TODO: remove this when utoipa is fixed
           CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: ${{ matrix.features }} ${{ matrix.build }} --verbose
+        run: cargo test ${{ matrix.features }} ${{ matrix.build }} --verbose
         env:
           # TODO: remove this when utoipa is fixed
           CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
@@ -115,20 +110,21 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: APT update
         run: sudo apt-get update
       - name: Install lld & GDAL
         run: |
-          sudo apt-get install lld libgdal-dev gdal-bin build-essential
+          sudo apt-get install lld libgdal-dev gdal-bin build-essential curl
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: init rust-toolchain
+      - name: Install Rustup
+        run: |
+          curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
+      - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: ${{ matrix.features }} ${{ matrix.build }} --verbose
+        run: cargo build ${{ matrix.features }} ${{ matrix.build }} --verbose
