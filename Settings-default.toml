@@ -73,6 +73,39 @@ layer_collection_defs_path = "./test_data/layer_collection_defs"
 compression_num_threads = 8
 compression_z_level = 6
 compression_algorithm = "LZW"
+allowed_drivers = [
+    "COG",
+    "CSV",
+    "ESRI Shapefile",
+    "FlatGeobuf",
+    "GeoJSON",
+    "GeoJSONSeq",
+    "GPKG",
+    "GTiff",
+    "HDF4",
+    "HDF5Image",
+    "HTTP",
+    "KML",
+    "MEM",
+    "Memory",
+    "MSGN",
+    "netCDF",
+    "OGCAPI",
+    "OSM",
+    "PNG",
+    "PostGISRaster",
+    "PostgreSQL",
+    "SAFE",
+    "SQLite",
+    "STACIT",
+    "TopoJSON",
+    "WCS",
+    "WFS",
+    "WMTS",
+    "XLS",
+    "XLSX",
+    "Zarr",
+]
 
 [session]
 # Whether to allow requests to `/anonymous` that return a valid session.
