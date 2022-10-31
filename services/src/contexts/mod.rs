@@ -19,8 +19,8 @@ use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
     ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
-    InitializedVectorOperator, MetaData, MetaDataProvider, QueryContext, RasterResultDescriptor,
-    VectorResultDescriptor,
+    InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
+    QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -74,14 +74,19 @@ pub trait Context: 'static + Send + Sync + Clone {
 
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
-    pub thread_pool: Arc<ThreadPool>,
+    thread_pool: Arc<ThreadPool>,
+    abort_registration: QueryAbortRegistration,
+    abort_trigger: Option<QueryAbortTrigger>,
 }
 
 impl QueryContextImpl {
     pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: Arc<ThreadPool>) -> Self {
+        let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
             thread_pool,
+            abort_registration,
+            abort_trigger: Some(abort_trigger),
         }
     }
 }
@@ -93,6 +98,16 @@ impl QueryContext for QueryContextImpl {
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
+    }
+
+    fn abort_registration(&self) -> &QueryAbortRegistration {
+        &self.abort_registration
+    }
+
+    fn abort_trigger(&mut self) -> geoengine_operators::util::Result<QueryAbortTrigger> {
+        self.abort_trigger
+            .take()
+            .ok_or(geoengine_operators::error::Error::AbortTriggerAlreadyUsed)
     }
 }
 

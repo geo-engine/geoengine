@@ -1,3 +1,4 @@
+use super::query::QueryAbortRegistration;
 use super::{
     CreateSpan, InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator,
     MockQueryContext,
@@ -126,9 +127,12 @@ impl MockExecutionContext {
     }
 
     pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
+        let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         MockQueryContext {
             chunk_byte_size,
             thread_pool: self.thread_pool.clone(),
+            abort_registration,
+            abort_trigger: Some(abort_trigger),
         }
     }
 }

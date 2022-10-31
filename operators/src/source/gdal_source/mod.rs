@@ -574,7 +574,7 @@ where
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
 
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
@@ -655,7 +655,6 @@ where
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
         );
-
         Ok(filled_stream.boxed())
     }
 }
@@ -1088,7 +1087,7 @@ mod tests {
     use geoengine_datatypes::{primitives::SpatialResolution, raster::GridShape2D};
 
     async fn query_gdal_source(
-        exe_ctx: &mut MockExecutionContext,
+        exe_ctx: &MockExecutionContext,
         query_ctx: &MockQueryContext,
         id: DataId,
         output_shape: GridShape2D,
@@ -1501,7 +1500,7 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001); // 2014-01-01
 
         let c = query_gdal_source(
-            &mut exe_ctx,
+            &exe_ctx,
             &query_ctx,
             id,
             output_shape,
@@ -1551,7 +1550,7 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_393_632_000_000); // 2014-01-01 - 2014-03-01
 
         let c = query_gdal_source(
-            &mut exe_ctx,
+            &exe_ctx,
             &query_ctx,
             id,
             output_shape,
@@ -1586,7 +1585,7 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_380_585_600_000, 1_380_585_600_000); // 2013-10-01 - 2013-10-01
 
         let c = query_gdal_source(
-            &mut exe_ctx,
+            &exe_ctx,
             &query_ctx,
             id,
             output_shape,
@@ -1616,7 +1615,7 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_420_074_000_000, 1_420_074_000_000); // 2015-01-01 - 2015-01-01
 
         let c = query_gdal_source(
-            &mut exe_ctx,
+            &exe_ctx,
             &query_ctx,
             id,
             output_shape,
@@ -1648,7 +1647,7 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000); // 2013-12-01 - 2014-01-01
 
         let c = query_gdal_source(
-            &mut exe_ctx,
+            &exe_ctx,
             &query_ctx,
             id,
             output_shape,

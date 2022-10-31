@@ -1,9 +1,17 @@
-use std::sync::Arc;
+use std::{
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
-use crate::util::create_rayon_thread_pool;
+use crate::util::Result;
+use crate::{error, util::create_rayon_thread_pool};
+use futures::Stream;
 use geoengine_datatypes::util::test::TestDefault;
+use pin_project::pin_project;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+use stream_cancel::{Trigger, Valve, Valved};
 
 /// Defines the size in bytes of a vector data chunk
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
@@ -43,27 +51,89 @@ impl TestDefault for ChunkByteSize {
 pub trait QueryContext: Send + Sync {
     fn chunk_byte_size(&self) -> ChunkByteSize;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
+
+    fn abort_registration(&self) -> &QueryAbortRegistration;
+    fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
+}
+
+/// This type allow wrapping multiple streams with `QueryAbortWrapper`s that
+/// can all be aborted at the same time using the corresponding `QueryAbortTrigger`.
+pub struct QueryAbortRegistration {
+    valve: Valve,
+}
+
+impl QueryAbortRegistration {
+    pub fn new() -> (Self, QueryAbortTrigger) {
+        let (trigger, valve) = Valve::new();
+
+        (Self { valve }, QueryAbortTrigger { trigger })
+    }
+
+    pub fn wrap<S: Stream>(&self, stream: S) -> QueryAbortWrapper<S> {
+        QueryAbortWrapper {
+            valved: self.valve.wrap(stream),
+        }
+    }
+}
+
+/// This type wraps a stream and allows aborting it using the corresponding `QueryAbortTrigger`
+/// from its `QueryAbortRegistration`.
+#[pin_project(project = AbortWrapperProjection)]
+pub struct QueryAbortWrapper<S> {
+    #[pin]
+    valved: Valved<S>,
+}
+
+impl<S> Stream for QueryAbortWrapper<S>
+where
+    S: Stream,
+{
+    type Item = S::Item;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.project().valved.poll_next(cx)
+    }
+}
+
+/// This type allows aborting all streams that were wrapped using the corresponding
+/// `QueryAbortRegistration`.
+pub struct QueryAbortTrigger {
+    trigger: Trigger,
+}
+
+impl QueryAbortTrigger {
+    pub fn abort(self) {
+        self.trigger.cancel();
+    }
 }
 
 pub struct MockQueryContext {
     pub chunk_byte_size: ChunkByteSize,
     pub thread_pool: Arc<ThreadPool>,
+    pub abort_registration: QueryAbortRegistration,
+    pub abort_trigger: Option<QueryAbortTrigger>,
 }
 
 impl TestDefault for MockQueryContext {
     fn test_default() -> Self {
+        let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size: ChunkByteSize::test_default(),
             thread_pool: create_rayon_thread_pool(0),
+            abort_registration,
+            abort_trigger: Some(abort_trigger),
         }
     }
 }
 
 impl MockQueryContext {
     pub fn new(chunk_byte_size: ChunkByteSize) -> Self {
+        let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
             thread_pool: create_rayon_thread_pool(0),
+            abort_registration,
+            abort_trigger: Some(abort_trigger),
         }
     }
 
@@ -71,9 +141,12 @@ impl MockQueryContext {
         chunk_byte_size: ChunkByteSize,
         num_threads: usize,
     ) -> Self {
+        let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
             thread_pool: create_rayon_thread_pool(num_threads),
+            abort_registration,
+            abort_trigger: Some(abort_trigger),
         }
     }
 }
@@ -85,5 +158,15 @@ impl QueryContext for MockQueryContext {
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
+    }
+
+    fn abort_registration(&self) -> &QueryAbortRegistration {
+        &self.abort_registration
+    }
+
+    fn abort_trigger(&mut self) -> Result<QueryAbortTrigger> {
+        self.abort_trigger
+            .take()
+            .ok_or(error::Error::AbortTriggerAlreadyUsed)
     }
 }
