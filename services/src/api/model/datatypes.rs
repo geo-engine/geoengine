@@ -1,19 +1,15 @@
+use crate::error::{self, Result};
+use crate::identifier;
+use ordered_float::NotNan;
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+use snafu::ResultExt;
 use std::collections::HashSet;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Formatter,
     str::FromStr,
 };
-
-use crate::error::{self, Result};
-use crate::identifier;
-use ordered_float::NotNan;
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
-use snafu::ResultExt;
-use utoipa::{
-    openapi::{ArrayBuilder, ObjectBuilder, Ref, SchemaType},
-    ToSchema,
-};
+use utoipa::ToSchema;
 
 identifier!(DataProviderId);
 
@@ -273,6 +269,7 @@ impl SpatialReference {
 
 impl ToSchema for SpatialReference {
     fn schema() -> utoipa::openapi::schema::Schema {
+        use utoipa::openapi::*;
         ObjectBuilder::new().schema_type(SchemaType::String).into()
     }
 }
@@ -789,7 +786,6 @@ impl<'de> Deserialize<'de> for TimeInstance {
 
 /// A time granularity.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[serde(rename_all = "camelCase")]
 pub enum TimeGranularity {
     Millis,
@@ -802,7 +798,6 @@ pub enum TimeGranularity {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub struct TimeStep {
     pub granularity: TimeGranularity,
     pub step: u32, // TODO: ensure on deserialization it is > 0
@@ -817,6 +812,7 @@ pub struct TimeInterval {
 
 impl ToSchema for TimeInterval {
     fn schema() -> utoipa::openapi::schema::Schema {
+        use utoipa::openapi::*;
         ObjectBuilder::new().schema_type(SchemaType::String).into()
     }
 }
@@ -897,6 +893,7 @@ pub struct RgbaColor([u8; 4]);
 // manual implementation utoipa generates an integer field
 impl ToSchema for RgbaColor {
     fn schema() -> utoipa::openapi::schema::Schema {
+        use utoipa::openapi::*;
         ArrayBuilder::new()
             .items(ObjectBuilder::new().schema_type(SchemaType::Integer))
             .min_items(Some(4))
@@ -921,6 +918,7 @@ pub struct Breakpoint {
 // manual implementation because of NotNan
 impl ToSchema for Breakpoint {
     fn schema() -> utoipa::openapi::schema::Schema {
+        use utoipa::openapi::*;
         ObjectBuilder::new()
             .property(
                 "value",
@@ -1161,7 +1159,10 @@ pub struct NoGeometry;
 impl ToSchema for NoGeometry {
     fn schema() -> utoipa::openapi::Schema {
         use utoipa::openapi::*;
-        ObjectBuilder::new().into()
+        ObjectBuilder::new()
+            .default(Some(serde_json::Value::Null))
+            .example(Some(serde_json::Value::Null))
+            .into()
     }
 }
 

@@ -313,7 +313,7 @@ pub struct GdalDatasetParameters {
     // Configs as key, value pairs that will be set as thread local config options, e.g.
     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
     // TODO: validate the config options: only allow specific keys and specific values
-    //pub gdal_config_options: Option<Vec<(String, String)>>, TODO: does not work with ToSchema at the moment
+    pub gdal_config_options: Option<Vec<(String, String)>>, // TODO: does not compile https://github.com/juhaku/utoipa/issues/330
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
 }
