@@ -183,7 +183,7 @@ pub struct OgrSourceDataset {
     pub attribute_query: Option<String>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 #[serde(tag = "format")]
 #[serde(rename_all = "camelCase")]
 pub enum OgrSourceTimeFormat {
@@ -201,7 +201,7 @@ pub enum OgrSourceTimeFormat {
     Auto,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum UnixTimeStampType {
     EpochSeconds,
@@ -249,7 +249,7 @@ impl Default for OgrSourceDatasetTimeType {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum OgrSourceDurationSpec {
     Infinite,
@@ -384,7 +384,7 @@ pub struct GdalLoadingInfoTemporalSlice {
     pub params: Option<GdalDatasetParameters>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum CsvHeader {
     Yes,
@@ -392,7 +392,7 @@ pub enum CsvHeader {
     Auto,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum FormatSpecifics {
     Csv { header: CsvHeader },

@@ -1,12 +1,16 @@
 use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
     Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, ExternalDataId,
-    FeatureDataType, LayerId, Measurement, Palette, RasterDataType, RasterPropertiesEntryType,
-    RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
-    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, TimeGranularity,
-    TimeInstance, TimeInterval, TimeStep, VectorDataType,
+    FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+    Palette, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
+    RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority,
+    SpatialReferenceOption, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
+    TimeStep, VectorDataType,
 };
-use crate::api::model::operators::OgrMetaData;
+use crate::api::model::operators::{
+    CsvHeader, FormatSpecifics, OgrMetaData, OgrSourceDurationSpec, OgrSourceTimeFormat,
+    UnixTimeStampType,
+};
 use crate::api::model::operators::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic,
@@ -19,7 +23,9 @@ use crate::api::model::operators::{
 use crate::api::model::services::{MetaDataDefinition, MetaDataSuggestion};
 use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
-use crate::datasets::storage::{AutoCreateDataset, CreateDataset};
+use crate::datasets::storage::{
+    AddDataset, AutoCreateDataset, CreateDataset, Dataset, DatasetDefinition,
+};
 use crate::datasets::upload::UploadId;
 use crate::handlers;
 use crate::handlers::tasks::TaskAbortOptions;
@@ -226,7 +232,19 @@ use utoipa::{Modify, OpenApi};
             OgrSourceColumnSpec,
             TypedGeometry,
             OgrSourceErrorSpec,
-            OgrSourceDatasetTimeType
+            OgrSourceDatasetTimeType,
+            OgrSourceDurationSpec,
+            OgrSourceTimeFormat,
+            NoGeometry,
+            MultiPoint,
+            MultiLineString,
+            MultiPolygon,
+            FormatSpecifics,
+            CsvHeader,
+            UnixTimeStampType,
+            Dataset,
+            DatasetDefinition,
+            AddDataset
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

@@ -1141,14 +1141,6 @@ impl DateTimeParseFormat {
         }
     }
 
-    fn has_tz(&self) -> bool {
-        self.has_tz
-    }
-
-    fn has_time(&self) -> bool {
-        self.has_time
-    }
-
     pub fn is_empty(&self) -> bool {
         self.fmt.is_empty()
     }
@@ -1166,20 +1158,24 @@ enum FormatStrLoopState {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoGeometry;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+impl ToSchema for NoGeometry {
+    fn schema() -> utoipa::openapi::Schema {
+        use utoipa::openapi::*;
+        ObjectBuilder::new().into()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct MultiPoint {
     coordinates: Vec<Coordinate2D>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct MultiLineString {
     coordinates: Vec<Vec<Coordinate2D>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct MultiPolygon {
-    polygons: Vec<Polygon>,
+    polygons: Vec<Vec<Coordinate2D>>,
 }
-
-type Ring = Vec<Coordinate2D>;
-type Polygon = Vec<Ring>;
