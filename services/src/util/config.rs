@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::RwLock;
@@ -345,6 +346,7 @@ pub struct Gdal {
     pub compression_num_threads: GdalCompressionNumThreads,
     pub compression_z_level: Option<u8>,
     pub compression_algorithm: Option<Box<str>>,
+    pub allowed_drivers: HashSet<String>,
 }
 
 impl ConfigElement for Gdal {
