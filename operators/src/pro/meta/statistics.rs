@@ -134,7 +134,7 @@ where
     type Output = T;
     type SpatialBounds = S;
 
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: QueryRectangle<Self::SpatialBounds>,
         ctx: &'a dyn QueryContext,

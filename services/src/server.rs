@@ -5,11 +5,12 @@ use crate::handlers;
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::server::{
-    calculate_max_blocking_threads_per_worker, configure_extractors, log_server_info, render_404,
-    render_405, serve_openapi_json, CustomRootSpanBuilder,
+    calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
+    log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
 };
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
+use geoengine_operators::util::gdal::register_gdal_drivers_from_list;
 use log::info;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -42,6 +43,8 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         .into();
 
     let tiling_spec = config::get_config_element::<config::TilingSpecification>()?.into();
+
+    register_gdal_drivers_from_list(config::get_config_element::<config::Gdal>()?.allowed_drivers);
 
     let ctx = InMemoryContext::new_with_data(
         data_path_config.dataset_defs_path,
@@ -144,6 +147,7 @@ where
         }
     })
     .worker_max_blocking_threads(calculate_max_blocking_threads_per_worker())
+    .on_connect(connection_init)
     .bind(bind_address)?
     .run()
     .await

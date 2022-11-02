@@ -5,7 +5,7 @@ use uuid::Uuid;
 identifier!(ComputationContext);
 
 /// An Id for a computation used for quota tracking
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ComputationUnit {
     pub issuer: Uuid,                // TODO: use UserId?
     pub context: ComputationContext, // TODO: introduce the concept of workflows to the operators crate and use/add it here

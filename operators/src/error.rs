@@ -310,6 +310,10 @@ pub enum Error {
     GdalSource {
         source: crate::source::GdalSourceError,
     },
+
+    QueryCanceled,
+
+    AbortTriggerAlreadyUsed,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

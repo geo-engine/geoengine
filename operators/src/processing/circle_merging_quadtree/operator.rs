@@ -349,7 +349,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
     type Output = MultiPointCollection;
     type SpatialBounds = BoundingBox2D;
 
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,

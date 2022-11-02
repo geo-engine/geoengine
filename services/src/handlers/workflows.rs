@@ -454,6 +454,7 @@ async fn dataset_from_workflow_handler<C: Context>(
                 force_big_tiff: false,
             },
             tile_limit,
+            Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
         ).await)?
     .map_err(crate::error::Error::from)?;
 
@@ -1147,6 +1148,7 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();

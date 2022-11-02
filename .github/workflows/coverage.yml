@@ -35,16 +35,20 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: APT update
         run: sudo apt-get update
       - name: Install lld & GDAL
         run: |
-          sudo apt-get install lld libgdal-dev gdal-bin build-essential
+          sudo apt-get install lld libgdal-dev gdal-bin build-essential curl
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
-      - name: init rust-toolchain
+      - name: Install Rustup
+        run: |
+          curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
+      - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
       - name: setup rust build cache

@@ -43,6 +43,7 @@ rustc-hash = { version = "1.0", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.7"
+stream-cancel = "0.8"
 tempfile = "3.1"
 tokio = { version = "1.15", features = ["macros", "signal", "sync", "rt-multi-thread", "time"] }
 tracing = "0.1"

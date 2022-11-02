@@ -1,9 +1,11 @@
+use crate::error;
 use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions};
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
     error::Error,
 };
-use futures::StreamExt;
+use futures::future::BoxFuture;
+use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterCreationOption};
 use gdal::{Dataset, Driver};
 use geoengine_datatypes::primitives::{
@@ -20,6 +22,8 @@ use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
 
+use super::abortable_query_execution;
+
 pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: RasterQueryRectangle,
@@ -27,6 +31,7 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
+    conn_closed: BoxFuture<'_, ()>,
 ) -> Result<Vec<u8>>
 where
     T: Pixel + GdalType,
@@ -41,6 +46,7 @@ where
         gdal_tiff_metadata,
         gdal_tiff_options,
         tile_limit,
+        conn_closed,
     )
     .await?;
 
@@ -55,18 +61,22 @@ pub struct GdalGeoTiffDatasetMetadata {
     pub spatial_reference: SpatialReference,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
     file_path: &Path,
     processor: Box<dyn RasterQueryProcessor<RasterType = P>>,
     query_rect: RasterQueryRectangle,
-    query_ctx: C,
+    mut query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
+    conn_closed: BoxFuture<'_, ()>,
 ) -> Result<()>
 where
     P: Pixel + GdalType,
 {
+    let query_abort_trigger = query_ctx.abort_trigger()?;
+
     // TODO: create file path if it doesn't exist
     // TODO: handle streams with multiple time steps correctly
 
@@ -96,7 +106,6 @@ where
     .await?;
 
     let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
-
     let dataset_writer = tile_stream
         .enumerate()
         .fold(
@@ -121,7 +130,10 @@ where
         )
         .await?;
 
-    crate::util::spawn_blocking(move || dataset_writer.finish()).await?
+    let written = crate::util::spawn_blocking(move || dataset_writer.finish())
+        .map_err(|e| error::Error::TokioJoin { source: e });
+
+    abortable_query_execution(written, conn_closed, query_abort_trigger).await?
 }
 
 const COG_BLOCK_SIZE: &str = "512";
@@ -557,6 +569,7 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -611,6 +624,7 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -661,6 +675,7 @@ mod tests {
                 force_big_tiff: true,
             },
             None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -715,6 +730,7 @@ mod tests {
                 force_big_tiff: true,
             },
             None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -772,6 +788,7 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -829,6 +846,7 @@ mod tests {
                 force_big_tiff: false,
             },
             Some(1),
+            Box::pin(futures::future::pending()),
         )
         .await;
 
@@ -875,6 +893,7 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
+            Box::pin(futures::future::pending()),
         )
         .await;
 
