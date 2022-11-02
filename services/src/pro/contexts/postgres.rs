@@ -475,7 +475,7 @@ where
                             email character varying (256),
                             real_name character varying (256),
                             active boolean NOT NULL
-                        );                     
+                        );
                         "#
                     ,
                     system_role_id = Role::system_role_id(),

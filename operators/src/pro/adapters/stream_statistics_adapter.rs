@@ -102,14 +102,10 @@ mod tests {
     async fn simple() {
         let v = vec![1, 2, 3];
         let v_stream = futures::stream::iter(v);
-        let (tx, _rx) = channel::<ComputationUnit>(111);
-        let quota = QuotaTracking::new(
-            tx,
-            ComputationUnit {
-                issuer: Uuid::new_v4(),
-                context: ComputationContext::new(),
-            },
-        );
+        let (tx, mut rx) = channel::<ComputationUnit>(111);
+        let issuer = Uuid::new_v4();
+        let context = ComputationContext::new();
+        let quota = QuotaTracking::new(tx, ComputationUnit { issuer, context });
         let mut v_stat_stream =
             StreamStatisticsAdapter::new(v_stream, span!(Level::TRACE, "test"), quota);
 
@@ -130,5 +126,10 @@ mod tests {
         assert_eq!(v_stat_stream.element_count(), 3);
         assert_eq!(v_stat_stream.poll_next_count(), 3);
         assert_eq!(v_stat_stream.not_ready_count(), 0);
+
+        assert_eq!(
+            rx.next().await.unwrap(),
+            ComputationUnit { issuer, context }
+        );
     }
 }

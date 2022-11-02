@@ -5,12 +5,14 @@ use uuid::Uuid;
 identifier!(ComputationContext);
 
 /// An Id for a computation used for quota tracking
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ComputationUnit {
     pub issuer: Uuid,                // TODO: use UserId?
     pub context: ComputationContext, // TODO: introduce the concept of workflows to the operators crate and use/add it here
 }
 
+/// This type holds a `Sender` to a channel that is used to track the computation units.
+/// It is passed to the `StreamStatisticsAdapter` via the `QueryContext`.
 #[derive(Clone)]
 pub struct QuotaTracking {
     quota_sender: Sender<ComputationUnit>,

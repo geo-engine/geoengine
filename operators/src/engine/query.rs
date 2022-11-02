@@ -48,9 +48,12 @@ pub trait QueryContext: Send + Sync {
     fn chunk_byte_size(&self) -> ChunkByteSize;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
 
+    /// get the `QueryContextExtensions` that contain additional information
     fn extensions(&self) -> &QueryContextExtensions;
 }
 
+/// This type allows adding additional information to the `QueryContext`.
+/// It acts like a type mape, allowing to store one value per type.
 #[derive(Default)]
 pub struct QueryContextExtensions {
     map: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
