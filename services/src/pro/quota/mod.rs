@@ -66,7 +66,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                 // TODO: also log workflow, or connect the computation context to a workflow beforehand.
                 //       However, currently it is possible to reuse a context for multiple queries.
                 //       Also: the operators crate knows nothing about workflows as of yet.
-                log::info!(
+                log::trace!(
                     "Quota received. User: {}, Context: {}",
                     computation.issuer,
                     computation.context
