@@ -11,8 +11,8 @@ pub struct ComputationUnit {
     pub context: ComputationContext, // TODO: introduce the concept of workflows to the operators crate and use/add it here
 }
 
-/// This type holds a `Sender` to a channel that is used to track the computation units.
-/// It is passed to the `StreamStatisticsAdapter` via the `QueryContext`.
+/// This type holds a [`Sender`] to a channel that is used to track the computation units.
+/// It is passed to the [`StreamStatisticsAdapter`] via the [`QueryContext`].
 #[derive(Clone)]
 pub struct QuotaTracking {
     quota_sender: Sender<ComputationUnit>,
