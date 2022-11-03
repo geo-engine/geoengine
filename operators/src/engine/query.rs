@@ -61,7 +61,7 @@ pub trait QueryContext: Send + Sync {
 }
 
 /// This type allows adding additional information to the `QueryContext`.
-/// It acts like a type mape, allowing to store one value per type.
+/// It acts like a type map, allowing one to store one value per type.
 #[derive(Default)]
 pub struct QueryContextExtensions {
     map: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
