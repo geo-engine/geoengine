@@ -31,8 +31,6 @@ impl QuotaTracking {
     }
 
     pub fn work_unit_done(&self) {
-        self.quota_sender
-            .send(self.computation)
-            .expect("the quota receiver should never close the receiving end of the channel");
+        let _ = self.quota_sender.send(self.computation); // ignore the Result because the quota receiver should never close the receiving end of the channel
     }
 }
