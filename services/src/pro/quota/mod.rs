@@ -1,9 +1,6 @@
-use futures::{
-    channel::mpsc::{channel, Receiver, Sender},
-    StreamExt,
-};
 use geoengine_operators::pro::meta::quota::{ComputationContext, ComputationUnit, QuotaTracking};
 use std::sync::Arc;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use geoengine_datatypes::util::test::TestDefault;
 
@@ -11,16 +8,13 @@ use crate::pro::users::UserId;
 
 use super::users::{UserDb, UserSession};
 
-// TODO: find a good default, choose w.r.t. resources or make configurable
-const QUOTA_CHANNEL_SIZE: usize = 1000;
-
 #[derive(Debug, Clone)]
 pub struct QuotaTrackingFactory {
-    quota_sender: Sender<ComputationUnit>,
+    quota_sender: UnboundedSender<ComputationUnit>,
 }
 
 impl QuotaTrackingFactory {
-    pub fn new(quota_sender: Sender<ComputationUnit>) -> Self {
+    pub fn new(quota_sender: UnboundedSender<ComputationUnit>) -> Self {
         Self { quota_sender }
     }
 
@@ -41,18 +35,18 @@ impl QuotaTrackingFactory {
 
 impl TestDefault for QuotaTrackingFactory {
     fn test_default() -> Self {
-        let (quota_sender, _quota_receiver) = channel(QUOTA_CHANNEL_SIZE);
+        let (quota_sender, _quota_receiver) = unbounded_channel();
         Self::new(quota_sender)
     }
 }
 
 pub struct QuotaManager<U: UserDb + 'static> {
     user_db: Arc<U>,
-    quota_receiver: Receiver<ComputationUnit>,
+    quota_receiver: UnboundedReceiver<ComputationUnit>,
 }
 
 impl<U: UserDb + 'static> QuotaManager<U> {
-    pub fn new(user_db: Arc<U>, quota_receiver: Receiver<ComputationUnit>) -> Self {
+    pub fn new(user_db: Arc<U>, quota_receiver: UnboundedReceiver<ComputationUnit>) -> Self {
         Self {
             user_db,
             quota_receiver,
@@ -61,7 +55,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
 
     pub fn run(mut self) {
         crate::util::spawn(async move {
-            while let Some(computation) = self.quota_receiver.next().await {
+            while let Some(computation) = self.quota_receiver.recv().await {
                 // TODO: issue a tracing event instead?
                 // TODO: also log workflow, or connect the computation context to a workflow beforehand.
                 //       However, currently it is possible to reuse a context for multiple queries.
@@ -85,7 +79,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
 }
 
 pub fn initialize_quota_tracking<U: UserDb + 'static>(user_db: Arc<U>) -> QuotaTrackingFactory {
-    let (quota_sender, quota_receiver) = channel::<ComputationUnit>(QUOTA_CHANNEL_SIZE);
+    let (quota_sender, quota_receiver) = unbounded_channel::<ComputationUnit>();
 
     QuotaManager::new(user_db, quota_receiver).run();
 
@@ -137,8 +131,8 @@ mod tests {
 
         let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
-        tracking.work_unit_done().await;
-        tracking.work_unit_done().await;
+        tracking.work_unit_done();
+        tracking.work_unit_done();
 
         // wait for quota to be recorded
         let mut success = false;

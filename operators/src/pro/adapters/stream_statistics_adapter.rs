@@ -66,8 +66,8 @@ where
                     element_count = *this.element_count,
                     empty = false
                 );
-                // track quota asynchronously
-                let _r = crate::util::spawn((*this.quota).work_unit_done());
+
+                (*this.quota).work_unit_done();
             }
             None => {
                 tracing::debug!(
@@ -89,8 +89,9 @@ where
 #[cfg(test)]
 mod tests {
 
-    use futures::{channel::mpsc::channel, StreamExt};
+    use futures::StreamExt;
     use geoengine_datatypes::util::Identifier;
+    use tokio::sync::mpsc::unbounded_channel;
     use tracing::{span, Level};
     use uuid::Uuid;
 
@@ -102,7 +103,7 @@ mod tests {
     async fn simple() {
         let v = vec![1, 2, 3];
         let v_stream = futures::stream::iter(v);
-        let (tx, mut rx) = channel::<ComputationUnit>(111);
+        let (tx, mut rx) = unbounded_channel::<ComputationUnit>();
         let issuer = Uuid::new_v4();
         let context = ComputationContext::new();
         let quota = QuotaTracking::new(tx, ComputationUnit { issuer, context });
@@ -128,7 +129,7 @@ mod tests {
         assert_eq!(v_stat_stream.not_ready_count(), 0);
 
         assert_eq!(
-            rx.next().await.unwrap(),
+            rx.recv().await.unwrap(),
             ComputationUnit { issuer, context }
         );
     }

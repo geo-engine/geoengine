@@ -1,5 +1,5 @@
-use futures::{channel::mpsc::Sender, Future, SinkExt};
 use geoengine_datatypes::identifier;
+use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 
 identifier!(ComputationContext);
@@ -15,26 +15,24 @@ pub struct ComputationUnit {
 /// It is passed to the [`StreamStatisticsAdapter`] via the [`QueryContext`].
 #[derive(Clone)]
 pub struct QuotaTracking {
-    quota_sender: Sender<ComputationUnit>,
+    quota_sender: UnboundedSender<ComputationUnit>,
     computation: ComputationUnit,
 }
 
 impl QuotaTracking {
-    pub fn new(quota_sender: Sender<ComputationUnit>, computation: ComputationUnit) -> Self {
+    pub fn new(
+        quota_sender: UnboundedSender<ComputationUnit>,
+        computation: ComputationUnit,
+    ) -> Self {
         Self {
             quota_sender,
             computation,
         }
     }
 
-    pub fn work_unit_done(&self) -> impl Future<Output = ()> {
-        let mut sender = self.quota_sender.clone();
-        let computation = self.computation;
-        async move {
-            sender
-                .send(computation)
-                .await
-                .expect("the quota receiver should never close the receiving end of the channel");
-        }
+    pub fn work_unit_done(&self) {
+        self.quota_sender
+            .send(self.computation)
+            .expect("the quota receiver should never close the receiving end of the channel");
     }
 }

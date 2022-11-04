@@ -2263,8 +2263,8 @@ mod tests {
 
             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
-            tracking.work_unit_done().await;
-            tracking.work_unit_done().await;
+            tracking.work_unit_done();
+            tracking.work_unit_done();
 
             // wait for quota to be recorded
             let mut success = false;
