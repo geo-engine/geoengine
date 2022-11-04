@@ -115,6 +115,7 @@ allowed_drivers = [
     "XLS",
     "XLSX",
     "Zarr",
+    "GPX",
 ]
 
 [session]
