@@ -5,7 +5,6 @@ use crate::api::model::datatypes::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use utoipa::openapi::Schema;
 use utoipa::ToSchema;
 
 use super::datatypes::{
@@ -124,7 +123,7 @@ pub type OgrMetaData =
     StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>;
 
 impl ToSchema for MockMetaData {
-    fn schema() -> Schema {
+    fn schema() -> utoipa::openapi::Schema {
         use utoipa::openapi::*;
         ObjectBuilder::new()
             .property(
@@ -142,7 +141,7 @@ impl ToSchema for MockMetaData {
 }
 
 impl ToSchema for OgrMetaData {
-    fn schema() -> Schema {
+    fn schema() -> utoipa::openapi::Schema {
         use utoipa::openapi::*;
         ObjectBuilder::new()
             .property("loading_info", Ref::from_schema_name("OgrSourceDataset"))
@@ -295,7 +294,7 @@ pub struct GdalMetaDataRegular {
 }
 
 /// Parameters for loading data using Gdal
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetParameters {
     pub file_path: String,
@@ -316,6 +315,61 @@ pub struct GdalDatasetParameters {
     pub gdal_config_options: Option<Vec<(String, String)>>, // TODO: does not compile https://github.com/juhaku/utoipa/issues/330
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
+}
+
+// Utoipa does not support tuple types
+impl ToSchema for GdalDatasetParameters {
+    fn schema() -> utoipa::openapi::Schema {
+        use utoipa::openapi::*;
+        ObjectBuilder::new()
+            .property("filePath", Object::with_type(SchemaType::String))
+            .required("filePath")
+            .property("rasterbandChannel", Object::with_type(SchemaType::Boolean))
+            .required("rasterbandChannel")
+            .property(
+                "geoTransform",
+                Ref::from_schema_name("GdalDatasetGeoTransform"),
+            )
+            .required("geoTransform")
+            .property("width", Object::with_type(SchemaType::Integer))
+            .required("width")
+            .property("height", Object::with_type(SchemaType::Integer))
+            .required("height")
+            .property(
+                "fileNotFoundHandling",
+                Ref::from_schema_name("FileNotFoundHandling"),
+            )
+            .required("fileNotFoundHandling")
+            .property(
+                "noDataValue",
+                ObjectBuilder::new()
+                    .schema_type(SchemaType::Number)
+                    .format(Some(SchemaFormat::Double)),
+            )
+            .property(
+                "propertiesMapping",
+                ArrayBuilder::new().items(Ref::from_schema_name("GdalMetadataMapping")),
+            )
+            .required("propertiesMapping")
+            .property(
+                "gdalOpenOptions",
+                ArrayBuilder::new().items(Object::with_type(SchemaType::String)),
+            )
+            .property(
+                "gdalConfigOptions",
+                ArrayBuilder::new().items(
+                    ArrayBuilder::new()
+                        .items(Object::with_type(SchemaType::String))
+                        .min_items(Some(2))
+                        .max_items(Some(2)),
+                ),
+            )
+            .property(
+                "allowAlphabandAsMask",
+                Object::with_type(SchemaType::Boolean),
+            )
+            .into()
+    }
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
