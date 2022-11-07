@@ -28,6 +28,7 @@ use crate::datasets::storage::{
 };
 use crate::datasets::upload::UploadId;
 use crate::handlers;
+use crate::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::TaskAbortOptions;
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
@@ -83,6 +84,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
+        handlers::spatial_references::get_spatial_reference_specification_handler,
     ),
     components(
         schemas(
@@ -113,6 +115,8 @@ use utoipa::{Modify, OpenApi};
             SpatialReference,
             SpatialReferenceOption,
             SpatialReferenceAuthority,
+            SpatialReferenceSpecification,
+            AxisOrder,
             Measurement,
             ContinuousMeasurement,
             ClassificationMeasurement,
@@ -244,7 +248,7 @@ use utoipa::{Modify, OpenApi};
             UnixTimeStampType,
             Dataset,
             DatasetDefinition,
-            AddDataset
+            AddDataset,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

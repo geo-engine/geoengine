@@ -9,6 +9,7 @@ use proj_sys::PJ_PROJ_STRING_TYPE_PJ_PROJ_4;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::str::FromStr;
+use utoipa::ToSchema;
 
 pub(crate) fn init_spatial_reference_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -32,6 +33,33 @@ pub struct SpatialReferenceSpecification {
     pub extent: BoundingBox2D,
     pub axis_labels: Option<(String, String)>,
     pub axis_order: Option<AxisOrder>,
+}
+
+impl ToSchema for SpatialReferenceSpecification {
+    fn schema() -> utoipa::openapi::Schema {
+        use utoipa::openapi::*;
+        ObjectBuilder::new()
+            .property("name", Object::with_type(SchemaType::String))
+            .required("name")
+            .property(
+                "spatialReference",
+                Ref::from_schema_name("SpatialReference"),
+            )
+            .required("spatialReference")
+            .property("projString", Object::with_type(SchemaType::String))
+            .required("projString")
+            .property("extent", Ref::from_schema_name("BoundingBox2D"))
+            .required("extent")
+            .property(
+                "axisLabels",
+                ArrayBuilder::new()
+                    .items(Object::with_type(SchemaType::String))
+                    .min_items(Some(2))
+                    .max_items(Some(2)),
+            )
+            .property("axisOrder", Ref::from_schema_name("AxisOrder"))
+            .into()
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
@@ -86,7 +114,7 @@ pub enum ProjJsonAxisDirection {
     North,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum AxisOrder {
     NorthEast,
@@ -155,6 +183,41 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
 }
 
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
+#[utoipa::path(
+    tag = "Spatial References",
+    get,
+    path = "/spatialReferenceSpecification/{srs_string}",
+    responses(
+        (status = 200, description = "OK", body = SpatialReferenceSpecification,
+            example = json!({
+                "name": "WGS 84",
+                "spatialReference": "EPSG:4326",
+                "projString": "+proj=longlat +datum=WGS84 +no_defs +type=crs",
+                "extent": {
+                    "lowerLeftCoordinate": {
+                        "x": -180.0,
+                        "y": -90.0
+                    },
+                    "upperRightCoordinate": {
+                        "x": 180.0,
+                        "y": 90.0
+                    }
+                },
+                "axisLabels": [
+                    "Geodetic longitude",
+                    "Geodetic latitude"
+                ],
+                "axisOrder": "northEast"
+            })
+        )
+    ),
+    params(
+        ("srs_string", example = "EPSG:4326")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn get_spatial_reference_specification_handler<C: Context>(
     srs_string: web::Path<String>,
     _session: C::Session,
