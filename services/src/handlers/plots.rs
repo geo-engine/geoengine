@@ -19,6 +19,7 @@ use geoengine_operators::engine::{QueryContext, ResultDescriptor, TypedPlotQuery
 use geoengine_operators::util::abortable_query_execution;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 pub(crate) fn init_plot_routes<C>(cfg: &mut web::ServiceConfig)
@@ -29,19 +30,23 @@ where
     cfg.service(web::resource("/plot/{id}").route(web::get().to(get_plot_handler::<C>)));
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GetPlot {
     #[serde(deserialize_with = "parse_bbox")]
+    #[param(example = "-180,-90,180,90", value_type = String)]
     pub bbox: BoundingBox2D,
+    #[param(example = "EPSG:4326")]
     pub crs: Option<SpatialReference>,
     #[serde(deserialize_with = "parse_time")]
+    #[param(example = "2020-01-01T00:00:00.0Z")]
     pub time: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
+    #[param(example = "0.1,0.1", value_type = String)]
     pub spatial_resolution: SpatialResolution,
 }
 
-/// Generates a [plot](WrappedPlotOutput).
+/// Generates a plot.
 ///
 /// # Example
 ///
@@ -99,28 +104,37 @@ pub(crate) struct GetPlot {
 /// }
 /// ```
 ///
-/// 2. Generate the plot.
-/// ```text
-/// GET /plot/504ed8a4-e0a4-5cef-9f91-b2ffd4a2b56b?bbox=-180,-90,180,90&crs=EPSG:4326&time=2020-01-01T00%3A00%3A00.0Z&spatialResolution=0.1,0.1
-/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "outputFormat": "JsonPlain",
-///   "plotType": "Statistics",
-///   "data": [
-///     {
-///       "pixelCount": 6,
-///       "nanCount": 0,
-///       "min": 1.0,
-///       "max": 6.0,
-///       "mean": 3.5,
-///       "stddev": 1.707825127659933
-///     }
-///   ]
-/// }
-/// ```
+/// 2. Generate the plot with this handler.
+#[utoipa::path(
+    tag = "Plots",
+    get,
+    path = "/plot/{id}",
+    responses(
+        (status = 200, description = "OK", body = WrappedPlotOutput,
+            example = json!({
+                "outputFormat": "JsonPlain",
+                "plotType": "Statistics",
+                "data": [
+                    {
+                        "pixelCount": 6,
+                        "nanCount": 0,
+                        "min": 1.0,
+                        "max": 6.0,
+                        "mean": 3.5,
+                        "stddev": 1.707825127659933
+                    }
+                ]
+            })
+        )
+    ),
+    params(
+        GetPlot,
+        ("id", description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn get_plot_handler<C: Context>(
     req: HttpRequest,
     id: web::Path<Uuid>,
@@ -225,11 +239,12 @@ async fn get_plot_handler<C: Context>(
     Ok(web::Json(output))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-struct WrappedPlotOutput {
+pub struct WrappedPlotOutput {
     output_format: PlotOutputFormat,
     plot_type: &'static str,
+    #[schema(value_type = Object)]
     data: serde_json::Value,
 }
 

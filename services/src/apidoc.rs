@@ -2,10 +2,10 @@ use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
     Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, ExternalDataId,
     FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
-    Palette, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
-    RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority,
-    SpatialReferenceOption, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
-    TimeStep, VectorDataType,
+    Palette, PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
+    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
+    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, TimeGranularity,
+    TimeInstance, TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FormatSpecifics, OgrMetaData, OgrSourceDurationSpec, OgrSourceTimeFormat,
@@ -28,6 +28,7 @@ use crate::datasets::storage::{
 };
 use crate::datasets::upload::UploadId;
 use crate::handlers;
+use crate::handlers::plots::WrappedPlotOutput;
 use crate::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::TaskAbortOptions;
 use crate::handlers::wcs::CoverageResponse;
@@ -85,6 +86,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
+        handlers::plots::get_plot_handler,
     ),
     components(
         schemas(
@@ -249,6 +251,9 @@ use utoipa::{Modify, OpenApi};
             Dataset,
             DatasetDefinition,
             AddDataset,
+
+            PlotOutputFormat,
+            WrappedPlotOutput
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

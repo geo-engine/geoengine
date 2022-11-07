@@ -920,10 +920,7 @@ impl ToSchema for Breakpoint {
     fn schema() -> utoipa::openapi::schema::Schema {
         use utoipa::openapi::*;
         ObjectBuilder::new()
-            .property(
-                "value",
-                ObjectBuilder::new().schema_type(SchemaType::Number),
-            )
+            .property("value", Object::with_type(SchemaType::Number))
             .property("color", Ref::from_schema_name("RgbaColor"))
             .into()
     }
@@ -1179,4 +1176,11 @@ pub struct MultiLineString {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct MultiPolygon {
     polygons: Vec<Vec<Coordinate2D>>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
+pub enum PlotOutputFormat {
+    JsonPlain,
+    JsonVega,
+    ImagePng,
 }
