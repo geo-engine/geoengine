@@ -1,8 +1,11 @@
-use futures::Future;
+use futures::{future::BoxFuture, Future, FutureExt};
+use log::debug;
 use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use tracing::{span, Level};
+
+use crate::{engine::QueryAbortTrigger, error, util::Result};
 
 /// A wrapper around `tokio::task::spawn_blocking` that wraps the
 /// function into the parent `Span` from `tracing`.
@@ -57,4 +60,27 @@ where
 
         future.await
     })
+}
+
+/// execute a future that consumes a query and abort it using the trigger if the abort future completes
+pub async fn abortable_query_execution<F: Future<Output = Result<T>> + Send, T>(
+    execution: F,
+    abort_future: BoxFuture<'_, ()>,
+    abort_trigger: QueryAbortTrigger,
+) -> F::Output {
+    let execution: BoxFuture<F::Output> = Box::pin(execution);
+
+    let (result, _, _) = futures::future::select_all([
+        execution,
+        Box::pin(abort_future.map(|_| Err(error::Error::QueryCanceled))),
+    ])
+    .await;
+
+    if matches!(result, Err(error::Error::QueryCanceled)) {
+        abort_trigger.abort();
+        debug!("Query canceled");
+        return Err(error::Error::QueryCanceled);
+    }
+
+    result
 }

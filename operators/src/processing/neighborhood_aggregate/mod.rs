@@ -235,7 +235,7 @@ where
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
 
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -673,6 +673,7 @@ mod tests {
             180,
             None,
             Some(colorizer),
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
@@ -740,6 +741,7 @@ mod tests {
             180,
             None,
             Some(colorizer),
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();

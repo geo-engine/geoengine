@@ -54,7 +54,7 @@ where
     type Output = RasterTile2D<TO>;
     type SpatialBounds = SpatialPartition2D;
 
-    async fn query<'b>(
+    async fn _query<'b>(
         &'b self,
         query: RasterQueryRectangle,
         ctx: &'b dyn QueryContext,

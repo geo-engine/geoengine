@@ -1,4 +1,4 @@
-use actix_web::{web, FromRequest, HttpResponse};
+use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use reqwest::Url;
 use snafu::{ensure, ResultExt};
 
@@ -17,7 +17,7 @@ use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::server::not_implemented_handler;
+use crate::util::server::{connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -27,6 +27,7 @@ use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
 use std::str::FromStr;
+use std::time::Duration;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -240,6 +241,7 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
     )
 )]
 async fn wms_map_handler<C: Context>(
+    req: HttpRequest,
     workflow: web::Path<WorkflowId>,
     request: web::Query<GetMap>,
     ctx: web::Data<C>,
@@ -254,6 +256,13 @@ async fn wms_map_handler<C: Context>(
     );
 
     // TODO: validate request further
+
+    let conn_closed = connection_closed(
+        &req,
+        config::get_config_element::<config::Wms>()?
+            .request_timeout_seconds
+            .map(Duration::from_secs),
+    );
 
     let workflow = ctx
         .workflow_registry_ref()
@@ -323,7 +332,7 @@ async fn wms_map_handler<C: Context>(
     let image_bytes = call_on_generic_raster_processor!(
         processor,
         p =>
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), colorizer).await
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), colorizer, conn_closed).await
     ).map_err(error::Error::from)?;
 
     Ok(HttpResponse::Ok()
@@ -531,6 +540,7 @@ mod tests {
             180,
             None,
             None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();

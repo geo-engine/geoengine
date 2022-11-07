@@ -9,8 +9,8 @@ use crate::util::config::{self, get_config_element, Backend};
 
 use super::projects::ProProjectDb;
 use crate::util::server::{
-    calculate_max_blocking_threads_per_worker, configure_extractors, log_server_info, render_404,
-    render_405, serve_openapi_json,
+    calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
+    log_server_info, render_404, render_405, serve_openapi_json,
 };
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
@@ -18,6 +18,7 @@ use actix_web::{http, middleware, web, App, HttpServer};
 use bb8_postgres::tokio_postgres::NoTls;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::ChunkByteSize;
+use geoengine_operators::util::gdal::register_gdal_drivers_from_list;
 use log::{info, warn};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -110,6 +111,7 @@ where
         app
     })
     .worker_max_blocking_threads(calculate_max_blocking_threads_per_worker())
+    .on_connect(connection_init)
     .bind(bind_address)?
     .run()
     .await
@@ -174,6 +176,8 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         .into();
 
     let tiling_spec = config::get_config_element::<config::TilingSpecification>()?.into();
+
+    register_gdal_drivers_from_list(config::get_config_element::<config::Gdal>()?.allowed_drivers);
 
     match web_config.backend {
         Backend::InMemory => {

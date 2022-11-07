@@ -1,4 +1,4 @@
-use futures::StreamExt;
+use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
     primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
@@ -11,15 +11,18 @@ use tracing::{span, Level};
 use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor};
 use crate::{error, util::Result};
 
+use super::abortable_query_execution;
+
 #[allow(clippy::too_many_arguments)]
-pub async fn raster_stream_to_png_bytes<T, C: QueryContext>(
+pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: RasterQueryRectangle,
-    query_ctx: C,
+    mut query_ctx: C,
     width: u32,
     height: u32,
     time: Option<TimeInterval>,
     colorizer: Option<Colorizer>,
+    conn_closed: BoxFuture<'_, ()>,
 ) -> Result<Vec<u8>>
 where
     T: Pixel,
@@ -27,7 +30,7 @@ where
     let span = span!(Level::TRACE, "raster_stream_to_png_bytes");
     let _enter = span.enter();
 
-    let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
+    let query_abort_trigger = query_ctx.abort_trigger()?;
 
     let tile_stream = processor.query(query_rect, &query_ctx).await?;
 
@@ -48,8 +51,8 @@ where
         GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
     ));
 
-    let output_tile = tile_stream
-        .fold(output_tile, |raster2d, tile| {
+    let output_tile: BoxFuture<Result<RasterTile2D<T>>> =
+        Box::pin(tile_stream.fold(output_tile, |raster2d, tile| {
             let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
                 (Ok(raster2d), Ok(tile)) if tile.is_empty() => Ok(raster2d),
                 (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
@@ -63,10 +66,12 @@ where
                 Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
                 Err(error) => futures::future::err(error),
             }
-        })
-        .await?;
+        }));
 
-    Ok(output_tile.grid_array.to_png(width, height, &colorizer)?)
+    let result = abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+
+    let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
+    Ok(result.grid_array.to_png(width, height, &colorizer)?)
 }
 
 /// Method to generate a default `Colorizer`.
@@ -133,6 +138,7 @@ mod tests {
             600,
             None,
             None,
+            Box::pin(futures::future::pending()),
         )
         .await
         .unwrap();
