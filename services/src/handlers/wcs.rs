@@ -419,7 +419,7 @@ async fn wcs_get_coverage_handler<C: Context>(
 
     let query_ctx = ctx.query_context()?;
 
-    let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
+    let mut bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_geotiff_bytes(
             p,
             query_rect,
@@ -440,7 +440,9 @@ async fn wcs_get_coverage_handler<C: Context>(
         .await)?
     .map_err(error::Error::from)?;
 
-    Ok(HttpResponse::Ok().content_type("image/tiff").body(bytes))
+    assert_eq!(bytes.len(), 1);
+
+    Ok(HttpResponse::Ok().content_type("image/tiff").body(bytes.pop().expect("bytes should have length 1")))
 }
 
 pub struct CoverageResponse {}
