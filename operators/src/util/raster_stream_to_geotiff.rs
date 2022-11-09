@@ -1,4 +1,8 @@
 use crate::error;
+use crate::source::{
+    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+    GdalLoadingInfoTemporalSlice,
+};
 use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions};
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
@@ -8,7 +12,10 @@ use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterCreationOption};
 use gdal::{Dataset, Driver};
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned, TimeInterval};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D,
+    SpatialPartitioned, TimeInterval,
+};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridSize, MapElements,
     MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D,
@@ -19,7 +26,6 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
-use crate::source::{FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfoTemporalSlice};
 
 use super::abortable_query_execution;
 
@@ -47,17 +53,17 @@ where
         tile_limit,
         conn_closed,
     )
-        .await?
-        .into_iter()
-        .map(|x| {
-            gdal::vsi::get_vsi_mem_file_bytes_owned(
-                x.params
-                    .expect("params is always set in raster_stream_to_geotiff")
-                    .file_path,
-            )
-                .unwrap()
-        })
-        .collect();
+    .await?
+    .into_iter()
+    .map(|x| {
+        gdal::vsi::get_vsi_mem_file_bytes_owned(
+            x.params
+                .expect("params is always set in raster_stream_to_geotiff")
+                .file_path,
+        )
+        .unwrap()
+    })
+    .collect();
 
     Ok(slices)
 }
@@ -107,11 +113,11 @@ where
             gdal_config_options,
         )
     })
-        .await?;
+    .await?;
 
     let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
 
-    let dataset_writer = tile_stream
+    let mut dataset_writer = tile_stream
         .enumerate()
         .fold(
             dataset_writer,
@@ -163,7 +169,7 @@ where
                     dataset_writer.write_tile(tile)?;
                     Ok(dataset_writer)
                 })
-                    .await?
+                .await?
             },
         )
         .await?;
@@ -185,7 +191,7 @@ const BIG_TIFF_BYTE_THRESHOLD: usize = 2_000_000_000; // ~ 2GB + 2GB for overvie
 
 #[derive(Debug)]
 struct GdalDatasetWriter<P: Pixel + GdalType> {
-    dataset: Dataset,
+    dataset: Option<Dataset>,
     rasterband_index: isize,
     gdal_tiff_options: GdalGeoTiffOptions,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -193,6 +199,8 @@ struct GdalDatasetWriter<P: Pixel + GdalType> {
     output_geo_transform: GeoTransform,
     x_pixel_size: f64,
     y_pixel_size: f64,
+    width: u32,
+    height: u32,
     _type: std::marker::PhantomData<P>,
     use_big_tiff: bool,
     time_intervals: Vec<TimeInterval>,
@@ -217,6 +225,8 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
 
         let x_pixel_size = query_rect.spatial_resolution.x;
         let y_pixel_size = query_rect.spatial_resolution.y;
+        let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
+        let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as u32;
         let output_bounds = query_rect.spatial_bounds;
 
         let output_geo_transform = GeoTransform::new(
@@ -233,8 +243,8 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
                 x_pixel_size: x_pixel_size,
                 y_pixel_size: -y_pixel_size,
             },
-            width: (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as usize,
-            height: (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as usize,
+            width: width as usize,
+            height: height as usize,
             file_not_found_handling: FileNotFoundHandling::Error,
             no_data_value: None, // `None` will let the GdalSource detect the correct no-data value.
             properties_mapping: None, // TODO: add properties
@@ -256,17 +266,8 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
 
         let rasterband_index = 1;
 
-        let dataset = Self::create_data_set(
-            &gdal_tiff_metadata,
-            &gdal_tiff_options,
-            &gdal_config_options,
-            &intermediate_dataset_parameters,
-            rasterband_index,
-            use_big_tiff,
-        )?;
-
         Ok(Self {
-            dataset,
+            dataset: None,
             rasterband_index,
             gdal_tiff_options,
             gdal_tiff_metadata,
@@ -274,6 +275,8 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             output_geo_transform,
             x_pixel_size,
             y_pixel_size,
+            width,
+            height,
             _type: Default::default(),
             use_big_tiff,
             time_intervals: vec![],
@@ -289,6 +292,8 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         gdal_tiff_options: &GdalGeoTiffOptions,
         gdal_config_options: &Option<Vec<(String, String)>>,
         dataset_parameters: &GdalDatasetParameters,
+        width: u32,
+        height: u32,
         rasterband_index: isize,
         use_big_tiff: bool,
     ) -> Result<Dataset> {
@@ -308,8 +313,8 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
 
         let mut dataset = driver.create_with_band_type_with_options::<P, _>(
             &dataset_parameters.file_path,
-            dataset_parameters.width as isize,
-            dataset_parameters.height as isize,
+            width as isize,
+            height as isize,
             1,
             &options,
         )?;
@@ -340,16 +345,22 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
     }
 
     fn init_new_intermediate_dataset(&mut self) -> Result<()> {
-        self.dataset = Self::create_data_set(
+        self.dataset = Some(Self::create_data_set(
             &self.gdal_tiff_metadata,
             &self.gdal_tiff_options,
             &self.gdal_config_options,
             &self.intermediate_dataset_parameters,
+            self.width,
+            self.height,
             self.rasterband_index,
             self.use_big_tiff,
-        )?;
+        )?);
 
         Ok(())
+    }
+
+    fn reset_dataset(&mut self) -> Option<Dataset> {
+        std::mem::replace(&mut self.dataset, None)
     }
 
     fn write_tile(&self, tile: RasterTile2D<P>) -> Result<()> {
@@ -421,6 +432,8 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let buffer = Buffer::new(window_size, no_data_value_grid.inner_grid.data); // TODO: also write mask!
 
         self.dataset
+            .as_ref()
+            .expect("dataset should be initialized")
             .rasterband(self.rasterband_index)?
             .write(window, window_size, &buffer)?;
         Ok(())
@@ -435,7 +448,11 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         // Write the MaskedGrid data and mask if no no-data value is set.
         let data_buffer = Buffer::new(window_size, masked_grid.inner_grid.data);
 
-        let mut raster_band = self.dataset.rasterband(self.rasterband_index)?;
+        let mut raster_band = self
+            .dataset
+            .as_ref()
+            .expect("dataset should be initialized")
+            .rasterband(self.rasterband_index)?;
         raster_band.write(window, window_size, &data_buffer)?;
 
         // No-data masks are described by the rasterio docs as:
@@ -453,7 +470,8 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         Ok(())
     }
 
-    fn finish(&self) -> Result<()> {
+    fn finish(&mut self) -> Result<()> {
+        let input_dataset = self.reset_dataset().expect("dataset should be initialized");
         let output_file_path = self
             .result
             .last()
@@ -465,17 +483,17 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             .clone();
         if self.gdal_tiff_options.as_cog {
             geotiff_to_cog(
-                &self.dataset,
+                input_dataset,
                 &self.intermediate_dataset_parameters.file_path,
                 &output_file_path,
                 self.gdal_tiff_options.compression_num_threads,
                 self.use_big_tiff,
             )
         } else {
-            let driver = self.dataset.driver();
+            let driver = input_dataset.driver();
 
             // close file before renaming
-            drop(&self.dataset);
+            drop(input_dataset);
 
             driver.rename(
                 &output_file_path,
@@ -591,7 +609,7 @@ impl std::fmt::Display for GdalCompressionNumThreads {
 /// separate step.
 ///
 fn geotiff_to_cog(
-    input_dataset: &Dataset,
+    input_dataset: Dataset,
     input_file_path: &Path,
     output_file_path: &Path,
     compression_num_threads: GdalCompressionNumThreads,
@@ -934,6 +952,81 @@ mod tests {
                 "../../../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff"
             ) as &[u8],
             bytes.pop().expect("bytes should have length 1").as_slice()
+        );
+
+        // TODO: check programmatically that intermediate file is gone
+    }
+
+    #[tokio::test]
+    async fn cloud_optimized_geotiff_multiple_timesteps_from_stream() {
+        let ctx = MockQueryContext::test_default();
+        let tiling_specification =
+            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+
+        let metadata = create_ndvi_meta_data();
+
+        let gdal_source = GdalSourceProcessor::<u8> {
+            tiling_specification,
+            meta_data: Box::new(metadata),
+            _phantom_data: PhantomData,
+        };
+
+        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
+
+        let mut bytes = raster_stream_to_geotiff_bytes(
+            gdal_source.boxed(),
+            RasterQueryRectangle {
+                spatial_bounds: query_bbox,
+                time_interval: TimeInterval::new(
+                    1_388_534_400_000,
+                    1_388_534_400_000 + 7_776_000_000,
+                )
+                .unwrap(),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    query_bbox.size_x() / 600.,
+                    query_bbox.size_y() / 600.,
+                ),
+            },
+            ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: true,
+                compression_num_threads: GdalCompressionNumThreads::AllCpus,
+                force_big_tiff: false,
+            },
+            None,
+            Box::pin(futures::future::pending()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(bytes.len(), 3);
+
+        // for i in 0..3 {
+        //     let file_name = format!(
+        //         "../test_data/raster/cloud_optimized_geotiff_timestep_{}_from_stream_compressed.tiff",
+        //         i
+        //     );
+        //     geoengine_datatypes::util::test::save_test_bytes(
+        //         &bytes.pop().expect("bytes should have length 3"),
+        //         file_name.as_str(),
+        //     );
+        // }
+
+        assert_eq!(
+            include_bytes!("../../../test_data/raster/cloud_optimized_geotiff_timestep_0_from_stream_compressed.tiff") as &[u8],
+            bytes.pop().expect("bytes should have length 3").as_slice()
+        );
+        assert_eq!(
+            include_bytes!("../../../test_data/raster/cloud_optimized_geotiff_timestep_1_from_stream_compressed.tiff") as &[u8],
+            bytes.pop().expect("bytes should have length 3").as_slice()
+        );
+        assert_eq!(
+            include_bytes!("../../../test_data/raster/cloud_optimized_geotiff_timestep_2_from_stream_compressed.tiff") as &[u8],
+            bytes.pop().expect("bytes should have length 3").as_slice()
         );
 
         // TODO: check programmatically that intermediate file is gone
