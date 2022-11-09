@@ -276,7 +276,7 @@ pub(crate) async fn quota_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<impl Responder> {
-    let quota_used = ctx.user_db_ref().quota_used_by_session(&session).await?;
+    let quota_used = ctx.user_db_ref().quota_used(&session).await?;
     Ok(web::Json(QuotaUsed { used: quota_used }))
 }
 

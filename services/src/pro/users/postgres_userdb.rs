@@ -444,7 +444,7 @@ where
         Ok(())
     }
 
-    async fn quota_used_by_session(&self, session: &UserSession) -> Result<u64> {
+    async fn quota_used(&self, session: &UserSession) -> Result<u64> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT quota_used FROM users WHERE id = $1;")

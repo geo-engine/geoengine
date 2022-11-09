@@ -193,7 +193,7 @@ impl UserDb for HashMapUserDb {
         Ok(())
     }
 
-    async fn quota_used_by_session(&self, session: &UserSession) -> Result<u64> {
+    async fn quota_used(&self, session: &UserSession) -> Result<u64> {
         Ok(self
             .quota_used
             .read()
