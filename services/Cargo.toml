@@ -38,7 +38,7 @@ float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
 gdal =  "0.13"
-gdal-sys = "0.7"
+gdal-sys = "0.8"
 geo = "0.23"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
