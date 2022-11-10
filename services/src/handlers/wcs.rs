@@ -14,7 +14,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
-use utoipa::openapi::{ObjectBuilder, SchemaFormat, SchemaType};
+use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
 use utoipa::ToSchema;
 
 use crate::api::model::datatypes::TimeInterval;
@@ -449,7 +449,7 @@ impl ToSchema for CoverageResponse {
     fn schema() -> utoipa::openapi::schema::Schema {
         ObjectBuilder::new()
             .schema_type(SchemaType::String)
-            .format(Some(SchemaFormat::Binary))
+            .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
             .into()
     }
 }
