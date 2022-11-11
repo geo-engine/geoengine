@@ -6,6 +6,7 @@ pub mod datasets;
 pub mod handlers;
 pub mod layers;
 pub mod projects;
+pub mod quota;
 pub mod server;
 pub mod users;
 pub mod util;

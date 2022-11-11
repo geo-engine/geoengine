@@ -6,6 +6,8 @@ use std::{
 };
 use tracing::Span;
 
+use crate::pro::meta::quota::QuotaTracking;
+
 #[pin_project(project = StreamStatisticsAdapterProjection)]
 pub struct StreamStatisticsAdapter<S> {
     #[pin]
@@ -13,15 +15,17 @@ pub struct StreamStatisticsAdapter<S> {
     poll_next_count: u64,
     element_count: u64,
     span: Span,
+    quota: QuotaTracking,
 }
 
 impl<S> StreamStatisticsAdapter<S> {
-    pub fn new(stream: S, span: Span) -> StreamStatisticsAdapter<S> {
+    pub fn new(stream: S, span: Span, quota: QuotaTracking) -> StreamStatisticsAdapter<S> {
         StreamStatisticsAdapter {
             stream,
             poll_next_count: 0,
             element_count: 0,
             span,
+            quota,
         }
     }
 
@@ -62,6 +66,8 @@ where
                     element_count = *this.element_count,
                     empty = false
                 );
+
+                (*this.quota).work_unit_done();
             }
             None => {
                 tracing::debug!(
@@ -82,8 +88,14 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use futures::StreamExt;
+    use geoengine_datatypes::util::Identifier;
+    use tokio::sync::mpsc::unbounded_channel;
     use tracing::{span, Level};
+    use uuid::Uuid;
+
+    use crate::pro::meta::quota::{ComputationContext, ComputationUnit};
 
     use super::*;
 
@@ -91,7 +103,12 @@ mod tests {
     async fn simple() {
         let v = vec![1, 2, 3];
         let v_stream = futures::stream::iter(v);
-        let mut v_stat_stream = StreamStatisticsAdapter::new(v_stream, span!(Level::TRACE, "test"));
+        let (tx, mut rx) = unbounded_channel::<ComputationUnit>();
+        let issuer = Uuid::new_v4();
+        let context = ComputationContext::new();
+        let quota = QuotaTracking::new(tx, ComputationUnit { issuer, context });
+        let mut v_stat_stream =
+            StreamStatisticsAdapter::new(v_stream, span!(Level::TRACE, "test"), quota);
 
         let one = v_stat_stream.next().await;
         assert_eq!(one, Some(1));
@@ -110,5 +127,10 @@ mod tests {
         assert_eq!(v_stat_stream.element_count(), 3);
         assert_eq!(v_stat_stream.poll_next_count(), 3);
         assert_eq!(v_stat_stream.not_ready_count(), 0);
+
+        assert_eq!(
+            rx.recv().await.unwrap(),
+            ComputationUnit { issuer, context }
+        );
     }
 }
