@@ -1,7 +1,9 @@
+use crate::contexts::AdminSession;
 use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::ProContext;
 use crate::pro::users::UserDb;
+use crate::pro::users::UserId;
 use crate::pro::users::UserRegistration;
 use crate::pro::users::UserSession;
 use crate::pro::users::{AuthCodeResponse, UserCredentials};
@@ -12,9 +14,13 @@ use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
 use crate::pro::users::OidcError::OidcDisabled;
+use actix_web::Either;
 use actix_web::{web, HttpResponse, Responder};
+use serde::Deserialize;
+use serde::Serialize;
 use snafu::ensure;
 use snafu::ResultExt;
+use utoipa::ToSchema;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -30,6 +36,8 @@ where
                 .route(web::post().to(session_project_handler::<C>)),
         )
         .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)))
+        .service(web::resource("/quota").route(web::get().to(quota_handler::<C>)))
+        .service(web::resource("/quotas/{user}").route(web::get().to(user_quota_handler::<C>)))
         .service(web::resource("/oidcInit").route(web::post().to(oidc_init::<C>)))
         .service(web::resource("/oidcLogin").route(web::post().to(oidc_login::<C>)));
 }
@@ -241,6 +249,73 @@ pub(crate) async fn session_view_handler<C: ProContext>(
         .await?;
 
     Ok(HttpResponse::Ok())
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct QuotaUsed {
+    pub used: u64,
+}
+
+/// Retrieves the used quota of the current user.
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/quota",
+    responses(
+        (status = 200, description = "The used quota of the user", body = QuotaUsed,
+            example = json!({
+                "used": 1234,
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn quota_handler<C: ProContext>(
+    ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<impl Responder> {
+    let quota_used = ctx.user_db_ref().quota_used(&session).await?;
+    Ok(web::Json(QuotaUsed { used: quota_used }))
+}
+
+/// Retrieves the used quota of a specific user.
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/quotas/{user}",
+    responses(
+        (status = 200, description = "The used quota of the user", body = QuotaUsed,
+            example = json!({
+                "used": 1234,
+            })
+        )
+    ),
+    params(
+        ("user" = UserId, description = "User id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn user_quota_handler<C: ProContext>(
+    ctx: web::Data<C>,
+    session: Either<AdminSession, C::Session>,
+    user: web::Path<UserId>,
+) -> Result<impl Responder> {
+    let user = user.into_inner();
+
+    if let Either::Right(session) = session {
+        if session.user.id != user {
+            return Err(error::Error::Authorization {
+                source: Box::new(error::Error::AnonymousAccessDisabled),
+            });
+        }
+    }
+
+    let quota_used = ctx.user_db_ref().quota_used_by_user(&user).await?;
+    Ok(web::Json(QuotaUsed { used: quota_used }))
 }
 
 /// Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.
@@ -1153,5 +1228,72 @@ mod tests {
             "Unsupported content type header.",
         )
         .await;
+    }
+
+    #[tokio::test]
+    async fn it_gets_quota() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let user = Validated {
+            user_input: UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+                real_name: "Foo Bar".to_string(),
+            },
+        };
+
+        ctx.user_db_ref().register(user).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+        };
+
+        let session = ctx.user_db_ref().login(credentials).await.unwrap();
+
+        ctx.user_db_ref()
+            .increment_quota_used(&session.user.id, 111)
+            .await
+            .unwrap();
+
+        // current user quota
+        let req = test::TestRequest::get()
+            .uri("/quota")
+            .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        let quota: QuotaUsed = test::read_body_json(res).await;
+        assert_eq!(quota.used, 111);
+
+        // specific user quota (self)
+        let req = test::TestRequest::get()
+            .uri(&format!("/quotas/{}", session.user.id))
+            .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        let quota: QuotaUsed = test::read_body_json(res).await;
+        assert_eq!(quota.used, 111);
+
+        // specific user quota (other)
+        let req = test::TestRequest::get()
+            .uri(&format!("/quotas/{}", uuid::Uuid::new_v4()))
+            .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        assert_eq!(res.status(), 401);
+
+        // specific user quota as admin
+        let req = test::TestRequest::get()
+            .uri(&format!("/quotas/{}", session.user.id))
+            .append_header((
+                header::AUTHORIZATION,
+                format!(
+                    "Bearer {}",
+                    config::get_config_element::<config::Session>()
+                        .unwrap()
+                        .admin_session_token
+                        .unwrap()
+                ),
+            ));
+        let res = send_pro_test_request(req, ctx).await;
+        let quota: QuotaUsed = test::read_body_json(res).await;
+        assert_eq!(quota.used, 111);
     }
 }

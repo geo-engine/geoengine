@@ -573,12 +573,12 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = ctx.execution_context(session).unwrap();
+        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
         let initialized = op.initialize(&exe_ctx).await.unwrap();
 
         let processor = initialized.query_processor().unwrap().get_u8().unwrap();
 
-        let query_ctx = ctx.query_context().unwrap();
+        let query_ctx = ctx.query_context(session).unwrap();
         let result = processor.raster_query(query, &query_ctx).await.unwrap();
 
         let result = result
