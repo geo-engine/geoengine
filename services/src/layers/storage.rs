@@ -359,10 +359,49 @@ impl LayerDb for HashMapLayerDb {
 
     async fn remove_layer_from_collection(
         &self,
-        layer: &LayerId,
-        collection: &LayerCollectionId,
+        layer_id: &LayerId,
+        collection_id: &LayerCollectionId,
     ) -> Result<()> {
-        todo!("remove_layer_from_collection")
+        let mut backend = self.backend.write().await;
+
+        let collection = backend
+            .collection_layers
+            .get_mut(collection_id)
+            .ok_or_else(|| LayerDbError::NoLayerCollectionForGivenId {
+                id: collection_id.clone(),
+            })?;
+
+        let mut index = None;
+        for (i, l) in collection.iter().enumerate() {
+            if l == layer_id {
+                index = Some(i);
+                break;
+            }
+        }
+
+        let Some(index) = index else {
+            return Err(LayerDbError::NoLayerForGivenIdInCollection {
+                layer: layer_id.clone(),
+                collection: collection_id.clone(),
+            }
+            .into());
+        };
+
+        collection.remove(index);
+
+        // check if layer is in any collection
+        // if not --> remove entirely
+
+        let layer_is_in_any_collection = backend
+            .collection_layers
+            .values()
+            .any(|layers| layers.contains(layer_id));
+
+        if !layer_is_in_any_collection {
+            backend.layers.remove(layer_id);
+        }
+
+        Ok(())
     }
 }
 
@@ -643,7 +682,7 @@ mod tests {
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_remove_collection() {
+    async fn it_removes_collections() {
         let db = HashMapLayerDb::default();
 
         let layer = AddLayer {
@@ -803,5 +842,132 @@ mod tests {
         )
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_removes_layers_from_collections() {
+        let db = HashMapLayerDb::default();
+
+        let root_collection = &db.root_collection_id().await.unwrap();
+
+        let another_collection = db
+            .add_collection(
+                AddLayerCollection {
+                    name: "top collection".to_string(),
+                    description: "description".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                root_collection,
+            )
+            .await
+            .unwrap();
+
+        let layer_in_one_collection = db
+            .add_layer(
+                AddLayer {
+                    name: "layer 1".to_string(),
+                    description: "description".to_string(),
+                    workflow: Workflow {
+                        operator: TypedOperator::Vector(
+                            MockPointSource {
+                                params: MockPointSourceParams {
+                                    points: vec![Coordinate2D::new(1., 2.); 3],
+                                },
+                            }
+                            .boxed(),
+                        ),
+                    },
+                    symbology: None,
+                }
+                .validated()
+                .unwrap(),
+                &another_collection,
+            )
+            .await
+            .unwrap();
+
+        let layer_in_two_collections = db
+            .add_layer(
+                AddLayer {
+                    name: "layer 2".to_string(),
+                    description: "description".to_string(),
+                    workflow: Workflow {
+                        operator: TypedOperator::Vector(
+                            MockPointSource {
+                                params: MockPointSourceParams {
+                                    points: vec![Coordinate2D::new(1., 2.); 3],
+                                },
+                            }
+                            .boxed(),
+                        ),
+                    },
+                    symbology: None,
+                }
+                .validated()
+                .unwrap(),
+                &another_collection,
+            )
+            .await
+            .unwrap();
+
+        db.add_layer_to_collection(&layer_in_two_collections, root_collection)
+            .await
+            .unwrap();
+
+        // remove first layer --> should be deleted entirely
+
+        db.remove_layer_from_collection(&layer_in_one_collection, &another_collection)
+            .await
+            .unwrap();
+
+        let number_of_layer_in_collection = db
+            .collection(
+                &another_collection,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap()
+            .items
+            .len();
+        assert_eq!(
+            number_of_layer_in_collection,
+            1 /* only the other collection should be here */
+        );
+
+        db.get_layer(&layer_in_one_collection).await.unwrap_err();
+
+        // remove second layer --> should only be gone in collection
+
+        db.remove_layer_from_collection(&layer_in_two_collections, &another_collection)
+            .await
+            .unwrap();
+
+        let number_of_layer_in_collection = db
+            .collection(
+                &another_collection,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap()
+            .items
+            .len();
+        assert_eq!(
+            number_of_layer_in_collection,
+            0 /* both layers were deleted */
+        );
+
+        db.get_layer(&layer_in_two_collections).await.unwrap();
     }
 }

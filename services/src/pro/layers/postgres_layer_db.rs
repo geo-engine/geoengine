@@ -403,7 +403,53 @@ where
         layer: &LayerId,
         collection: &LayerCollectionId,
     ) -> Result<()> {
-        todo!("remove_layer_from_collection")
+        let collection_uuid =
+            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: collection.0.clone(),
+            })?;
+
+        let layer_uuid =
+            Uuid::from_str(&layer.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: layer.0.clone(),
+            })?;
+
+        let conn = self.conn_pool.get().await?;
+
+        let remove_layer_collection_stmt = conn
+            .prepare(
+                "DELETE FROM collection_layers
+                 WHERE collection = $1
+                 AND layer = $2;",
+            )
+            .await?;
+        let num_results = conn
+            .execute(
+                &remove_layer_collection_stmt,
+                &[&collection_uuid, &layer_uuid],
+            )
+            .await?;
+
+        if num_results == 0 {
+            return Err(LayerDbError::NoLayerForGivenIdInCollection {
+                layer: layer.clone(),
+                collection: collection.clone(),
+            }
+            .into());
+        }
+
+        // remove layers without any collection
+        let remove_layers_without_parents_stmt = conn
+            .prepare(
+                "DELETE FROM layers
+                 WHERE id NOT IN (
+                    SELECT layer FROM collection_layers
+                 );",
+            )
+            .await?;
+        conn.execute(&remove_layers_without_parents_stmt, &[])
+            .await?;
+
+        Ok(())
     }
 }
 

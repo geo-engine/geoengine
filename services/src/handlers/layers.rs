@@ -34,10 +34,6 @@ where
                     )
                     .route("/{collection}", web::delete().to(remove_collection::<C>))
                     .route(
-                        "/{collection}/{layer}",
-                        web::delete().to(remove_layer_from_collection::<C>),
-                    )
-                    .route(
                         r#"/{provider}/{collection:.+}"#,
                         web::get().to(list_collection_handler::<C>),
                     ),
@@ -532,25 +528,24 @@ async fn add_collection<C: Context>(
     }))
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct RemoveCollectionFilter {
+    layer: Option<LayerId>,
+}
+
 async fn remove_collection<C: Context>(
     _session: AdminSession, // TODO: allow normal users to remove their collections
     ctx: web::Data<C>,
     collection: web::Path<LayerCollectionId>,
+    filter: web::Query<RemoveCollectionFilter>,
 ) -> Result<HttpResponse> {
-    ctx.layer_db_ref().remove_collection(&collection).await?;
-
-    Ok(HttpResponse::Ok().finish())
-}
-
-async fn remove_layer_from_collection<C: Context>(
-    _session: AdminSession, // TODO: allow normal users to remove their layers from their collections
-    ctx: web::Data<C>,
-    collection: web::Path<LayerCollectionId>,
-    layer: web::Path<LayerId>,
-) -> Result<HttpResponse> {
-    ctx.layer_db_ref()
-        .remove_layer_from_collection(&layer, &collection)
-        .await?;
+    if let Some(layer_id) = filter.layer.as_ref() {
+        ctx.layer_db_ref()
+            .remove_layer_from_collection(layer_id, &collection)
+            .await?;
+    } else {
+        ctx.layer_db_ref().remove_collection(&collection).await?;
+    }
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -723,14 +718,21 @@ mod tests {
         let admin_session_id = AdminSession::default().id();
 
         let req = test::TestRequest::delete()
-            .uri(&format!("/layers/collections/{collection_id}/{layer_id}"))
+            .uri(&format!(
+                "/layers/collections/{collection_id}?layer={layer_id}"
+            ))
             .append_header((
                 header::AUTHORIZATION,
                 Bearer::new(admin_session_id.to_string()),
             ));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(
+            response.status().is_success(),
+            "{:?}: {:?}",
+            response.response().head(),
+            response.response().body()
+        );
 
         // layer should be gone
         ctx.layer_db_ref().get_layer(&layer_id).await.unwrap_err();

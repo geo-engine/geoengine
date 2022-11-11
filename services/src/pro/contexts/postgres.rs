@@ -2457,4 +2457,134 @@ mod tests {
         })
         .await;
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_removes_layers_from_collections() {
+        with_temp_context(|ctx, _| async move {
+            let db = ctx.layer_db_ref();
+
+            let root_collection = &db.root_collection_id().await.unwrap();
+
+            let another_collection = db
+                .add_collection(
+                    AddLayerCollection {
+                        name: "top collection".to_string(),
+                        description: "description".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    root_collection,
+                )
+                .await
+                .unwrap();
+
+            let layer_in_one_collection = db
+                .add_layer(
+                    AddLayer {
+                        name: "layer 1".to_string(),
+                        description: "description".to_string(),
+                        workflow: Workflow {
+                            operator: TypedOperator::Vector(
+                                MockPointSource {
+                                    params: MockPointSourceParams {
+                                        points: vec![Coordinate2D::new(1., 2.); 3],
+                                    },
+                                }
+                                .boxed(),
+                            ),
+                        },
+                        symbology: None,
+                    }
+                    .validated()
+                    .unwrap(),
+                    &another_collection,
+                )
+                .await
+                .unwrap();
+
+            let layer_in_two_collections = db
+                .add_layer(
+                    AddLayer {
+                        name: "layer 2".to_string(),
+                        description: "description".to_string(),
+                        workflow: Workflow {
+                            operator: TypedOperator::Vector(
+                                MockPointSource {
+                                    params: MockPointSourceParams {
+                                        points: vec![Coordinate2D::new(1., 2.); 3],
+                                    },
+                                }
+                                .boxed(),
+                            ),
+                        },
+                        symbology: None,
+                    }
+                    .validated()
+                    .unwrap(),
+                    &another_collection,
+                )
+                .await
+                .unwrap();
+
+            db.add_layer_to_collection(&layer_in_two_collections, root_collection)
+                .await
+                .unwrap();
+
+            // remove first layer --> should be deleted entirely
+
+            db.remove_layer_from_collection(&layer_in_one_collection, &another_collection)
+                .await
+                .unwrap();
+
+            let number_of_layer_in_collection = db
+                .collection(
+                    &another_collection,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap()
+                .items
+                .len();
+            assert_eq!(
+                number_of_layer_in_collection,
+                1 /* only the other collection should be here */
+            );
+
+            db.get_layer(&layer_in_one_collection).await.unwrap_err();
+
+            // remove second layer --> should only be gone in collection
+
+            db.remove_layer_from_collection(&layer_in_two_collections, &another_collection)
+                .await
+                .unwrap();
+
+            let number_of_layer_in_collection = db
+                .collection(
+                    &another_collection,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap()
+                .items
+                .len();
+            assert_eq!(
+                number_of_layer_in_collection,
+                0 /* both layers were deleted */
+            );
+
+            db.get_layer(&layer_in_two_collections).await.unwrap();
+        })
+        .await;
+    }
 }
