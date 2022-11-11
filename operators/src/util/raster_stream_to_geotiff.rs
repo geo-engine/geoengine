@@ -7,7 +7,7 @@ use crate::{
 use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterCreationOption};
-use gdal::{Dataset, Driver};
+use gdal::{Dataset, DriverManager};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
@@ -210,7 +210,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let thread_local_configs =
             gdal_config_options.map(TemporaryGdalThreadLocalConfigOptions::new);
 
-        let driver = Driver::get_by_name("GTiff")?;
+        let driver = DriverManager::get_driver_by_name("GTiff")?;
         let options = create_gdal_tiff_options(
             &compression_num_threads,
             gdal_tiff_options.as_cog,
@@ -234,7 +234,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         // If it is set, set the no-data value for the output geotiff.
         // Otherwise add a mask band to the output geotiff.
         if let Some(no_data) = gdal_tiff_metadata.no_data_value {
-            band.set_no_data_value(no_data)?;
+            band.set_no_data_value(Some(no_data))?;
         } else {
             band.create_mask_band(true)?;
         }
@@ -501,7 +501,7 @@ fn geotiff_to_cog(
     as_big_tiff: bool,
 ) -> Result<()> {
     let input_driver = input_dataset.driver();
-    let output_driver = Driver::get_by_name("COG")?;
+    let output_driver = DriverManager::get_driver_by_name("COG")?;
     let num_threads = &compression_num_threads.to_string();
 
     let mut options = vec![

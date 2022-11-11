@@ -6,7 +6,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::{operations::image::Colorizer, primitives::SpatialResolution};
-use utoipa::openapi::{ObjectBuilder, SchemaFormat, SchemaType};
+use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
 use utoipa::ToSchema;
 
 use crate::api::model::datatypes::{SpatialReference, SpatialReferenceOption, TimeInterval};
@@ -271,7 +271,7 @@ async fn wms_map_handler<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context(session.clone())?;
 
     let initialized = operator
         .clone()
@@ -325,9 +325,9 @@ async fn wms_map_handler<C: Context>(
         ),
     };
 
-    let colorizer = colorizer_from_style(&request.styles)?;
+    let query_ctx = ctx.query_context(session)?;
 
-    let query_ctx = ctx.query_context()?;
+    let colorizer = colorizer_from_style(&request.styles)?;
 
     let image_bytes = call_on_generic_raster_processor!(
         processor,
@@ -346,7 +346,7 @@ impl ToSchema for MapResponse {
     fn schema() -> utoipa::openapi::schema::Schema {
         ObjectBuilder::new()
             .schema_type(SchemaType::String)
-            .format(Some(SchemaFormat::Binary))
+            .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
             .into()
     }
 }
@@ -535,7 +535,7 @@ mod tests {
                 .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
             },
-            ctx.query_context().unwrap(),
+            ctx.query_context(SimpleSession::default()).unwrap(),
             360,
             180,
             None,
