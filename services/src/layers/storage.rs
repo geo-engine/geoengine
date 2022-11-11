@@ -10,25 +10,15 @@ use super::layer::{
     ProviderLayerId,
 };
 use super::listing::{LayerCollectionId, LayerCollectionProvider};
+use super::LayerDbError;
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::error::{Error, Result};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Db, util::user_input::Validated};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, RwLockWriteGuard};
 use uuid::Uuid;
-
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub(crate)))]
-#[snafu(module(error), context(suffix(false)))] // disables default `Snafu` suffix
-pub enum LayerDbError {
-    #[snafu(display("There is no layer with the given id {id}"))]
-    NoLayerForGivenId { id: LayerId },
-    #[snafu(display("There is no layer collection with the given id {id}"))]
-    NoLayerCollectionForGivenId { id: LayerCollectionId },
-}
 
 pub const INTERNAL_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0xce5e_84db_cbf9_48a2_9a32_d4b7_cc56_ea74);
@@ -86,7 +76,22 @@ pub trait LayerDb: LayerCollectionProvider + Send + Sync {
         parent: &LayerCollectionId,
     ) -> Result<()>;
 
-    // TODO: share/remove/update
+    /// Removes a layer from the database.
+    ///
+    /// Does not work on the root collection.
+    ///
+    /// Potentially removes sub-collections if they have no other parent.
+    /// Potentially removes layers if they have no other parent.
+    async fn remove_collection(&self, collection: &LayerCollectionId) -> Result<()>;
+
+    /// Removes a layer from a collection.
+    async fn remove_layer_from_collection(
+        &self,
+        layer: &LayerId,
+        collection: &LayerCollectionId,
+    ) -> Result<()>;
+
+    // TODO: share/update
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -283,6 +288,81 @@ impl LayerDb for HashMapLayerDb {
         }
 
         Ok(())
+    }
+
+    async fn remove_collection(&self, collection: &LayerCollectionId) -> Result<()> {
+        fn _remove_collection(
+            backend: &mut RwLockWriteGuard<'_, HashMapLayerDbBackend>,
+            collection: &LayerCollectionId,
+        ) -> Vec<LayerCollectionId> {
+            backend.collections.remove(collection);
+
+            // remove collection as sub-collection from other collections
+            for children in backend.collection_children.values_mut() {
+                children.retain(|c| c != collection);
+            }
+
+            let child_collections = backend
+                .collection_children
+                .remove(collection)
+                .unwrap_or_default();
+
+            // check if child collections have another parent
+            // if not --> return them (avoids recursion)
+            let mut child_collections_to_remove = Vec::new();
+
+            for child_collection in child_collections {
+                let has_parent = backend
+                    .collection_children
+                    .iter()
+                    .any(|(_, v)| v.contains(&child_collection));
+
+                if !has_parent {
+                    child_collections_to_remove.push(child_collection);
+                }
+            }
+
+            // check if child layers have another parent
+            // if not --> remove them
+            let child_layers = backend
+                .collection_layers
+                .remove(collection)
+                .unwrap_or_default();
+            for child_layer in child_layers {
+                let has_parent = backend
+                    .collection_layers
+                    .iter()
+                    .any(|(_, v)| v.contains(&child_layer));
+
+                if !has_parent {
+                    backend.layers.remove(&child_layer);
+                }
+            }
+
+            child_collections_to_remove
+        }
+
+        if collection == &LayerCollectionId(INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()) {
+            return Err(LayerDbError::CannotRemoveRootCollection.into());
+        }
+
+        let mut backend = self.backend.write().await;
+
+        let mut layer_collections_to_remove = _remove_collection(&mut backend, collection);
+        while let Some(layer_collection_id) = layer_collections_to_remove.pop() {
+            layer_collections_to_remove
+                .extend(_remove_collection(&mut backend, &layer_collection_id));
+        }
+
+        Ok(())
+    }
+
+    async fn remove_layer_from_collection(
+        &self,
+        layer: &LayerId,
+        collection: &LayerCollectionId,
+    ) -> Result<()> {
+        todo!("remove_layer_from_collection")
     }
 }
 
@@ -559,5 +639,169 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn test_remove_collection() {
+        let db = HashMapLayerDb::default();
+
+        let layer = AddLayer {
+            name: "layer".to_string(),
+            description: "description".to_string(),
+            workflow: Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: None,
+        }
+        .validated()
+        .unwrap();
+
+        let root_collection = &db.root_collection_id().await.unwrap();
+
+        let collection = AddLayerCollection {
+            name: "top collection".to_string(),
+            description: "description".to_string(),
+        }
+        .validated()
+        .unwrap();
+
+        let top_c_id = db
+            .add_collection(collection, root_collection)
+            .await
+            .unwrap();
+
+        let l_id = db.add_layer(layer, &top_c_id).await.unwrap();
+
+        let collection = AddLayerCollection {
+            name: "empty collection".to_string(),
+            description: "description".to_string(),
+        }
+        .validated()
+        .unwrap();
+
+        let empty_c_id = db.add_collection(collection, &top_c_id).await.unwrap();
+
+        let items = db
+            .collection(
+                &top_c_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            items,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: top_c_id.clone(),
+                },
+                name: "top collection".to_string(),
+                description: "description".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: empty_c_id.clone(),
+                        },
+                        name: "empty collection".to_string(),
+                        description: "description".to_string(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: l_id.clone(),
+                        },
+                        name: "layer".to_string(),
+                        description: "description".to_string(),
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        // remove empty collection
+        db.remove_collection(&empty_c_id).await.unwrap();
+
+        let items = db
+            .collection(
+                &top_c_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            items,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: top_c_id.clone(),
+                },
+                name: "top collection".to_string(),
+                description: "description".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: l_id.clone(),
+                    },
+                    name: "layer".to_string(),
+                    description: "description".to_string(),
+                })],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        // remove top (not root) collection
+        db.remove_collection(&top_c_id).await.unwrap();
+
+        db.collection(
+            &top_c_id,
+            LayerCollectionListOptions {
+                offset: 0,
+                limit: 20,
+            }
+            .validated()
+            .unwrap(),
+        )
+        .await
+        .unwrap_err();
+
+        // should be deleted automatically
+        db.get_layer(&l_id).await.unwrap_err();
+
+        // it is not allowed to remove the root collection
+        db.remove_collection(root_collection).await.unwrap_err();
+        db.collection(
+            root_collection,
+            LayerCollectionListOptions {
+                offset: 0,
+                limit: 20,
+            }
+            .validated()
+            .unwrap(),
+        )
+        .await
+        .unwrap();
     }
 }

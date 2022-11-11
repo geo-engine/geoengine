@@ -1,15 +1,16 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
-use actix_web::{web, FromRequest, Responder};
-
+use crate::contexts::AdminSession;
 use crate::error::Result;
-
 use crate::layers::layer::{
-    CollectionItem, LayerCollection, LayerCollectionListing, ProviderLayerCollectionId,
+    AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
+    ProviderLayerCollectionId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
-use crate::layers::storage::{LayerProviderDb, LayerProviderListingOptions};
+use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
+use actix_web::{web, FromRequest, HttpResponse, Responder};
+use serde::{Deserialize, Serialize};
 
 pub const ROOT_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x1c3b_8042_300b_485c_95b5_0147_d9dc_068d);
@@ -23,15 +24,26 @@ where
     C::Session: FromRequest,
 {
     cfg.service(
-        web::resource("/layers/collections")
-            .route(web::get().to(list_root_collections_handler::<C>)),
-    )
-    .service(
-        web::resource(r#"/layers/collections/{provider}/{collection:.+}"#)
-            .route(web::get().to(list_collection_handler::<C>)),
-    )
-    .service(
-        web::resource("/layers/{provider}/{layer:.+}").route(web::get().to(layer_handler::<C>)),
+        web::scope("/layers")
+            .service(
+                web::scope("/collections")
+                    .service(
+                        web::resource("")
+                            .route(web::get().to(list_root_collections_handler::<C>))
+                            .route(web::put().to(add_collection::<C>)),
+                    )
+                    .route("/{collection}", web::delete().to(remove_collection::<C>))
+                    .route(
+                        "/{collection}/{layer}",
+                        web::delete().to(remove_layer_from_collection::<C>),
+                    )
+                    .route(
+                        r#"/{provider}/{collection:.+}"#,
+                        web::get().to(list_collection_handler::<C>),
+                    ),
+            )
+            .route("", web::put().to(add_layer::<C>))
+            .route("/{provider}/{layer:.+}", web::get().to(layer_handler::<C>)),
     );
 }
 
@@ -454,4 +466,333 @@ async fn layer_handler<C: Context>(
         .await?;
 
     Ok(web::Json(collection))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddLayerRequest {
+    pub layer: AddLayer,
+    pub collection_id: LayerCollectionId,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddLayerResponse {
+    pub layer_id: LayerId,
+}
+
+async fn add_layer<C: Context>(
+    _session: AdminSession, // TODO: allow normal users to add layers to their stuff
+    ctx: web::Data<C>,
+    request: web::Json<AddLayerRequest>,
+) -> Result<web::Json<AddLayerResponse>> {
+    let request = request.into_inner();
+
+    let collection_id = request.collection_id;
+    let add_layer = request.layer.validated()?;
+
+    let layer_id = ctx
+        .layer_db_ref()
+        .add_layer(add_layer, &collection_id)
+        .await?;
+
+    Ok(web::Json(AddLayerResponse { layer_id }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddCollectionRequest {
+    pub layer_collection: AddLayerCollection,
+    pub parent_id: LayerCollectionId,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddCollectionResponse {
+    pub layer_collection_id: LayerCollectionId,
+}
+
+async fn add_collection<C: Context>(
+    _session: AdminSession, // TODO: allow normal users to add collections to their stuff
+    ctx: web::Data<C>,
+    request: web::Json<AddCollectionRequest>,
+) -> Result<web::Json<AddCollectionResponse>> {
+    let request = request.into_inner();
+
+    let parent_id = request.parent_id;
+    let add_collection = request.layer_collection.validated()?;
+
+    let layer_collection_id = ctx
+        .layer_db_ref()
+        .add_collection(add_collection, &parent_id)
+        .await?;
+
+    Ok(web::Json(AddCollectionResponse {
+        layer_collection_id,
+    }))
+}
+
+async fn remove_collection<C: Context>(
+    _session: AdminSession, // TODO: allow normal users to remove their collections
+    ctx: web::Data<C>,
+    collection: web::Path<LayerCollectionId>,
+) -> Result<HttpResponse> {
+    ctx.layer_db_ref().remove_collection(&collection).await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+async fn remove_layer_from_collection<C: Context>(
+    _session: AdminSession, // TODO: allow normal users to remove their layers from their collections
+    ctx: web::Data<C>,
+    collection: web::Path<LayerCollectionId>,
+    layer: web::Path<LayerId>,
+) -> Result<HttpResponse> {
+    ctx.layer_db_ref()
+        .remove_layer_from_collection(&layer, &collection)
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{
+        contexts::{InMemoryContext, Session},
+        util::tests::send_test_request,
+        workflows::workflow::Workflow,
+    };
+    use actix_web::{http::header, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::{
+        engine::VectorOperator,
+        mock::{MockPointSource, MockPointSourceParams},
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_add_layer_to_collection() {
+        // fixing this avoids random admin session tokens
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
+
+        let ctx = InMemoryContext::test_default();
+
+        let admin_session_id = AdminSession::default().id();
+
+        let collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+        let req = test::TestRequest::put()
+            .uri("/layers")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ))
+            .set_json(serde_json::json!({
+              "collectionId": collection_id,
+              "layer": {
+                "name": "Foo",
+                "description": "Bar",
+                "workflow": {
+                  "type": "Vector",
+                  "operator": {
+                    "type": "MockPointSource",
+                    "params": {
+                      "points": [
+                        { "x": 0.0, "y": 0.1 },
+                        { "x": 1.0, "y": 1.1 }
+                      ]
+                    }
+                  }
+                },
+                "symbology": null,
+              },
+            }));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{:?}", response);
+
+        let result: AddLayerResponse = test::read_body_json(response).await;
+
+        ctx.layer_db_ref()
+            .get_layer(&result.layer_id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_add_collection() {
+        // fixing this avoids random admin session tokens
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
+
+        let ctx = InMemoryContext::test_default();
+
+        let admin_session_id = AdminSession::default().id();
+
+        let collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+        let req = test::TestRequest::put()
+            .uri("/layers/collections")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ))
+            .set_json(serde_json::json!({
+              "parentId": collection_id,
+              "layerCollection": {
+                "name": "Foo",
+                "description": "Bar",
+              },
+            }));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{:?}", response);
+
+        let result: AddCollectionResponse = test::read_body_json(response).await;
+
+        ctx.layer_db_ref()
+            .collection(
+                &result.layer_collection_id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_remove_layer_from_collection() {
+        // fixing this avoids random admin session tokens
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
+
+        let ctx = InMemoryContext::test_default();
+
+        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+        let collection_id = ctx
+            .layer_db_ref()
+            .add_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let layer_id = ctx
+            .layer_db_ref()
+            .add_layer(
+                AddLayer {
+                    name: "Layer Name".to_string(),
+                    description: "Layer Description".to_string(),
+                    workflow: Workflow {
+                        operator: MockPointSource {
+                            params: MockPointSourceParams {
+                                points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                            },
+                        }
+                        .boxed()
+                        .into(),
+                    },
+                    symbology: None,
+                }
+                .validated()
+                .unwrap(),
+                &collection_id,
+            )
+            .await
+            .unwrap();
+
+        let admin_session_id = AdminSession::default().id();
+
+        let req = test::TestRequest::delete()
+            .uri(&format!("/layers/collections/{collection_id}/{layer_id}"))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{:?}", response);
+
+        // layer should be gone
+        ctx.layer_db_ref().get_layer(&layer_id).await.unwrap_err();
+    }
+
+    #[tokio::test]
+    async fn test_remove_collection() {
+        // fixing this avoids random admin session tokens
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
+
+        let ctx = InMemoryContext::test_default();
+
+        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+        let collection_id = ctx
+            .layer_db_ref()
+            .add_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let admin_session_id = AdminSession::default().id();
+
+        let req = test::TestRequest::delete()
+            .uri(&format!("/layers/collections/{collection_id}"))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{:?}", response);
+
+        ctx.layer_db_ref()
+            .collection(
+                &collection_id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+        // try removeing root collection id --> should fail
+
+        let req = test::TestRequest::delete()
+            .uri(&format!("/layers/collections/{root_collection_id}"))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_client_error(), "{:?}", response);
+    }
 }
