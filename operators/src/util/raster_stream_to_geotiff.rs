@@ -158,8 +158,7 @@ struct GdalDatasetWriter<P: Pixel + GdalType> {
     _type: std::marker::PhantomData<P>,
     use_big_tiff: bool,
     global_offset: GridIdx2D,
-    width: u32,
-    height: u32,
+    global_limit: GridIdx2D,
 }
 
 impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
@@ -195,7 +194,11 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             .next()
             .expect("query bounds should contain at least one tile");
 
-        let global_offset = tile_info.global_upper_left_pixel_idx();
+        let global_offset = tile_info
+            .global_geo_transform
+            .coordinate_to_grid_idx_2d(query_rect.spatial_bounds.upper_left());
+
+        let global_limit = global_offset + GridIdx2D::from([height as isize, width as isize]);
 
         let uncompressed_byte_size = width as usize * height as usize * std::mem::size_of::<P>();
         let use_big_tiff =
@@ -252,8 +255,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             _type: Default::default(),
             use_big_tiff,
             global_offset,
-            width,
-            height,
+            global_limit,
         })
     }
 
@@ -274,29 +276,38 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             // TODO: compute the intersection on the `SpatialPartition2D`s once the float precision issue is fixed
 
             let tile_offset = tile_info.global_upper_left_pixel_idx();
+            let tile_limit = tile_offset
+                + GridIdx2D::from([
+                    tile_info.tile_size_in_pixels.axis_size_y() as isize,
+                    tile_info.tile_size_in_pixels.axis_size_x() as isize,
+                ]);
 
-            // tile offset must be top left with respect to the output bounds lower right, otherwise the tile would not have been computed.
-            // if upper left of input raster is outside of output bounds, we take only the part that is inside the output bounds
+            if tile_limit.inner()[0] < self.global_offset.inner()[0]
+                || tile_limit.inner()[1] < self.global_offset.inner()[1]
+                || tile_offset.inner()[0] >= self.global_limit.inner()[0]
+                || tile_offset.inner()[1] >= self.global_limit.inner()[1]
+            {
+                // tile is outside of output bounds
+                return Ok(());
+            }
+
             let intersection_offset = GridIdx2D::from([
                 std::cmp::max(tile_offset.inner()[0], self.global_offset.inner()[0]),
                 std::cmp::max(tile_offset.inner()[1], self.global_offset.inner()[1]),
             ]);
 
-            // compute the width and height of the intersection
             let width = std::cmp::min(
-                tile_info.tile_size_in_pixels.axis_size_x(),
-                ((self.global_offset.inner()[1] + self.width as isize)
-                    - intersection_offset.inner()[1] as isize) as usize,
+                tile_info.tile_size_in_pixels.axis_size_x() as isize,
+                self.global_limit.inner()[1] - intersection_offset.inner()[1],
             );
 
             let height = std::cmp::min(
-                tile_info.tile_size_in_pixels.axis_size_y(),
-                ((self.global_offset.inner()[0] as isize + self.height as isize)
-                    - intersection_offset.inner()[0] as isize) as usize,
+                tile_info.tile_size_in_pixels.axis_size_y() as isize,
+                self.global_limit.inner()[0] - intersection_offset.inner()[0],
             );
 
-            // create output grid and blit the data into it
-            let mut output_grid = MaskedGrid2D::from(EmptyGrid2D::new([height, width].into()));
+            let mut output_grid =
+                MaskedGrid2D::from(EmptyGrid2D::new([height as usize, width as usize].into()));
 
             let shift_offset = intersection_offset - tile_offset;
             let shifted_source = tile
