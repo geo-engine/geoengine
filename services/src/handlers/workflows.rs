@@ -19,7 +19,9 @@ use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor};
+use geoengine_operators::engine::{
+    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor,
+};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };
@@ -455,6 +457,7 @@ async fn dataset_from_workflow_handler<C: Context>(
             },
             tile_limit,
             Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
+            execution_context.tiling_specification(),
         ).await)?
     .map_err(crate::error::Error::from)?;
 
@@ -1149,6 +1152,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
+            exe_ctx.tiling_specification(),
         )
         .await
         .unwrap();

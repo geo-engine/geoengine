@@ -434,8 +434,8 @@ async fn wcs_get_coverage_handler<C: Context>(
                 force_big_tiff: false,
             },
             Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            conn_closed
-            
+            conn_closed,
+            execution_context.tiling_specification(),
         )
         .await)?
     .map_err(error::Error::from)?;
