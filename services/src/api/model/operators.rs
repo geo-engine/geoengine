@@ -127,15 +127,15 @@ impl ToSchema for MockMetaData {
         use utoipa::openapi::*;
         ObjectBuilder::new()
             .property(
-                "loading_info",
+                "loadingInfo",
                 Ref::from_schema_name("MockDatasetDataSourceLoadingInfo"),
             )
-            .required("loading_info")
+            .required("loadingInfo")
             .property(
-                "result_descriptor",
+                "resultDescriptor",
                 Ref::from_schema_name("VectorResultDescriptor"),
             )
-            .required("result_descriptor")
+            .required("resultDescriptor")
             .into()
     }
 }
@@ -144,13 +144,13 @@ impl ToSchema for OgrMetaData {
     fn schema() -> utoipa::openapi::Schema {
         use utoipa::openapi::*;
         ObjectBuilder::new()
-            .property("loading_info", Ref::from_schema_name("OgrSourceDataset"))
-            .required("loading_info")
+            .property("loadingInfo", Ref::from_schema_name("OgrSourceDataset"))
+            .required("loadingInfo")
             .property(
-                "result_descriptor",
+                "resultDescriptor",
                 Ref::from_schema_name("VectorResultDescriptor"),
             )
-            .required("result_descriptor")
+            .required("resultDescriptor")
             .into()
     }
 }
