@@ -91,29 +91,30 @@ pub struct DatasetDefinition {
       "sourceOperator": "OgrSource"
     },
     "metaData": {
-      "OgrMetaData": {
-        "loadingInfo": {
-          "fileName": "germany_polygon.gpkg",
-          "layerName": "test_germany",
-          "dataType": "MultiPolygon",
-          "time": "none",
-          "columns": {
-            "x": "",
-            "y": null,
-            "text": [],
-            "float": [],
-            "int": [],
-            "bool": [],
-            "datetime": [],
-          },
-          "forceOgrTimeFilter": false,
-          "onError": "ignore"
+      "type": "OgrMetaData",
+      "loadingInfo": {
+        "fileName": "germany_polygon.gpkg",
+        "layerName": "test_germany",
+        "dataType": "MultiPolygon",
+        "time": {
+          "type": "none"
         },
-        "resultDescriptor": {
-          "dataType": "MultiPolygon",
-          "spatialReference": "EPSG:4326",
-          "columns": {}
-        }
+        "columns": {
+          "x": "",
+          "y": null,
+          "text": [],
+          "float": [],
+          "int": [],
+          "bool": [],
+          "datetime": [],
+        },
+        "forceOgrTimeFilter": false,
+        "onError": "ignore"
+      },
+      "resultDescriptor": {
+        "dataType": "MultiPolygon",
+        "spatialReference": "EPSG:4326",
+        "columns": {}
       }
     }
   }
