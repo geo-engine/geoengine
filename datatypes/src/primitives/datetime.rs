@@ -32,11 +32,10 @@ impl DateTime {
     /// Panics if the values are out of range.
     ///
     pub fn new_utc(year: i32, month: u8, day: u8, hour: u8, minute: u8, second: u8) -> Self {
-        let datetime = NaiveDate::from_ymd(year, month.into(), day.into()).and_hms(
-            hour.into(),
-            minute.into(),
-            second.into(),
-        );
+        let datetime = NaiveDate::from_ymd_opt(year, month.into(), day.into())
+            .expect("should set valid date")
+            .and_hms_opt(hour.into(), minute.into(), second.into())
+            .expect("should set valid time");
         let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
 
         Self { datetime }
@@ -77,12 +76,10 @@ impl DateTime {
         second: u8,
         millis: u16,
     ) -> Self {
-        let datetime = NaiveDate::from_ymd(year, month.into(), day.into()).and_hms_milli(
-            hour.into(),
-            minute.into(),
-            second.into(),
-            millis.into(),
-        );
+        let datetime = NaiveDate::from_ymd_opt(year, month.into(), day.into())
+            .expect("should set valid date")
+            .and_hms_milli_opt(hour.into(), minute.into(), second.into(), millis.into())
+            .expect("should set valid time");
         let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
 
         Self { datetime }
@@ -145,7 +142,8 @@ impl DateTime {
                     .map_err(|e| DateTimeError::DateParse {
                         source: Box::new(e),
                     })?
-                    .and_hms(0, 0, 0);
+                    .and_hms_opt(0, 0, 0)
+                    .expect("`00:00:00` should be a valid time");
 
                 Ok(Self {
                     datetime: chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc),
