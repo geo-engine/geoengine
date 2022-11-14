@@ -1,16 +1,28 @@
 use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, ExternalDataId, FeatureDataType,
-    LayerId, Measurement, Palette, RasterDataType, RasterQueryRectangle, RgbaColor,
-    SpatialPartition2D, SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption,
-    SpatialResolution, TimeInstance, TimeInterval, VectorDataType,
+    Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId,
+    FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+    Palette, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
+    RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority,
+    SpatialReferenceOption, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
+    TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
-    PlotResultDescriptor, RasterResultDescriptor, TypedOperator, TypedResultDescriptor,
-    VectorColumnInfo, VectorResultDescriptor,
+    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
+    GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
+    GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
+    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
+    OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
+    OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor, TimeReference,
+    TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
+    VectorResultDescriptor,
 };
+use crate::api::model::services::{MetaDataDefinition, MetaDataSuggestion};
 use crate::contexts::SessionId;
-use crate::datasets::listing::{Provenance, ProvenanceOutput};
+use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
+use crate::datasets::storage::{
+    AddDataset, AutoCreateDataset, CreateDataset, Dataset, DatasetDefinition,
+};
 use crate::datasets::upload::UploadId;
 use crate::handlers;
 use crate::handlers::tasks::TaskAbortOptions;
@@ -24,7 +36,6 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::LayerCollectionId;
 use crate::ogc::util::OgcBoundingBox;
-
 use crate::ogc::{wcs, wfs, wms};
 use crate::pro;
 use crate::projects::{
@@ -71,6 +82,11 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::logout_handler,
         pro::handlers::users::register_user_handler,
         pro::handlers::users::session_handler,
+        handlers::datasets::list_datasets_handler,
+        handlers::datasets::get_dataset_handler,
+        handlers::datasets::create_dataset_handler,
+        handlers::datasets::auto_create_dataset_handler,
+        handlers::datasets::suggest_meta_data_handler,
     ),
     components(
         schemas(
@@ -195,6 +211,49 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             Feature,
             FeatureType,
             Coordinates,
+
+            CreateDataset,
+            AutoCreateDataset,
+            OrderBy,
+            DatasetListing,
+            MetaDataSuggestion,
+            MetaDataDefinition,
+            MockMetaData,
+            GdalMetaDataRegular,
+            GdalMetaDataStatic,
+            GdalMetadataNetCdfCf,
+            GdalMetaDataList,
+            GdalDatasetParameters,
+            TimeStep,
+            GdalSourceTimePlaceholder,
+            GdalLoadingInfoTemporalSlice,
+            FileNotFoundHandling,
+            GdalDatasetGeoTransform,
+            GdalMetadataMapping,
+            TimeGranularity,
+            DateTimeParseFormat,
+            TimeReference,
+            RasterPropertiesKey,
+            RasterPropertiesEntryType,
+            OgrMetaData,
+            MockDatasetDataSourceLoadingInfo,
+            OgrSourceDataset,
+            OgrSourceColumnSpec,
+            TypedGeometry,
+            OgrSourceErrorSpec,
+            OgrSourceDatasetTimeType,
+            OgrSourceDurationSpec,
+            OgrSourceTimeFormat,
+            NoGeometry,
+            MultiPoint,
+            MultiLineString,
+            MultiPolygon,
+            FormatSpecifics,
+            CsvHeader,
+            UnixTimeStampType,
+            Dataset,
+            DatasetDefinition,
+            AddDataset,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
