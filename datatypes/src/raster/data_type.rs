@@ -2,7 +2,7 @@ use crate::error::{self, Error};
 use crate::operations::image::RgbaTransmutable;
 use crate::raster::TypedRasterConversion;
 use crate::util::Result;
-use gdal::raster::GDALDataType;
+use gdal::raster::GdalDataType;
 use num_traits::{AsPrimitive, Bounded, Num};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -110,16 +110,16 @@ impl RasterDataType {
         }
     }
 
-    pub fn from_gdal_data_type(gdal_data_type: GDALDataType::Type) -> Result<Self> {
+    pub fn from_gdal_data_type(gdal_data_type: GdalDataType) -> Result<Self> {
         match gdal_data_type {
-            GDALDataType::GDT_Byte => Ok(Self::U8),
-            GDALDataType::GDT_UInt16 => Ok(Self::U16),
-            GDALDataType::GDT_Int16 => Ok(Self::I16),
-            GDALDataType::GDT_UInt32 => Ok(Self::U32),
-            GDALDataType::GDT_Int32 => Ok(Self::I32),
-            GDALDataType::GDT_Float32 => Ok(Self::F32),
-            GDALDataType::GDT_Float64 => Ok(Self::F64),
-            _ /* | GDALDataType::GDT_Unknown */ => Err(Error::GdalRasterDataTypeNotSupported),
+            GdalDataType::UInt8 => Ok(Self::U8),
+            GdalDataType::UInt16 => Ok(Self::U16),
+            GdalDataType::Int16 => Ok(Self::I16),
+            GdalDataType::UInt32 => Ok(Self::U32),
+            GdalDataType::Int32 => Ok(Self::I32),
+            GdalDataType::Float32 => Ok(Self::F32),
+            GdalDataType::Float64 => Ok(Self::F64),
+            GdalDataType::Unknown => Err(Error::GdalRasterDataTypeNotSupported),
         }
     }
 }

@@ -22,6 +22,7 @@ pub struct HashMapUserDb {
     users: Db<HashMap<String, User>>,
     external_users: Db<HashMap<SubjectIdentifier, ExternalUser>>, //TODO: Key only works if a single identity provider is used
     sessions: Db<HashMap<SessionId, UserSession>>,
+    quota_used: Db<HashMap<UserId, u64>>,
 }
 
 #[async_trait]
@@ -185,6 +186,31 @@ impl UserDb for HashMapUserDb {
             }
             None => Err(error::Error::InvalidSession),
         }
+    }
+
+    async fn increment_quota_used(&self, user: &UserId, quota_used: u64) -> Result<()> {
+        *self.quota_used.write().await.entry(*user).or_default() += quota_used;
+        Ok(())
+    }
+
+    async fn quota_used(&self, session: &UserSession) -> Result<u64> {
+        Ok(self
+            .quota_used
+            .read()
+            .await
+            .get(&session.user.id)
+            .copied()
+            .unwrap_or_default())
+    }
+
+    async fn quota_used_by_user(&self, user: &UserId) -> Result<u64> {
+        Ok(self
+            .quota_used
+            .read()
+            .await
+            .get(user)
+            .copied()
+            .unwrap_or_default())
     }
 }
 
