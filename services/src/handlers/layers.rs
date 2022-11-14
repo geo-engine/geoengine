@@ -9,8 +9,9 @@ use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
-use actix_web::{web, FromRequest, HttpResponse, Responder};
+use actix_web::{web, Either, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
 pub const ROOT_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x1c3b_8042_300b_485c_95b5_0147_d9dc_068d);
@@ -30,7 +31,7 @@ where
                     .service(
                         web::resource("")
                             .route(web::get().to(list_root_collections_handler::<C>))
-                            .route(web::put().to(add_collection::<C>)),
+                            .route(web::post().to(add_collection::<C>)),
                     )
                     .route("/{collection}", web::delete().to(remove_collection::<C>))
                     .route(
@@ -38,7 +39,7 @@ where
                         web::get().to(list_collection_handler::<C>),
                     ),
             )
-            .route("", web::put().to(add_layer::<C>))
+            .route("", web::post().to(add_layer::<C>))
             .route("/{provider}/{layer:.+}", web::get().to(layer_handler::<C>)),
     );
 }
@@ -90,7 +91,7 @@ where
     )
 )]
 async fn list_root_collections_handler<C: Context>(
-    _session: C::Session,
+    _session: Either<AdminSession, C::Session>,
     ctx: web::Data<C>,
     options: web::Query<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
@@ -464,19 +465,37 @@ async fn layer_handler<C: Context>(
     Ok(web::Json(collection))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AddLayerRequest {
     pub layer: AddLayer,
+    #[schema(value_type = String, example = "05102bb3-a855-4a37-8a8a-30026a91fef1")]
     pub collection_id: LayerCollectionId,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AddLayerResponse {
     pub layer_id: LayerId,
 }
 
+/// Add a new layer to a collection
+#[utoipa::path(
+    tag = "Layers",
+    post,
+    path = "/layers",
+    request_body = AddLayerRequest,
+    responses(
+        (status = 200, description = "OK", body = AddLayerResponse,
+            example = json!({
+                "layerId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn add_layer<C: Context>(
     _session: AdminSession, // TODO: allow normal users to add layers to their stuff
     ctx: web::Data<C>,
@@ -495,19 +514,37 @@ async fn add_layer<C: Context>(
     Ok(web::Json(AddLayerResponse { layer_id }))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AddCollectionRequest {
     pub layer_collection: AddLayerCollection,
+    #[schema(value_type = String, example = "05102bb3-a855-4a37-8a8a-30026a91fef1")]
     pub parent_id: LayerCollectionId,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AddCollectionResponse {
     pub layer_collection_id: LayerCollectionId,
 }
 
+/// Add a new collection to an existing collection
+#[utoipa::path(
+    tag = "Layers",
+    post,
+    path = "/layers/collections",
+    request_body = AddCollectionRequest,
+    responses(
+        (status = 200, description = "OK", body = AddCollectionResponse,
+            example = json!({
+                "layerCollectionId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn add_collection<C: Context>(
     _session: AdminSession, // TODO: allow normal users to add collections to their stuff
     ctx: web::Data<C>,
@@ -528,11 +565,28 @@ async fn add_collection<C: Context>(
     }))
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, IntoParams)]
 struct RemoveCollectionFilter {
+    /// Specify this layer filter to only remove a specifc layer from a collection.
     layer: Option<LayerId>,
 }
 
+/// Remove an entire collection or a layer from a collection
+#[utoipa::path(
+    tag = "Layers",
+    delete,
+    path = "/layers/collections/{collection}",
+    params(
+        ("collection" = LayerCollectionId, description = "Layer collection id"),
+        RemoveCollectionFilter,
+    ),
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn remove_collection<C: Context>(
     _session: AdminSession, // TODO: allow normal users to remove their collections
     ctx: web::Data<C>,
@@ -583,7 +637,7 @@ mod tests {
 
         let collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
 
-        let req = test::TestRequest::put()
+        let req = test::TestRequest::post()
             .uri("/layers")
             .append_header((
                 header::AUTHORIZATION,
@@ -636,7 +690,7 @@ mod tests {
 
         let collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
 
-        let req = test::TestRequest::put()
+        let req = test::TestRequest::post()
             .uri("/layers/collections")
             .append_header((
                 header::AUTHORIZATION,

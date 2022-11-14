@@ -1,16 +1,12 @@
-use std::collections::HashMap;
-
-use serde::{Deserialize, Serialize};
-use utoipa::openapi::{ArrayBuilder, ObjectBuilder, SchemaType};
-use utoipa::{IntoParams, ToSchema};
-
+use super::listing::LayerCollectionId;
 use crate::api::model::datatypes::{DataProviderId, LayerId};
-
 use crate::{
     error::Result, projects::Symbology, util::user_input::UserInput, workflows::workflow::Workflow,
 };
-
-use super::listing::LayerCollectionId;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use utoipa::openapi::{ArrayBuilder, ObjectBuilder, SchemaType};
+use utoipa::{IntoParams, ToSchema};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -44,9 +40,11 @@ pub struct LayerListing {
     pub description: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct AddLayer {
+    #[schema(example = "Example Layer")]
     pub name: String,
+    #[schema(example = "Example layer description")]
     pub description: String,
     pub workflow: Workflow,
     pub symbology: Option<Symbology>,
@@ -123,9 +121,11 @@ impl CollectionItem {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct AddLayerCollection {
+    #[schema(example = "Example Collection")]
     pub name: String,
+    #[schema(example = "A description for an example collection")]
     pub description: String,
 }
 
