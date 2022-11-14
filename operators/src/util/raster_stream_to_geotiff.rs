@@ -9,7 +9,7 @@ use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterCreationOption};
 use gdal::{Dataset, DriverManager};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridIdx2D, GridSize,
@@ -99,7 +99,7 @@ where
     let dataset_writer = crate::util::spawn_blocking(move || {
         let gdal_config_options = gdal_config_options.as_deref();
 
-        GdalDatasetWriter::new(
+        GdalDatasetWriter::new_with_tiling_spec(
             tiling_specification,
             &file_path,
             query_rect,
@@ -154,21 +154,22 @@ struct GdalDatasetWriter<P: Pixel + GdalType> {
     output_file_path: PathBuf,
     gdal_tiff_options: GdalGeoTiffOptions,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
-    output_bounds: SpatialPartition2D,
+    _output_bounds: SpatialPartition2D, // currently unused due to workaround for intersection and contained because of float precision
     _type: std::marker::PhantomData<P>,
     use_big_tiff: bool,
-    global_offset: GridIdx2D,
-    global_limit: GridIdx2D,
+    window_start: GridIdx2D,
+    window_end: GridIdx2D,
 }
 
 impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
     fn new(
-        tiling_specification: TilingSpecification,
         file_path: &Path,
         query_rect: RasterQueryRectangle,
         gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: Option<&[(String, String)]>,
+        window_start: GridIdx2D,
+        window_end: GridIdx2D,
     ) -> Result<Self> {
         const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
         let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
@@ -187,18 +188,6 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             -y_pixel_size,
         );
         let output_bounds = query_rect.spatial_bounds;
-
-        let tile_info = tiling_specification
-            .strategy(x_pixel_size, -y_pixel_size)
-            .tile_information_iterator(query_rect.spatial_bounds)
-            .next()
-            .expect("query bounds should contain at least one tile");
-
-        let global_offset = tile_info
-            .global_geo_transform
-            .coordinate_to_grid_idx_2d(query_rect.spatial_bounds.upper_left());
-
-        let global_limit = global_offset + GridIdx2D::from([height as isize, width as isize]);
 
         let uncompressed_byte_size = width as usize * height as usize * std::mem::size_of::<P>();
         let use_big_tiff =
@@ -251,77 +240,115 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             output_file_path,
             gdal_tiff_options,
             gdal_tiff_metadata,
-            output_bounds,
+            _output_bounds: output_bounds,
             _type: Default::default(),
             use_big_tiff,
-            global_offset,
-            global_limit,
+            window_start,
+            window_end,
         })
+    }
+
+    fn new_with_tiling_spec(
+        tiling_specification: TilingSpecification,
+        file_path: &Path,
+        query_rect: RasterQueryRectangle,
+        gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+        gdal_tiff_options: GdalGeoTiffOptions,
+        gdal_config_options: Option<&[(String, String)]>,
+    ) -> Result<Self> {
+        let x_pixel_size = query_rect.spatial_resolution.x;
+        let y_pixel_size = query_rect.spatial_resolution.y;
+
+        let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
+        let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as u32;
+
+        let global_geo_transform = tiling_specification
+            .strategy(x_pixel_size, -y_pixel_size)
+            .geo_transform;
+
+        let window_start =
+            global_geo_transform.coordinate_to_grid_idx_2d(query_rect.spatial_bounds.upper_left());
+
+        let window_end = window_start + GridIdx2D::from([height as isize, width as isize]);
+
+        Self::new(
+            file_path,
+            query_rect,
+            gdal_tiff_metadata,
+            gdal_tiff_options,
+            gdal_config_options,
+            window_start,
+            window_end,
+        )
     }
 
     fn write_tile(&self, tile: RasterTile2D<P>) -> Result<()> {
         let tile_info = tile.tile_information();
 
-        let tile_bounds = tile_info.spatial_partition();
+        let tile_start = tile_info.global_upper_left_pixel_idx();
+        let [tile_height, tile_width] = tile_info.tile_size_in_pixels.shape_array;
+        let tile_end = tile_start + GridIdx2D::from([tile_height as isize, tile_width as isize]);
+
+        let GridIdx([tile_start_y, tile_start_x]) = tile_start;
+        let GridIdx([tile_end_y, tile_end_x]) = tile_end;
+        let GridIdx([window_start_y, window_start_x]) = self.window_start;
+        let GridIdx([window_end_y, window_end_x]) = self.window_end;
 
         // compute the upper left pixel index in the output raster and extract the input data
-        let (output_ul_idx, grid_array) = if self.output_bounds.contains(&tile_bounds) {
-            (
-                tile_info.global_upper_left_pixel_idx() - self.global_offset,
-                tile.into_materialized_tile().grid_array,
-            )
-        } else {
-            // extract relevant data from tile (intersection with output_bounds)
+        let (GridIdx([output_ul_y, output_ul_x]), grid_array) =
+            // TODO: check contains on the `SpatialPartition2D`s once the float precision issue is fixed
+            if tile_start_x >= window_start_x && tile_start_y >= window_start_y && tile_end_x <= window_end_x && tile_end_y <= window_end_y {
+                // tile is completely inside the output raster
+                (
+                    tile_info.global_upper_left_pixel_idx() - self.window_start,
+                    tile.into_materialized_tile().grid_array,
+                )
+            } else {
+                // extract relevant data from tile (intersection with output_bounds)
 
-            // TODO: compute the intersection on the `SpatialPartition2D`s once the float precision issue is fixed
+                // TODO: compute the intersection on the `SpatialPartition2D`s once the float precision issue is fixed
 
-            let tile_offset = tile_info.global_upper_left_pixel_idx();
-            let tile_limit = tile_offset
-                + GridIdx2D::from([
-                    tile_info.tile_size_in_pixels.axis_size_y() as isize,
-                    tile_info.tile_size_in_pixels.axis_size_x() as isize,
+                if tile_end_y < window_start_y
+                    || tile_end_x < window_start_x
+                    || tile_start_y >= window_end_y
+                    || tile_start_x >= window_end_x
+                {
+                    // tile is outside of output bounds
+                    return Ok(());
+                }
+
+                let intersection_start = GridIdx2D::from([
+                    std::cmp::max(tile_start_y, window_start_y),
+                    std::cmp::max(tile_start_x, window_start_x),
                 ]);
+                let GridIdx([intersection_start_y, intersection_start_x]) = intersection_start;
 
-            if tile_limit.inner()[0] < self.global_offset.inner()[0]
-                || tile_limit.inner()[1] < self.global_offset.inner()[1]
-                || tile_offset.inner()[0] >= self.global_limit.inner()[0]
-                || tile_offset.inner()[1] >= self.global_limit.inner()[1]
-            {
-                // tile is outside of output bounds
-                return Ok(());
-            }
+                let width = std::cmp::min(
+                    tile_info.tile_size_in_pixels.axis_size_x() as isize,
+                    window_end_x - intersection_start_x,
+                );
 
-            let intersection_offset = GridIdx2D::from([
-                std::cmp::max(tile_offset.inner()[0], self.global_offset.inner()[0]),
-                std::cmp::max(tile_offset.inner()[1], self.global_offset.inner()[1]),
-            ]);
+                let height = std::cmp::min(
+                    tile_info.tile_size_in_pixels.axis_size_y() as isize,
+                    window_end_y - intersection_start_y,
+                );
 
-            let width = std::cmp::min(
-                tile_info.tile_size_in_pixels.axis_size_x() as isize,
-                self.global_limit.inner()[1] - intersection_offset.inner()[1],
-            );
+                let mut output_grid =
+                    MaskedGrid2D::from(EmptyGrid2D::new([height as usize, width as usize].into()));
 
-            let height = std::cmp::min(
-                tile_info.tile_size_in_pixels.axis_size_y() as isize,
-                self.global_limit.inner()[0] - intersection_offset.inner()[0],
-            );
+                let shift_offset = intersection_start - tile_start;
+                let shifted_source = tile
+                    .grid_array
+                    .shift_by_offset(GridIdx([-1, -1]) * shift_offset);
 
-            let mut output_grid =
-                MaskedGrid2D::from(EmptyGrid2D::new([height as usize, width as usize].into()));
+                output_grid.grid_blit_from(&shifted_source);
 
-            let shift_offset = intersection_offset - tile_offset;
-            let shifted_source = tile
-                .grid_array
-                .shift_by_offset(GridIdx([-1, -1]) * shift_offset);
+                (intersection_start - self.window_start, output_grid)
+            };
 
-            output_grid.grid_blit_from(&shifted_source);
-
-            (intersection_offset - self.global_offset, output_grid)
-        };
-
-        let window = (output_ul_idx.inner()[1], output_ul_idx.inner()[0]);
-        let shape = grid_array.axis_size();
-        let window_size = (shape[1], shape[0]);
+        let window = (output_ul_x, output_ul_y);
+        let [shape_y, shape_x] = grid_array.axis_size();
+        let window_size = (shape_x, shape_y);
 
         // Check if the gdal_tiff_metadata no-data value is set.
         // If it is set write a geotiff with no-data values.
