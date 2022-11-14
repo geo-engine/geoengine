@@ -29,7 +29,7 @@ use crate::util::canonicalize_subpath;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-use gdal::raster::{Dimension, Group};
+use gdal::raster::{Dimension, GdalDataType, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
@@ -193,7 +193,9 @@ impl<'a> ToNetCdfSubgroup for Group<'a> {
                     self.open_md_array("ebv_cube", Default::default())
                         .context(error::GdalMd)?
                         .datatype()
-                        .numeric_datatype(),
+                        .numeric_datatype()
+                        .try_into()
+                        .unwrap_or(GdalDataType::Float64),
                 )
                 .unwrap_or(RasterDataType::F64),
             );
@@ -464,7 +466,11 @@ impl NetCdfCfDataProvider {
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::from_gdal_data_type(
-                data_array.datatype().numeric_datatype(),
+                data_array
+                    .datatype()
+                    .numeric_datatype()
+                    .try_into()
+                    .unwrap_or(GdalDataType::Float64),
             )
             .unwrap_or(RasterDataType::F64),
             spatial_reference: SpatialReference::try_from(

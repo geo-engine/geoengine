@@ -513,7 +513,7 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
             .context(crate::error::Operator)?;
 
         let query_rect = self.info.query;
-        let query_ctx = self.ctx.query_context()?;
+        let query_ctx = self.ctx.query_context(self.session.clone())?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
@@ -1233,11 +1233,11 @@ mod tests {
         .boxed();
 
         let session = ctx.default_session_ref().await.clone();
-        let exe_ctx = ctx.execution_context(session).unwrap();
+        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
 
         let o = op.initialize(&exe_ctx).await.unwrap();
 
-        let query_ctx = ctx.query_context().unwrap();
+        let query_ctx = ctx.query_context(session.clone()).unwrap();
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
@@ -1538,11 +1538,11 @@ mod tests {
         .boxed();
 
         let session = ctx.default_session_ref().await.clone();
-        let exe_ctx = ctx.execution_context(session).unwrap();
+        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
 
         let o = op.initialize(&exe_ctx).await.unwrap();
 
-        let query_ctx = ctx.query_context().unwrap();
+        let query_ctx = ctx.query_context(session.clone()).unwrap();
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),

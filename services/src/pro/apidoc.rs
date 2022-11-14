@@ -27,6 +27,7 @@ use crate::ogc::util::OgcBoundingBox;
 
 use crate::ogc::{wcs, wfs, wms};
 use crate::pro;
+use crate::pro::handlers::users::QuotaUsed;
 use crate::projects::{
     ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
     PolygonSymbology, ProjectId, RasterSymbology, STRectangle, StrokeParam, Symbology,
@@ -69,6 +70,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::anonymous_handler,
         pro::handlers::users::login_handler,
         pro::handlers::users::logout_handler,
+        pro::handlers::users::quota_handler,
+        pro::handlers::users::user_quota_handler,
         pro::handlers::users::register_user_handler,
         pro::handlers::users::session_handler,
     ),
@@ -79,6 +82,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             UserRegistration,
             DateTime,
             UserInfo,
+            QuotaUsed,
 
             DataId,
             DataProviderId,
