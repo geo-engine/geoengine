@@ -500,7 +500,6 @@ pub fn reproject_and_unify_bbox<T: AxisAlignedRectangle>(
 #[cfg(test)]
 mod tests {
 
-    use crate::assert_approx_eq;
     use crate::primitives::{BoundingBox2D, SpatialPartition2D};
     use crate::spatial_reference::SpatialReferenceAuthority;
     use crate::util::well_known_data::{
@@ -824,14 +823,13 @@ mod tests {
             input.unwrap(),
             SpatialPartition2D::new_unchecked((-180., 85.06).into(), (180., -85.06).into())
         );
-        let output = output.unwrap();
-        assert_approx_eq!(
-            &[output.upper_left().x, output.upper_left().y],
-            &[-20_037_508.342_789_244, 20_048_966.104_014_594]
-        );
-        assert_approx_eq!(
-            &[output.lower_right().x, output.lower_right().y],
-            &[20_037_508.342_789_244, -20_048_966.104_014_594]
+
+        assert_eq!(
+            output.unwrap(),
+            SpatialPartition2D::new_unchecked(
+                (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+                (20_037_508.342_789_244, -20_048_966.104_014_594).into()
+            )
         );
     }
 }
