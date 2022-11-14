@@ -1,4 +1,5 @@
 use crate::api::model::datatypes::{DataProviderId, DatasetId};
+use crate::api::model::operators::TypedResultDescriptor;
 use crate::contexts::Session;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
@@ -13,11 +14,8 @@ use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::MetaData;
 use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
-use geoengine_operators::{
-    engine::TypedResultDescriptor, mock::MockDatasetDataSourceLoadingInfo,
-    source::GdalMetaDataStatic,
-};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
+use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::fmt::Debug;

@@ -23,6 +23,18 @@ pub struct RasterResultDescriptor {
     pub bbox: Option<SpatialPartition2D>,
 }
 
+impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultDescriptor {
+    fn from(value: geoengine_operators::engine::RasterResultDescriptor) -> Self {
+        Self {
+            data_type: value.data_type.into(),
+            spatial_reference: value.spatial_reference.into(),
+            measurement: value.measurement.into(),
+            time: value.time.map(Into::into),
+            bbox: value.bbox.map(Into::into),
+        }
+    }
+}
+
 /// An enum to differentiate between `Operator` variants
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "operator")]
@@ -79,11 +91,36 @@ pub struct VectorResultDescriptor {
     pub bbox: Option<BoundingBox2D>,
 }
 
+impl From<geoengine_operators::engine::VectorResultDescriptor> for VectorResultDescriptor {
+    fn from(value: geoengine_operators::engine::VectorResultDescriptor) -> Self {
+        Self {
+            data_type: value.data_type.into(),
+            spatial_reference: value.spatial_reference.into(),
+            columns: value
+                .columns
+                .into_iter()
+                .map(|(key, value)| (key, value.into()))
+                .collect(),
+            time: value.time.map(Into::into),
+            bbox: value.bbox.map(Into::into),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorColumnInfo {
     pub data_type: FeatureDataType,
     pub measurement: Measurement,
+}
+
+impl From<geoengine_operators::engine::VectorColumnInfo> for VectorColumnInfo {
+    fn from(value: geoengine_operators::engine::VectorColumnInfo) -> Self {
+        Self {
+            data_type: value.data_type.into(),
+            measurement: value.measurement.into(),
+        }
+    }
 }
 
 /// A `ResultDescriptor` for plot queries
@@ -95,12 +132,50 @@ pub struct PlotResultDescriptor {
     pub bbox: Option<BoundingBox2D>,
 }
 
+impl From<geoengine_operators::engine::PlotResultDescriptor> for PlotResultDescriptor {
+    fn from(value: geoengine_operators::engine::PlotResultDescriptor) -> Self {
+        Self {
+            spatial_reference: value.spatial_reference.into(),
+            time: value.time.map(Into::into),
+            bbox: value.bbox.map(Into::into),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TypedResultDescriptor {
     Plot(PlotResultDescriptor),
     Raster(RasterResultDescriptor),
     Vector(VectorResultDescriptor),
+}
+
+impl From<geoengine_operators::engine::TypedResultDescriptor> for TypedResultDescriptor {
+    fn from(value: geoengine_operators::engine::TypedResultDescriptor) -> Self {
+        match value {
+            geoengine_operators::engine::TypedResultDescriptor::Plot(p) => Self::Plot(p.into()),
+            geoengine_operators::engine::TypedResultDescriptor::Raster(r) => Self::Raster(r.into()),
+            geoengine_operators::engine::TypedResultDescriptor::Vector(v) => Self::Vector(v.into()),
+        }
+    }
+}
+
+impl From<geoengine_operators::engine::PlotResultDescriptor> for TypedResultDescriptor {
+    fn from(value: geoengine_operators::engine::PlotResultDescriptor) -> Self {
+        Self::Plot(value.into())
+    }
+}
+
+impl From<geoengine_operators::engine::RasterResultDescriptor> for TypedResultDescriptor {
+    fn from(value: geoengine_operators::engine::RasterResultDescriptor) -> Self {
+        Self::Raster(value.into())
+    }
+}
+
+impl From<geoengine_operators::engine::VectorResultDescriptor> for TypedResultDescriptor {
+    fn from(value: geoengine_operators::engine::VectorResultDescriptor) -> Self {
+        Self::Vector(value.into())
+    }
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]

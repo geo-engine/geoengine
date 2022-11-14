@@ -1,5 +1,6 @@
 use crate::error::{self, Result};
 use crate::identifier;
+use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use ordered_float::NotNan;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use snafu::ResultExt;
@@ -473,6 +474,19 @@ pub enum VectorDataType {
     MultiPolygon,
 }
 
+impl From<geoengine_datatypes::collections::VectorDataType> for VectorDataType {
+    fn from(value: geoengine_datatypes::collections::VectorDataType) -> Self {
+        match value {
+            geoengine_datatypes::collections::VectorDataType::Data => Self::Data,
+            geoengine_datatypes::collections::VectorDataType::MultiPoint => Self::MultiPoint,
+            geoengine_datatypes::collections::VectorDataType::MultiLineString => {
+                Self::MultiLineString
+            }
+            geoengine_datatypes::collections::VectorDataType::MultiPolygon => Self::MultiPolygon,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, ToSchema)]
 pub struct Coordinate2D {
     pub x: f64,
@@ -565,6 +579,19 @@ pub enum FeatureDataType {
     DateTime,
 }
 
+impl From<geoengine_datatypes::primitives::FeatureDataType> for FeatureDataType {
+    fn from(value: geoengine_datatypes::primitives::FeatureDataType) -> Self {
+        match value {
+            geoengine_datatypes::primitives::FeatureDataType::Category => Self::Category,
+            geoengine_datatypes::primitives::FeatureDataType::Int => Self::Int,
+            geoengine_datatypes::primitives::FeatureDataType::Float => Self::Float,
+            geoengine_datatypes::primitives::FeatureDataType::Text => Self::Text,
+            geoengine_datatypes::primitives::FeatureDataType::Bool => Self::Bool,
+            geoengine_datatypes::primitives::FeatureDataType::DateTime => Self::DateTime,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
@@ -573,10 +600,33 @@ pub enum Measurement {
     Classification(ClassificationMeasurement),
 }
 
+impl From<geoengine_datatypes::primitives::Measurement> for Measurement {
+    fn from(value: geoengine_datatypes::primitives::Measurement) -> Self {
+        match value {
+            geoengine_datatypes::primitives::Measurement::Unitless => Self::Unitless,
+            geoengine_datatypes::primitives::Measurement::Continuous(cm) => {
+                Self::Continuous(cm.into())
+            }
+            geoengine_datatypes::primitives::Measurement::Classification(cm) => {
+                Self::Classification(cm.into())
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
     pub unit: Option<String>,
+}
+
+impl From<geoengine_datatypes::primitives::ContinuousMeasurement> for ContinuousMeasurement {
+    fn from(value: geoengine_datatypes::primitives::ContinuousMeasurement) -> Self {
+        Self {
+            measurement: value.measurement,
+            unit: value.unit,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
@@ -587,6 +637,17 @@ pub struct ContinuousMeasurement {
 pub struct ClassificationMeasurement {
     pub measurement: String,
     pub classes: HashMap<u8, String>,
+}
+
+impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
+    for ClassificationMeasurement
+{
+    fn from(value: geoengine_datatypes::primitives::ClassificationMeasurement) -> Self {
+        Self {
+            measurement: value.measurement,
+            classes: value.classes,
+        }
+    }
 }
 
 /// A type that is solely for serde's serializability.
@@ -632,6 +693,15 @@ impl TryFrom<SerializableClassificationMeasurement> for ClassificationMeasuremen
 pub struct SpatialPartition2D {
     upper_left_coordinate: Coordinate2D,
     lower_right_coordinate: Coordinate2D,
+}
+
+impl From<geoengine_datatypes::primitives::SpatialPartition2D> for SpatialPartition2D {
+    fn from(value: geoengine_datatypes::primitives::SpatialPartition2D) -> Self {
+        Self {
+            upper_left_coordinate: value.upper_left().into(),
+            lower_right_coordinate: value.lower_right().into(),
+        }
+    }
 }
 
 /// A spatio-temporal rectangle with a specified resolution
@@ -860,6 +930,23 @@ pub enum RasterDataType {
     I64,
     F32,
     F64,
+}
+
+impl From<geoengine_datatypes::raster::RasterDataType> for RasterDataType {
+    fn from(value: geoengine_datatypes::raster::RasterDataType) -> Self {
+        match value {
+            geoengine_datatypes::raster::RasterDataType::U8 => Self::U8,
+            geoengine_datatypes::raster::RasterDataType::U16 => Self::U16,
+            geoengine_datatypes::raster::RasterDataType::U32 => Self::U32,
+            geoengine_datatypes::raster::RasterDataType::U64 => Self::U64,
+            geoengine_datatypes::raster::RasterDataType::I8 => Self::I8,
+            geoengine_datatypes::raster::RasterDataType::I16 => Self::I16,
+            geoengine_datatypes::raster::RasterDataType::I32 => Self::I32,
+            geoengine_datatypes::raster::RasterDataType::I64 => Self::I64,
+            geoengine_datatypes::raster::RasterDataType::F32 => Self::F32,
+            geoengine_datatypes::raster::RasterDataType::F64 => Self::F64,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
