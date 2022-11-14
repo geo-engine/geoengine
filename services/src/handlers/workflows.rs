@@ -411,76 +411,24 @@ async fn dataset_from_workflow_handler<C: Context>(
     ctx: web::Data<C>,
     info: web::Json<RasterDatasetFromWorkflow>,
 ) -> Result<impl Responder> {
-    // TODO: support datasets with multiple time steps
-
-    let workflow = ctx.workflow_registry_ref().load(&id).await?;
-
-    let operator = workflow
-        .operator
-        .get_raster()
-        .context(crate::error::Operator)?;
-
-    let execution_context = ctx.execution_context(session.clone())?;
-    let initialized = operator
-        .clone()
-        .initialize(&execution_context)
-        .await
-        .context(crate::error::Operator)?;
-
-    let result_descriptor = initialized.result_descriptor();
-
-    let processor = initialized
-        .query_processor()
-        .context(crate::error::Operator)?;
-
-    // put the created data into a new upload
     let upload = UploadId::new();
     let upload_path = upload.root_path()?;
     fs::create_dir_all(&upload_path)
         .await
         .context(crate::error::Io)?;
-    let file_path = upload_path.join("raster.tiff");
+    let file_path = upload_path.clone();
 
-    let query_rect = info.query;
-    let query_ctx = ctx.query_context()?;
-    let request_spatial_ref = Option::<SpatialReference>::from(result_descriptor.spatial_reference)
-        .ok_or(crate::error::Error::MissingSpatialReference)?;
-    let tile_limit = None; // TODO: set a reasonable limit or make configurable?
-
-    // build the geotiff
-    let res = call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
-            &file_path,
-            p,
-            query_rect,
-            query_ctx,
-            GdalGeoTiffDatasetMetadata {
-                no_data_value: Default::default(), // TODO: decide how to handle the no data here
-                spatial_reference: request_spatial_ref,
-            },
-            GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
-                as_cog: info.as_cog,
-                force_big_tiff: false,
-            },
-            tile_limit,
-            Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
-        ).await)?
-    .map_err(crate::error::Error::from)?;
-
-    // create the dataset
-    let dataset = create_dataset(
-        info.into_inner(),
-        res,
-        result_descriptor,
-        ctx.get_ref(),
+    let task = RasterDatasetFromWorkflowTask {
+        id,
         session,
-    )
-    .await?;
-
-    Ok(web::Json(RasterDatasetFromWorkflowResult {
-        dataset,
+        ctx: ctx.clone(),
+        info,
         upload,
-    }))
+        file_path,
+    };
+
+    let result = task.process().await?;
+    Ok(web::Json(result))
 }
 
 async fn create_dataset<C: Context>(
@@ -491,24 +439,24 @@ async fn create_dataset<C: Context>(
     session: <C as Context>::Session,
 ) -> Result<DatasetId> {
     let dataset_id = DatasetId::new();
-    let meta_data; //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular
-    if slice_info.len() == 1 {
+    //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular
+    let meta_data = if slice_info.len() == 1 {
         let loading_info_slice = slice_info.pop().expect("slice_info has len one");
         let time = Some(loading_info_slice.time);
         let params = loading_info_slice
             .params
             .expect("params is always set in raster_stream_to_geotiff"); //TODO: What is the use-case for None in the GdalMetaDataList?
-        meta_data = MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
+        MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
             time,
             params,
             result_descriptor: result_descriptor.clone(),
-        });
+        })
     } else {
-        meta_data = MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
+        MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
             result_descriptor: result_descriptor.clone(),
             params: slice_info,
-        });
-    }
+        })
+    };
 
     let dataset_definition = DatasetDefinition {
         properties: AddDataset {
@@ -544,7 +492,7 @@ struct RasterDatasetFromWorkflowTask<C: Context> {
 
 impl<C: Context> RasterDatasetFromWorkflowTask<C> {
     async fn process(&self) -> Result<RasterDatasetFromWorkflowResult> {
-        let workflow = self.ctx.workflow_registry_ref().load(&self.id).await?;
+        let workflow = self.ctx.workflow_registry_ref().load(&self.id).await?; //TODO: Maybe task should not start if it would fail here.
 
         let operator = workflow
             .operator
@@ -594,7 +542,6 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
         // create the dataset
         let dataset = create_dataset(
             self.info.clone(),
-            // file_path,
             res,
             result_descriptor,
             self.ctx.get_ref(),

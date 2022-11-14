@@ -43,7 +43,7 @@ where
 {
     let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
 
-    let slices = raster_stream_to_geotiff(
+    let result = raster_stream_to_geotiff(
         &file_path,
         processor,
         query_rect,
@@ -61,11 +61,10 @@ where
                 .expect("params is always set in raster_stream_to_geotiff")
                 .file_path,
         )
-        .unwrap()
     })
-    .collect();
+    .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(slices)
+    Ok(result)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -104,16 +103,15 @@ where
         None
     };
 
-    let dataset_writer = crate::util::spawn_blocking(move || {
-        GdalDatasetWriter::new(
-            &file_path,
-            query_rect,
-            gdal_tiff_metadata,
-            gdal_tiff_options,
-            gdal_config_options,
-        )
-    })
-    .await?;
+    let dataset_writer: GdalDatasetWriter<P> = GdalDatasetWriter::new(
+        &file_path,
+        query_rect,
+        gdal_tiff_metadata,
+        gdal_tiff_options,
+        gdal_config_options,
+    );
+
+    let dataset_writer = Ok(dataset_writer);
 
     let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
 
@@ -157,12 +155,17 @@ where
 
                     let mut dataset_parameters =
                         dataset_writer.intermediate_dataset_parameters.clone();
-                    dataset_parameters.file_path = next_file_path.parse().unwrap();
+                    dataset_parameters.file_path = PathBuf::from(next_file_path);
                     dataset_writer.result.push(GdalLoadingInfoTemporalSlice {
-                        time: current_interval.clone(),
+                        time: current_interval,
                         params: Some(dataset_parameters),
                     });
-                    dataset_writer.init_new_intermediate_dataset()?;
+                    dataset_writer =
+                        crate::util::spawn_blocking(move || -> Result<GdalDatasetWriter<P>> {
+                            dataset_writer.init_new_intermediate_dataset()?;
+                            Ok(dataset_writer)
+                        })
+                        .await??;
                 }
 
                 crate::util::spawn_blocking(move || -> Result<GdalDatasetWriter<P>> {
@@ -179,7 +182,7 @@ where
     let written = crate::util::spawn_blocking(move || dataset_writer.finish())
         .map_err(|e| error::Error::TokioJoin { source: e });
 
-    abortable_query_execution(written, conn_closed, query_abort_trigger).await?;
+    abortable_query_execution(written, conn_closed, query_abort_trigger).await??;
 
     Ok(result)
 }
@@ -217,7 +220,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: Option<Vec<(String, String)>>,
-    ) -> Result<Self> {
+    ) -> Self {
         const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
         let placeholder_path = file_path.join("raster_%_START_TIME_%.tiff");
         let file_path = file_path.join("raster.tiff");
@@ -236,11 +239,11 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         );
 
         let intermediate_dataset_parameters = GdalDatasetParameters {
-            file_path: intermediate_file_path.clone(),
+            file_path: intermediate_file_path,
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: query_rect.spatial_bounds.upper_left(),
-                x_pixel_size: x_pixel_size,
+                x_pixel_size,
                 y_pixel_size: -y_pixel_size,
             },
             width: width as usize,
@@ -266,7 +269,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
 
         let rasterband_index = 1;
 
-        Ok(Self {
+        Self {
             dataset: None,
             rasterband_index,
             gdal_tiff_options,
@@ -284,18 +287,20 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             gdal_config_options,
             intermediate_dataset_parameters,
             result: vec![],
-        })
+        }
     }
 
+    #[allow(clippy::too_many_arguments)] //TODO: I could bundle some arguments in a struct as well
     fn create_data_set(
         gdal_tiff_metadata: &GdalGeoTiffDatasetMetadata,
-        gdal_tiff_options: &GdalGeoTiffOptions,
+        gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: &Option<Vec<(String, String)>>,
         dataset_parameters: &GdalDatasetParameters,
         width: u32,
         height: u32,
         rasterband_index: isize,
         use_big_tiff: bool,
+        output_geo_transform: GeoTransform,
     ) -> Result<Dataset> {
         let compression_num_threads = gdal_tiff_options.compression_num_threads.to_string();
 
@@ -319,13 +324,6 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             &options,
         )?;
 
-        //TODO: This might be hacky, but I don't understand why there are multiple GeoTransforms.
-        let output_geo_transform = GeoTransform::new(
-            dataset_parameters.geo_transform.origin_coordinate,
-            dataset_parameters.geo_transform.x_pixel_size,
-            dataset_parameters.geo_transform.y_pixel_size,
-        );
-
         dataset.set_spatial_ref(&gdal_tiff_metadata.spatial_reference.try_into()?)?;
         dataset.set_geo_transform(&output_geo_transform.into())?;
         let mut band = dataset.rasterband(rasterband_index)?;
@@ -347,13 +345,14 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
     fn init_new_intermediate_dataset(&mut self) -> Result<()> {
         self.dataset = Some(Self::create_data_set(
             &self.gdal_tiff_metadata,
-            &self.gdal_tiff_options,
+            self.gdal_tiff_options,
             &self.gdal_config_options,
             &self.intermediate_dataset_parameters,
             self.width,
             self.height,
             self.rasterband_index,
             self.use_big_tiff,
+            self.output_geo_transform,
         )?);
 
         Ok(())

@@ -442,7 +442,9 @@ async fn wcs_get_coverage_handler<C: Context>(
 
     assert_eq!(bytes.len(), 1);
 
-    Ok(HttpResponse::Ok().content_type("image/tiff").body(bytes.pop().expect("bytes should have length 1")))
+    Ok(HttpResponse::Ok()
+        .content_type("image/tiff")
+        .body(bytes.pop().expect("bytes should have length 1")))
 }
 
 pub struct CoverageResponse {}
