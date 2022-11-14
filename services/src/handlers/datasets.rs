@@ -106,7 +106,7 @@ async fn list_datasets_handler<C: Context>(
 #[utoipa::path(
     tag = "Datasets",
     get,
-    path = "/dataset/internal/{dataset}",
+    path = "/dataset/{dataset}",
     responses(
         (status = 200, description = "OK", body = Dataset,
             example = json!({
