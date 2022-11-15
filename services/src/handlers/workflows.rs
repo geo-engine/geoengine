@@ -592,21 +592,21 @@ impl<C: Context> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
 /// Create a task for creating a new dataset from the result of the workflow given by its `id` and the dataset parameters in the request body.
 /// Returns the id of the created task
 #[utoipa::path(
-tag = "Workflows",
-post,
-path = "/datasetFromWorkflowTask/{id}",
-request_body = RasterDatasetFromWorkflow,
-responses(
-(status = 200, description = "Id of created task", body = TaskResponse,
-example = json!({"task_id": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"})
-)
-),
-params(
-("id" = WorkflowId, description = "Workflow id")
-),
-security(
-("session_token" = [])
-)
+    tag = "Workflows",
+    post,
+    path = "/datasetFromWorkflowTask/{id}",
+    request_body = RasterDatasetFromWorkflow,
+    responses(
+        (status = 200, description = "Id of created task", body = TaskResponse,
+        example = json!({"task_id": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"})
+        )
+    ),
+    params(
+        ("id" = WorkflowId, description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
 )]
 async fn dataset_from_workflow_handler_task<C: Context>(
     id: web::Path<WorkflowId>,
