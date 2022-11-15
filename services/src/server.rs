@@ -102,6 +102,11 @@ where
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>);
 
+        app = app.route(
+            "/available",
+            web::get().to(crate::util::server::available_handler),
+        );
+
         let mut api_urls = vec![];
 
         app = serve_openapi_json(
