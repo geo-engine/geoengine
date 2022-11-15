@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a handler (`/available`) to the API to check if the service is available.
+
+  - https://github.com/geo-engine/geoengine/pull/681
+
 - Added spatial resolution to the `RasterResultDescriptor` that tracks the native resolution of the raster data through raster operations.
 
   - https://github.com/geo-engine/geoengine/pull/618
