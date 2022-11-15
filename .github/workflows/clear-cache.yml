@@ -21,18 +21,27 @@ jobs:
             const [owner, repo] = GITHUB_REPOSITORY.split('/')
 
             console.log(`Clearing all caches for ${owner}/${repo}`)
+            
+            let caches = [];
 
-            const result = await github.request('GET /repos/{owner}/{repo}/actions/caches', {
-              owner,
-              repo,
-            });
+            let caches = [];
 
-            for (const cache of result.data.actions_caches) {
-              console.log(`Deleting cache ${cache.id}...`);
-
-              await github.request('DELETE /repos/{owner}/{repo}/actions/caches/{cache_id}', {
+            do {
+              const result = await github.request('GET /repos/{owner}/{repo}/actions/caches', {
                 owner,
                 repo,
-                cache_id: cache.id
-              })
-            }
+              });
+
+              caches = result.data.actions_caches;
+              console.log(`Found ${caches.length} caches`);
+
+              for (const cache of caches) {
+                console.log(`Deleting cache ${cache.id}...`);
+
+                await github.request('DELETE /repos/{owner}/{repo}/actions/caches/{cache_id}', {
+                  owner,
+                  repo,
+                  cache_id: cache.id
+                })
+              }
+            } while (caches.length > 0);
