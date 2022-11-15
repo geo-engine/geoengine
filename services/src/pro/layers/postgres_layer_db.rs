@@ -345,24 +345,28 @@ where
             return Err(LayerDbError::CannotRemoveRootCollection.into());
         }
 
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.transaction().await?;
 
         // delete the collection!
         // on delete cascade removes all entries from `collection_children` and `collection_layers`
 
-        let remove_layer_collection_stmt = conn
+        let remove_layer_collection_stmt = transaction
             .prepare(
                 "DELETE FROM layer_collections
                  WHERE id = $1;",
             )
             .await?;
-        conn.execute(&remove_layer_collection_stmt, &[&collection])
+        transaction
+            .execute(&remove_layer_collection_stmt, &[&collection])
             .await?;
 
         // delete all collections without parent collection
-        // TODO: use recursive delete statement
 
-        let remove_layer_collections_without_parents_stmt = conn
+        // HINT: a recursive delete statement seems reasonable, but hard to implement in postgres
+        //       because you have a graph with potential loops
+
+        let remove_layer_collections_without_parents_stmt = transaction
             .prepare(
                 "DELETE FROM layer_collections
                  WHERE  id <> $1 -- do not delete root collection
@@ -371,7 +375,7 @@ where
                  );",
             )
             .await?;
-        while 0 < conn
+        while 0 < transaction
             .execute(
                 &remove_layer_collections_without_parents_stmt,
                 &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID],
@@ -384,7 +388,7 @@ where
 
         // delete all layers without parent collection
 
-        let remove_layers_without_parents_stmt = conn
+        let remove_layers_without_parents_stmt = transaction
             .prepare(
                 "DELETE FROM layers
                  WHERE id NOT IN (
@@ -392,8 +396,11 @@ where
                  );",
             )
             .await?;
-        conn.execute(&remove_layers_without_parents_stmt, &[])
+        transaction
+            .execute(&remove_layers_without_parents_stmt, &[])
             .await?;
+
+        transaction.commit().await?;
 
         Ok(())
     }
