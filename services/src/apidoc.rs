@@ -46,6 +46,7 @@ use utoipa::{Modify, OpenApi};
         handlers::layers::add_layer,
         handlers::layers::add_collection,
         handlers::layers::remove_collection,
+        handlers::layers::remove_layer_from_collection,
         handlers::session::anonymous_handler,
         handlers::session::session_handler,
         handlers::session::session_project_handler,
@@ -136,9 +137,6 @@ use utoipa::{Modify, OpenApi};
             CollectionItem,
             AddLayer,
             handlers::layers::AddLayerRequest,
-            handlers::layers::AddLayerResponse,
-            handlers::layers::AddCollectionRequest,
-            handlers::layers::AddCollectionResponse,
             AddLayerCollection,
 
             Breakpoint,
