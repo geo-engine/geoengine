@@ -400,9 +400,7 @@ where
             .execute(&remove_layers_without_parents_stmt, &[])
             .await?;
 
-        transaction.commit().await?;
-
-        Ok(())
+        transaction.commit().await.map_err(Into::into)
     }
 
     async fn remove_layer_from_collection(
@@ -420,16 +418,17 @@ where
                 found: layer.0.clone(),
             })?;
 
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.transaction().await?;
 
-        let remove_layer_collection_stmt = conn
+        let remove_layer_collection_stmt = transaction
             .prepare(
                 "DELETE FROM collection_layers
                  WHERE collection = $1
                  AND layer = $2;",
             )
             .await?;
-        let num_results = conn
+        let num_results = transaction
             .execute(
                 &remove_layer_collection_stmt,
                 &[&collection_uuid, &layer_uuid],
@@ -445,7 +444,7 @@ where
         }
 
         // remove layers without any collection
-        let remove_layers_without_parents_stmt = conn
+        let remove_layers_without_parents_stmt = transaction
             .prepare(
                 "DELETE FROM layers
                  WHERE id NOT IN (
@@ -453,10 +452,11 @@ where
                  );",
             )
             .await?;
-        conn.execute(&remove_layers_without_parents_stmt, &[])
+        transaction
+            .execute(&remove_layers_without_parents_stmt, &[])
             .await?;
 
-        Ok(())
+        transaction.commit().await.map_err(Into::into)
     }
 }
 
