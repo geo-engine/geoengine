@@ -24,8 +24,6 @@ jobs:
             
             let caches = [];
 
-            let caches = [];
-
             do {
               const result = await github.request('GET /repos/{owner}/{repo}/actions/caches', {
                 owner,
