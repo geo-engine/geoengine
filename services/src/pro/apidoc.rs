@@ -19,8 +19,8 @@ use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, Ge
 use crate::handlers::wms::MapResponse;
 use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListing, LayerListing, Property,
-    ProviderLayerCollectionId, ProviderLayerId,
+    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
+    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::LayerCollectionId;
 use crate::ogc::util::OgcBoundingBox;
@@ -50,6 +50,10 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::layers::layer_handler,
         handlers::layers::list_collection_handler,
         handlers::layers::list_root_collections_handler,
+        handlers::layers::add_layer,
+        handlers::layers::add_collection,
+        handlers::layers::remove_collection,
+        handlers::layers::remove_layer_from_collection,
         handlers::tasks::abort_handler,
         handlers::tasks::list_handler,
         handlers::tasks::status_handler,
@@ -149,6 +153,9 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             LayerCollectionListing,
             Property,
             CollectionItem,
+            AddLayer,
+            handlers::layers::AddLayerRequest,
+            AddLayerCollection,
 
             Breakpoint,
             ColorParam,
