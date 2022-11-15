@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::path::Path;
 use std::{
     fs::{self, DirEntry, File},
     io::BufReader,
@@ -13,7 +14,7 @@ use crate::{contexts::MockableSession, datasets::storage::DatasetDb};
 
 use super::storage::DatasetDefinition;
 
-use log::warn;
+use log::{info, warn};
 
 pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
     dataset_db: &mut D,
@@ -36,9 +37,12 @@ pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
         Ok(())
     }
 
-    let dir = fs::read_dir(file_path);
+    let dir = fs::read_dir(&file_path);
     if dir.is_err() {
-        warn!("Skipped adding datasets from directory because it can't be read");
+        warn!(
+            "Skipped adding datasets from directory `{:?}` because it can't be read",
+            file_path
+        );
         return;
     }
     let dir = dir.expect("checked");
@@ -48,15 +52,16 @@ pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
             Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
                 if let Err(e) = add_dataset_definition_from_dir_entry(dataset_db, &entry).await {
                     warn!(
-                        "Skipped adding dataset from directory entry: {:?} error: {}",
-                        entry,
+                        "Skipped adding dataset from file `{:?}` error `{}`",
+                        entry.path(),
                         e.to_string()
                     );
                 }
             }
-            _ => {
-                warn!("Skipped adding dataset from directory entry: {:?}", entry);
+            Err(e) => {
+                warn!("Skipped adding dataset from directory entry `{:?}`", e);
             }
+            _ => {}
         }
     }
 }
@@ -74,29 +79,48 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, file_p
         Ok(())
     }
 
-    let dir = fs::read_dir(file_path);
-    if dir.is_err() {
-        warn!("Skipped adding providers from directory because it can't be read");
-        return;
-    }
-    let dir = dir.expect("checked");
+    async fn add_from_dir<D: LayerProviderDb>(db: &mut D, file_path: &Path) {
+        let dir = fs::read_dir(file_path);
+        if dir.is_err() {
+            warn!(
+                "Skipped adding providers from directory `{:?}` because it can't be read",
+                file_path
+            );
+            return;
+        }
+        let dir = dir.expect("checked");
 
-    for entry in dir {
-        if let Ok(entry) = entry {
-            if entry.path().is_dir() {
-                continue;
+        for entry in dir {
+            match entry {
+                Ok(entry) if entry.path().is_file() => {
+                    match add_provider_definition_from_dir_entry(db, &entry).await {
+                        Ok(_) => info!("Added provider from file `{:?}`", entry.path()),
+                        Err(e) => {
+                            warn!(
+                                "Skipped adding provider from file `{:?}` error: `{}`",
+                                entry.path(),
+                                e.to_string()
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    // TODO: log
+                    warn!("Skipped adding provider from directory entry `{:?}`", e);
+                }
+                _ => {}
             }
-            if let Err(e) = add_provider_definition_from_dir_entry(db, &entry).await {
-                // TODO: log
-                warn!(
-                    "Skipped adding provider from directory entry: {:?} error: {}",
-                    entry,
-                    e.to_string()
-                );
-            }
-        } else {
-            // TODO: log
-            warn!("Skipped adding provider from directory entry: {:?}", entry);
         }
     }
+
+    add_from_dir(db, &file_path).await;
+
+    #[cfg(feature = "pro")]
+    add_from_dir(db, &file_path.join("pro")).await;
+
+    #[cfg(feature = "nfdi")]
+    add_from_dir(db, &file_path.join("nfdi")).await;
+
+    #[cfg(feature = "ebv")]
+    add_from_dir(db, &file_path.join("ebv")).await;
 }

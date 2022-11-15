@@ -83,7 +83,6 @@ impl ProInMemoryContext {
 
         let mut layer_provider_db = HashMapLayerProviderDb::default();
         add_providers_from_directory(&mut layer_provider_db, provider_defs_path.clone()).await;
-        add_providers_from_directory(&mut layer_provider_db, provider_defs_path.join("pro")).await;
 
         let user_db = Arc::new(HashMapUserDb::default());
         let quota = initialize_quota_tracking(user_db.clone());
