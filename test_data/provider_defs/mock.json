@@ -1,34 +1,59 @@
 {
   "type": "MockExternalLayerProviderDefinition",
   "id": "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
-  "datasets": [
-    {
-      "properties": {
-        "id": {
-          "type": "external",
-          "providerId": "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
-          "datasetId": "d89f1327-15ff-4016-8c3e-e96a7c60d93b"
-        },
-        "name": "Mock",
-        "description": "A mock dataset",
-        "sourceOperator": "MockDatasetDataSource"
-      },
-      "metaData": {
-        "type": "MockMetaData",
-        "loadingInfo": {
-          "points": [
-            {
-              "x": 133.7,
-              "y": 42.0
+  "rootCollection": {
+    "id": "b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df",
+    "name": "Mock Collection A",
+    "description": "",
+    "collections": [
+      {
+        "id": "c1351ca5-0353-41ad-9f15-784ea207d0ef",
+        "name": "Empty Collection",
+        "description": "",
+        "collections": [],
+        "layers": []
+      }
+    ],
+    "layers": [
+      {
+        "id": "389a84ef-add4-4f22-9389-1e4a89396f65",
+        "name": "Mock Layer A",
+        "description": "",
+        "symbology": null,
+        "properties": [],
+        "metadata": {},
+        "workflow": {
+          "type": "Vector",
+          "operator": {
+            "type": "MockDatasetDataSource",
+            "params": {
+              "data": {
+                "type": "external",
+                "providerId": "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
+                "layerId": "myMock"
+              }
             }
-          ]
-        },
-        "resultDescriptor": {
-          "dataType": "MultiPoint",
-          "spatialReference": "EPSG:4326",
-          "columns": {}
+          }
         }
       }
+    ]
+  },
+  "data": {
+    "myMock": {
+      "type": "MockMetaData",
+      "loadingInfo": {
+        "points": [
+          {
+            "x": 133.7,
+            "y": 42.0
+          }
+        ]
+      },
+      "resultDescriptor": {
+        "dataType": "MultiPoint",
+        "spatialReference": "EPSG:4326",
+        "columns": {}
+      }
     }
-  ]
+  }
 }
