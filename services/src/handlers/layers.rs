@@ -634,13 +634,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_layer_to_collection() {
-        // fixing this avoids random admin session tokens
-        crate::util::config::set_config(
-            "session.admin_session_token",
-            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
-        )
-        .unwrap();
-
         let ctx = InMemoryContext::test_default();
 
         let admin_session_id = AdminSession::default().id();
@@ -684,13 +677,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_collection() {
-        // fixing this avoids random admin session tokens
-        crate::util::config::set_config(
-            "session.admin_session_token",
-            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
-        )
-        .unwrap();
-
         let ctx = InMemoryContext::test_default();
 
         let admin_session_id = AdminSession::default().id();
@@ -724,13 +710,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_remove_layer_from_collection() {
-        // fixing this avoids random admin session tokens
-        crate::util::config::set_config(
-            "session.admin_session_token",
-            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
-        )
-        .unwrap();
-
         let ctx = InMemoryContext::test_default();
 
         let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
@@ -796,13 +775,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_remove_collection() {
-        // fixing this avoids random admin session tokens
-        crate::util::config::set_config(
-            "session.admin_session_token",
-            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
-        )
-        .unwrap();
-
         let ctx = InMemoryContext::test_default();
 
         let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
