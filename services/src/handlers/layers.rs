@@ -493,7 +493,7 @@ pub struct AddLayerRequest {
     responses(
         (status = 200, description = "OK", body = IdResponse<LayerId>,
             example = json!({
-                "layerId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+                "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
             })
         )
     ),
@@ -531,7 +531,7 @@ async fn add_layer<C: Context>(
     responses(
         (status = 200, description = "OK", body = IdResponse<LayerCollectionId>,
             example = json!({
-                "layerCollectionId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+                "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
             })
         )
     ),
