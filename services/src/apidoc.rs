@@ -63,7 +63,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::get_workflow_metadata_handler,
         handlers::workflows::get_workflow_provenance_handler,
         handlers::workflows::load_workflow_handler,
-        handlers::workflows::register_workflow_handler,        
+        handlers::workflows::register_workflow_handler,
     ),
     components(
         schemas(
