@@ -46,11 +46,8 @@ where
                         "/layers/{layer}",
                         web::delete().to(remove_layer_from_collection::<C>),
                     )
-                    .service(
-                        web::resource("")
-                            .route(web::post().to(add_collection::<C>))
-                            .route(web::delete().to(remove_collection::<C>)),
-                    ),
+                    .route("/collections", web::post().to(add_collection::<C>))
+                    .route("", web::delete().to(remove_collection::<C>)),
             ),
     );
 }
@@ -523,7 +520,7 @@ async fn add_layer<C: Context>(
 #[utoipa::path(
     tag = "Layers",
     post,
-    path = "/layerDb/collections/{collection}",
+    path = "/layerDb/collections/{collection}/collections",
     params(
         ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
     ),
@@ -555,7 +552,7 @@ async fn add_collection<C: Context>(
     Ok(web::Json(IdResponse { id }))
 }
 
-/// Remove a collection from a collection
+/// Remove a collection
 #[utoipa::path(
     tag = "Layers",
     delete,
@@ -684,7 +681,7 @@ mod tests {
         let collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
 
         let req = test::TestRequest::post()
-            .uri(&format!("/layerDb/collections/{collection_id}"))
+            .uri(&format!("/layerDb/collections/{collection_id}/collections"))
             .append_header((
                 header::AUTHORIZATION,
                 Bearer::new(admin_session_id.to_string()),
