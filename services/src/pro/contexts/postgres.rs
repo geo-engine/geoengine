@@ -129,7 +129,12 @@ where
 
         let mut layer_provider_db = PostgresLayerProviderDb::new(pool.clone());
 
-        add_providers_from_directory(&mut layer_provider_db, provider_defs_path.clone()).await;
+        add_providers_from_directory(
+            &mut layer_provider_db,
+            provider_defs_path.clone(),
+            &[provider_defs_path.join("pro")],
+        )
+        .await;
 
         let user_db = Arc::new(PostgresUserDb::new(pool.clone()));
         let quota = initialize_quota_tracking(user_db.clone());

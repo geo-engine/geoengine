@@ -65,7 +65,11 @@ pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
 }
 
 // TODO: move to layers source dir
-pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, file_path: PathBuf) {
+pub async fn add_providers_from_directory<D: LayerProviderDb>(
+    db: &mut D,
+    base_path: PathBuf,
+    more_paths: &[PathBuf],
+) {
     async fn add_provider_definition_from_dir_entry<D: LayerProviderDb>(
         db: &mut D,
         entry: &DirEntry,
@@ -108,14 +112,15 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, file_p
         }
     }
 
-    add_from_dir(db, &file_path).await;
+    add_from_dir(db, &base_path).await;
 
-    #[cfg(feature = "pro")]
-    add_from_dir(db, &file_path.join("pro")).await;
+    for path in more_paths {
+        add_from_dir(db, path).await;
+    }
 
     #[cfg(feature = "nfdi")]
-    add_from_dir(db, &file_path.join("nfdi")).await;
+    add_from_dir(db, &base_path.join("nfdi")).await;
 
     #[cfg(feature = "ebv")]
-    add_from_dir(db, &file_path.join("ebv")).await;
+    add_from_dir(db, &base_path.join("ebv")).await;
 }
