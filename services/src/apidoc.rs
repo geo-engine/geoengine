@@ -39,6 +39,7 @@ use utoipa::{Modify, OpenApi};
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        crate::util::server::available_handler,
         crate::util::server::server_info_handler,
         handlers::layers::layer_handler,
         handlers::layers::list_collection_handler,
@@ -62,7 +63,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::get_workflow_metadata_handler,
         handlers::workflows::get_workflow_provenance_handler,
         handlers::workflows::load_workflow_handler,
-        handlers::workflows::register_workflow_handler,
+        handlers::workflows::register_workflow_handler,        
     ),
     components(
         schemas(

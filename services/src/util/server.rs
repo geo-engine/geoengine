@@ -193,7 +193,15 @@ pub(crate) fn server_info() -> ServerInfo {
         features: env!("VERGEN_CARGO_FEATURES"),
     }
 }
-
+/// Server availablity check.
+#[utoipa::path(
+    tag = "General",
+    get,
+    path = "/available",
+    responses(
+        (status = 204, description = "Server availablity check")
+    )
+)]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
 pub(crate) async fn available_handler() -> impl actix_web::Responder {
     HttpResponse::Ok().status(StatusCode::NO_CONTENT).finish()
