@@ -656,13 +656,11 @@ mod tests {
 
     use super::*;
     use crate::api::model::datatypes::{DataProviderId, DatasetId};
-    use crate::datasets::external::mock::MockExternalLayerProviderDefinition;
+    use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
-    use crate::datasets::storage::{
-        AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition,
-    };
+    use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataDefinition};
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::layers::layer::{
@@ -1546,17 +1544,20 @@ mod tests {
 
             let provider = MockExternalLayerProviderDefinition {
                 id: provider_id,
-                datasets: vec![DatasetDefinition {
-                    properties: AddDataset {
-                        id: Some(DatasetId::new()),
-                        name: "test".to_owned(),
-                        description: "desc".to_owned(),
-                        source_operator: "MockPointSource".to_owned(),
-                        symbology: None,
-                        provenance: None,
-                    },
-                    meta_data,
-                }],
+                root_collection: MockCollection {
+                    id: LayerCollectionId("b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_owned()),
+                    name: "Mock Collection A".to_owned(),
+                    description: "Some description".to_owned(),
+                    collections: vec![MockCollection {
+                        id: LayerCollectionId("21466897-37a1-4666-913a-50b5244699ad".to_owned()),
+                        name: "Mock Collection B".to_owned(),
+                        description: "Some description".to_owned(),
+                        collections: vec![],
+                        layers: vec![],
+                    }],
+                    layers: vec![],
+                },
+                data: [("myData".to_owned(), meta_data)].into_iter().collect(),
             };
 
             db.add_layer_provider(Box::new(provider)).await.unwrap();
