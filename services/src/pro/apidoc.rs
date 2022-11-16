@@ -46,6 +46,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        crate::util::server::available_handler,
         crate::util::server::server_info_handler,
         handlers::layers::layer_handler,
         handlers::layers::list_collection_handler,
