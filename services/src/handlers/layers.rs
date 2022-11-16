@@ -43,7 +43,7 @@ where
             .service(
                 web::scope("/collections/{collection}")
                     .route(
-                        "/{layer}",
+                        "/layers/{layer}",
                         web::delete().to(remove_layer_from_collection::<C>),
                     )
                     .service(
@@ -590,7 +590,7 @@ struct RemoveLayerFromCollectionParams {
 #[utoipa::path(
     tag = "Layers",
     delete,
-    path = "/layerDb/collections/{collection}/{layer}",
+    path = "/layerDb/collections/{collection}/layers/{layer}",
     params(
         ("collection" = LayerCollectionId, description = "Layer collection id"),
         ("layer" = LayerId, description = "Layer id"),
@@ -755,7 +755,9 @@ mod tests {
         let admin_session_id = AdminSession::default().id();
 
         let req = test::TestRequest::delete()
-            .uri(&format!("/layerDb/collections/{collection_id}/{layer_id}"))
+            .uri(&format!(
+                "/layerDb/collections/{collection_id}/layers/{layer_id}"
+            ))
             .append_header((
                 header::AUTHORIZATION,
                 Bearer::new(admin_session_id.to_string()),
