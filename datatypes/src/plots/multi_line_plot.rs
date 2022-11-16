@@ -38,7 +38,7 @@ impl Plot for MultiLineChart {
             .iter()
             .map(|d| {
                 serde_json::json!({
-                    "x": d.time.as_rfc3339(),
+                    "x": d.time.as_vega_date_time(),
                     "y": d.value,
                     "series": d.series,
                 })

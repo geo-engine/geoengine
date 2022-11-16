@@ -57,6 +57,16 @@ impl TimeInstance {
             .to_rfc3339_with_millis()
     }
 
+    /// Return a date time string for Vega plots
+    pub fn as_vega_date_time(self) -> String {
+        let instance = self.clamp(TimeInstance::MIN, TimeInstance::MAX);
+
+        instance
+            .as_date_time()
+            .expect("should not overflow because it was clamped")
+            .to_vega_date_time()
+    }
+
     pub const fn inner(self) -> i64 {
         self.0
     }
