@@ -14,7 +14,7 @@ use crate::{contexts::MockableSession, datasets::storage::DatasetDb};
 
 use super::storage::DatasetDefinition;
 
-use log::{info, warn};
+use log::{error, info, warn};
 
 pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
     dataset_db: &mut D,
@@ -37,15 +37,13 @@ pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
         Ok(())
     }
 
-    let dir = fs::read_dir(&file_path);
-    if dir.is_err() {
-        warn!(
+    let Ok(dir) = fs::read_dir(&file_path) else {
+        error!(
             "Skipped adding datasets from directory `{:?}` because it can't be read",
             file_path
         );
         return;
-    }
-    let dir = dir.expect("checked");
+    };
 
     for entry in dir {
         match entry {
@@ -80,15 +78,13 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, file_p
     }
 
     async fn add_from_dir<D: LayerProviderDb>(db: &mut D, file_path: &Path) {
-        let dir = fs::read_dir(file_path);
-        if dir.is_err() {
-            warn!(
+        let Ok(dir) = fs::read_dir(file_path) else {
+            error!(
                 "Skipped adding providers from directory `{:?}` because it can't be read",
                 file_path
             );
             return;
-        }
-        let dir = dir.expect("checked");
+        };
 
         for entry in dir {
             match entry {
@@ -105,7 +101,6 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, file_p
                     }
                 }
                 Err(e) => {
-                    // TODO: log
                     warn!("Skipped adding provider from directory entry `{:?}`", e);
                 }
                 _ => {}
