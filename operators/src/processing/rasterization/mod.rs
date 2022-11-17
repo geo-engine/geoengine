@@ -420,11 +420,11 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                                         .for_each_with(send, |send, val| send.send(val).expect("Receiver should be allocated for scope duration"));
                                 });
 
-                                receive.iter().for_each(|result| {
+                                for result in receive.iter() {
                                     for (index, value) in result {
                                         tile_data[index] += value;
                                     }
-                                });
+                                }
                             });
                         });
                     }
