@@ -44,7 +44,7 @@ where
                 web::scope("/collections/{collection}")
                     .service(
                         web::resource("/layers/{layer}")
-                            .route(web::post().to(add_existng_layer_to_collection::<C>))
+                            .route(web::post().to(add_existing_layer_to_collection::<C>))
                             .route(web::delete().to(remove_layer_from_collection::<C>)),
                     )
                     .service(
@@ -630,8 +630,23 @@ struct AddExistingLayerToCollectionParams {
     layer: LayerId,
 }
 
-// TODO: doc and utoipa
-async fn add_existng_layer_to_collection<C: Context>(
+/// Add an existing layer to a collection
+#[utoipa::path(
+    tag = "Layers",
+    post,
+    path = "/layerDb/collections/{collection}/layers/{layer}",
+    params(
+        ("collection" = LayerCollectionId, description = "Layer collection id"),
+        ("layer" = LayerId, description = "Layer id"),
+    ),
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn add_existing_layer_to_collection<C: Context>(
     _session: AdminSession, // TODO: allow normal users to remove their collections
     ctx: web::Data<C>,
     path: web::Path<AddExistingLayerToCollectionParams>,
@@ -649,7 +664,22 @@ struct CollectionAndSubCollectionParams {
     sub_collection: LayerCollectionId,
 }
 
-// TODO: doc and utoipa
+/// Add an existing collection to a collection
+#[utoipa::path(
+    tag = "Layers",
+    post,
+    path = "/layerDb/collections/{parent}/collections/{collection}",
+    params(
+        ("parent" = LayerCollectionId, description = "Parent layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
+        ("collection" = LayerId, description = "Layer collection id"),
+    ),
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn add_existing_collection_to_collection<C: Context>(
     _session: AdminSession, // TODO: allow normal users to remove their collections
     ctx: web::Data<C>,
@@ -662,7 +692,22 @@ async fn add_existing_collection_to_collection<C: Context>(
     Ok(HttpResponse::Ok().finish())
 }
 
-// TODO: doc and utoipa
+/// Add a collection from a collection
+#[utoipa::path(
+    tag = "Layers",
+    delete,
+    path = "/layerDb/collections/{parent}/collections/{collection}",
+    params(
+        ("parent" = LayerCollectionId, description = "Parent layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
+        ("collection" = LayerId, description = "Layer collection id"),
+    ),
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn remove_collection_from_collection<C: Context>(
     _session: AdminSession, // TODO: allow normal users to remove their collections
     ctx: web::Data<C>,
