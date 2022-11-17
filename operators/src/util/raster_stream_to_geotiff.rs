@@ -29,6 +29,41 @@ use std::path::PathBuf;
 
 use super::abortable_query_execution;
 
+pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
+    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    query_rect: RasterQueryRectangle,
+    query_ctx: C,
+    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+    gdal_tiff_options: GdalGeoTiffOptions,
+    tile_limit: Option<usize>,
+    conn_closed: BoxFuture<'_, ()>,
+) -> Result<Vec<u8>>
+where
+    T: Pixel + GdalType,
+{
+    let mut timesteps = raster_stream_to_geotiff_bytes(
+        processor,
+        query_rect,
+        query_ctx,
+        gdal_tiff_metadata,
+        gdal_tiff_options,
+        tile_limit,
+        conn_closed,
+    )
+    .await?;
+
+    if timesteps.len() == 1 {
+        Ok(timesteps
+            .pop()
+            .expect("there should be exactly one timestep"))
+    } else {
+        Err(Error::InvalidNumberOfTimeSteps {
+            expected: 1,
+            found: timesteps.len(),
+        })
+    }
+}
+
 pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: RasterQueryRectangle,
@@ -166,11 +201,11 @@ where
                         crate::util::spawn_blocking(move || -> Result<GdalDatasetWriter<P>> {
                             dataset_writer.init_new_intermediate_dataset(
                                 current_interval,
-                                dataset_path,
                                 dataset_writer
                                     .intermediate_dataset_parameters
                                     .file_path
                                     .clone(),
+                                dataset_path,
                             )?;
                             Ok(dataset_writer)
                         })
@@ -704,7 +739,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let mut bytes = raster_stream_to_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -736,12 +771,10 @@ mod tests {
         //    "../test_data/raster/geotiff_from_stream_compressed.tiff",
         // );
 
-        assert_eq!(bytes.len(), 1);
-
         assert_eq!(
             include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
-            bytes.pop().expect("bytes should have length 1").as_slice()
+            bytes.as_slice()
         );
     }
 
@@ -761,7 +794,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let mut bytes = raster_stream_to_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -788,13 +821,11 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(bytes.len(), 1);
-
         assert_eq!(
             include_bytes!(
                 "../../../test_data/raster/geotiff_with_mask_from_stream_compressed.tiff"
             ) as &[u8],
-            bytes.pop().expect("bytes should have length 1").as_slice()
+            bytes.as_slice()
         );
     }
 
@@ -814,7 +845,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let mut bytes = raster_stream_to_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -846,12 +877,10 @@ mod tests {
         //    "../test_data/raster/geotiff_big_tiff_from_stream_compressed.tiff",
         // );
 
-        assert_eq!(bytes.len(), 1);
-
         assert_eq!(
             include_bytes!("../../../test_data/raster/geotiff_big_tiff_from_stream_compressed.tiff")
                 as &[u8],
-            bytes.pop().expect("bytes should have length 1").as_slice()
+            bytes.as_slice()
         );
     }
 
@@ -871,7 +900,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let mut bytes = raster_stream_to_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -903,13 +932,11 @@ mod tests {
         //    "../test_data/raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff",
         //);
 
-        assert_eq!(bytes.len(), 1);
-
         assert_eq!(
             include_bytes!(
                 "../../../test_data/raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff"
             ) as &[u8],
-            bytes.pop().expect("bytes should have length 1").as_slice()
+            bytes.as_slice()
         );
 
         // TODO: check programmatically that intermediate file is gone
@@ -931,7 +958,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let mut bytes = raster_stream_to_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -963,13 +990,11 @@ mod tests {
         //     "../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff",
         // );
 
-        assert_eq!(bytes.len(), 1);
-
         assert_eq!(
             include_bytes!(
                 "../../../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff"
             ) as &[u8],
-            bytes.pop().expect("bytes should have length 1").as_slice()
+            bytes.as_slice()
         );
 
         // TODO: check programmatically that intermediate file is gone
@@ -1051,6 +1076,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cloud_optimized_geotiff_multiple_timesteps_from_stream_wrong_request() {
+        let ctx = MockQueryContext::test_default();
+        let tiling_specification =
+            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+
+        let metadata = create_ndvi_meta_data();
+
+        let gdal_source = GdalSourceProcessor::<u8> {
+            tiling_specification,
+            meta_data: Box::new(metadata),
+            _phantom_data: PhantomData,
+        };
+
+        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
+
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
+            gdal_source.boxed(),
+            RasterQueryRectangle {
+                spatial_bounds: query_bbox,
+                time_interval: TimeInterval::new(
+                    1_388_534_400_000,
+                    1_388_534_400_000 + 7_776_000_000,
+                )
+                .unwrap(),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    query_bbox.size_x() / 600.,
+                    query_bbox.size_y() / 600.,
+                ),
+            },
+            ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: true,
+                compression_num_threads: GdalCompressionNumThreads::AllCpus,
+                force_big_tiff: false,
+            },
+            None,
+            Box::pin(futures::future::pending()),
+        )
+        .await;
+
+        assert!(bytes.is_err());
+    }
+
+    #[tokio::test]
     async fn geotiff_from_stream_limit() {
         let ctx = MockQueryContext::test_default();
         let tiling_specification =
@@ -1066,7 +1139,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = raster_stream_to_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1113,7 +1186,7 @@ mod tests {
             SpatialPartition2D::new((-180., -66.227_224_576_271_84).into(), (180., -90.).into())
                 .unwrap();
 
-        let bytes = raster_stream_to_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,

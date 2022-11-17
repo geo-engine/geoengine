@@ -314,6 +314,16 @@ pub enum Error {
     QueryCanceled,
 
     AbortTriggerAlreadyUsed,
+
+    #[snafu(display(
+        "InvalidNumberOfTimeStepsError: expected \"{}\" found \"{}\"",
+        expected,
+        found
+    ))]
+    InvalidNumberOfTimeSteps {
+        expected: usize,
+        found: usize,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
