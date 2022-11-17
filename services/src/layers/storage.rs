@@ -378,8 +378,6 @@ impl LayerDb for HashMapLayerDb {
     ) -> Result<()> {
         let mut backend = self.backend.write().await;
 
-        dbg!(&backend.collection_children);
-
         let children = backend
             .collection_children
             .get_mut(parent)
@@ -413,7 +411,6 @@ impl LayerDb for HashMapLayerDb {
         Ok(())
     }
 
-    // TODO: add test
     async fn remove_layer_from_collection(
         &self,
         layer_id: &LayerId,
@@ -896,6 +893,96 @@ mod tests {
             }
             .validated()
             .unwrap(),
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_removes_collections_from_collections() {
+        let db = HashMapLayerDb::default();
+
+        let root_collection_id = &db.root_collection_id().await.unwrap();
+
+        let mid_collection_id = db
+            .add_collection(
+                AddLayerCollection {
+                    name: "mid collection".to_string(),
+                    description: "description".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let bottom_collection_id = db
+            .add_collection(
+                AddLayerCollection {
+                    name: "bottom collection".to_string(),
+                    description: "description".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                &mid_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let layer_id = db
+            .add_layer(
+                AddLayer {
+                    name: "layer".to_string(),
+                    description: "description".to_string(),
+                    workflow: Workflow {
+                        operator: TypedOperator::Vector(
+                            MockPointSource {
+                                params: MockPointSourceParams {
+                                    points: vec![Coordinate2D::new(1., 2.); 3],
+                                },
+                            }
+                            .boxed(),
+                        ),
+                    },
+                    symbology: None,
+                }
+                .validated()
+                .unwrap(),
+                &mid_collection_id,
+            )
+            .await
+            .unwrap();
+
+        // removing the mid collection…
+        db.remove_collection_from_parent(&mid_collection_id, root_collection_id)
+            .await
+            .unwrap();
+
+        // …should remove itself
+        db.collection(
+            &mid_collection_id,
+            LayerCollectionListOptions::default().validated().unwrap(),
+        )
+        .await
+        .unwrap_err();
+
+        // …should remove the bottom collection
+        db.collection(
+            &bottom_collection_id,
+            LayerCollectionListOptions::default().validated().unwrap(),
+        )
+        .await
+        .unwrap_err();
+
+        // … and should remove the layer of the bottom collection
+        db.get_layer(&layer_id).await.unwrap_err();
+
+        // the root collection is still there
+        db.collection(
+            root_collection_id,
+            LayerCollectionListOptions::default().validated().unwrap(),
         )
         .await
         .unwrap();

@@ -20,6 +20,12 @@ pub enum LayerDbError {
         layer: LayerId,
     },
 
+    #[snafu(display("There is no collection {collection} in collection {parent}"))]
+    NoCollectionForGivenIdInCollection {
+        collection: LayerCollectionId,
+        parent: LayerCollectionId,
+    },
+
     #[snafu(display("You must not remove the root collection"))]
     CannotRemoveRootCollection,
 }

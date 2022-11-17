@@ -50,6 +50,55 @@ where
     pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
         Self { conn_pool }
     }
+
+    /// delete all collections without parent collection
+    async fn _remove_collections_without_parent_collection(
+        transaction: &tokio_postgres::Transaction<'_>,
+    ) -> Result<()> {
+        // HINT: a recursive delete statement seems reasonable, but hard to implement in postgres
+        //       because you have a graph with potential loops
+
+        let remove_layer_collections_without_parents_stmt = transaction
+            .prepare(
+                "DELETE FROM layer_collections
+                 WHERE  id <> $1 -- do not delete root collection
+                 AND    id NOT IN (
+                    SELECT child FROM collection_children
+                 );",
+            )
+            .await?;
+        while 0 < transaction
+            .execute(
+                &remove_layer_collections_without_parents_stmt,
+                &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID],
+            )
+            .await?
+        {
+            // whenever one collection is deleted, we have to check again if there are more
+            // collections without parents
+        }
+
+        Ok(())
+    }
+
+    /// delete all layers without parent collection
+    async fn _remove_layers_without_parent_collection(
+        transaction: &tokio_postgres::Transaction<'_>,
+    ) -> Result<()> {
+        let remove_layers_without_parents_stmt = transaction
+            .prepare(
+                "DELETE FROM layers
+                 WHERE id NOT IN (
+                    SELECT layer FROM collection_layers
+                 );",
+            )
+            .await?;
+        transaction
+            .execute(&remove_layers_without_parents_stmt, &[])
+            .await?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -361,44 +410,9 @@ where
             .execute(&remove_layer_collection_stmt, &[&collection])
             .await?;
 
-        // delete all collections without parent collection
+        Self::_remove_collections_without_parent_collection(&transaction).await?;
 
-        // HINT: a recursive delete statement seems reasonable, but hard to implement in postgres
-        //       because you have a graph with potential loops
-
-        let remove_layer_collections_without_parents_stmt = transaction
-            .prepare(
-                "DELETE FROM layer_collections
-                 WHERE  id <> $1 -- do not delete root collection
-                 AND    id NOT IN (
-                    SELECT child FROM collection_children
-                 );",
-            )
-            .await?;
-        while 0 < transaction
-            .execute(
-                &remove_layer_collections_without_parents_stmt,
-                &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID],
-            )
-            .await?
-        {
-            // whenever one collection is deleted, we have to check again if there are more
-            // collections without parents
-        }
-
-        // delete all layers without parent collection
-
-        let remove_layers_without_parents_stmt = transaction
-            .prepare(
-                "DELETE FROM layers
-                 WHERE id NOT IN (
-                    SELECT layer FROM collection_layers
-                 );",
-            )
-            .await?;
-        transaction
-            .execute(&remove_layers_without_parents_stmt, &[])
-            .await?;
+        Self::_remove_layers_without_parent_collection(&transaction).await?;
 
         transaction.commit().await.map_err(Into::into)
     }
@@ -443,18 +457,7 @@ where
             .into());
         }
 
-        // remove layers without any collection
-        let remove_layers_without_parents_stmt = transaction
-            .prepare(
-                "DELETE FROM layers
-                 WHERE id NOT IN (
-                    SELECT layer FROM collection_layers
-                 );",
-            )
-            .await?;
-        transaction
-            .execute(&remove_layers_without_parents_stmt, &[])
-            .await?;
+        Self::_remove_layers_without_parent_collection(&transaction).await?;
 
         transaction.commit().await.map_err(Into::into)
     }
@@ -464,7 +467,46 @@ where
         collection: &LayerCollectionId,
         parent: &LayerCollectionId,
     ) -> Result<()> {
-        todo!()
+        let collection_uuid =
+            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: collection.0.clone(),
+            })?;
+
+        let parent_collection_uuid =
+            Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: parent.0.clone(),
+            })?;
+
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.transaction().await?;
+
+        let remove_layer_collection_stmt = transaction
+            .prepare(
+                "DELETE FROM collection_children
+                 WHERE child = $1
+                 AND parent = $2;",
+            )
+            .await?;
+        let num_results = transaction
+            .execute(
+                &remove_layer_collection_stmt,
+                &[&collection_uuid, &parent_collection_uuid],
+            )
+            .await?;
+
+        if num_results == 0 {
+            return Err(LayerDbError::NoCollectionForGivenIdInCollection {
+                collection: collection.clone(),
+                parent: parent.clone(),
+            }
+            .into());
+        }
+
+        Self::_remove_collections_without_parent_collection(&transaction).await?;
+
+        Self::_remove_layers_without_parent_collection(&transaction).await?;
+
+        transaction.commit().await.map_err(Into::into)
     }
 }
 
