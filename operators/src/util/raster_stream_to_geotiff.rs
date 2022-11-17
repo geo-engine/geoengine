@@ -1,7 +1,7 @@
 use crate::error;
 use crate::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-    GdalLoadingInfoTemporalSlice,
+    GdalLoadingInfoTemporalSlice, GdalSourceTimePlaceholder, TimeReference,
 };
 use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions};
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
 };
 use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
-use gdal::raster::{Buffer, GdalType, RasterCreationOption};
+use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
 use gdal::{Dataset, DriverManager};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D,
@@ -102,12 +102,6 @@ where
     Ok(result)
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct GdalGeoTiffDatasetMetadata {
-    pub no_data_value: Option<f64>,
-    pub spatial_reference: SpatialReference,
-}
-
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
     file_path: &Path,
@@ -138,98 +132,71 @@ where
         None
     };
 
-    let dataset_writer: GdalDatasetWriter<P> = GdalDatasetWriter::new(
+    let dataset_holder: Result<GdalDatasetHolder<P>> = Ok(GdalDatasetHolder::new(
         &file_path,
         query_rect,
         gdal_tiff_metadata,
         gdal_tiff_options,
         gdal_config_options,
-    );
-
-    let dataset_writer = Ok(dataset_writer);
+    ));
 
     let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
 
-    let mut dataset_writer = tile_stream
+    let mut dataset_holder = tile_stream
         .enumerate()
         .fold(
-            dataset_writer,
-            move |dataset_writer, (tile_index, tile)| async move {
+            dataset_holder,
+            move |dataset_holder, (tile_index, tile)| async move {
                 if tile_limit.map_or_else(|| false, |limit| tile_index >= limit) {
                     return Err(Error::TileLimitExceeded {
                         limit: tile_limit.expect("limit exist because it is exceeded"),
                     });
                 }
 
-                // TODO: more descriptive error. This error occured when a file could not be created...
-                let mut dataset_writer = dataset_writer?;
+                let mut dataset_holder =
+                    dataset_holder.expect("dataset description should exist before writing a tile");
                 let tile = tile?;
 
                 let current_interval = tile.time;
 
-                if dataset_writer
-                    .dataset
-                    .as_ref()
-                    .map_or(true, |x| x.time_interval != current_interval)
-                {
-                    if let Some(intermediate_dataset) = dataset_writer.dataset.take() {
-                        dataset_writer.finish(intermediate_dataset)?;
-                    }
-                    let mut next_file_path: String =
-                        dataset_writer.placeholder_path.to_string_lossy().into();
+                let dataset_holder =
+                    crate::util::spawn_blocking(move || -> Result<GdalDatasetHolder<P>> {
+                        dataset_holder
+                            .update_intermediate_dataset_from_time_interval(current_interval)?;
+                        Ok(dataset_holder)
+                    })
+                    .await??;
 
-                    //TODO: Consider making time_string format and place_holder configurable
-                    let time_string = current_interval
-                        .start()
-                        .as_date_time()
-                        .ok_or(Error::TimeInstanceNotDisplayable)?
-                        .format(&DateTimeParseFormat::custom("%Y-%m-%d".to_string()));
-
-                    // TODO: use more efficient algorithm for replacing multiple placeholders, e.g. aho-corasick
-                    next_file_path = next_file_path.replace("%_START_TIME_%", &time_string);
-
-                    let dataset_path = PathBuf::from(next_file_path);
-
-                    let mut dataset_parameters =
-                        dataset_writer.intermediate_dataset_parameters.clone();
-                    dataset_parameters.file_path = dataset_path.clone();
-                    dataset_writer.result.push(GdalLoadingInfoTemporalSlice {
-                        time: current_interval,
-                        params: Some(dataset_parameters),
-                    });
-                    dataset_writer =
-                        crate::util::spawn_blocking(move || -> Result<GdalDatasetWriter<P>> {
-                            dataset_writer.init_new_intermediate_dataset(
-                                current_interval,
-                                dataset_writer
-                                    .intermediate_dataset_parameters
-                                    .file_path
-                                    .clone(),
-                                dataset_path,
-                            )?;
-                            Ok(dataset_writer)
-                        })
-                        .await??;
-                }
-
-                crate::util::spawn_blocking(move || -> Result<GdalDatasetWriter<P>> {
-                    dataset_writer.write_tile(tile)?;
-                    Ok(dataset_writer)
+                crate::util::spawn_blocking(move || -> Result<GdalDatasetHolder<P>> {
+                    let raster_band = dataset_holder
+                        .intermediate_dataset
+                        .as_ref()
+                        .expect("dataset should exist after successfully creating/updating it based on the tile's time interval")
+                        .dataset
+                        .rasterband(dataset_holder.create_meta.raster_band_index)?;
+                    dataset_holder
+                        .dataset_writer
+                        .write_tile_into_band(tile, raster_band)?;
+                    Ok(dataset_holder)
                 })
                 .await?
             },
         )
         .await?;
 
-    let intermediate_dataset = dataset_writer
-        .dataset
+    let intermediate_dataset = dataset_holder
+        .intermediate_dataset
         .take()
-        .ok_or(error::Error::EmptyInput)?;
+        .expect("dataset should exist after writing all tiles");
 
-    let result = dataset_writer.result.clone();
+    let result = dataset_holder.result.clone();
 
-    let written = crate::util::spawn_blocking(move || dataset_writer.finish(intermediate_dataset))
-        .map_err(|e| error::Error::TokioJoin { source: e });
+    let written = crate::util::spawn_blocking(move || {
+        dataset_holder
+            .dataset_writer
+            .finish_dataset(intermediate_dataset)
+    })
+    .map_err(|e| error::Error::TokioJoin { source: e });
 
     abortable_query_execution(written, conn_closed, query_abort_trigger).await??;
 
@@ -242,6 +209,34 @@ const COMPRESSION_LEVEL: &str = "9"; // maximum compression
 const BIG_TIFF_BYTE_THRESHOLD: usize = 2_000_000_000; // ~ 2GB + 2GB for overviews + buffer for headers
 
 #[derive(Debug)]
+pub struct PathWithPlaceholder {
+    full_path: PathBuf,
+    placeholder: String,
+    time_placeholder: GdalSourceTimePlaceholder,
+}
+
+impl PathWithPlaceholder {
+    fn translate_path_for_interval(&self, interval: TimeInterval) -> Result<PathBuf> {
+        let time = match self.time_placeholder.reference {
+            TimeReference::Start => interval.start(),
+            TimeReference::End => interval.end(),
+        };
+        let time_string = time
+            .as_date_time()
+            .ok_or(Error::TimeInstanceNotDisplayable)?
+            .format(&self.time_placeholder.format);
+
+        Ok(PathBuf::from(
+            // TODO: use more efficient algorithm for replacing multiple placeholders, e.g. aho-corasick
+            self.full_path
+                .to_string_lossy()
+                .to_string()
+                .replace(&self.placeholder, &time_string),
+        ))
+    }
+}
+
+#[derive(Debug)]
 struct IntermediateDataset {
     dataset: Dataset,
     time_interval: TimeInterval,
@@ -250,26 +245,24 @@ struct IntermediateDataset {
 }
 
 #[derive(Debug)]
-struct GdalDatasetWriter<P: Pixel + GdalType> {
-    dataset: Option<IntermediateDataset>,
-    rasterband_index: isize,
-    gdal_tiff_options: GdalGeoTiffOptions,
-    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
-    output_bounds: SpatialPartition2D,
-    output_geo_transform: GeoTransform,
-    x_pixel_size: f64,
-    y_pixel_size: f64,
+struct IntermediateDatasetMetadata {
+    raster_band_index: isize,
     width: u32,
     height: u32,
-    _type: std::marker::PhantomData<P>,
     use_big_tiff: bool,
-    placeholder_path: PathBuf,
+    path_with_placeholder: PathWithPlaceholder,
     gdal_config_options: Option<Vec<(String, String)>>,
     intermediate_dataset_parameters: GdalDatasetParameters,
+}
+
+struct GdalDatasetHolder<P: Pixel + GdalType> {
+    intermediate_dataset: Option<IntermediateDataset>,
+    create_meta: IntermediateDatasetMetadata,
+    dataset_writer: GdalDatasetWriter<P>,
     result: Vec<GdalLoadingInfoTemporalSlice>,
 }
 
-impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
+impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
     fn new(
         file_path: &Path,
         query_rect: RasterQueryRectangle,
@@ -278,9 +271,20 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         gdal_config_options: Option<Vec<(String, String)>>,
     ) -> Self {
         const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
-        let placeholder_path = file_path.join("raster_%_START_TIME_%.tiff");
         let file_path = file_path.join("raster.tiff");
         let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
+
+        //TODO: Consider making placeholder and time_placeholder format configurable
+        let placeholder = "%_START_TIME_%";
+        let placeholder_path = file_path.join(format!("raster_{}.tiff", placeholder));
+        let path_with_placeholder = PathWithPlaceholder {
+            full_path: placeholder_path,
+            placeholder: placeholder.to_string(),
+            time_placeholder: GdalSourceTimePlaceholder {
+                format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
+                reference: TimeReference::Start,
+            },
+        };
 
         let x_pixel_size = query_rect.spatial_resolution.x;
         let y_pixel_size = query_rect.spatial_resolution.y;
@@ -326,41 +330,41 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let rasterband_index = 1;
 
         Self {
-            dataset: None,
-            rasterband_index,
-            gdal_tiff_options,
-            gdal_tiff_metadata,
-            output_bounds,
-            output_geo_transform,
-            x_pixel_size,
-            y_pixel_size,
-            width,
-            height,
-            _type: Default::default(),
-            use_big_tiff,
-            placeholder_path,
-            gdal_config_options,
-            intermediate_dataset_parameters,
+            intermediate_dataset: None,
+            create_meta: IntermediateDatasetMetadata {
+                raster_band_index: rasterband_index,
+                width,
+                height,
+                use_big_tiff,
+                path_with_placeholder,
+                gdal_config_options,
+                intermediate_dataset_parameters,
+            },
+            dataset_writer: GdalDatasetWriter {
+                gdal_tiff_options,
+                gdal_tiff_metadata,
+                output_bounds,
+                output_geo_transform,
+                x_pixel_size,
+                y_pixel_size,
+                use_big_tiff,
+                _type: Default::default(),
+            },
             result: vec![],
         }
     }
 
-    #[allow(clippy::too_many_arguments)] //TODO: I could bundle some arguments in a struct as well
     fn create_data_set(
+        intermediate_dataset_metadata: &IntermediateDatasetMetadata,
         gdal_tiff_metadata: &GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
-        gdal_config_options: &Option<Vec<(String, String)>>,
-        dataset_parameters: &GdalDatasetParameters,
-        width: u32,
-        height: u32,
-        rasterband_index: isize,
-        use_big_tiff: bool,
         output_geo_transform: GeoTransform,
     ) -> Result<Dataset> {
         let compression_num_threads = gdal_tiff_options.compression_num_threads.to_string();
 
         // reverts the thread local configs on drop
-        let thread_local_configs = gdal_config_options
+        let thread_local_configs = intermediate_dataset_metadata
+            .gdal_config_options
             .as_deref()
             .map(TemporaryGdalThreadLocalConfigOptions::new);
 
@@ -368,20 +372,22 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let options = create_gdal_tiff_options(
             &compression_num_threads,
             gdal_tiff_options.as_cog,
-            use_big_tiff,
+            intermediate_dataset_metadata.use_big_tiff,
         );
 
         let mut dataset = driver.create_with_band_type_with_options::<P, _>(
-            &dataset_parameters.file_path,
-            width as isize,
-            height as isize,
+            &intermediate_dataset_metadata
+                .intermediate_dataset_parameters
+                .file_path,
+            intermediate_dataset_metadata.width as isize,
+            intermediate_dataset_metadata.height as isize,
             1,
             &options,
         )?;
 
         dataset.set_spatial_ref(&gdal_tiff_metadata.spatial_reference.try_into()?)?;
         dataset.set_geo_transform(&output_geo_transform.into())?;
-        let mut band = dataset.rasterband(rasterband_index)?;
+        let mut band = dataset.rasterband(intermediate_dataset_metadata.raster_band_index)?;
 
         // Check if the gdal_tiff_metadata no-data value is set.
         // If it is set, set the no-data value for the output geotiff.
@@ -404,17 +410,12 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         destination_path: PathBuf,
     ) -> Result<()> {
         let dataset = Self::create_data_set(
-            &self.gdal_tiff_metadata,
-            self.gdal_tiff_options,
-            &self.gdal_config_options,
-            &self.intermediate_dataset_parameters,
-            self.width,
-            self.height,
-            self.rasterband_index,
-            self.use_big_tiff,
-            self.output_geo_transform,
+            &self.create_meta,
+            &self.dataset_writer.gdal_tiff_metadata,
+            self.dataset_writer.gdal_tiff_options,
+            self.dataset_writer.output_geo_transform,
         )?;
-        self.dataset = Some(IntermediateDataset {
+        self.intermediate_dataset = Some(IntermediateDataset {
             dataset,
             time_interval,
             intermediate_path,
@@ -424,7 +425,62 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         Ok(())
     }
 
-    fn write_tile(&self, tile: RasterTile2D<P>) -> Result<()> {
+    fn update_intermediate_dataset_from_time_interval(
+        &mut self,
+        time_interval: TimeInterval,
+    ) -> Result<()> {
+        if self
+            .intermediate_dataset
+            .as_ref()
+            .map_or(true, |x| x.time_interval != time_interval)
+        {
+            if let Some(intermediate_dataset) = self.intermediate_dataset.take() {
+                self.dataset_writer.finish_dataset(intermediate_dataset)?;
+            }
+            let dataset_path = self
+                .create_meta
+                .path_with_placeholder
+                .translate_path_for_interval(time_interval)?;
+
+            let mut dataset_parameters = self.create_meta.intermediate_dataset_parameters.clone();
+            dataset_parameters.file_path = dataset_path.clone();
+            self.result.push(GdalLoadingInfoTemporalSlice {
+                time: time_interval,
+                params: Some(dataset_parameters),
+            });
+            self.init_new_intermediate_dataset(
+                time_interval,
+                self.create_meta
+                    .intermediate_dataset_parameters
+                    .file_path
+                    .clone(),
+                dataset_path,
+            )?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct GdalGeoTiffDatasetMetadata {
+    pub no_data_value: Option<f64>,
+    pub spatial_reference: SpatialReference,
+}
+
+#[derive(Debug)]
+struct GdalDatasetWriter<P: Pixel + GdalType> {
+    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+    gdal_tiff_options: GdalGeoTiffOptions,
+    output_bounds: SpatialPartition2D,
+    output_geo_transform: GeoTransform,
+    x_pixel_size: f64,
+    y_pixel_size: f64,
+    use_big_tiff: bool,
+    _type: std::marker::PhantomData<P>,
+}
+
+impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
+    fn write_tile_into_band(&self, tile: RasterTile2D<P>, raster_band: RasterBand) -> Result<()> {
         let tile_info = tile.tile_information();
 
         let tile_bounds = tile_info.spatial_partition();
@@ -473,49 +529,44 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         // If it is set write a geotiff with no-data values.
         // Otherwise write a geotiff with a mask band.
         if let Some(out_no_data_value) = self.gdal_tiff_metadata.no_data_value {
-            self.write_no_data_value_grid(&grid_array, out_no_data_value, window, window_size)?;
+            Self::write_no_data_value_grid(
+                &grid_array,
+                out_no_data_value,
+                window,
+                window_size,
+                raster_band,
+            )?;
         } else {
-            self.write_masked_data_grid(grid_array, window, window_size)?;
+            Self::write_masked_data_grid(grid_array, window, window_size, raster_band)?;
         }
         Ok(())
     }
 
     fn write_no_data_value_grid(
-        &self,
         grid_array: &MaskedGrid2D<P>,
         no_data_value: f64,
         window: (isize, isize),
         window_size: (usize, usize),
+        mut raster_band: RasterBand,
     ) -> Result<()> {
         let out_no_data_value_p: P = P::from_(no_data_value);
         let no_data_value_grid = NoDataValueGrid::from_masked_grid(grid_array, out_no_data_value_p);
 
         let buffer = Buffer::new(window_size, no_data_value_grid.inner_grid.data); // TODO: also write mask!
 
-        self.dataset
-            .as_ref()
-            .expect("dataset should be initialized")
-            .dataset
-            .rasterband(self.rasterband_index)?
-            .write(window, window_size, &buffer)?;
+        raster_band.write(window, window_size, &buffer)?;
         Ok(())
     }
 
     fn write_masked_data_grid(
-        &self,
         masked_grid: MaskedGrid2D<P>,
         window: (isize, isize),
         window_size: (usize, usize),
+        mut raster_band: RasterBand,
     ) -> Result<()> {
         // Write the MaskedGrid data and mask if no no-data value is set.
         let data_buffer = Buffer::new(window_size, masked_grid.inner_grid.data);
 
-        let mut raster_band = self
-            .dataset
-            .as_ref()
-            .expect("dataset should be initialized")
-            .dataset
-            .rasterband(self.rasterband_index)?;
         raster_band.write(window, window_size, &data_buffer)?;
 
         // No-data masks are described by the rasterio docs as:
@@ -533,7 +584,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         Ok(())
     }
 
-    fn finish(&self, intermediate_dataset: IntermediateDataset) -> Result<()> {
+    fn finish_dataset(&self, intermediate_dataset: IntermediateDataset) -> Result<()> {
         let input_dataset = intermediate_dataset.dataset;
         let input_file_path = intermediate_dataset.intermediate_path;
         let output_file_path = intermediate_dataset.destination_path;
