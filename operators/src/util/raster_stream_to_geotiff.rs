@@ -517,7 +517,7 @@ pub struct GdalGeoTiffDatasetMetadata {
 struct GdalDatasetWriter<P: Pixel + GdalType> {
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
-    output_bounds: SpatialPartition2D,
+    _output_bounds: SpatialPartition2D, // currently unused due to workaround for intersection and contained because of float precision
     output_geo_transform: GeoTransform,
     x_pixel_size: f64,
     y_pixel_size: f64,
