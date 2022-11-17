@@ -458,6 +458,14 @@ where
 
         transaction.commit().await.map_err(Into::into)
     }
+
+    async fn remove_collection_from_parent(
+        &self,
+        collection: &LayerCollectionId,
+        parent: &LayerCollectionId,
+    ) -> Result<()> {
+        todo!()
+    }
 }
 
 #[async_trait]

@@ -76,13 +76,25 @@ pub trait LayerDb: LayerCollectionProvider + Send + Sync {
         parent: &LayerCollectionId,
     ) -> Result<()>;
 
-    /// Removes a layer from the database.
+    /// Removes a collection from the database.
     ///
     /// Does not work on the root collection.
     ///
     /// Potentially removes sub-collections if they have no other parent.
     /// Potentially removes layers if they have no other parent.
     async fn remove_collection(&self, collection: &LayerCollectionId) -> Result<()>;
+
+    /// Removes a collection from a parent collection.
+    ///
+    /// Does not work on the root collection.
+    ///
+    /// Potentially removes sub-collections if they have no other parent.
+    /// Potentially removes layers if they have no other parent.
+    async fn remove_collection_from_parent(
+        &self,
+        collection: &LayerCollectionId,
+        parent: &LayerCollectionId,
+    ) -> Result<()>;
 
     /// Removes a layer from a collection.
     async fn remove_layer_from_collection(
@@ -171,6 +183,59 @@ impl HashMapLayerDb {
         Self {
             backend: Arc::new(RwLock::new(backend)),
         }
+    }
+
+    /// Remove collection and output a list of collection ids that need to be removed
+    /// because they have no more parent
+    fn _remove_collection(
+        backend: &mut RwLockWriteGuard<'_, HashMapLayerDbBackend>,
+        collection: &LayerCollectionId,
+    ) -> Vec<LayerCollectionId> {
+        backend.collections.remove(collection);
+
+        // remove collection as sub-collection from other collections
+        for children in backend.collection_children.values_mut() {
+            children.retain(|c| c != collection);
+        }
+
+        let child_collections = backend
+            .collection_children
+            .remove(collection)
+            .unwrap_or_default();
+
+        // check if child collections have another parent
+        // if not --> return them (avoids recursion)
+        let mut child_collections_to_remove = Vec::new();
+
+        for child_collection in child_collections {
+            let has_parent = backend
+                .collection_children
+                .iter()
+                .any(|(_, v)| v.contains(&child_collection));
+
+            if !has_parent {
+                child_collections_to_remove.push(child_collection);
+            }
+        }
+
+        // check if child layers have another parent
+        // if not --> remove them
+        let child_layers = backend
+            .collection_layers
+            .remove(collection)
+            .unwrap_or_default();
+        for child_layer in child_layers {
+            let has_parent = backend
+                .collection_layers
+                .iter()
+                .any(|(_, v)| v.contains(&child_layer));
+
+            if !has_parent {
+                backend.layers.remove(&child_layer);
+            }
+        }
+
+        child_collections_to_remove
     }
 }
 
@@ -291,72 +356,64 @@ impl LayerDb for HashMapLayerDb {
     }
 
     async fn remove_collection(&self, collection: &LayerCollectionId) -> Result<()> {
-        fn _remove_collection(
-            backend: &mut RwLockWriteGuard<'_, HashMapLayerDbBackend>,
-            collection: &LayerCollectionId,
-        ) -> Vec<LayerCollectionId> {
-            backend.collections.remove(collection);
-
-            // remove collection as sub-collection from other collections
-            for children in backend.collection_children.values_mut() {
-                children.retain(|c| c != collection);
-            }
-
-            let child_collections = backend
-                .collection_children
-                .remove(collection)
-                .unwrap_or_default();
-
-            // check if child collections have another parent
-            // if not --> return them (avoids recursion)
-            let mut child_collections_to_remove = Vec::new();
-
-            for child_collection in child_collections {
-                let has_parent = backend
-                    .collection_children
-                    .iter()
-                    .any(|(_, v)| v.contains(&child_collection));
-
-                if !has_parent {
-                    child_collections_to_remove.push(child_collection);
-                }
-            }
-
-            // check if child layers have another parent
-            // if not --> remove them
-            let child_layers = backend
-                .collection_layers
-                .remove(collection)
-                .unwrap_or_default();
-            for child_layer in child_layers {
-                let has_parent = backend
-                    .collection_layers
-                    .iter()
-                    .any(|(_, v)| v.contains(&child_layer));
-
-                if !has_parent {
-                    backend.layers.remove(&child_layer);
-                }
-            }
-
-            child_collections_to_remove
-        }
-
         if collection == &LayerCollectionId(INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()) {
             return Err(LayerDbError::CannotRemoveRootCollection.into());
         }
 
         let mut backend = self.backend.write().await;
 
-        let mut layer_collections_to_remove = _remove_collection(&mut backend, collection);
+        let mut layer_collections_to_remove = Self::_remove_collection(&mut backend, collection);
         while let Some(layer_collection_id) = layer_collections_to_remove.pop() {
             layer_collections_to_remove
-                .extend(_remove_collection(&mut backend, &layer_collection_id));
+                .extend(Self::_remove_collection(&mut backend, &layer_collection_id));
         }
 
         Ok(())
     }
 
+    async fn remove_collection_from_parent(
+        &self,
+        collection: &LayerCollectionId,
+        parent: &LayerCollectionId,
+    ) -> Result<()> {
+        let mut backend = self.backend.write().await;
+
+        dbg!(&backend.collection_children);
+
+        let children = backend
+            .collection_children
+            .get_mut(parent)
+            .ok_or_else(|| LayerDbError::NoLayerCollectionForGivenId { id: parent.clone() })?;
+
+        let length_before = children.len();
+        children.retain(|c| c != collection);
+
+        if length_before == children.len() {
+            return Err(LayerDbError::NoLayerCollectionForGivenId {
+                id: collection.clone(),
+            }
+            .into());
+        }
+
+        // check if collection is still a child of another collection
+
+        let collection_must_be_removed = !backend
+            .collection_children
+            .iter()
+            .any(|(_, v)| v.contains(collection));
+
+        if collection_must_be_removed {
+            let mut layer_collections_to_remove = vec![collection.clone()];
+            while let Some(layer_collection_id) = layer_collections_to_remove.pop() {
+                layer_collections_to_remove
+                    .extend(Self::_remove_collection(&mut backend, &layer_collection_id));
+            }
+        }
+
+        Ok(())
+    }
+
+    // TODO: add test
     async fn remove_layer_from_collection(
         &self,
         layer_id: &LayerId,
