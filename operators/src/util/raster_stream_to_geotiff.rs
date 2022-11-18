@@ -300,7 +300,6 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         let y_pixel_size = query_rect.spatial_resolution.y;
         let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
         let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as u32;
-        let _output_bounds = query_rect.spatial_bounds;
 
         let output_geo_transform = GeoTransform::new(
             query_rect.spatial_bounds.upper_left(),
@@ -353,10 +352,8 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             dataset_writer: GdalDatasetWriter {
                 gdal_tiff_options,
                 gdal_tiff_metadata,
-                _output_bounds,
+                _output_bounds: query_rect.spatial_bounds,
                 output_geo_transform,
-                x_pixel_size,
-                y_pixel_size,
                 use_big_tiff,
                 _type: Default::default(),
                 window_start,
@@ -519,8 +516,6 @@ struct GdalDatasetWriter<P: Pixel + GdalType> {
     gdal_tiff_options: GdalGeoTiffOptions,
     _output_bounds: SpatialPartition2D, // currently unused due to workaround for intersection and contained because of float precision
     output_geo_transform: GeoTransform,
-    x_pixel_size: f64,
-    y_pixel_size: f64,
     use_big_tiff: bool,
     _type: std::marker::PhantomData<P>,
     window_start: GridIdx2D,
