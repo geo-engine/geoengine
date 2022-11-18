@@ -55,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - https://github.com/geo-engine/geoengine/pull/610
 
+- Added method to create dataset from the result of the workflow via a task
+
+  - https://github.com/geo-engine/geoengine/pull/675
+
 ### Changed
 
 - The Interpolation operator's input resolution can now be set to `native` to take the best available resolution, if it is known.
