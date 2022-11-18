@@ -289,7 +289,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             full_path: placeholder_path,
             placeholder: placeholder.to_string(),
             time_placeholder: GdalSourceTimePlaceholder {
-                format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
+                format: DateTimeParseFormat::custom("%Y-%m-%dT%H-%M-%S".to_string()),
                 reference: TimeReference::Start,
             },
         };
