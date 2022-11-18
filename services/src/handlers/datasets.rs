@@ -5,15 +5,13 @@ use std::{
 };
 
 use crate::api::model::datatypes::DatasetId;
+use crate::api::model::services::{MetaDataDefinition, MetaDataSuggestion};
 use crate::datasets::upload::UploadRootPath;
 use crate::datasets::{
     listing::DatasetProvider,
-    storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData},
+    storage::{AddDataset, DatasetStore, SuggestMetaData},
 };
-use crate::datasets::{
-    storage::{CreateDataset, MetaDataDefinition},
-    upload::Upload,
-};
+use crate::datasets::{storage::CreateDataset, upload::Upload};
 use crate::error;
 use crate::error::Result;
 use crate::util::user_input::UserInput;
@@ -37,7 +35,7 @@ use geoengine_operators::{
     engine::{StaticMetaData, VectorColumnInfo, VectorResultDescriptor},
     source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
-        OgrSourceTimeFormat,
+        OgrSourceErrorSpec, OgrSourceTimeFormat,
     },
     util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
@@ -180,7 +178,7 @@ async fn create_dataset_handler<C: Context>(
     adjust_user_path_to_upload_path(&mut definition.meta_data, &upload)?;
 
     let db = ctx.dataset_db_ref();
-    let meta_data = db.wrap_meta_data(definition.meta_data);
+    let meta_data = db.wrap_meta_data(definition.meta_data.into());
     let id = db
         .add_dataset(&session, definition.properties.validated()?, meta_data)
         .await?;
@@ -190,20 +188,20 @@ async fn create_dataset_handler<C: Context>(
 
 fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Upload) -> Result<()> {
     match meta {
-        crate::datasets::storage::MetaDataDefinition::MockMetaData(_) => {}
-        crate::datasets::storage::MetaDataDefinition::OgrMetaData(m) => {
+        MetaDataDefinition::MockMetaData(_) => {}
+        MetaDataDefinition::OgrMetaData(m) => {
             m.loading_info.file_name = upload.adjust_file_path(&m.loading_info.file_name)?;
         }
-        crate::datasets::storage::MetaDataDefinition::GdalMetaDataRegular(m) => {
+        MetaDataDefinition::GdalMetaDataRegular(m) => {
             m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
         }
-        crate::datasets::storage::MetaDataDefinition::GdalStatic(m) => {
+        MetaDataDefinition::GdalStatic(m) => {
             m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
         }
-        crate::datasets::storage::MetaDataDefinition::GdalMetadataNetCdfCf(m) => {
+        MetaDataDefinition::GdalMetadataNetCdfCf(m) => {
             m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
         }
-        crate::datasets::storage::MetaDataDefinition::GdalMetaDataList(m) => {
+        MetaDataDefinition::GdalMetaDataList(m) => {
             for p in &mut m.params {
                 if let Some(ref mut params) = p.params {
                     params.file_path = upload.adjust_file_path(&params.file_path)?;
@@ -343,7 +341,7 @@ async fn suggest_meta_data_handler<C: Context>(
 
     Ok(web::Json(MetaDataSuggestion {
         main_file,
-        meta_data,
+        meta_data: meta_data.into(),
     }))
 }
 
@@ -365,7 +363,9 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
     None
 }
 
-fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDefinition> {
+fn auto_detect_meta_data_definition(
+    main_file_path: &Path,
+) -> Result<crate::datasets::storage::MetaDataDefinition> {
     let dataset = gdal_open_dataset(main_file_path).context(error::Operator)?;
     let layer = {
         if let Ok(layer) = dataset.layer(0) {
@@ -396,58 +396,56 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
 
     let time = detect_time_type(&columns_vecs);
 
-    Ok(MetaDataDefinition::OgrMetaData(StaticMetaData::<
-        _,
-        _,
-        VectorQueryRectangle,
-    > {
-        loading_info: OgrSourceDataset {
-            file_name: main_file_path.into(),
-            layer_name: geometry.layer_name.unwrap_or_else(|| layer.name()),
-            data_type: Some(geometry.data_type),
-            time,
-            default_geometry: None,
-            columns: Some(OgrSourceColumnSpec {
-                format_specifics: None,
-                x,
-                y,
-                int: columns_vecs.int,
-                float: columns_vecs.float,
-                text: columns_vecs.text,
-                bool: vec![],
-                datetime: columns_vecs.date,
-                rename: None,
-            }),
-            force_ogr_time_filter: false,
-            force_ogr_spatial_filter: false,
-            on_error: geoengine_operators::source::OgrSourceErrorSpec::Ignore,
-            sql_query: None,
-            attribute_query: None,
+    Ok(crate::datasets::storage::MetaDataDefinition::OgrMetaData(
+        StaticMetaData::<_, _, VectorQueryRectangle> {
+            loading_info: OgrSourceDataset {
+                file_name: main_file_path.into(),
+                layer_name: geometry.layer_name.unwrap_or_else(|| layer.name()),
+                data_type: Some(geometry.data_type),
+                time,
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
+                    x,
+                    y,
+                    int: columns_vecs.int,
+                    float: columns_vecs.float,
+                    text: columns_vecs.text,
+                    bool: vec![],
+                    datetime: columns_vecs.date,
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            },
+            result_descriptor: VectorResultDescriptor {
+                data_type: geometry.data_type,
+                spatial_reference: geometry.spatial_reference,
+                columns: columns_map
+                    .into_iter()
+                    .filter_map(|(k, v)| {
+                        v.try_into()
+                            .map(|v| {
+                                (
+                                    k,
+                                    VectorColumnInfo {
+                                        data_type: v,
+                                        measurement: Measurement::Unitless,
+                                    },
+                                )
+                            })
+                            .ok()
+                    }) // ignore all columns here that don't have a corresponding type in our collections
+                    .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
         },
-        result_descriptor: VectorResultDescriptor {
-            data_type: geometry.data_type,
-            spatial_reference: geometry.spatial_reference,
-            columns: columns_map
-                .into_iter()
-                .filter_map(|(k, v)| {
-                    v.try_into()
-                        .map(|v| {
-                            (
-                                k,
-                                VectorColumnInfo {
-                                    data_type: v,
-                                    measurement: Measurement::Unitless,
-                                },
-                            )
-                        })
-                        .ok()
-                }) // ignore all columns here that don't have a corresponding type in our collections
-                .collect(),
-            time: None,
-            bbox: None,
-        },
-        phantom: Default::default(),
-    }))
+    ))
 }
 
 /// create Gdal dataset with autodetect parameters based on available columns
@@ -663,10 +661,24 @@ impl TryFrom<ColumnDataType> for FeatureDataType {
 
     fn try_from(value: ColumnDataType) -> Result<Self, Self::Error> {
         match value {
-            ColumnDataType::Int => Ok(FeatureDataType::Int),
-            ColumnDataType::Float => Ok(FeatureDataType::Float),
-            ColumnDataType::Text => Ok(FeatureDataType::Text),
-            ColumnDataType::Date => Ok(FeatureDataType::DateTime),
+            ColumnDataType::Int => Ok(Self::Int),
+            ColumnDataType::Float => Ok(Self::Float),
+            ColumnDataType::Text => Ok(Self::Text),
+            ColumnDataType::Date => Ok(Self::DateTime),
+            ColumnDataType::Unknown => Err(error::Error::NoFeatureDataTypeForColumnDataType),
+        }
+    }
+}
+
+impl TryFrom<ColumnDataType> for crate::api::model::datatypes::FeatureDataType {
+    type Error = error::Error;
+
+    fn try_from(value: ColumnDataType) -> Result<Self, Self::Error> {
+        match value {
+            ColumnDataType::Int => Ok(Self::Int),
+            ColumnDataType::Float => Ok(Self::Float),
+            ColumnDataType::Text => Ok(Self::Text),
+            ColumnDataType::Date => Ok(Self::DateTime),
             ColumnDataType::Unknown => Err(error::Error::NoFeatureDataTypeForColumnDataType),
         }
     }
@@ -1113,7 +1125,8 @@ mod tests {
         ))
         .unwrap();
 
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+        if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+        {
             if let Some(columns) = &mut meta_data.loading_info.columns {
                 columns.text.sort();
             }
@@ -1121,7 +1134,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
@@ -1206,7 +1219,8 @@ mod tests {
             auto_detect_meta_data_definition(test_data!("vector/data/points_with_iso_time.json"))
                 .unwrap();
 
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+        if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+        {
             if let Some(columns) = &mut meta_data.loading_info.columns {
                 columns.datetime.sort();
             }
@@ -1214,7 +1228,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points_with_iso_time.json").into(),
                     layer_name: "points_with_iso_time".to_string(),
@@ -1279,7 +1293,8 @@ mod tests {
             auto_detect_meta_data_definition(test_data!("vector/data/points_with_time.gpkg"))
                 .unwrap();
 
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+        if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+        {
             if let Some(columns) = &mut meta_data.loading_info.columns {
                 columns.datetime.sort();
             }
@@ -1287,7 +1302,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points_with_time.gpkg").into(),
                     layer_name: "points_with_time".to_string(),
@@ -1352,7 +1367,8 @@ mod tests {
             auto_detect_meta_data_definition(test_data!("vector/data/points_with_date.shp"))
                 .unwrap();
 
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+        if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+        {
             if let Some(columns) = &mut meta_data.loading_info.columns {
                 columns.datetime.sort();
             }
@@ -1360,7 +1376,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points_with_date.shp").into(),
                     layer_name: "points_with_date".to_string(),
@@ -1428,7 +1444,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points_with_iso_start_duration.json").into(),
                     layer_name: "points_with_iso_start_duration".to_string(),
@@ -1491,7 +1507,8 @@ mod tests {
         let mut meta_data =
             auto_detect_meta_data_definition(test_data!("vector/data/lonlat.csv")).unwrap();
 
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+        if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+        {
             if let Some(columns) = &mut meta_data.loading_info.columns {
                 columns.text.sort();
             }
@@ -1499,7 +1516,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat.csv").into(),
                     layer_name: "lonlat".to_string(),

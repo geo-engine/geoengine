@@ -1,13 +1,15 @@
 use crate::error::{self, Result};
 use crate::identifier;
-use geoengine_datatypes::primitives::AxisAlignedRectangle;
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
+};
 use ordered_float::NotNan;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use snafu::ResultExt;
 use std::collections::HashSet;
 use std::{
     collections::{BTreeMap, HashMap},
-    fmt::Formatter,
+    fmt::{Debug, Formatter},
     str::FromStr,
 };
 use utoipa::ToSchema;
@@ -252,7 +254,7 @@ impl SpatialReference {
             SpatialReferenceAuthority::Epsg | SpatialReferenceAuthority::Iau2000 => {
                 Ok(format!("{}:{}", self.authority, self.code))
             }
-            // poor-mans integration of Meteosat Second Generation 
+            // poor-mans integration of Meteosat Second Generation
             SpatialReferenceAuthority::SrOrg if self.code == 81 => Ok("+proj=geos +lon_0=0 +h=35785831 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs +type=crs".to_owned()),
             SpatialReferenceAuthority::SrOrg | SpatialReferenceAuthority::Esri => {
                 Err(error::Error::ProjStringUnresolvable { spatial_ref: self })
@@ -388,6 +390,17 @@ impl From<geoengine_datatypes::spatial_reference::SpatialReferenceOption>
     }
 }
 
+impl From<SpatialReferenceOption>
+    for geoengine_datatypes::spatial_reference::SpatialReferenceOption
+{
+    fn from(value: SpatialReferenceOption) -> Self {
+        match value {
+            SpatialReferenceOption::SpatialReference(sr) => Self::SpatialReference(sr.into()),
+            SpatialReferenceOption::Unreferenced => Self::Unreferenced,
+        }
+    }
+}
+
 impl From<SpatialReference> for SpatialReferenceOption {
     fn from(spatial_reference: SpatialReference) -> Self {
         Self::SpatialReference(spatial_reference)
@@ -483,6 +496,17 @@ impl From<geoengine_datatypes::collections::VectorDataType> for VectorDataType {
                 Self::MultiLineString
             }
             geoengine_datatypes::collections::VectorDataType::MultiPolygon => Self::MultiPolygon,
+        }
+    }
+}
+
+impl From<VectorDataType> for geoengine_datatypes::collections::VectorDataType {
+    fn from(value: VectorDataType) -> Self {
+        match value {
+            VectorDataType::Data => Self::Data,
+            VectorDataType::MultiPoint => Self::MultiPoint,
+            VectorDataType::MultiLineString => Self::MultiLineString,
+            VectorDataType::MultiPolygon => Self::MultiPolygon,
         }
     }
 }
@@ -592,6 +616,19 @@ impl From<geoengine_datatypes::primitives::FeatureDataType> for FeatureDataType 
     }
 }
 
+impl From<FeatureDataType> for geoengine_datatypes::primitives::FeatureDataType {
+    fn from(value: FeatureDataType) -> Self {
+        match value {
+            FeatureDataType::Category => Self::Category,
+            FeatureDataType::Int => Self::Int,
+            FeatureDataType::Float => Self::Float,
+            FeatureDataType::Text => Self::Text,
+            FeatureDataType::Bool => Self::Bool,
+            FeatureDataType::DateTime => Self::DateTime,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
@@ -614,6 +651,16 @@ impl From<geoengine_datatypes::primitives::Measurement> for Measurement {
     }
 }
 
+impl From<Measurement> for geoengine_datatypes::primitives::Measurement {
+    fn from(value: Measurement) -> Self {
+        match value {
+            Measurement::Unitless => Self::Unitless,
+            Measurement::Continuous(cm) => Self::Continuous(cm.into()),
+            Measurement::Classification(cm) => Self::Classification(cm.into()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
@@ -622,6 +669,15 @@ pub struct ContinuousMeasurement {
 
 impl From<geoengine_datatypes::primitives::ContinuousMeasurement> for ContinuousMeasurement {
     fn from(value: geoengine_datatypes::primitives::ContinuousMeasurement) -> Self {
+        Self {
+            measurement: value.measurement,
+            unit: value.unit,
+        }
+    }
+}
+
+impl From<ContinuousMeasurement> for geoengine_datatypes::primitives::ContinuousMeasurement {
+    fn from(value: ContinuousMeasurement) -> Self {
         Self {
             measurement: value.measurement,
             unit: value.unit,
@@ -643,6 +699,17 @@ impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
     for ClassificationMeasurement
 {
     fn from(value: geoengine_datatypes::primitives::ClassificationMeasurement) -> Self {
+        Self {
+            measurement: value.measurement,
+            classes: value.classes,
+        }
+    }
+}
+
+impl From<ClassificationMeasurement>
+    for geoengine_datatypes::primitives::ClassificationMeasurement
+{
+    fn from(value: ClassificationMeasurement) -> Self {
         Self {
             measurement: value.measurement,
             classes: value.classes,
@@ -701,6 +768,15 @@ impl From<geoengine_datatypes::primitives::SpatialPartition2D> for SpatialPartit
             upper_left_coordinate: value.upper_left().into(),
             lower_right_coordinate: value.lower_right().into(),
         }
+    }
+}
+
+impl From<SpatialPartition2D> for geoengine_datatypes::primitives::SpatialPartition2D {
+    fn from(value: SpatialPartition2D) -> Self {
+        Self::new_unchecked(
+            value.upper_left_coordinate.into(),
+            value.lower_right_coordinate.into(),
+        )
     }
 }
 
@@ -764,6 +840,24 @@ impl ToSchema for QueryRectangle<BoundingBox2D> {
 pub struct SpatialResolution {
     pub x: f64,
     pub y: f64,
+}
+
+impl From<geoengine_datatypes::primitives::SpatialResolution> for SpatialResolution {
+    fn from(value: geoengine_datatypes::primitives::SpatialResolution) -> Self {
+        Self {
+            x: value.x,
+            y: value.y,
+        }
+    }
+}
+
+impl From<SpatialResolution> for geoengine_datatypes::primitives::SpatialResolution {
+    fn from(value: SpatialResolution) -> Self {
+        Self {
+            x: value.x,
+            y: value.y,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug, ToSchema)]
@@ -867,10 +961,56 @@ pub enum TimeGranularity {
     Years,
 }
 
+impl From<geoengine_datatypes::primitives::TimeGranularity> for TimeGranularity {
+    fn from(value: geoengine_datatypes::primitives::TimeGranularity) -> Self {
+        match value {
+            geoengine_datatypes::primitives::TimeGranularity::Millis => Self::Millis,
+            geoengine_datatypes::primitives::TimeGranularity::Seconds => Self::Seconds,
+            geoengine_datatypes::primitives::TimeGranularity::Minutes => Self::Minutes,
+            geoengine_datatypes::primitives::TimeGranularity::Hours => Self::Hours,
+            geoengine_datatypes::primitives::TimeGranularity::Days => Self::Days,
+            geoengine_datatypes::primitives::TimeGranularity::Months => Self::Months,
+            geoengine_datatypes::primitives::TimeGranularity::Years => Self::Years,
+        }
+    }
+}
+
+impl From<TimeGranularity> for geoengine_datatypes::primitives::TimeGranularity {
+    fn from(value: TimeGranularity) -> Self {
+        match value {
+            TimeGranularity::Millis => Self::Millis,
+            TimeGranularity::Seconds => Self::Seconds,
+            TimeGranularity::Minutes => Self::Minutes,
+            TimeGranularity::Hours => Self::Hours,
+            TimeGranularity::Days => Self::Days,
+            TimeGranularity::Months => Self::Months,
+            TimeGranularity::Years => Self::Years,
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct TimeStep {
     pub granularity: TimeGranularity,
     pub step: u32, // TODO: ensure on deserialization it is > 0
+}
+
+impl From<geoengine_datatypes::primitives::TimeStep> for TimeStep {
+    fn from(value: geoengine_datatypes::primitives::TimeStep) -> Self {
+        Self {
+            granularity: value.granularity.into(),
+            step: value.step,
+        }
+    }
+}
+
+impl From<TimeStep> for geoengine_datatypes::primitives::TimeStep {
+    fn from(value: TimeStep) -> Self {
+        Self {
+            granularity: value.granularity.into(),
+            step: value.step,
+        }
+    }
 }
 
 /// Stores time intervals in ms in close-open semantic [start, end)
@@ -945,6 +1085,23 @@ impl From<geoengine_datatypes::raster::RasterDataType> for RasterDataType {
             geoengine_datatypes::raster::RasterDataType::I64 => Self::I64,
             geoengine_datatypes::raster::RasterDataType::F32 => Self::F32,
             geoengine_datatypes::raster::RasterDataType::F64 => Self::F64,
+        }
+    }
+}
+
+impl From<RasterDataType> for geoengine_datatypes::raster::RasterDataType {
+    fn from(value: RasterDataType) -> Self {
+        match value {
+            RasterDataType::U8 => Self::U8,
+            RasterDataType::U16 => Self::U16,
+            RasterDataType::U32 => Self::U32,
+            RasterDataType::U64 => Self::U64,
+            RasterDataType::I8 => Self::I8,
+            RasterDataType::I16 => Self::I16,
+            RasterDataType::I32 => Self::I32,
+            RasterDataType::I64 => Self::I64,
+            RasterDataType::F32 => Self::F32,
+            RasterDataType::F64 => Self::F64,
         }
     }
 }
@@ -1146,17 +1303,69 @@ pub struct RasterPropertiesKey {
     pub key: String,
 }
 
+impl From<geoengine_datatypes::raster::RasterPropertiesKey> for RasterPropertiesKey {
+    fn from(value: geoengine_datatypes::raster::RasterPropertiesKey) -> Self {
+        Self {
+            domain: value.domain,
+            key: value.key,
+        }
+    }
+}
+
+impl From<RasterPropertiesKey> for geoengine_datatypes::raster::RasterPropertiesKey {
+    fn from(value: RasterPropertiesKey) -> Self {
+        Self {
+            domain: value.domain,
+            key: value.key,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub enum RasterPropertiesEntryType {
     Number,
     String,
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
+impl From<geoengine_datatypes::raster::RasterPropertiesEntryType> for RasterPropertiesEntryType {
+    fn from(value: geoengine_datatypes::raster::RasterPropertiesEntryType) -> Self {
+        match value {
+            geoengine_datatypes::raster::RasterPropertiesEntryType::Number => Self::Number,
+            geoengine_datatypes::raster::RasterPropertiesEntryType::String => Self::String,
+        }
+    }
+}
+
+impl From<RasterPropertiesEntryType> for geoengine_datatypes::raster::RasterPropertiesEntryType {
+    fn from(value: RasterPropertiesEntryType) -> Self {
+        match value {
+            RasterPropertiesEntryType::Number => Self::Number,
+            RasterPropertiesEntryType::String => Self::String,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
 pub struct DateTimeParseFormat {
     fmt: String,
     has_tz: bool,
     has_time: bool,
+}
+
+impl From<geoengine_datatypes::primitives::DateTimeParseFormat> for DateTimeParseFormat {
+    fn from(value: geoengine_datatypes::primitives::DateTimeParseFormat) -> Self {
+        Self {
+            fmt: value._to_parse_format().to_string(),
+            has_tz: value.has_tz(),
+            has_time: value.has_time(),
+        }
+    }
+}
+
+impl From<DateTimeParseFormat> for geoengine_datatypes::primitives::DateTimeParseFormat {
+    fn from(value: DateTimeParseFormat) -> Self {
+        Self::custom(value.fmt)
+    }
 }
 
 impl DateTimeParseFormat {
@@ -1243,6 +1452,18 @@ enum FormatStrLoopState {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoGeometry;
 
+impl From<geoengine_datatypes::primitives::NoGeometry> for NoGeometry {
+    fn from(_: geoengine_datatypes::primitives::NoGeometry) -> Self {
+        Self {}
+    }
+}
+
+impl From<NoGeometry> for geoengine_datatypes::primitives::NoGeometry {
+    fn from(_: NoGeometry) -> Self {
+        Self {}
+    }
+}
+
 impl ToSchema for NoGeometry {
     fn schema() -> utoipa::openapi::Schema {
         use utoipa::openapi::*;
@@ -1258,12 +1479,84 @@ pub struct MultiPoint {
     coordinates: Vec<Coordinate2D>,
 }
 
+impl From<geoengine_datatypes::primitives::MultiPoint> for MultiPoint {
+    fn from(value: geoengine_datatypes::primitives::MultiPoint) -> Self {
+        Self {
+            coordinates: value.points().iter().map(|x| (*x).into()).collect(),
+        }
+    }
+}
+
+impl From<MultiPoint> for geoengine_datatypes::primitives::MultiPoint {
+    fn from(value: MultiPoint) -> Self {
+        Self::new(value.coordinates.iter().map(|x| (*x).into()).collect()).unwrap()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct MultiLineString {
     coordinates: Vec<Vec<Coordinate2D>>,
 }
 
+impl From<geoengine_datatypes::primitives::MultiLineString> for MultiLineString {
+    fn from(value: geoengine_datatypes::primitives::MultiLineString) -> Self {
+        Self {
+            coordinates: value
+                .lines()
+                .iter()
+                .map(|x| x.iter().map(|x| (*x).into()).collect())
+                .collect(),
+        }
+    }
+}
+
+impl From<MultiLineString> for geoengine_datatypes::primitives::MultiLineString {
+    fn from(value: MultiLineString) -> Self {
+        Self::new(
+            value
+                .coordinates
+                .iter()
+                .map(|x| x.iter().map(|x| (*x).into()).collect())
+                .collect(),
+        )
+        .unwrap()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct MultiPolygon {
-    polygons: Vec<Vec<Coordinate2D>>,
+    polygons: Vec<Vec<Vec<Coordinate2D>>>,
+}
+
+impl From<geoengine_datatypes::primitives::MultiPolygon> for MultiPolygon {
+    fn from(value: geoengine_datatypes::primitives::MultiPolygon) -> Self {
+        Self {
+            polygons: value
+                .polygons()
+                .iter()
+                .map(|x| {
+                    x.iter()
+                        .map(|y| y.iter().map(|y| (*y).into()).collect())
+                        .collect()
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<MultiPolygon> for geoengine_datatypes::primitives::MultiPolygon {
+    fn from(value: MultiPolygon) -> Self {
+        Self::new(
+            value
+                .polygons
+                .iter()
+                .map(|x| {
+                    x.iter()
+                        .map(|y| y.iter().map(|y| (*y).into()).collect())
+                        .collect()
+                })
+                .collect(),
+        )
+        .unwrap()
+    }
 }

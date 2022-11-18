@@ -430,11 +430,11 @@ impl DateTimeParseFormat {
         }
     }
 
-    fn has_tz(&self) -> bool {
+    pub fn has_tz(&self) -> bool {
         self.has_tz
     }
 
-    fn has_time(&self) -> bool {
+    pub fn has_time(&self) -> bool {
         self.has_time
     }
 
@@ -442,7 +442,7 @@ impl DateTimeParseFormat {
         self.fmt.is_empty()
     }
 
-    fn _to_parse_format(&self) -> &str {
+    pub fn _to_parse_format(&self) -> &str {
         &self.fmt
     }
 }

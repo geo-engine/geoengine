@@ -1393,7 +1393,8 @@ mod tests {
                         .collect(),
                         time: None,
                         bbox: None,
-                    }),
+                    })
+                    .into(),
                 },
             );
 

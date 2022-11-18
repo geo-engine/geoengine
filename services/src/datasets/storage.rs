@@ -121,7 +121,7 @@ pub struct DatasetDefinition {
 }))]
 pub struct CreateDataset {
     pub upload: UploadId,
-    pub definition: DatasetDefinition,
+    pub definition: crate::api::model::services::DatasetDefinition,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
