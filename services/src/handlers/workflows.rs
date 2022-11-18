@@ -68,10 +68,6 @@ where
     .service(
         web::resource("datasetFromWorkflow/{id}")
             .route(web::post().to(dataset_from_workflow_handler::<C>)),
-    )
-    .service(
-        web::resource("datasetFromWorkflowTask/{id}")
-            .route(web::post().to(dataset_from_workflow_handler_task::<C>)),
     );
 }
 
@@ -388,51 +384,6 @@ pub struct RasterDatasetFromWorkflowResult {
 
 impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
 
-/// Create a new dataset from the result of the workflow given by its `id` and the dataset parameters in the request body.
-/// Returns the id of the created dataset and upload
-#[utoipa::path(
-    tag = "Workflows",
-    post,
-    path = "/datasetFromWorkflow/{id}",
-    request_body = RasterDatasetFromWorkflow,
-    responses(
-        (status = 200, description = "Id of created dataset and upload", body = RasterDatasetFromWorkflowResult,
-            example = json!({"upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0", "dataset": {"type": "internal", "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"}})
-        )
-    ),
-    params(
-        ("id" = WorkflowId, description = "Workflow id")
-    ),
-    security(
-        ("session_token" = [])
-    )
-)]
-async fn dataset_from_workflow_handler<C: Context>(
-    id: web::Path<WorkflowId>,
-    session: C::Session,
-    ctx: web::Data<C>,
-    info: web::Json<RasterDatasetFromWorkflow>,
-) -> Result<impl Responder> {
-    let upload = UploadId::new();
-    let upload_path = upload.root_path()?;
-    fs::create_dir_all(&upload_path)
-        .await
-        .context(crate::error::Io)?;
-    let file_path = upload_path.clone();
-
-    let task = RasterDatasetFromWorkflowTask {
-        id,
-        session,
-        ctx: ctx.clone(),
-        info,
-        upload,
-        file_path,
-    };
-
-    let result = task.process().await?;
-    Ok(web::Json(result))
-}
-
 async fn create_dataset<C: Context>(
     info: RasterDatasetFromWorkflow,
     mut slice_info: Vec<GdalLoadingInfoTemporalSlice>,
@@ -597,7 +548,7 @@ impl<C: Context> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
 #[utoipa::path(
     tag = "Workflows",
     post,
-    path = "/datasetFromWorkflowTask/{id}",
+    path = "/datasetFromWorkflow/{id}",
     request_body = RasterDatasetFromWorkflow,
     responses(
         (status = 200, description = "Id of created task", body = TaskResponse,
@@ -611,7 +562,7 @@ impl<C: Context> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
         ("session_token" = [])
     )
 )]
-async fn dataset_from_workflow_handler_task<C: Context>(
+async fn dataset_from_workflow_handler<C: Context>(
     id: web::Path<WorkflowId>,
     session: C::Session,
     ctx: web::Data<C>,
@@ -690,7 +641,9 @@ mod tests {
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
-    use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
+    use geoengine_operators::util::raster_stream_to_geotiff::{
+        raster_stream_to_geotiff_bytes, single_timestep_raster_stream_to_geotiff_bytes,
+    };
     use serde_json::json;
     use std::io::Read;
     use zip::read::ZipFile;
@@ -1151,136 +1104,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
-    async fn dataset_from_workflow() {
-        let exe_ctx_tiling_spec = TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
-            tile_size_in_pixels: GridShape::new([600, 600]),
-        };
-
-        // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-        );
-
-        let session_id = ctx.default_session_ref().await.id();
-
-        let dataset = add_ndvi_to_datasets(&ctx).await;
-
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: dataset.into(),
-                    },
-                }
-                .boxed(),
-            ),
-        };
-
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
-            .await
-            .unwrap();
-
-        // create dataset from workflow
-        let req = test::TestRequest::post()
-            .uri(&format!("/datasetFromWorkflow/{}", workflow_id))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
-            .set_payload(
-                r#"{
-                "name": "foo",
-                "description": null,
-                "query": {
-                    "spatialBounds": {
-                        "upperLeftCoordinate": {
-                            "x": -10.0,
-                            "y": 80.0
-                        },
-                        "lowerRightCoordinate": {
-                            "x": 50.0,
-                            "y": 20.0
-                        }
-                    },
-                    "timeInterval": {
-                        "start": 1388534400000,
-                        "end": 1388534401000
-                    },
-                    "spatialResolution": {
-                        "x": 0.1,
-                        "y": 0.1
-                    }
-                }
-            }"#,
-            );
-        let res = send_test_request(req, ctx.clone()).await;
-
-        assert_eq!(res.status(), 200);
-
-        let response: RasterDatasetFromWorkflowResult = test::read_body_json(res).await;
-        // automatically deletes uploads on drop
-        let _test_uploads = TestDataUploads {
-            uploads: vec![response.upload],
-        };
-
-        let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
-        // query the newly created dataset
-        let op = GdalSource {
-            params: GdalSourceParameters {
-                data: dataset_id.into(),
-            },
-        }
-        .boxed();
-
-        let session = ctx.default_session_ref().await.clone();
-        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
-
-        let o = op.initialize(&exe_ctx).await.unwrap();
-
-        let query_ctx = ctx.query_context(session.clone()).unwrap();
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
-
-        let processor = o.query_processor().unwrap().get_u8().unwrap();
-
-        let mut result = raster_stream_to_geotiff_bytes(
-            processor,
-            query_rect,
-            query_ctx,
-            GdalGeoTiffDatasetMetadata {
-                no_data_value: Some(0.),
-                spatial_reference: SpatialReference::epsg_4326(),
-            },
-            GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
-                    .unwrap()
-                    .compression_num_threads,
-                as_cog: false,
-                force_big_tiff: false,
-            },
-            None,
-            Box::pin(futures::future::pending()),
-            exe_ctx.tiling_specification(),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
-            result.pop().expect("result length should be 1")
-        );
-    }
-
-    #[tokio::test]
     async fn it_does_not_register_invalid_workflow() {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
@@ -1477,7 +1300,7 @@ mod tests {
 
         // create dataset from workflow
         let req = test::TestRequest::post()
-            .uri(&format!("/datasetFromWorkflowTask/{}", workflow_id))
+            .uri(&format!("/datasetFromWorkflow/{}", workflow_id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(
@@ -1555,7 +1378,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_u8().unwrap();
 
-        let mut result = raster_stream_to_geotiff_bytes(
+        let mut result = single_timestep_raster_stream_to_geotiff_bytes(
             processor,
             query_rect,
             query_ctx,
@@ -1577,12 +1400,10 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(1, result.len());
-
         assert_eq!(
             include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
-            result.pop().expect("result should have length 1")
+            result.as_slice()
         );
     }
 
@@ -1619,7 +1440,7 @@ mod tests {
 
         // create dataset from workflow
         let req = test::TestRequest::post()
-            .uri(&format!("/datasetFromWorkflowTask/{}", workflow_id))
+            .uri(&format!("/datasetFromWorkflow/{}", workflow_id))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(

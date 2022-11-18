@@ -281,8 +281,6 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         window_end: GridIdx2D,
     ) -> Self {
         const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
-        let file_path = file_path.join("raster.tiff");
-        let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
 
         //TODO: Consider making placeholder and time_placeholder format configurable
         let placeholder = "%_START_TIME_%";
@@ -295,6 +293,9 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
                 reference: TimeReference::Start,
             },
         };
+
+        let file_path = file_path.join("raster.tiff");
+        let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
 
         let x_pixel_size = query_rect.spatial_resolution.x;
         let y_pixel_size = query_rect.spatial_resolution.y;
