@@ -1,17 +1,22 @@
+use std::time::Duration;
+
 use crate::api::model::datatypes::TimeInterval;
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::util::{parse_bbox, parse_time};
+use crate::util::config;
 use crate::util::parsing::parse_spatial_resolution;
+use crate::util::server::connection_closed;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
-use actix_web::{web, FromRequest, Responder};
+use actix_web::{web, FromRequest, HttpRequest, Responder};
 use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::{ResultDescriptor, TypedPlotQueryProcessor};
+use geoengine_operators::engine::{QueryContext, ResultDescriptor, TypedPlotQueryProcessor};
+use geoengine_operators::util::abortable_query_execution;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use uuid::Uuid;
@@ -117,11 +122,19 @@ pub(crate) struct GetPlot {
 /// }
 /// ```
 async fn get_plot_handler<C: Context>(
+    req: HttpRequest,
     id: web::Path<Uuid>,
     params: web::Query<GetPlot>,
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
+    let conn_closed = connection_closed(
+        &req,
+        config::get_config_element::<config::Plots>()?
+            .request_timeout_seconds
+            .map(Duration::from_secs),
+    );
+
     let workflow = ctx
         .workflow_registry_ref()
         .load(&WorkflowId(id.into_inner()))
@@ -129,7 +142,7 @@ async fn get_plot_handler<C: Context>(
 
     let operator = workflow.operator.get_plot().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context(session.clone())?;
 
     let initialized = operator
         .initialize(&execution_context)
@@ -171,29 +184,31 @@ async fn get_plot_handler<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let query_ctx = ctx.query_context()?;
+    let mut query_ctx = ctx.query_context(session)?;
+
+    let query_abort_trigger = query_ctx.abort_trigger()?;
 
     let output_format = PlotOutputFormat::from(&processor);
     let plot_type = processor.plot_type();
 
     let data = match processor {
-        TypedPlotQueryProcessor::JsonPlain(processor) => processor
-            .plot_query(query_rect, &query_ctx)
-            .await
-            .context(error::Operator)?,
+        TypedPlotQueryProcessor::JsonPlain(processor) => {
+            let json = processor.plot_query(query_rect, &query_ctx);
+            let result = abortable_query_execution(json, conn_closed, query_abort_trigger).await;
+            result.context(error::Operator)?
+        }
         TypedPlotQueryProcessor::JsonVega(processor) => {
-            let chart = processor
-                .plot_query(query_rect, &query_ctx)
-                .await
-                .context(error::Operator)?;
+            let chart = processor.plot_query(query_rect, &query_ctx);
+            let chart = abortable_query_execution(chart, conn_closed, query_abort_trigger).await;
+            let chart = chart.context(error::Operator)?;
 
             serde_json::to_value(&chart).context(error::SerdeJson)?
         }
         TypedPlotQueryProcessor::ImagePng(processor) => {
-            let png_bytes = processor
-                .plot_query(query_rect, &query_ctx)
-                .await
-                .context(error::Operator)?;
+            let png_bytes = processor.plot_query(query_rect, &query_ctx);
+            let png_bytes =
+                abortable_query_execution(png_bytes, conn_closed, query_abort_trigger).await;
+            let png_bytes = png_bytes.context(error::Operator)?;
 
             let data_uri = format!("data:image/png;base64,{}", base64::encode(png_bytes));
 

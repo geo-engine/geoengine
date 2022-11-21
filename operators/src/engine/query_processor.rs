@@ -19,11 +19,24 @@ use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2
 pub trait QueryProcessor: Send + Sync {
     type Output;
     type SpatialBounds: AxisAlignedRectangle + Send + Sync;
-    async fn query<'a>(
+
+    /// inner logic of the processor
+    async fn _query<'a>(
         &'a self,
         query: QueryRectangle<Self::SpatialBounds>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>>;
+
+    async fn query<'a>(
+        &'a self,
+        query: QueryRectangle<Self::SpatialBounds>,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        Ok(Box::pin(
+            ctx.abort_registration()
+                .wrap(self._query(query, ctx).await?),
+        ))
+    }
 }
 
 /// An instantiation of a raster operator that produces a stream of raster results for a query
@@ -126,7 +139,7 @@ where
     type Output = T;
     type SpatialBounds = S;
 
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: QueryRectangle<S>,
         ctx: &'a dyn QueryContext,
@@ -143,7 +156,7 @@ where
     type Output = RasterTile2D<T>;
     type SpatialBounds = SpatialPartition2D;
 
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -160,7 +173,7 @@ where
     type Output = V;
     type SpatialBounds = BoundingBox2D;
 
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,

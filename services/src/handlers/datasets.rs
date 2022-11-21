@@ -1081,7 +1081,7 @@ mod tests {
         let source = make_ogr_source(&exe_ctx, dataset_id).await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
-        let query_ctx = ctx.query_context()?;
+        let query_ctx = ctx.query_context(session.clone())?;
 
         let query = query_processor
             .query(

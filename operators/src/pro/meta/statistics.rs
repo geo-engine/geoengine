@@ -4,6 +4,7 @@ use crate::engine::{
     VectorResultDescriptor,
 };
 use crate::pro::adapters::stream_statistics_adapter::StreamStatisticsAdapter;
+use crate::pro::meta::quota::QuotaTracking;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -133,11 +134,17 @@ where
     type Output = T;
     type SpatialBounds = S;
 
-    async fn query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: QueryRectangle<Self::SpatialBounds>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        let quota = ctx
+            .extensions()
+            .get::<QuotaTracking>()
+            .expect("`QuotaTracking` extension should be set during `ProContext` creation")
+            .clone();
+
         let span = (self.span)();
         let _enter = span.enter();
 
@@ -148,7 +155,7 @@ where
         match stream_result {
             Ok(stream) => {
                 tracing::debug!(event = "query ok");
-                Ok(StreamStatisticsAdapter::new(stream, span.clone()).boxed())
+                Ok(StreamStatisticsAdapter::new(stream, span.clone(), quota).boxed())
             }
             Err(err) => {
                 tracing::debug!(event = "query error");

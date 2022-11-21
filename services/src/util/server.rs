@@ -4,18 +4,22 @@ use crate::util::config::get_config_element;
 
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::uri::PathAndQuery;
-use actix_http::HttpMessage;
+use actix_http::{Extensions, HttpMessage, StatusCode};
+
 use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
-use actix_web::{http, middleware, web, HttpResponse};
+use actix_web::{http, middleware, web, HttpRequest, HttpResponse};
+use futures::future::BoxFuture;
 use log::debug;
+
+use std::any::Any;
 use std::num::NonZeroUsize;
+use std::time::Duration;
 use tracing::log::info;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
 use url::Url;
 use utoipa::{openapi::OpenApi, ToSchema};
-
 /// Custom root span for web requests that paste a request id to all logs.
 pub struct CustomRootSpanBuilder;
 
@@ -189,6 +193,19 @@ pub(crate) fn server_info() -> ServerInfo {
         features: env!("VERGEN_CARGO_FEATURES"),
     }
 }
+/// Server availablity check.
+#[utoipa::path(
+    tag = "General",
+    get,
+    path = "/available",
+    responses(
+        (status = 204, description = "Server availablity check")
+    )
+)]
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+pub(crate) async fn available_handler() -> impl actix_web::Responder {
+    HttpResponse::Ok().status(StatusCode::NO_CONTENT).finish()
+}
 
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) fn render_404(
@@ -293,4 +310,88 @@ pub(crate) fn log_server_info() -> Result<()> {
 // async is required for the request handler signature
 pub async fn not_implemented_handler() -> HttpResponse {
     HttpResponse::NotImplemented().finish()
+}
+
+#[cfg(target_os = "linux")]
+pub struct SocketFd(pub std::os::unix::prelude::RawFd);
+
+/// attach the connection's socket file descriptor to the connection data
+#[cfg(target_os = "linux")]
+pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
+    use actix_rt::net::TcpStream;
+    use std::num::NonZeroI32;
+    use std::os::unix::prelude::{AsRawFd, RawFd};
+
+    if let Some(sock) = connection.downcast_ref::<TcpStream>() {
+        let fd = sock.as_raw_fd();
+        if let Ok(fd) = NonZeroI32::try_from(fd) {
+            let fd = RawFd::from(fd);
+            data.insert(SocketFd(fd));
+        }
+    }
+}
+
+/// start a new task that monitors the request's socket file descriptor and tries to detect when the connection is closed.
+/// The returned join handle can be awaited to get notified when the connection is closed (or, if given, when the timeout is reached).
+// TODO: the socket file descriptor might be re-used by a subsequent connection before we notice that
+//       the connections was closed. We maybe need a global list of all open connections and their socket file descriptors
+//       or some other way to invalidate the socket file descriptor in the old connection when a new one arrives.
+//       idea: have a global map of sockets being monitored for connection close. When a new connection arrives: get its fd and
+//       check whether this fd is currently being monitored. If so: notify the monitor channel of the new connection via a channel.
+#[cfg(target_os = "linux")]
+pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<()> {
+    use futures::TryFutureExt;
+    use nix::errno::Errno;
+    use nix::sys::socket::MsgFlags;
+    use std::time::Instant;
+
+    const CONNECTION_MONITOR_INTERVAL_SECONDS: u64 = 1;
+
+    if let Some(fd) = req.conn_data::<SocketFd>() {
+        let fd = fd.0;
+        let handle = crate::util::spawn(async move {
+            let mut data = vec![];
+            let start = Instant::now();
+
+            while timeout.map_or(true, |t| start.elapsed() >= t) {
+                let r = nix::sys::socket::recv(fd, data.as_mut_slice(), MsgFlags::MSG_PEEK);
+
+                match r {
+                    Ok(0) | Err(Errno::EBADF) => {
+                        // the connection seems to be closed
+                        return;
+                    }
+                    _ => (), // the connection seems to be still valid
+                }
+
+                tokio::time::sleep(std::time::Duration::from_secs(
+                    CONNECTION_MONITOR_INTERVAL_SECONDS,
+                ))
+                .await;
+            }
+        });
+
+        // TODO: return `pending` on JoinError?
+        let handle = handle.unwrap_or_else(|_| ());
+
+        Box::pin(handle)
+    } else if let Some(timeout) = timeout {
+        Box::pin(tokio::time::sleep(timeout))
+    } else {
+        Box::pin(futures::future::pending())
+    }
+}
+
+// on non-linux systems we do not monitor the connections because they would require a different implementation
+
+#[cfg(not(target_os = "linux"))]
+pub fn connection_init(_connection: &dyn Any, _data: &mut Extensions) {}
+
+#[cfg(not(target_os = "linux"))]
+pub fn connection_closed(_req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<()> {
+    if let Some(timeout) = timeout {
+        Box::pin(tokio::time::sleep(timeout))
+    } else {
+        Box::pin(futures::future::pending())
+    }
 }

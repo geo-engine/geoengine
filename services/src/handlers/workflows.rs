@@ -19,7 +19,9 @@ use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor};
+use geoengine_operators::engine::{
+    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor,
+};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
 };
@@ -433,7 +435,7 @@ async fn dataset_from_workflow_handler<C: Context>(
     let file_path = upload_path.join("raster.tiff");
 
     let query_rect = info.query;
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(session.clone())?;
     let request_spatial_ref = Option::<SpatialReference>::from(result_descriptor.spatial_reference)
         .ok_or(crate::error::Error::MissingSpatialReference)?;
     let tile_limit = None; // TODO: set a reasonable limit or make configurable?
@@ -454,6 +456,8 @@ async fn dataset_from_workflow_handler<C: Context>(
                 force_big_tiff: false,
             },
             tile_limit,
+            Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
+            execution_context.tiling_specification(),
         ).await)?
     .map_err(crate::error::Error::from)?;
 
@@ -1118,11 +1122,11 @@ mod tests {
         .boxed();
 
         let session = ctx.default_session_ref().await.clone();
-        let exe_ctx = ctx.execution_context(session).unwrap();
+        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
 
         let o = op.initialize(&exe_ctx).await.unwrap();
 
-        let query_ctx = ctx.query_context().unwrap();
+        let query_ctx = ctx.query_context(session.clone()).unwrap();
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
@@ -1147,6 +1151,8 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
+            Box::pin(futures::future::pending()),
+            exe_ctx.tiling_specification(),
         )
         .await
         .unwrap();

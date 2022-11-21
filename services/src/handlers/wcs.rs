@@ -1,6 +1,7 @@
 use std::str::FromStr;
+use std::time::Duration;
 
-use actix_web::{web, FromRequest, HttpResponse};
+use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
@@ -13,7 +14,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
-use utoipa::openapi::{ObjectBuilder, SchemaFormat, SchemaType};
+use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
 use utoipa::ToSchema;
 
 use crate::api::model::datatypes::TimeInterval;
@@ -25,7 +26,7 @@ use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::server::not_implemented_handler;
+use crate::util::server::{connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -308,6 +309,7 @@ async fn wcs_describe_coverage_handler<C: Context>(
 )]
 #[allow(clippy::too_many_lines)]
 async fn wcs_get_coverage_handler<C: Context>(
+    req: HttpRequest,
     workflow: web::Path<WorkflowId>,
     request: web::Query<GetCoverage>,
     ctx: web::Data<C>,
@@ -332,6 +334,13 @@ async fn wcs_get_coverage_handler<C: Context>(
         error::WcsVersionNotSupported
     );
 
+    let conn_closed = connection_closed(
+        &req,
+        config::get_config_element::<config::Wcs>()?
+            .request_timeout_seconds
+            .map(Duration::from_secs),
+    );
+
     let request_partition = request.spatial_partition()?;
 
     if let Some(gridorigin) = request.gridorigin {
@@ -352,7 +361,7 @@ async fn wcs_get_coverage_handler<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context(session.clone())?;
 
     let initialized = operator
         .clone()
@@ -408,7 +417,7 @@ async fn wcs_get_coverage_handler<C: Context>(
         spatial_resolution,
     };
 
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(session)?;
 
     let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_geotiff_bytes(
@@ -425,7 +434,8 @@ async fn wcs_get_coverage_handler<C: Context>(
                 force_big_tiff: false,
             },
             Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            
+            conn_closed,
+            execution_context.tiling_specification(),
         )
         .await)?
     .map_err(error::Error::from)?;
@@ -439,7 +449,7 @@ impl ToSchema for CoverageResponse {
     fn schema() -> utoipa::openapi::schema::Schema {
         ObjectBuilder::new()
             .schema_type(SchemaType::String)
-            .format(Some(SchemaFormat::Binary))
+            .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
             .into()
     }
 }

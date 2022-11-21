@@ -18,6 +18,9 @@ raster_data_root_path = "../test_data/raster" # relative to sub crate directory 
 [upload]
 path = "test_upload"
 
+[session]
+admin_session_token = "70c3f586-f01b-49cf-9b41-473531b0fb00"
+
 [oidc]
 enabled = true
 issuer = ""

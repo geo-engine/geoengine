@@ -37,8 +37,8 @@ flexi_logger = { version = "0.24", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
-gdal =  "0.13"
-gdal-sys = "0.7"
+gdal =  "0.14.0"
+gdal-sys = "0.8"
 geo = "0.23"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
@@ -68,6 +68,7 @@ serde_json = "1.0"
 serde_urlencoded = "0.7"
 serde_with = "2.0"
 snafu = "0.7"
+stream-cancel = "0.8"
 strum = { version = "0.24", features = ["derive"] }
 time = "0.3"
 tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
@@ -76,14 +77,17 @@ tonic = { version = "0.6", features = ["tls", "tls-roots"] } # must be compatibl
 tracing = "0.1"
 tracing-actix-web = "0.6"
 tracing-opentelemetry = "0.18"
-tracing-subscriber = { version = "0.3", features = ["local-time", "ansi"] }
+tracing-subscriber = { version = "0.3", features = ["local-time", "ansi", "tracing-log"] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
-utoipa = { version = "2.2", features = ["actix_extras", "chrono", "uuid"] }
+utoipa = { version = "2.3", features = ["actix_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "2.0", features = ["actix-web"] }
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
 walkdir = "2.3"
 zip = "0.6"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = "0.25"
 
 [dev-dependencies]
 httptest = "0.15.2"
