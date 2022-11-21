@@ -682,7 +682,7 @@ async fn add_existing_collection_to_collection<C: Context>(
     Ok(HttpResponse::Ok().finish())
 }
 
-/// Add a collection from a collection
+/// Delete a collection from a collection
 #[utoipa::path(
     tag = "Layers",
     delete,
