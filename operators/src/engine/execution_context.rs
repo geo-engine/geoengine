@@ -131,6 +131,7 @@ impl MockExecutionContext {
         MockQueryContext {
             chunk_byte_size,
             thread_pool: self.thread_pool.clone(),
+            extensions: Default::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }

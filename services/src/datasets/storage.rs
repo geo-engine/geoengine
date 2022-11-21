@@ -1,4 +1,5 @@
 use crate::api::model::datatypes::{DataProviderId, DatasetId};
+use crate::api::model::operators::TypedResultDescriptor;
 use crate::contexts::Session;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
@@ -13,11 +14,8 @@ use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::MetaData;
 use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
-use geoengine_operators::{
-    engine::TypedResultDescriptor, mock::MockDatasetDataSourceLoadingInfo,
-    source::GdalMetaDataStatic,
-};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
+use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::fmt::Debug;
@@ -93,36 +91,37 @@ pub struct DatasetDefinition {
       "sourceOperator": "OgrSource"
     },
     "metaData": {
-      "OgrMetaData": {
-        "loadingInfo": {
-          "fileName": "germany_polygon.gpkg",
-          "layerName": "test_germany",
-          "dataType": "MultiPolygon",
-          "time": "none",
-          "columns": {
-            "x": "",
-            "y": null,
-            "text": [],
-            "float": [],
-            "int": [],
-            "bool": [],
-            "datetime": [],
-          },
-          "forceOgrTimeFilter": false,
-          "onError": "ignore"
+      "type": "OgrMetaData",
+      "loadingInfo": {
+        "fileName": "germany_polygon.gpkg",
+        "layerName": "test_germany",
+        "dataType": "MultiPolygon",
+        "time": {
+          "type": "none"
         },
-        "resultDescriptor": {
-          "dataType": "MultiPolygon",
-          "spatialReference": "EPSG:4326",
-          "columns": {}
-        }
+        "columns": {
+          "x": "",
+          "y": null,
+          "text": [],
+          "float": [],
+          "int": [],
+          "bool": [],
+          "datetime": [],
+        },
+        "forceOgrTimeFilter": false,
+        "onError": "ignore"
+      },
+      "resultDescriptor": {
+        "dataType": "MultiPolygon",
+        "spatialReference": "EPSG:4326",
+        "columns": {}
       }
     }
   }
 }))]
 pub struct CreateDataset {
     pub upload: UploadId,
-    pub definition: DatasetDefinition,
+    pub definition: crate::api::model::services::DatasetDefinition,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]

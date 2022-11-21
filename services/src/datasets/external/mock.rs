@@ -1,39 +1,55 @@
 use std::collections::HashMap;
 
 use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
-use crate::datasets::listing::ProvenanceOutput;
+use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerCollectionId, ProviderLayerId,
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
+    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::projects::Symbology;
 use crate::workflows::workflow::Workflow;
-use crate::{
-    datasets::storage::{DatasetDefinition, MetaDataDefinition},
-    error,
-    util::user_input::Validated,
-};
+use crate::{datasets::storage::MetaDataDefinition, error, util::user_input::Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
-use geoengine_operators::engine::{TypedOperator, VectorOperator};
-use geoengine_operators::mock::{MockDatasetDataSource, MockDatasetDataSourceParams};
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use uuid::Uuid;
-
-pub const ROOT_COLLECTION_ID: Uuid = Uuid::from_u128(0xd630_e723_63d4_440c_9e15_644c_400f_c7c1);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MockExternalLayerProviderDefinition {
     pub id: DataProviderId,
-    pub datasets: Vec<DatasetDefinition>,
+    pub root_collection: MockCollection,
+    pub data: HashMap<String, MetaDataDefinition>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MockCollection {
+    pub id: LayerCollectionId,
+    pub name: String,
+    pub description: String,
+    pub collections: Vec<MockCollection>,
+    pub layers: Vec<MockLayer>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MockLayer {
+    pub id: LayerId,
+    pub name: String,
+    pub description: String,
+    pub symbology: Option<Symbology>,
+    pub provenance: Option<Provenance>,
+    pub workflow: Workflow,
+    pub properties: Vec<Property>,
+    pub metadata: HashMap<String, String>,
 }
 
 #[typetag::serde]
@@ -42,7 +58,8 @@ impl DataProviderDefinition for MockExternalLayerProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(MockExternalDataProvider {
             id: self.id,
-            datasets: self.datasets,
+            root_collection: self.root_collection,
+            data: self.data,
         }))
     }
 
@@ -62,7 +79,44 @@ impl DataProviderDefinition for MockExternalLayerProviderDefinition {
 #[derive(Debug)]
 pub struct MockExternalDataProvider {
     id: DataProviderId,
-    datasets: Vec<DatasetDefinition>,
+    root_collection: MockCollection,
+    data: HashMap<String, MetaDataDefinition>,
+}
+
+impl MockExternalDataProvider {
+    fn collection(&self, collection_id: &LayerCollectionId) -> Option<&MockCollection> {
+        let mut queue = vec![&self.root_collection];
+
+        while !queue.is_empty() {
+            let current = queue.pop().unwrap();
+
+            if &current.id == collection_id {
+                return Some(current);
+            }
+
+            queue.extend(&current.collections);
+        }
+
+        None
+    }
+
+    fn layer(&self, layer_id: &LayerId) -> Option<&MockLayer> {
+        let mut queue = vec![&self.root_collection];
+
+        while !queue.is_empty() {
+            let current = queue.pop().unwrap();
+
+            for layer in &current.layers {
+                if &layer.id == layer_id {
+                    return Some(layer);
+                }
+            }
+
+            queue.extend(&current.collections);
+        }
+
+        None
+    }
 }
 
 #[async_trait]
@@ -80,95 +134,77 @@ impl LayerCollectionProvider for MockExternalDataProvider {
     async fn collection(
         &self,
         collection: &LayerCollectionId,
-        _options: Validated<LayerCollectionListOptions>,
+        options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
-        ensure!(
-            *collection == self.root_collection_id().await?,
-            error::UnknownLayerCollectionId {
-                id: collection.clone()
-            }
-        );
+        let options = options.user_input;
 
-        // TODO: use options
+        let collection =
+            self.collection(collection)
+                .ok_or(error::Error::UnknownLayerCollectionId {
+                    id: collection.clone(),
+                })?;
 
-        let mut listing = vec![];
-        for dataset in &self.datasets {
-            listing.push(Ok(CollectionItem::Layer(LayerListing {
-                id: ProviderLayerId {
-                    provider_id: self.id,
-                    layer_id: dataset
-                        .properties
-                        .id
-                        .as_ref()
-                        .ok_or(error::Error::MissingDatasetId)
-                        .map(|id| LayerId(id.to_string()))?,
-                },
-                name: dataset.properties.name.clone(),
-                description: dataset.properties.description.clone(),
-            })));
-        }
-
-        let items = listing
-            .into_iter()
-            .filter_map(|d: Result<_>| if let Ok(d) = d { Some(d) } else { None })
-            .collect();
-
-        Ok(LayerCollection {
+        let out = LayerCollection {
             id: ProviderLayerCollectionId {
                 provider_id: self.id,
-                collection_id: collection.clone(),
+                collection_id: collection.id.clone(),
             },
-            name: "MockName".to_owned(),
-            description: "MockType".to_owned(),
-            items,
+            name: collection.name.clone(),
+            description: collection.description.clone(),
+            items: collection
+                .collections
+                .iter()
+                .map(|c| {
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: self.id,
+                            collection_id: c.id.clone(),
+                        },
+                        name: c.name.clone(),
+                        description: c.description.clone(),
+                    })
+                })
+                .chain(collection.layers.iter().map(|l| {
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: self.id,
+                            layer_id: l.id.clone(),
+                        },
+                        name: l.name.clone(),
+                        description: l.description.clone(),
+                    })
+                }))
+                .skip(options.offset as usize)
+                .take(options.limit as usize)
+                .collect(),
             entry_label: None,
             properties: vec![],
-        })
+        };
+
+        Ok(out)
     }
 
     async fn root_collection_id(&self) -> Result<LayerCollectionId> {
-        Ok(LayerCollectionId(ROOT_COLLECTION_ID.to_string()))
+        Ok(LayerCollectionId(self.root_collection.id.to_string()))
     }
 
     async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
-        self.datasets
-            .iter()
-            .find(|d| {
-                d.properties
-                    .id
-                    .as_ref()
-                    .map(|id| LayerId(id.to_string()))
-                    .as_ref()
-                    == Some(id)
-            })
-            .ok_or(error::Error::UnknownDataId)
-            .and_then(|d| {
-                Ok(Layer {
-                    id: ProviderLayerId {
-                        provider_id: self.id,
-                        layer_id: id.clone(),
-                    },
-                    name: d.properties.name.clone(),
-                    description: d.properties.description.clone(),
-                    workflow: Workflow {
-                        operator: TypedOperator::Vector(
-                            MockDatasetDataSource {
-                                params: MockDatasetDataSourceParams {
-                                    data: d
-                                        .properties
-                                        .id
-                                        .ok_or(error::Error::MissingDatasetId)?
-                                        .into(),
-                                },
-                            }
-                            .boxed(),
-                        ),
-                    },
-                    symbology: d.properties.symbology.clone(),
-                    properties: vec![],
-                    metadata: HashMap::new(),
-                })
-            })
+        let layer = self
+            .layer(id)
+            .ok_or(error::Error::UnknownLayerId { id: id.clone() })?;
+
+        Ok(Layer {
+            id: ProviderLayerId {
+                provider_id: self.id,
+                layer_id: layer.id.clone(),
+            },
+            name: layer.name.clone(),
+            description: layer.description.clone(),
+            workflow: layer.workflow.clone(),
+            symbology: layer.symbology.clone(),
+            properties: layer.properties.clone(),
+            metadata: layer.metadata.clone(),
+        })
     }
 }
 
@@ -190,20 +226,22 @@ impl
         >,
         geoengine_operators::error::Error,
     > {
-        let dataset = id
-            .internal()
-            .ok_or(geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(error::Error::DataIdTypeMissMatch),
-            })?;
-        let dataset_def = self
-            .datasets
-            .iter()
-            .find(|d| d.properties.id.as_ref() == Some(&dataset.into()))
-            .ok_or(geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(error::Error::UnknownDataId),
-            })?;
+        let id = match id {
+            geoengine_datatypes::dataset::DataId::External(id) => id,
+            geoengine_datatypes::dataset::DataId::Internal { dataset_id: _ } => {
+                return Err(geoengine_operators::error::Error::LoadingInfo {
+                    source: Box::new(error::Error::InvalidDataId),
+                })
+            }
+        };
 
-        if let MetaDataDefinition::MockMetaData(m) = &dataset_def.meta_data {
+        let metadata = self.data.get(&id.layer_id.0).ok_or(
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(error::Error::UnknownDataId),
+            },
+        )?;
+
+        if let MetaDataDefinition::MockMetaData(m) = metadata {
             Ok(Box::new(m.clone()))
         } else {
             Err(geoengine_operators::error::Error::DatasetMetaData {

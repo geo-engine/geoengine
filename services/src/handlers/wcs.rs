@@ -14,7 +14,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
-use utoipa::openapi::{ObjectBuilder, SchemaFormat, SchemaType};
+use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
 use utoipa::ToSchema;
 
 use crate::api::model::datatypes::TimeInterval;
@@ -361,7 +361,7 @@ async fn wcs_get_coverage_handler<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context(session.clone())?;
 
     let initialized = operator
         .clone()
@@ -417,7 +417,7 @@ async fn wcs_get_coverage_handler<C: Context>(
         spatial_resolution,
     };
 
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(session)?;
 
     let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_geotiff_bytes(
@@ -434,8 +434,8 @@ async fn wcs_get_coverage_handler<C: Context>(
                 force_big_tiff: false,
             },
             Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            conn_closed
-            
+            conn_closed,
+            execution_context.tiling_specification(),
         )
         .await)?
     .map_err(error::Error::from)?;
@@ -449,7 +449,7 @@ impl ToSchema for CoverageResponse {
     fn schema() -> utoipa::openapi::schema::Schema {
         ObjectBuilder::new()
             .schema_type(SchemaType::String)
-            .format(Some(SchemaFormat::Binary))
+            .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
             .into()
     }
 }

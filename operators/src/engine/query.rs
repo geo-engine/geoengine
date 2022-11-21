@@ -1,7 +1,8 @@
 use std::{
-    pin::Pin,
-    sync::Arc,
+    any::{Any, TypeId},
+    collections::HashMap,
     task::{Context, Poll},
+    {pin::Pin, sync::Arc},
 };
 
 use crate::util::Result;
@@ -52,8 +53,36 @@ pub trait QueryContext: Send + Sync {
     fn chunk_byte_size(&self) -> ChunkByteSize;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
 
+    /// get the `QueryContextExtensions` that contain additional information
+    fn extensions(&self) -> &QueryContextExtensions;
+
     fn abort_registration(&self) -> &QueryAbortRegistration;
     fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
+}
+
+/// This type allows adding additional information to the `QueryContext`.
+/// It acts like a type map, allowing one to store one value per type.
+#[derive(Default)]
+pub struct QueryContextExtensions {
+    map: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+}
+
+impl QueryContextExtensions {
+    pub fn insert<T: 'static + Send + Sync>(&mut self, val: T) -> Option<T> {
+        self.map
+            .insert(TypeId::of::<T>(), Box::new(val))
+            .and_then(downcast_owned)
+    }
+
+    pub fn get<T: 'static + Send + Sync>(&self) -> Option<&T> {
+        self.map
+            .get(&TypeId::of::<T>())
+            .and_then(|boxed| boxed.downcast_ref())
+    }
+}
+
+fn downcast_owned<T: 'static + Send + Sync>(boxed: Box<dyn Any + Send + Sync>) -> Option<T> {
+    boxed.downcast().ok().map(|boxed| *boxed)
 }
 
 /// This type allow wrapping multiple streams with `QueryAbortWrapper`s that
@@ -110,6 +139,8 @@ impl QueryAbortTrigger {
 pub struct MockQueryContext {
     pub chunk_byte_size: ChunkByteSize,
     pub thread_pool: Arc<ThreadPool>,
+
+    pub extensions: QueryContextExtensions,
     pub abort_registration: QueryAbortRegistration,
     pub abort_trigger: Option<QueryAbortTrigger>,
 }
@@ -120,6 +151,7 @@ impl TestDefault for MockQueryContext {
         Self {
             chunk_byte_size: ChunkByteSize::test_default(),
             thread_pool: create_rayon_thread_pool(0),
+            extensions: QueryContextExtensions::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -132,6 +164,7 @@ impl MockQueryContext {
         Self {
             chunk_byte_size,
             thread_pool: create_rayon_thread_pool(0),
+            extensions: QueryContextExtensions::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -145,6 +178,7 @@ impl MockQueryContext {
         Self {
             chunk_byte_size,
             thread_pool: create_rayon_thread_pool(num_threads),
+            extensions: QueryContextExtensions::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -158,6 +192,10 @@ impl QueryContext for MockQueryContext {
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
+    }
+
+    fn extensions(&self) -> &QueryContextExtensions {
+        &self.extensions
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {

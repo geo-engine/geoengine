@@ -7,6 +7,7 @@ use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
 use crate::pro::layers::postgres_layer_db::{PostgresLayerDb, PostgresLayerProviderDb};
 use crate::pro::projects::ProjectPermission;
+use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::users::{OidcRequestDb, UserDb, UserId, UserSession};
 use crate::pro::util::config::Oidc;
 use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
@@ -22,7 +23,9 @@ use bb8_postgres::{
     PostgresConnectionManager,
 };
 use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_operators::engine::ChunkByteSize;
+use geoengine_datatypes::util::Identifier;
+use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
+use geoengine_operators::pro::meta::quota::ComputationContext;
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, warn};
 use rayon::ThreadPool;
@@ -54,6 +57,7 @@ where
     query_ctx_chunk_size: ChunkByteSize,
     task_manager: Arc<SimpleTaskManager>,
     oidc_request_db: Arc<Option<OidcRequestDb>>,
+    quota: QuotaTrackingFactory,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -75,8 +79,11 @@ where
 
         Self::update_schema(pool.get().await?).await?;
 
+        let user_db = Arc::new(PostgresUserDb::new(pool.clone()));
+        let quota = initialize_quota_tracking(user_db.clone());
+
         Ok(Self {
-            user_db: Arc::new(PostgresUserDb::new(pool.clone())),
+            user_db,
             project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
             workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
             dataset_db: Arc::new(PostgresDatasetDb::new(pool.clone())),
@@ -87,6 +94,7 @@ where
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             oidc_request_db: Arc::new(None),
+            quota,
         })
     }
 
@@ -121,11 +129,18 @@ where
 
         let mut layer_provider_db = PostgresLayerProviderDb::new(pool.clone());
 
-        add_providers_from_directory(&mut layer_provider_db, provider_defs_path.clone()).await;
-        add_providers_from_directory(&mut layer_provider_db, provider_defs_path.join("pro")).await;
+        add_providers_from_directory(
+            &mut layer_provider_db,
+            provider_defs_path.clone(),
+            &[provider_defs_path.join("pro")],
+        )
+        .await;
+
+        let user_db = Arc::new(PostgresUserDb::new(pool.clone()));
+        let quota = initialize_quota_tracking(user_db.clone());
 
         Ok(Self {
-            user_db: Arc::new(PostgresUserDb::new(pool.clone())),
+            user_db,
             project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
             workflow_registry: Arc::new(workflow_db),
             dataset_db: Arc::new(dataset_db),
@@ -136,6 +151,7 @@ where
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
+            quota,
         })
     }
 
@@ -191,12 +207,14 @@ where
                             email character varying (256) UNIQUE,
                             password_hash character varying (256),
                             real_name character varying (256),
-                            active boolean NOT NULL
+                            active boolean NOT NULL,
+                            quota_used bigint NOT NULL DEFAULT 0,
                             CONSTRAINT users_anonymous_ck CHECK (
                                (email IS NULL AND password_hash IS NULL AND real_name IS NULL) OR 
                                (email IS NOT NULL AND password_hash IS NOT NULL AND 
                                 real_name IS NOT NULL) 
-                            )
+                            ),
+                            CONSTRAINT users_quota_used_ck CHECK (quota_used >= 0)
                         );
 
                         INSERT INTO users (
@@ -596,11 +614,19 @@ where
         &self.task_manager
     }
 
-    fn query_context(&self) -> Result<Self::QueryContext> {
+    fn query_context(&self, session: UserSession) -> Result<Self::QueryContext> {
         // TODO: load config only once
-        Ok(QueryContextImpl::new(
+
+        let mut extensions = QueryContextExtensions::default();
+        extensions.insert(
+            self.quota
+                .create_quota_tracking(&session, ComputationContext::new()),
+        );
+
+        Ok(QueryContextImpl::new_with_extensions(
             self.query_ctx_chunk_size,
             self.thread_pool.clone(),
+            extensions,
         ))
     }
 
@@ -634,13 +660,11 @@ mod tests {
 
     use super::*;
     use crate::api::model::datatypes::{DataProviderId, DatasetId};
-    use crate::datasets::external::mock::MockExternalLayerProviderDefinition;
+    use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
-    use crate::datasets::storage::{
-        AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition,
-    };
+    use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataDefinition};
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::layers::layer::{
@@ -1393,7 +1417,8 @@ mod tests {
                         .collect(),
                         time: None,
                         bbox: None,
-                    }),
+                    })
+                    .into(),
                 },
             );
 
@@ -1524,17 +1549,20 @@ mod tests {
 
             let provider = MockExternalLayerProviderDefinition {
                 id: provider_id,
-                datasets: vec![DatasetDefinition {
-                    properties: AddDataset {
-                        id: Some(DatasetId::new()),
-                        name: "test".to_owned(),
-                        description: "desc".to_owned(),
-                        source_operator: "MockPointSource".to_owned(),
-                        symbology: None,
-                        provenance: None,
-                    },
-                    meta_data,
-                }],
+                root_collection: MockCollection {
+                    id: LayerCollectionId("b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_owned()),
+                    name: "Mock Collection A".to_owned(),
+                    description: "Some description".to_owned(),
+                    collections: vec![MockCollection {
+                        id: LayerCollectionId("21466897-37a1-4666-913a-50b5244699ad".to_owned()),
+                        name: "Mock Collection B".to_owned(),
+                        description: "Some description".to_owned(),
+                        collections: vec![],
+                        layers: vec![],
+                    }],
+                    layers: vec![],
+                },
+                data: [("myData".to_owned(), meta_data)].into_iter().collect(),
             };
 
             db.add_layer_provider(Box::new(provider)).await.unwrap();
@@ -2207,6 +2235,56 @@ mod tests {
                     properties: vec![],
                 }
             );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_tracks_quota_in_postgres() {
+        with_temp_context(|ctx, _| async move {
+            let _user = ctx
+                .user_db_ref()
+                .register(
+                    UserRegistration {
+                        email: "foo@example.com".to_string(),
+                        password: "secret1234".to_string(),
+                        real_name: "Foo Bar".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let session = ctx
+                .user_db_ref()
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
+
+            let quota = initialize_quota_tracking(ctx.user_db());
+
+            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+
+            tracking.work_unit_done();
+            tracking.work_unit_done();
+
+            // wait for quota to be recorded
+            let mut success = false;
+            for _ in 0..10 {
+                let used = ctx.user_db_ref().quota_used(&session).await.unwrap();
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+                if used == 2 {
+                    success = true;
+                    break;
+                }
+            }
+
+            assert!(success);
         })
         .await;
     }

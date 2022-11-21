@@ -72,14 +72,14 @@ impl InMemoryContext {
         let mut dataset_db = HashMapDatasetDb::default();
         add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
 
-        let mut layer_proivder_db = HashMapLayerProviderDb::default();
-        add_providers_from_directory(&mut layer_proivder_db, provider_defs_path).await;
+        let mut layer_provider_db = HashMapLayerProviderDb::default();
+        add_providers_from_directory(&mut layer_provider_db, provider_defs_path, &[]).await;
 
         Self {
             project_db: Default::default(),
             workflow_registry: Default::default(),
             layer_db: Arc::new(layer_db),
-            layer_provider_db: Arc::new(layer_proivder_db),
+            layer_provider_db: Arc::new(layer_provider_db),
             task_manager: Default::default(),
             session: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -164,7 +164,7 @@ impl Context for InMemoryContext {
         &self.task_manager
     }
 
-    fn query_context(&self) -> Result<Self::QueryContext> {
+    fn query_context(&self, _session: SimpleSession) -> Result<Self::QueryContext> {
         Ok(QueryContextImpl::new(
             self.query_ctx_chunk_size,
             self.thread_pool.clone(),

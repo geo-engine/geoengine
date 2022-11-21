@@ -193,7 +193,7 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
             id,
             name: dataset.name,
             description: dataset.description,
-            result_descriptor,
+            result_descriptor: result_descriptor.into(),
             source_operator: dataset.source_operator,
             symbology: dataset.symbology,
             provenance: dataset.provenance,

@@ -8,16 +8,13 @@ use crate::api::model::datatypes::{
     TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
-    CsvHeader, FormatSpecifics, OgrMetaData, OgrSourceDurationSpec, OgrSourceTimeFormat,
-    UnixTimeStampType,
-};
-use crate::api::model::operators::{
-    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-    GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic,
-    GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
-    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrSourceColumnSpec, OgrSourceDataset,
-    OgrSourceDatasetTimeType, OgrSourceErrorSpec, PlotResultDescriptor, RasterResultDescriptor,
-    TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor, VectorColumnInfo,
+    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
+    GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
+    GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
+    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
+    OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
+    OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor, TimeReference,
+    TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
     VectorResultDescriptor,
 };
 use crate::api::model::services::{MetaDataDefinition, MetaDataSuggestion};
@@ -55,6 +52,7 @@ use utoipa::{Modify, OpenApi};
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        crate::util::server::available_handler,
         crate::util::server::server_info_handler,
         handlers::layers::layer_handler,
         handlers::layers::list_collection_handler,

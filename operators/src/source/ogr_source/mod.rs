@@ -810,7 +810,12 @@ where
 
         match time_format {
             OgrSourceTimeFormat::Auto => Box::new(move |field: FieldValue| match field {
-                FieldValue::DateValue(value) => Ok(DateTime::from(value.and_hms(0, 0, 0)).into()),
+                FieldValue::DateValue(value) => Ok(DateTime::from(
+                    value
+                        .and_hms_opt(0, 0, 0)
+                        .expect("`00:00:00` should be a valid time"),
+                )
+                .into()),
                 FieldValue::DateTimeValue(value) => Ok(DateTime::from(value).into()),
                 _ => Err(Error::OgrFieldValueIsNotDateTime),
             }),
