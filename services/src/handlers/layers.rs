@@ -580,6 +580,7 @@ async fn remove_collection<C: Context>(
     Ok(HttpResponse::Ok().finish())
 }
 
+// TODO: reflect in the API docs that these ids are usually UUIDs in the layer db
 #[derive(Debug, Serialize, Deserialize, IntoParams)]
 struct RemoveLayerFromCollectionParams {
     collection: LayerCollectionId,
