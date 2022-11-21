@@ -540,8 +540,8 @@ impl From<Coordinate2D> for geoengine_datatypes::primitives::Coordinate2D {
 /// A bounding box that includes all border points.
 /// Note: may degenerate to a point!
 pub struct BoundingBox2D {
-    lower_left_coordinate: Coordinate2D,
-    upper_right_coordinate: Coordinate2D,
+    pub lower_left_coordinate: Coordinate2D,
+    pub upper_right_coordinate: Coordinate2D,
 }
 
 impl From<geoengine_datatypes::primitives::BoundingBox2D> for BoundingBox2D {
