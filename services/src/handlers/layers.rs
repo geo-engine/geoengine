@@ -12,7 +12,7 @@ use crate::util::IdResponse;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
 use actix_web::{web, Either, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
+use utoipa::IntoParams;
 
 pub const ROOT_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x1c3b_8042_300b_485c_95b5_0147_d9dc_068d);
@@ -38,30 +38,28 @@ where
             .route("/{provider}/{layer:.+}", web::get().to(layer_handler::<C>)),
     )
     .service(
-        web::scope("/layerDb")
-            .route("/layers", web::post().to(add_layer::<C>))
-            .service(
-                web::scope("/collections/{collection}")
-                    .service(
-                        web::resource("/layers/{layer}")
-                            .route(web::post().to(add_existing_layer_to_collection::<C>))
-                            .route(web::delete().to(remove_layer_from_collection::<C>)),
-                    )
-                    .service(
-                        web::scope("/collections")
-                            .route("", web::post().to(add_collection::<C>))
-                            .service(
-                                web::resource("/{sub_collection}")
-                                    .route(
-                                        web::post().to(add_existing_collection_to_collection::<C>),
-                                    )
-                                    .route(
-                                        web::delete().to(remove_collection_from_collection::<C>),
-                                    ),
-                            ),
-                    )
-                    .route("", web::delete().to(remove_collection::<C>)),
-            ),
+        web::scope("/layerDb").service(
+            web::scope("/collections/{collection}")
+                .service(
+                    web::scope("/layers")
+                        .route("", web::post().to(add_layer::<C>))
+                        .service(
+                            web::resource("/{layer}")
+                                .route(web::post().to(add_existing_layer_to_collection::<C>))
+                                .route(web::delete().to(remove_layer_from_collection::<C>)),
+                        ),
+                )
+                .service(
+                    web::scope("/collections")
+                        .route("", web::post().to(add_collection::<C>))
+                        .service(
+                            web::resource("/{sub_collection}")
+                                .route(web::post().to(add_existing_collection_to_collection::<C>))
+                                .route(web::delete().to(remove_collection_from_collection::<C>)),
+                        ),
+                )
+                .route("", web::delete().to(remove_collection::<C>)),
+        ),
     );
 }
 
@@ -486,20 +484,15 @@ async fn layer_handler<C: Context>(
     Ok(web::Json(collection))
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AddLayerRequest {
-    pub layer: AddLayer,
-    #[schema(value_type = String, example = "05102bb3-a855-4a37-8a8a-30026a91fef1")]
-    pub collection_id: LayerCollectionId,
-}
-
 /// Add a new layer to a collection
 #[utoipa::path(
     tag = "Layers",
     post,
-    path = "/layerDb/layers",
-    request_body = AddLayerRequest,
+    path = "/layerDb/collections/{collectionId}/layers",
+    params(
+        ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
+    ),
+    request_body = AddLayer,
     responses(
         (status = 200, description = "OK", body = IdResponse<LayerId>,
             example = json!({
@@ -514,17 +507,14 @@ pub struct AddLayerRequest {
 async fn add_layer<C: Context>(
     _session: AdminSession, // TODO: allow normal users to add layers to their stuff
     ctx: web::Data<C>,
-    request: web::Json<AddLayerRequest>,
+    collection: web::Path<LayerCollectionId>,
+    request: web::Json<AddLayer>,
 ) -> Result<web::Json<IdResponse<LayerId>>> {
     let request = request.into_inner();
 
-    let collection_id = request.collection_id;
-    let add_layer = request.layer.validated()?;
+    let add_layer = request.validated()?;
 
-    let id = ctx
-        .layer_db_ref()
-        .add_layer(add_layer, &collection_id)
-        .await?;
+    let id = ctx.layer_db_ref().add_layer(add_layer, &collection).await?;
 
     Ok(web::Json(IdResponse { id }))
 }
@@ -747,14 +737,12 @@ mod tests {
         let collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
 
         let req = test::TestRequest::post()
-            .uri("/layerDb/layers")
+            .uri(&format!("/layerDb/collections/{collection_id}/layers"))
             .append_header((
                 header::AUTHORIZATION,
                 Bearer::new(admin_session_id.to_string()),
             ))
             .set_json(serde_json::json!({
-              "collectionId": collection_id,
-              "layer": {
                 "name": "Foo",
                 "description": "Bar",
                 "workflow": {
@@ -770,7 +758,6 @@ mod tests {
                   }
                 },
                 "symbology": null,
-              },
             }));
         let response = send_test_request(req, ctx.clone()).await;
 

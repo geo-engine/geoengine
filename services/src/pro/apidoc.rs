@@ -158,7 +158,6 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             Property,
             CollectionItem,
             AddLayer,
-            handlers::layers::AddLayerRequest,
             AddLayerCollection,
 
             Breakpoint,

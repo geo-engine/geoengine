@@ -140,7 +140,6 @@ use utoipa::{Modify, OpenApi};
             Property,
             CollectionItem,
             AddLayer,
-            handlers::layers::AddLayerRequest,
             AddLayerCollection,
 
             Breakpoint,
