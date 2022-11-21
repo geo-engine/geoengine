@@ -39,32 +39,22 @@ impl TimeInstance {
         TimeInstance(millis)
     }
 
-    pub fn as_rfc3339(self) -> String {
+    pub fn as_datetime_string(self) -> String {
         let instance = self.clamp(TimeInstance::MIN, TimeInstance::MAX);
 
         instance
             .as_date_time()
             .expect("TimeInstance is not valid")
-            .to_rfc3339()
+            .to_datetime_string()
     }
 
-    pub fn as_rfc3339_with_millis(self) -> String {
+    pub fn as_datetime_string_with_millis(self) -> String {
         let instance = self.clamp(TimeInstance::MIN, TimeInstance::MAX);
 
         instance
             .as_date_time()
             .expect("TimeInstance is not valid")
-            .to_rfc3339_with_millis()
-    }
-
-    /// Return a date time string for Vega plots
-    pub fn as_vega_date_time(self) -> String {
-        let instance = self.clamp(TimeInstance::MIN, TimeInstance::MAX);
-
-        instance
-            .as_date_time()
-            .expect("should not overflow because it was clamped")
-            .to_vega_date_time()
+            .to_datetime_string_with_millis()
     }
 
     pub const fn inner(self) -> i64 {

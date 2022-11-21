@@ -301,10 +301,10 @@ mod tests {
                 result,
                 expected,
                 "[{}, {}) != [{}, {})",
-                result.start().as_rfc3339(),
-                result.end().as_rfc3339(),
-                expected.start().as_rfc3339(),
-                expected.end().as_rfc3339(),
+                result.start().as_datetime_string(),
+                result.end().as_datetime_string(),
+                expected.start().as_datetime_string(),
+                expected.end().as_datetime_string(),
             );
         }
 
