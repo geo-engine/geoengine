@@ -759,7 +759,7 @@ impl From<OgrSourceErrorSpec> for geoengine_operators::source::OgrSourceErrorSpe
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, ToSchema)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum OgrSourceDatasetTimeType {
     None,
@@ -1115,7 +1115,7 @@ impl ToSchema for GdalDatasetParameters {
                 "noDataValue",
                 ObjectBuilder::new()
                     .schema_type(SchemaType::Number)
-                    .format(Some(SchemaFormat::Double)),
+                    .format(Some(SchemaFormat::KnownFormat(KnownFormat::Double))),
             )
             .property(
                 "propertiesMapping",
