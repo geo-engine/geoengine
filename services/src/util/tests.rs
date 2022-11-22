@@ -194,6 +194,7 @@ pub async fn send_test_request<C: SimpleContext>(
             )
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::layers::init_layer_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(handlers::projects::init_project_routes::<C>)
             .configure(handlers::session::init_session_routes::<C>)
