@@ -241,6 +241,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             RasterPropertiesKey,
             RasterPropertiesEntryType,
             OgrMetaData,
+            GdalConfigOption,
             MockDatasetDataSourceLoadingInfo,
             OgrSourceDataset,
             OgrSourceColumnSpec,

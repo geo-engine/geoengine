@@ -461,6 +461,7 @@ impl From<GdalMetaDataStatic> for geoengine_operators::source::GdalMetaDataStati
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceDataset {
+    #[schema(value_type = String)]
     pub file_name: PathBuf,
     pub layer_name: String,
     pub data_type: Option<VectorDataType>,
@@ -886,10 +887,25 @@ impl From<GdalMetaDataRegular> for geoengine_operators::source::GdalMetaDataRegu
     }
 }
 
+#[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
+pub struct GdalConfigOption((String, String));
+
+impl ToSchema for GdalConfigOption {
+    fn schema() -> utoipa::openapi::Schema {
+        use utoipa::openapi::*;
+        ArrayBuilder::new()
+            .items(Object::with_type(SchemaType::String))
+            .min_items(Some(2))
+            .max_items(Some(2))
+            .into()
+    }
+}
+
 /// Parameters for loading data using Gdal
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetParameters {
+    #[schema(value_type = String)]
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
     pub geo_transform: GdalDatasetGeoTransform, // TODO: discuss if we need this at all
@@ -905,7 +921,7 @@ pub struct GdalDatasetParameters {
     // Configs as key, value pairs that will be set as thread local config options, e.g.
     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
     // TODO: validate the config options: only allow specific keys and specific values
-    pub gdal_config_options: Option<Vec<(String, String)>>, // TODO: does not compile https://github.com/juhaku/utoipa/issues/330
+    pub gdal_config_options: Option<Vec<GdalConfigOption>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
 }
@@ -924,7 +940,9 @@ impl From<geoengine_operators::source::GdalDatasetParameters> for GdalDatasetPar
                 .properties_mapping
                 .map(|x| x.into_iter().map(Into::into).collect()),
             gdal_open_options: value.gdal_open_options,
-            gdal_config_options: value.gdal_config_options,
+            gdal_config_options: value
+                .gdal_config_options
+                .map(|x| x.into_iter().map(GdalConfigOption).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
         }
     }
@@ -944,64 +962,11 @@ impl From<GdalDatasetParameters> for geoengine_operators::source::GdalDatasetPar
                 .properties_mapping
                 .map(|x| x.into_iter().map(Into::into).collect()),
             gdal_open_options: value.gdal_open_options,
-            gdal_config_options: value.gdal_config_options,
+            gdal_config_options: value
+                .gdal_config_options
+                .map(|x| x.into_iter().map(|y| y.0).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
         }
-    }
-}
-
-// Utoipa does not support tuple types
-impl ToSchema for GdalDatasetParameters {
-    fn schema() -> utoipa::openapi::Schema {
-        use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property("filePath", Object::with_type(SchemaType::String))
-            .required("filePath")
-            .property("rasterbandChannel", Object::with_type(SchemaType::Boolean))
-            .required("rasterbandChannel")
-            .property(
-                "geoTransform",
-                Ref::from_schema_name("GdalDatasetGeoTransform"),
-            )
-            .required("geoTransform")
-            .property("width", Object::with_type(SchemaType::Integer))
-            .required("width")
-            .property("height", Object::with_type(SchemaType::Integer))
-            .required("height")
-            .property(
-                "fileNotFoundHandling",
-                Ref::from_schema_name("FileNotFoundHandling"),
-            )
-            .required("fileNotFoundHandling")
-            .property(
-                "noDataValue",
-                ObjectBuilder::new()
-                    .schema_type(SchemaType::Number)
-                    .format(Some(SchemaFormat::KnownFormat(KnownFormat::Double))),
-            )
-            .property(
-                "propertiesMapping",
-                ArrayBuilder::new().items(Ref::from_schema_name("GdalMetadataMapping")),
-            )
-            .required("propertiesMapping")
-            .property(
-                "gdalOpenOptions",
-                ArrayBuilder::new().items(Object::with_type(SchemaType::String)),
-            )
-            .property(
-                "gdalConfigOptions",
-                ArrayBuilder::new().items(
-                    ArrayBuilder::new()
-                        .items(Object::with_type(SchemaType::String))
-                        .min_items(Some(2))
-                        .max_items(Some(2)),
-                ),
-            )
-            .property(
-                "allowAlphabandAsMask",
-                Object::with_type(SchemaType::Boolean),
-            )
-            .into()
     }
 }
 

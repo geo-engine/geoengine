@@ -7,16 +7,7 @@ use crate::api::model::datatypes::{
     SpatialReferenceOption, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
     TimeStep, VectorDataType,
 };
-use crate::api::model::operators::{
-    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
-    GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
-    GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
-    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
-    OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
-    OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor, TimeReference,
-    TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
-    VectorResultDescriptor,
-};
+use crate::api::model::operators::{CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder, MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor, TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor, GdalConfigOption};
 use crate::api::model::services::{MetaDataDefinition, MetaDataSuggestion};
 use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
@@ -225,6 +216,7 @@ use utoipa::{Modify, OpenApi};
             RasterPropertiesKey,
             RasterPropertiesEntryType,
             OgrMetaData,
+            GdalConfigOption,
             MockDatasetDataSourceLoadingInfo,
             OgrSourceDataset,
             OgrSourceColumnSpec,
