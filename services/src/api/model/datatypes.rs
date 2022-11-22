@@ -6,7 +6,6 @@ use geoengine_datatypes::primitives::{
 use ordered_float::NotNan;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use snafu::ResultExt;
-use std::collections::HashSet;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::{Debug, Formatter},
@@ -1369,84 +1368,10 @@ impl From<DateTimeParseFormat> for geoengine_datatypes::primitives::DateTimePars
 }
 
 impl DateTimeParseFormat {
-    pub fn custom(fmt: String) -> Self {
-        let (has_tz, has_time) = {
-            let mut has_tz = false;
-            let mut has_time = false;
-
-            let has_tz_values: HashSet<&str> = ["%Z", "%z", "%:z"].into();
-            let has_time_values: HashSet<&str> =
-                ["%a", "%A", "%M", "%p", "%S", "%X", "%H", "%I"].into();
-
-            let mut state = FormatStrLoopState::Normal;
-
-            for c in fmt.chars() {
-                match state {
-                    FormatStrLoopState::Normal => {
-                        if c == '%' {
-                            state = FormatStrLoopState::Percent("%".to_string());
-                        }
-                    }
-                    FormatStrLoopState::Percent(ref mut s) => {
-                        s.push(c);
-
-                        if c == '%' {
-                            // was escaped percentage
-                            state = FormatStrLoopState::Normal;
-                        } else if c.is_ascii_alphabetic() {
-                            if has_tz_values.contains(s.as_str()) {
-                                has_tz = true;
-                            }
-                            if has_time_values.contains(s.as_str()) {
-                                has_time = true;
-                            }
-
-                            state = FormatStrLoopState::Normal;
-                        }
-                    }
-                }
-            }
-
-            (has_tz, has_time)
-        };
-
-        DateTimeParseFormat {
-            fmt,
-            has_tz,
-            has_time,
-        }
-    }
-
+    // this is used as default value
     pub fn unix() -> Self {
-        let fmt = "%s".to_owned();
-        Self {
-            fmt,
-            has_tz: false,
-            has_time: true,
-        }
+        geoengine_datatypes::primitives::DateTimeParseFormat::unix().into()
     }
-
-    pub fn ymd() -> Self {
-        let fmt = "%Y-%m-%d".to_owned();
-        Self {
-            fmt,
-            has_tz: false,
-            has_time: false,
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.fmt.is_empty()
-    }
-
-    fn _to_parse_format(&self) -> &str {
-        &self.fmt
-    }
-}
-
-enum FormatStrLoopState {
-    Normal,
-    Percent(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1482,14 +1407,14 @@ pub struct MultiPoint {
 impl From<geoengine_datatypes::primitives::MultiPoint> for MultiPoint {
     fn from(value: geoengine_datatypes::primitives::MultiPoint) -> Self {
         Self {
-            coordinates: value.points().iter().map(|x| (*x).into()).collect(),
+            coordinates: value.points().into_iter().map(|x| (*x).into()).collect(),
         }
     }
 }
 
 impl From<MultiPoint> for geoengine_datatypes::primitives::MultiPoint {
     fn from(value: MultiPoint) -> Self {
-        Self::new(value.coordinates.iter().map(|x| (*x).into()).collect()).unwrap()
+        Self::new(value.coordinates.into_iter().map(|x| x.into()).collect()).unwrap()
     }
 }
 
@@ -1503,8 +1428,8 @@ impl From<geoengine_datatypes::primitives::MultiLineString> for MultiLineString 
         Self {
             coordinates: value
                 .lines()
-                .iter()
-                .map(|x| x.iter().map(|x| (*x).into()).collect())
+                .into_iter()
+                .map(|x| x.into_iter().map(|x| (*x).into()).collect())
                 .collect(),
         }
     }
@@ -1515,8 +1440,8 @@ impl From<MultiLineString> for geoengine_datatypes::primitives::MultiLineString 
         Self::new(
             value
                 .coordinates
-                .iter()
-                .map(|x| x.iter().map(|x| (*x).into()).collect())
+                .into_iter()
+                .map(|x| x.into_iter().map(|x| x.into()).collect())
                 .collect(),
         )
         .unwrap()
@@ -1533,10 +1458,10 @@ impl From<geoengine_datatypes::primitives::MultiPolygon> for MultiPolygon {
         Self {
             polygons: value
                 .polygons()
-                .iter()
+                .into_iter()
                 .map(|x| {
-                    x.iter()
-                        .map(|y| y.iter().map(|y| (*y).into()).collect())
+                    x.into_iter()
+                        .map(|y| y.into_iter().map(|y| (*y).into()).collect())
                         .collect()
                 })
                 .collect(),
