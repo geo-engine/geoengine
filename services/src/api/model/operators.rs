@@ -55,55 +55,6 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
     }
 }
 
-impl ResultDescriptor for RasterResultDescriptor {
-    type DataType = RasterDataType;
-
-    fn data_type(&self) -> Self::DataType {
-        self.data_type
-    }
-
-    fn spatial_reference(&self) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption {
-        self.spatial_reference.into()
-    }
-
-    fn map_data_type<F>(&self, f: F) -> Self
-    where
-        F: Fn(&Self::DataType) -> Self::DataType,
-    {
-        Self {
-            data_type: f(&self.data_type),
-            measurement: self.measurement.clone(),
-            ..*self
-        }
-    }
-
-    fn map_spatial_reference<F>(&self, f: F) -> Self
-    where
-        F: Fn(
-            &geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-        ) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-    {
-        Self {
-            spatial_reference: f(&self.spatial_reference.into()).into(),
-            measurement: self.measurement.clone(),
-            ..*self
-        }
-    }
-
-    fn map_time<F>(&self, f: F) -> Self
-    where
-        F: Fn(
-            &Option<geoengine_datatypes::primitives::TimeInterval>,
-        ) -> Option<geoengine_datatypes::primitives::TimeInterval>,
-    {
-        Self {
-            time: f(&self.time.map(Into::into)).map(Into::into),
-            measurement: self.measurement.clone(),
-            ..*self
-        }
-    }
-}
-
 /// An enum to differentiate between `Operator` variants
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "operator")]
@@ -192,57 +143,6 @@ impl From<VectorResultDescriptor> for geoengine_operators::engine::VectorResultD
     }
 }
 
-impl ResultDescriptor for VectorResultDescriptor {
-    type DataType = VectorDataType;
-
-    fn data_type(&self) -> Self::DataType {
-        self.data_type
-    }
-
-    fn spatial_reference(&self) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption {
-        self.spatial_reference.into()
-    }
-
-    fn map_data_type<F>(&self, f: F) -> Self
-    where
-        F: Fn(&Self::DataType) -> Self::DataType,
-    {
-        Self {
-            data_type: f(&self.data_type),
-            spatial_reference: self.spatial_reference,
-            columns: self.columns.clone(),
-            ..*self
-        }
-    }
-
-    fn map_spatial_reference<F>(&self, f: F) -> Self
-    where
-        F: Fn(
-            &geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-        ) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-    {
-        Self {
-            data_type: self.data_type,
-            spatial_reference: f(&self.spatial_reference.into()).into(),
-            columns: self.columns.clone(),
-            ..*self
-        }
-    }
-
-    fn map_time<F>(&self, f: F) -> Self
-    where
-        F: Fn(
-            &Option<geoengine_datatypes::primitives::TimeInterval>,
-        ) -> Option<geoengine_datatypes::primitives::TimeInterval>,
-    {
-        Self {
-            time: f(&self.time.map(Into::into)).map(Into::into),
-            columns: self.columns.clone(),
-            ..*self
-        }
-    }
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorColumnInfo {
@@ -283,44 +183,6 @@ impl From<geoengine_operators::engine::PlotResultDescriptor> for PlotResultDescr
             spatial_reference: value.spatial_reference.into(),
             time: value.time.map(Into::into),
             bbox: value.bbox.map(Into::into),
-        }
-    }
-}
-
-impl ResultDescriptor for PlotResultDescriptor {
-    type DataType = (); // TODO: maybe distinguish between image, interactive plot, etc.
-
-    fn data_type(&self) -> Self::DataType {}
-
-    fn spatial_reference(&self) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption {
-        self.spatial_reference.into()
-    }
-
-    fn map_data_type<F>(&self, _f: F) -> Self
-    where
-        F: Fn(&Self::DataType) -> Self::DataType,
-    {
-        *self
-    }
-
-    fn map_spatial_reference<F>(&self, _f: F) -> Self
-    where
-        F: Fn(
-            &geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-        ) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-    {
-        *self
-    }
-
-    fn map_time<F>(&self, f: F) -> Self
-    where
-        F: Fn(
-            &Option<geoengine_datatypes::primitives::TimeInterval>,
-        ) -> Option<geoengine_datatypes::primitives::TimeInterval>,
-    {
-        Self {
-            time: f(&self.time.map(Into::into)).map(Into::into),
-            ..*self
         }
     }
 }
