@@ -98,10 +98,10 @@ where
         let time = tile_a.time.intersect(&tile_b.time).unwrap_or_else(|| {
             panic!(
                 "intervals must overlap: ({}/{}) <-> ({}/{})\nThis is a bug and most likely means an operator or adapter has a faulty implementation.",
-                tile_a.time.start().as_rfc3339(),
-                tile_a.time.end().as_rfc3339(),
-                tile_b.time.start().as_rfc3339(),
-                tile_b.time.end().as_rfc3339()
+                tile_a.time.start().as_datetime_string(),
+                tile_a.time.end().as_datetime_string(),
+                tile_b.time.start().as_datetime_string(),
+                tile_b.time.end().as_datetime_string()
             )
         });
         tile_a.time = time;
@@ -195,10 +195,10 @@ where
             time = time.intersect(&tile.time).unwrap_or_else(|| {
                 panic!(
                     "intervals must overlap: ({}/{}) <-> ({}/{})\nThis is a bug and most likely means an operator or adapter has a faulty implementation.",
-                    time.start().as_rfc3339(),
-                    time.end().as_rfc3339(),
-                    tile.time.start().as_rfc3339(),
-                    tile.time.end().as_rfc3339()
+                    time.start().as_datetime_string(),
+                    time.end().as_datetime_string(),
+                    tile.time.start().as_datetime_string(),
+                    tile.time.end().as_datetime_string()
                 )
             });
         }
