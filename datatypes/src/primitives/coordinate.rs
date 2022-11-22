@@ -146,20 +146,20 @@ impl<'c> From<&'c Coordinate2D> for &'c [f64] {
     }
 }
 
-impl From<Coordinate2D> for geo_types::Coord<f64> {
-    fn from(coordinate: Coordinate2D) -> geo_types::Coord<f64> {
+impl From<Coordinate2D> for geo::Coord<f64> {
+    fn from(coordinate: Coordinate2D) -> geo::Coord<f64> {
         Self::from(&coordinate)
     }
 }
 
-impl From<&Coordinate2D> for geo_types::Coord<f64> {
-    fn from(coordinate: &Coordinate2D) -> geo_types::Coord<f64> {
-        geo_types::Coord::from((coordinate.x, coordinate.y))
+impl From<&Coordinate2D> for geo::Coord<f64> {
+    fn from(coordinate: &Coordinate2D) -> geo::Coord<f64> {
+        geo::Coord::from((coordinate.x, coordinate.y))
     }
 }
 
-impl From<geo_types::Coord<f64>> for Coordinate2D {
-    fn from(coordinate: geo_types::Coord<f64>) -> Coordinate2D {
+impl From<geo::Coord<f64>> for Coordinate2D {
+    fn from(coordinate: geo::Coord<f64>) -> Coordinate2D {
         Coordinate2D {
             x: coordinate.x,
             y: coordinate.y,

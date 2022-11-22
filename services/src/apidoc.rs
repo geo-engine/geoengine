@@ -31,8 +31,8 @@ use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, Ge
 use crate::handlers::wms::MapResponse;
 use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListing, LayerListing, Property,
-    ProviderLayerCollectionId, ProviderLayerId,
+    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
+    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::LayerCollectionId;
 use crate::ogc::util::OgcBoundingBox;
@@ -56,6 +56,13 @@ use utoipa::{Modify, OpenApi};
         handlers::layers::layer_handler,
         handlers::layers::list_collection_handler,
         handlers::layers::list_root_collections_handler,
+        handlers::layers::add_layer,
+        handlers::layers::add_collection,
+        handlers::layers::remove_collection,
+        handlers::layers::remove_layer_from_collection,
+        handlers::layers::add_existing_layer_to_collection,
+        handlers::layers::add_existing_collection_to_collection,
+        handlers::layers::remove_collection_from_collection,
         handlers::session::anonymous_handler,
         handlers::session::session_handler,
         handlers::session::session_project_handler,
@@ -149,6 +156,8 @@ use utoipa::{Modify, OpenApi};
             LayerCollectionListing,
             Property,
             CollectionItem,
+            AddLayer,
+            AddLayerCollection,
 
             Breakpoint,
             ColorParam,

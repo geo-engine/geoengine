@@ -168,14 +168,45 @@ impl DateTime {
         chrono_date_time.format(parse_format).to_string()
     }
 
-    pub fn to_rfc3339(self) -> String {
+    /// Format the `DateTime` as a string similar to the RFC 3339 standard.
+    ///
+    /// Note: negative numbers will the padded to 6 digits.
+    pub fn to_datetime_string(self) -> String {
         let chrono_date_time: chrono::DateTime<chrono::FixedOffset> = self.into();
-        chrono_date_time.to_rfc3339()
+
+        if chrono_date_time.year() < 0 {
+            chrono_date_time
+                .format(&format!(
+                    "{year:07}-%m-%dT%H:%M:%S%.f+00:00",
+                    year = chrono_date_time.year()
+                ))
+                .to_string()
+        } else {
+            chrono_date_time
+                .format("%Y-%m-%dT%H:%M:%S%.f+00:00")
+                .to_string()
+        }
     }
 
-    pub fn to_rfc3339_with_millis(self) -> String {
+    /// Format the `DateTime` as a string similar to the RFC 3339 standard.
+    /// Format fractional seconds as milliseconds and use Z for timezone.
+    ///
+    /// Note: negative numbers will the padded to 6 digits.
+    pub fn to_datetime_string_with_millis(self) -> String {
         let chrono_date_time: chrono::DateTime<chrono::FixedOffset> = self.into();
-        chrono_date_time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+
+        if chrono_date_time.year() < 0 {
+            chrono_date_time
+                .format(&format!(
+                    "{year:07}-%m-%dT%H:%M:%S%.3fZ",
+                    year = chrono_date_time.year()
+                ))
+                .to_string()
+        } else {
+            chrono_date_time
+                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                .to_string()
+        }
     }
 
     /// Now in UTC.
@@ -241,12 +272,7 @@ impl FromStr for DateTime {
 
 impl Display for DateTime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.datetime
-                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-        )
+        write!(f, "{}", self.to_datetime_string_with_millis())
     }
 }
 
@@ -667,7 +693,7 @@ mod tests {
         );
         assert_eq!(
             DateTime::new_utc(-2010, 1, 2, 3, 4, 5).to_string(),
-            "-2010-01-02T03:04:05.000Z"
+            "-002010-01-02T03:04:05.000Z"
         );
     }
 
@@ -679,7 +705,7 @@ mod tests {
         );
         assert_eq!(
             DateTime::new_utc(-2010, 1, 2, 3, 4, 5),
-            DateTime::from_str("-2010-01-02T03:04:05.000Z").unwrap()
+            DateTime::from_str("-002010-01-02T03:04:05.000Z").unwrap()
         );
     }
 
@@ -705,10 +731,18 @@ mod tests {
     }
 
     #[test]
-    fn test_as_rfc() {
+    fn test_as_datetime_string() {
         assert_eq!(
-            DateTime::new_utc(2010, 1, 2, 3, 4, 5).to_rfc3339_with_millis(),
+            DateTime::new_utc(2010, 1, 2, 3, 4, 5).to_datetime_string_with_millis(),
             "2010-01-02T03:04:05.000Z"
+        );
+    }
+
+    #[test]
+    fn test_datetime_negative_years() {
+        assert_eq!(
+            DateTime::new_utc(-2010, 1, 2, 3, 4, 5).to_datetime_string(),
+            "-002010-01-02T03:04:05+00:00"
         );
     }
 }
