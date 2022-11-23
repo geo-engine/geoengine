@@ -185,6 +185,13 @@ impl InitializedDensityRasterization {
                     .to_string()
             }
         );
+        ensure!(
+            stddev >= 0.,
+            error::InvalidOperatorSpec {
+                reason: "The standard deviation for density rasterization must be greater than or equal to zero."
+                    .to_string()
+            }
+        );
 
         Ok(InitializedDensityRasterization {
             source,
