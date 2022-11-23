@@ -488,7 +488,7 @@ async fn layer_handler<C: Context>(
 #[utoipa::path(
     tag = "Layers",
     post,
-    path = "/layerDb/collections/{collectionId}/layers",
+    path = "/layerDb/collections/{collection}/layers",
     params(
         ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
     ),
@@ -767,6 +767,20 @@ mod tests {
         let result: IdResponse<LayerId> = test::read_body_json(response).await;
 
         ctx.layer_db_ref().get_layer(&result.id).await.unwrap();
+
+        let collection = ctx
+            .layer_db_ref()
+            .collection(
+                &collection_id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(collection.items.iter().any(|item| match item {
+            CollectionItem::Layer(layer) => layer.id.layer_id == result.id,
+            CollectionItem::Collection(_) => false,
+        }));
     }
 
     #[tokio::test]
