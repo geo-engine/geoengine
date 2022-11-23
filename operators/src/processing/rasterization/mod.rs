@@ -5,6 +5,7 @@ use crate::engine::{
     RasterResultDescriptor, SingleVectorSource, TypedRasterQueryProcessor,
     TypedVectorQueryProcessor,
 };
+use arrow::datatypes::ArrowNativeTypeOp;
 
 use crate::error;
 use crate::processing::rasterization::GridOrDensity::Grid;
@@ -331,6 +332,7 @@ pub struct DensityRasterizationQueryProcessor {
 }
 
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
     type RasterType = f64;
 
@@ -351,10 +353,10 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                 let tile_bounds = tile_info.spatial_partition();
 
                 let vector_query = VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new(
-                        tile_bounds.lower_left() - Coordinate2D::new(self.radius, self.radius),
-                        tile_bounds.upper_right() + Coordinate2D::new(self.radius, self.radius),
-                    )?,
+                    spatial_bounds: extended_bounding_box_from_spatial_partition(
+                        tile_bounds,
+                        self.radius,
+                    ),
                     time_interval: query.time_interval,
                     spatial_resolution: query.spatial_resolution,
                 };
@@ -379,45 +381,49 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                                         .coordinates()
                                         .par_iter()
                                         .filter_map(|&coord| {
-                                            let spatial_partition = SpatialPartition2D::new(
-                                                coord
-                                                    - Coordinate2D::new(self.radius, -self.radius),
-                                                coord
-                                                    + Coordinate2D::new(self.radius, -self.radius),
-                                            )
-                                            .expect("Bounds should be valid since radius was checked to be strictly positive")
-                                            .intersection(&tile_info.spatial_partition());
+                                            let spatial_partition =
+                                                spatial_partition_around_point(coord, self.radius)
+                                                    .intersection(&tile_info.spatial_partition());
 
                                             let grid_bounds = match spatial_partition {
-                                                None => { return None; },
+                                                None => {
+                                                    return None;
+                                                }
                                                 Some(spatial_partition) => tile_geo_transform
                                                     .spatial_to_grid_bounds(&spatial_partition),
                                             };
 
-                                            Some((0..grid_bounds.number_of_elements())
-                                                .into_par_iter()
-                                                .filter_map(move |linear_index| {
-                                                    let grid_idx = grid_bounds
-                                                        .grid_idx_unchecked(linear_index);
-                                                    let pixel_coordinate = tile_geo_transform
-                                                        .grid_idx_to_pixel_center_coordinate_2d(
-                                                            grid_idx,
-                                                        );
-                                                    let distance =
-                                                        coord.euclidean_distance(&pixel_coordinate);
-                                                    if distance <= self.radius {
-                                                        let [y, x] = grid_idx.0;
-                                                        Some((
-                                                            x as usize + y as usize * tile_size_x,
-                                                            gaussian(distance, self.stddev),
-                                                        ))
-                                                    } else {
-                                                        None
-                                                    }
-                                                })
-                                                .collect::<Vec<_>>())
+                                            Some(
+                                                (0..grid_bounds.number_of_elements())
+                                                    .into_par_iter()
+                                                    .filter_map(move |linear_index| {
+                                                        let grid_idx = grid_bounds
+                                                            .grid_idx_unchecked(linear_index);
+                                                        let pixel_coordinate = tile_geo_transform
+                                                            .grid_idx_to_pixel_center_coordinate_2d(
+                                                                grid_idx,
+                                                            );
+                                                        let distance = coord
+                                                            .euclidean_distance(&pixel_coordinate);
+                                                        if distance <= self.radius {
+                                                            let [y, x] = grid_idx.0;
+                                                            Some((
+                                                                x as usize
+                                                                    + y as usize * tile_size_x,
+                                                                gaussian(distance, self.stddev),
+                                                            ))
+                                                        } else {
+                                                            None
+                                                        }
+                                                    })
+                                                    .collect::<Vec<_>>(),
+                                            )
                                         })
-                                        .for_each_with(send, |send, val| send.send(val).expect("Receiver should be allocated for scope duration"));
+                                        .for_each_with(send, |send, val| {
+                                            send.send(val).expect(
+                                                "Receiver should be allocated for scope duration",
+                                            );
+                                        });
                                 });
 
                                 for result in receive.iter() {
@@ -441,7 +447,9 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                     tile_info,
                     GridOrEmpty::Grid(
                         Grid2D::new(tiling_strategy.tile_size_in_pixels, tile_data)
-                            .expect("Data vector length should match the number of pixels in the tile")
+                            .expect(
+                                "Data vector length should match the number of pixels in the tile",
+                            )
                             .into(),
                     ),
                 ))
@@ -449,6 +457,51 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
         Ok(tiles.boxed())
     }
+}
+
+fn spatial_partition_around_point(coordinate: Coordinate2D, extent: f64) -> SpatialPartition2D {
+    SpatialPartition2D::new_unchecked(
+        Coordinate2D::new(
+            coordinate.x.sub_checked(extent).unwrap_or(f64::MIN),
+            coordinate.y.add_checked(extent).unwrap_or(f64::MAX),
+        ),
+        Coordinate2D::new(
+            coordinate.x.add_checked(extent).unwrap_or(f64::MAX),
+            coordinate.y.sub_checked(extent).unwrap_or(f64::MIN),
+        ),
+    )
+}
+
+fn extended_bounding_box_from_spatial_partition(
+    spatial_partition: SpatialPartition2D,
+    extent: f64,
+) -> BoundingBox2D {
+    BoundingBox2D::new_unchecked(
+        Coordinate2D::new(
+            spatial_partition
+                .lower_left()
+                .x
+                .sub_checked(extent)
+                .unwrap_or(f64::MIN),
+            spatial_partition
+                .lower_left()
+                .y
+                .sub_checked(extent)
+                .unwrap_or(f64::MIN),
+        ),
+        Coordinate2D::new(
+            spatial_partition
+                .upper_right()
+                .x
+                .add_checked(extent)
+                .unwrap_or(f64::MAX),
+            spatial_partition
+                .upper_right()
+                .y
+                .add_checked(extent)
+                .unwrap_or(f64::MAX),
+        ),
+    )
 }
 
 fn gaussian(x: f64, stddev: f64) -> f64 {
