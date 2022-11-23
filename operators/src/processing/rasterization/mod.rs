@@ -46,7 +46,9 @@ impl OperatorName for Rasterization {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum GridSizeMode {
+    /// The spatial resolution is interpreted as a fixed size in coordinate units
     Fixed,
+    /// The spatial resolution is interpreted as a multiplier for the query pixel size
     Relative,
 }
 
@@ -54,21 +56,29 @@ pub enum GridSizeMode {
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum GridOrDensity {
+    /// A grid which summarizes points in cells (2D histogram)
     Grid(GridParams),
+    /// A heatmap calculated from a gaussian density function
     Density(DensityParams),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DensityParams {
+    /// Limits the distance (in coordinate units) to which a point is taken
+    /// into account for an output pixel density value
     radius: f64,
+    /// The standard deviation parameter for the gaussian function
     stddev: f64,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GridParams {
+    /// The size of grid cells, interpreted depending on the chosen grid size mode
     spatial_resolution: SpatialResolution,
+    /// The origin coordinate which aligns the grid bounds
     origin_coordinate: Coordinate2D,
+    /// Determines how to interpret the grid resolution
     grid_size_mode: GridSizeMode,
 }
 
@@ -387,6 +397,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
                                             let grid_bounds = match spatial_partition {
                                                 None => {
+                                                    // The intersection with the tile is empty, so nothing needs to be calculated
                                                     return None;
                                                 }
                                                 Some(spatial_partition) => tile_geo_transform
@@ -504,8 +515,11 @@ fn extended_bounding_box_from_spatial_partition(
     )
 }
 
+/// Calculates the gaussian density value for
+/// `x`, the distance from the mean and
+/// `stddev`, the standard deviation
 fn gaussian(x: f64, stddev: f64) -> f64 {
-    (1. / f64::sqrt(2. * f64::PI() * stddev * stddev)) * f64::exp(-(x * x) / (2. * stddev * stddev))
+    (1. / (f64::sqrt(2. * f64::PI()) * stddev)) * f64::exp(-(x * x) / (2. * stddev * stddev))
 }
 
 #[cfg(test)]
