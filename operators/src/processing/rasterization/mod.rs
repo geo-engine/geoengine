@@ -43,14 +43,14 @@ impl OperatorName for Rasterization {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum GridSizeMode {
     Fixed,
     Relative,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum GridOrDensity {
     Grid(GridParams),
