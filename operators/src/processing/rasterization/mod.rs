@@ -233,6 +233,11 @@ pub struct GridRasterizationQueryProcessor {
 impl RasterQueryProcessor for GridRasterizationQueryProcessor {
     type RasterType = f64;
 
+    /// Performs a grid rasterization by first determining the grid resolution to use.
+    /// Then, for each tile, a grid, aligned to the configured origin coordinate, is created.
+    /// All points within the spatial bounds of the grid are queried and counted in the
+    /// grid cells.
+    /// Finally, the grid resolution is upsampled (if necessary) to the tile resolution.
     async fn raster_query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -348,6 +353,12 @@ pub struct DensityRasterizationQueryProcessor {
 impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
     type RasterType = f64;
 
+    /// Performs a gaussian density rasterization.
+    /// For each tile, the spatial bounds are extended by `radius` in x and y direction.
+    /// All points within these extended bounds are then queried. For each point, the distance to
+    /// its surrounding tile pixels (up to `radius` distance) is measured and input into the
+    /// gaussian density function with the configured standard deviation. The density values
+    /// for each pixel are then summed to result in the tile pixel grid.
     async fn raster_query<'a>(
         &'a self,
         query: RasterQueryRectangle,
