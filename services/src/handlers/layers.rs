@@ -779,7 +779,7 @@ mod tests {
 
         assert!(collection.items.iter().any(|item| match item {
             CollectionItem::Layer(layer) => layer.id.layer_id == result.id,
-            _ => false,
+            CollectionItem::Collection(_) => false,
         }));
     }
 
