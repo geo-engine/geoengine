@@ -32,6 +32,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
+use crate::util::spawn_blocking;
 use tracing::span;
 use tracing::Level;
 use typetag::serde;
@@ -306,23 +307,29 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
                     }
                 }
 
-                let mut tile_data = Vec::with_capacity(tile_shape.number_of_elements());
-                for tile_y in 0..tile_shape.axis_size_y() as isize {
-                    for tile_x in 0..tile_shape.axis_size_x() as isize {
-                        let pixel_coordinate = tile_info
-                            .tile_geo_transform()
-                            .grid_idx_to_pixel_center_coordinate_2d([tile_y, tile_x].into());
-                        if query.spatial_bounds.contains_coordinate(&pixel_coordinate) {
-                            let [grid_y, grid_x] = grid_geo_transform
-                                .coordinate_to_grid_idx_2d(pixel_coordinate)
-                                .0;
-                            tile_data
-                                .push(grid_data[grid_x as usize + grid_y as usize * grid_size_x]);
-                        } else {
-                            tile_data.push(0.);
+                let tile_data = spawn_blocking(move || {
+                    let mut tile_data = Vec::with_capacity(tile_shape.number_of_elements());
+                    for tile_y in 0..tile_shape.axis_size_y() as isize {
+                        for tile_x in 0..tile_shape.axis_size_x() as isize {
+                            let pixel_coordinate = tile_info
+                                .tile_geo_transform()
+                                .grid_idx_to_pixel_center_coordinate_2d([tile_y, tile_x].into());
+                            if query.spatial_bounds.contains_coordinate(&pixel_coordinate) {
+                                let [grid_y, grid_x] = grid_geo_transform
+                                    .coordinate_to_grid_idx_2d(pixel_coordinate)
+                                    .0;
+                                tile_data.push(
+                                    grid_data[grid_x as usize + grid_y as usize * grid_size_x],
+                                );
+                            } else {
+                                tile_data.push(0.);
+                            }
                         }
                     }
-                }
+                    tile_data
+                })
+                .await
+                .expect("Should only forward panics from spawned task");
                 let tile_grid = Grid2D::new(tile_shape, tile_data)
                     .expect("Data vector length should match the number of pixels in the tile");
 
@@ -392,65 +399,64 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
                 while let Some(chunk) = chunks.next().await {
                     let chunk = chunk?;
+                    let (send, mut receive) = tokio::sync::mpsc::unbounded_channel();
                     ctx.thread_pool().install(|| {
-                        rayon::scope(|s| {
-                            let (send, receive) = std::sync::mpsc::channel();
+                        let radius = self.radius;
+                        let stddev = self.stddev;
+                        rayon::spawn(move || {
+                            chunk
+                                .coordinates()
+                                .par_iter()
+                                .filter_map(|&coord| {
+                                    let spatial_partition =
+                                        spatial_partition_around_point(coord, radius)
+                                            .intersection(&tile_info.spatial_partition());
 
-                            s.spawn(move |_s1| {
-                                chunk
-                                    .coordinates()
-                                    .par_iter()
-                                    .filter_map(|&coord| {
-                                        let spatial_partition =
-                                            spatial_partition_around_point(coord, self.radius)
-                                                .intersection(&tile_info.spatial_partition());
+                                    let grid_bounds = match spatial_partition {
+                                        None => {
+                                            // The intersection with the tile is empty, so nothing needs to be calculated
+                                            return None;
+                                        }
+                                        Some(spatial_partition) => tile_geo_transform
+                                            .spatial_to_grid_bounds(&spatial_partition),
+                                    };
 
-                                        let grid_bounds = match spatial_partition {
-                                            None => {
-                                                // The intersection with the tile is empty, so nothing needs to be calculated
-                                                return None;
-                                            }
-                                            Some(spatial_partition) => tile_geo_transform
-                                                .spatial_to_grid_bounds(&spatial_partition),
-                                        };
-
-                                        Some(
-                                            (0..grid_bounds.number_of_elements())
-                                                .into_par_iter()
-                                                .filter_map(move |linear_index| {
-                                                    let grid_idx = grid_bounds
-                                                        .grid_idx_unchecked(linear_index);
-                                                    let pixel_coordinate = tile_geo_transform
-                                                        .grid_idx_to_pixel_center_coordinate_2d(
-                                                            grid_idx,
-                                                        );
-                                                    let distance =
-                                                        coord.euclidean_distance(&pixel_coordinate);
-                                                    if distance <= self.radius {
-                                                        let [y, x] = grid_idx.0;
-                                                        Some((
-                                                            x as usize + y as usize * tile_size_x,
-                                                            gaussian(distance, self.stddev),
-                                                        ))
-                                                    } else {
-                                                        None
-                                                    }
-                                                })
-                                                .collect::<Vec<_>>(),
-                                        )
-                                    })
-                                    .for_each_with(send, |send, val| {
-                                        debug_assert!(send.send(val).is_ok());
-                                    });
-                            });
-
-                            for result in receive.iter() {
-                                for (index, value) in result {
-                                    tile_data[index] += value;
-                                }
-                            }
+                                    Some(
+                                        (0..grid_bounds.number_of_elements())
+                                            .into_par_iter()
+                                            .filter_map(move |linear_index| {
+                                                let grid_idx =
+                                                    grid_bounds.grid_idx_unchecked(linear_index);
+                                                let pixel_coordinate = tile_geo_transform
+                                                    .grid_idx_to_pixel_center_coordinate_2d(
+                                                        grid_idx,
+                                                    );
+                                                let distance =
+                                                    coord.euclidean_distance(&pixel_coordinate);
+                                                if distance <= radius {
+                                                    let [y, x] = grid_idx.0;
+                                                    Some((
+                                                        x as usize + y as usize * tile_size_x,
+                                                        gaussian(distance, stddev),
+                                                    ))
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .collect::<Vec<_>>(),
+                                    )
+                                })
+                                .for_each_with(send, |send, val| {
+                                    debug_assert!(send.send(val).is_ok());
+                                });
                         });
                     });
+
+                    while let Some(result) = receive.recv().await {
+                        for (index, value) in result {
+                            tile_data[index] += value;
+                        }
+                    }
                 }
 
                 Ok(RasterTile2D::new_with_tile_info(
