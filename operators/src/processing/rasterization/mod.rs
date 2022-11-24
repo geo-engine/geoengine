@@ -440,9 +440,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                                         )
                                     })
                                     .for_each_with(send, |send, val| {
-                                        send.send(val).expect(
-                                            "Receiver should be allocated for scope duration",
-                                        );
+                                        debug_assert!(send.send(val).is_ok());
                                     });
                             });
 
