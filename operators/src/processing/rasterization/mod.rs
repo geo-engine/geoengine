@@ -234,6 +234,8 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
     type RasterType = f64;
 
     /// Performs a grid rasterization by first determining the grid resolution to use.
+    /// The grid resolution is limited to the query resolution, because a finer granularity
+    /// would not be visible in the resulting raster.
     /// Then, for each tile, a grid, aligned to the configured origin coordinate, is created.
     /// All points within the spatial bounds of the grid are queried and counted in the
     /// grid cells.
