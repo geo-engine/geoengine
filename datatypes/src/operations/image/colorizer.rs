@@ -3,42 +3,131 @@ use crate::operations::image::RgbaTransmutable;
 use crate::raster::Pixel;
 use crate::util::Result;
 use ordered_float::{FloatIsNan, NotNan};
-use serde::{Deserialize, Serialize};
+use serde::de::{MapAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fmt::Formatter;
 use std::str::FromStr;
 
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Colorizer {
     #[serde(rename_all = "camelCase")]
     LinearGradient {
         breakpoints: Breakpoints,
         no_data_color: RgbaColor,
-        default_color: RgbaColor, // TODO: deprecated, this will be removed. Please use over/under values.
-        over_color: Option<RgbaColor>,
-        under_color: Option<RgbaColor>,
+        over_color: RgbaColor,
+        under_color: RgbaColor,
     },
     #[serde(rename_all = "camelCase")]
     LogarithmicGradient {
         breakpoints: Breakpoints,
         no_data_color: RgbaColor,
-        default_color: RgbaColor, // TODO: deprecated, this will be removed. Please use over/under values.
-        over_color: Option<RgbaColor>,
-        under_color: Option<RgbaColor>,
+        over_color: RgbaColor,
+        under_color: RgbaColor,
     },
     #[serde(rename_all = "camelCase")]
     Palette {
         colors: Palette,
         no_data_color: RgbaColor,
-        default_color: RgbaColor, // TODO: deprecated, this will be removed. Please use over/under values.
-        over_color: Option<RgbaColor>,
-        under_color: Option<RgbaColor>,
+        over_color: RgbaColor,
+        under_color: RgbaColor,
     },
     Rgba,
+}
+
+// custom deserializer to make sure backwards compatibility with defaultColor option is working
+struct ColorizerVisitor;
+impl<'de> Deserialize<'de> for Colorizer {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_map(ColorizerVisitor)
+    }
+}
+
+impl<'de> Visitor<'de> for ColorizerVisitor {
+    type Value = Colorizer;
+
+    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        write!(formatter, "expected a colorizer gradient struct.")
+    }
+
+    fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+    where
+        M: MapAccess<'de>,
+    {
+        // define all possible fields, that could be encountered while deserializing
+        let mut breakpoints: Option<Breakpoints> = None;
+        let mut colors: Option<Palette> = None;
+        let mut no_data_color: Option<RgbaColor> = None;
+        let mut over_color: Option<RgbaColor> = None;
+        let mut under_color: Option<RgbaColor> = None;
+        let mut colorizer_type: Option<&str> = None;
+
+        // iterate over all the keys, serde is visiting
+        while let Some(json_key) = map.next_key::<&str>()? {
+            // match the key and set the respective value
+            match json_key {
+                "type" => colorizer_type = map.next_value()?,
+                "breakpoints" => breakpoints = map.next_value()?,
+                "colors" => colors = map.next_value()?,
+                "noDataColor" => no_data_color = map.next_value()?,
+                "overColor" => over_color = map.next_value()?,
+                "underColor" => under_color = map.next_value()?,
+                "defaultColor" => {
+                    // broadcast the legacy value to both new values
+                    let default_color: Option<RgbaColor> = map.next_value()?;
+                    over_color = default_color;
+                    under_color = default_color;
+                }
+                // TODO: should this throw an error? What if the json contains a redundant field,
+                // but is otherwise ok?
+                _ => (),
+            };
+        }
+
+        match colorizer_type {
+            Some("linearGradient") => Ok(Colorizer::LinearGradient {
+                breakpoints: breakpoints
+                    .ok_or_else(|| serde::de::Error::custom("Missing breakpoints field"))?,
+                no_data_color: no_data_color
+                    .ok_or_else(|| serde::de::Error::custom("Missing noDataColor field"))?,
+                over_color: over_color
+                    .ok_or_else(|| serde::de::Error::custom("Missing overColor field"))?,
+                under_color: under_color
+                    .ok_or_else(|| serde::de::Error::custom("Missing underColor field"))?,
+            }),
+            Some("logarithmicGradient") => Ok(Colorizer::LogarithmicGradient {
+                breakpoints: breakpoints
+                    .ok_or_else(|| serde::de::Error::custom("Missing breakpoints field"))?,
+                no_data_color: no_data_color
+                    .ok_or_else(|| serde::de::Error::custom("Missing noDataColor field"))?,
+                over_color: over_color
+                    .ok_or_else(|| serde::de::Error::custom("Missing overColor field"))?,
+                under_color: under_color
+                    .ok_or_else(|| serde::de::Error::custom("Missing underColor field"))?,
+            }),
+            Some("palette") => Ok(Colorizer::Palette {
+                colors: colors.ok_or_else(|| serde::de::Error::custom("Missing colors field"))?,
+                no_data_color: no_data_color
+                    .ok_or_else(|| serde::de::Error::custom("Missing noDataColor field"))?,
+                over_color: over_color
+                    .ok_or_else(|| serde::de::Error::custom("Missing overColor field"))?,
+                under_color: under_color
+                    .ok_or_else(|| serde::de::Error::custom("Missing underColor field"))?,
+            }),
+            //TODO: what about the `Rgba` variant?
+            _ => Err(serde::de::Error::custom(
+                "Encountered an unknown colorizer type.",
+            )),
+        }
+    }
 }
 
 impl Colorizer {
@@ -46,9 +135,8 @@ impl Colorizer {
     pub fn linear_gradient(
         breakpoints: Breakpoints,
         no_data_color: RgbaColor,
-        default_color: RgbaColor,
-        over_color: Option<RgbaColor>,
-        under_color: Option<RgbaColor>,
+        over_color: RgbaColor,
+        under_color: RgbaColor,
     ) -> Result<Self> {
         ensure!(
             breakpoints.len() >= 2,
@@ -60,7 +148,6 @@ impl Colorizer {
         let colorizer = Self::LinearGradient {
             breakpoints,
             no_data_color,
-            default_color,
             over_color,
             under_color,
         };
@@ -80,9 +167,8 @@ impl Colorizer {
     pub fn logarithmic_gradient(
         breakpoints: Breakpoints,
         no_data_color: RgbaColor,
-        default_color: RgbaColor,
-        over_color: Option<RgbaColor>,
-        under_color: Option<RgbaColor>,
+        over_color: RgbaColor,
+        under_color: RgbaColor,
     ) -> Result<Self> {
         ensure!(
             breakpoints.len() >= 2,
@@ -94,7 +180,6 @@ impl Colorizer {
         let colorizer = Self::LogarithmicGradient {
             breakpoints,
             no_data_color,
-            default_color,
             over_color,
             under_color,
         };
@@ -120,9 +205,8 @@ impl Colorizer {
     pub fn palette(
         colors: HashMap<NotNan<f64>, RgbaColor>,
         no_data_color: RgbaColor,
-        default_color: RgbaColor,
-        over_color: Option<RgbaColor>,
-        under_color: Option<RgbaColor>,
+        over_color: RgbaColor,
+        under_color: RgbaColor,
     ) -> Result<Self> {
         ensure!(
             !colors.is_empty() && colors.len() <= 256,
@@ -134,7 +218,6 @@ impl Colorizer {
         Ok(Self::Palette {
             colors: Palette(colors),
             no_data_color,
-            default_color,
             over_color,
             under_color,
         })
@@ -229,7 +312,7 @@ impl Colorizer {
         }
     }
 
-    pub fn over_color(&self) -> Option<RgbaColor> {
+    pub fn over_color(&self) -> RgbaColor {
         match self {
             Colorizer::LinearGradient { over_color, .. }
             | Colorizer::LogarithmicGradient { over_color, .. }
@@ -238,7 +321,7 @@ impl Colorizer {
         }
     }
 
-    pub fn under_color(&self) -> Option<RgbaColor> {
+    pub fn under_color(&self) -> RgbaColor {
         match self {
             Colorizer::LinearGradient { under_color, .. }
             | Colorizer::LogarithmicGradient { under_color, .. }
@@ -288,14 +371,12 @@ impl Colorizer {
             Self::LinearGradient {
                 breakpoints: _,
                 no_data_color,
-                default_color,
                 over_color,
                 under_color,
             }
             | Self::LogarithmicGradient {
                 breakpoints: _,
                 no_data_color,
-                default_color,
                 over_color,
                 under_color,
             } => {
@@ -306,7 +387,6 @@ impl Colorizer {
                     min_value,
                     max_value,
                     no_data_color: *no_data_color,
-                    default_color: *default_color,
                     over_color: *over_color,
                     under_color: *under_color,
                 }
@@ -314,13 +394,11 @@ impl Colorizer {
             Self::Palette {
                 colors,
                 no_data_color,
-                default_color,
                 over_color,
                 under_color,
             } => ColorMapper::ColorMap {
                 color_map: colors,
                 no_data_color: *no_data_color,
-                default_color: *default_color,
                 over_color: *over_color,
                 under_color: *under_color,
             },
@@ -345,9 +423,6 @@ impl Colorizer {
         let smallest_breakpoint_value = *breakpoints[0].value;
         let largest_breakpoint_value = *breakpoints[breakpoints.len() - 1].value;
 
-        let first_color = breakpoints[0].color;
-        let last_color = breakpoints[breakpoints.len() - 1].color;
-
         let step = (max - min) / ((number_of_colors - 1) as f64);
 
         let mut breakpoint_iter = breakpoints.iter();
@@ -358,15 +433,9 @@ impl Colorizer {
             .take(number_of_colors)
             .map(|value| {
                 if value < smallest_breakpoint_value {
-                    match self.under_color() {
-                        Some(under) => under,
-                        None => first_color,
-                    }
+                    self.under_color()
                 } else if value > largest_breakpoint_value {
-                    match self.over_color() {
-                        Some(over) => over,
-                        None => last_color,
-                    }
+                    self.over_color()
                 } else {
                     while value > *breakpoint_next.value {
                         breakpoint_prev = breakpoint_next;
@@ -414,7 +483,6 @@ impl Colorizer {
             Self::LinearGradient {
                 breakpoints,
                 no_data_color,
-                default_color,
                 over_color,
                 under_color,
             } => {
@@ -435,7 +503,6 @@ impl Colorizer {
                         })
                         .collect(),
                     *no_data_color,
-                    *default_color,
                     *over_color,
                     *under_color,
                 )
@@ -443,7 +510,6 @@ impl Colorizer {
             Self::LogarithmicGradient {
                 breakpoints,
                 no_data_color,
-                default_color,
                 over_color,
                 under_color,
             } => {
@@ -464,7 +530,6 @@ impl Colorizer {
                         })
                         .collect(),
                     *no_data_color,
-                    *default_color,
                     *over_color,
                     *under_color,
                 )
@@ -472,7 +537,6 @@ impl Colorizer {
             Self::Palette {
                 colors: _,
                 no_data_color: _,
-                default_color: _,
                 ..
             } => Err(Error::ColorizerRescaleNotSupported {
                 colorizer: "palette".to_string(),
@@ -491,16 +555,14 @@ pub enum ColorMapper<'c> {
         min_value: f64,
         max_value: f64,
         no_data_color: RgbaColor,
-        default_color: RgbaColor,
-        over_color: Option<RgbaColor>,
-        under_color: Option<RgbaColor>,
+        over_color: RgbaColor,
+        under_color: RgbaColor,
     },
     ColorMap {
         color_map: &'c Palette,
         no_data_color: RgbaColor,
-        default_color: RgbaColor,
-        over_color: Option<RgbaColor>,
-        under_color: Option<RgbaColor>,
+        over_color: RgbaColor,
+        under_color: RgbaColor,
     },
     Rgba,
 }
@@ -518,7 +580,6 @@ impl<'c> ColorMapper<'c> {
                 min_value,
                 max_value,
                 no_data_color,
-                default_color,
                 over_color,
                 under_color,
             } => {
@@ -526,25 +587,26 @@ impl<'c> ColorMapper<'c> {
                 if f64::is_nan(value) {
                     *no_data_color
                 } else if value < *min_value {
-                    under_color.unwrap_or(*default_color)
+                    *under_color
                 } else if value > *max_value {
-                    over_color.unwrap_or(*default_color)
+                    *over_color
                 } else {
                     let color_table_factor = (color_table.len() - 1) as f64;
                     let table_entry = f64::round(
                         color_table_factor * ((value - *min_value) / (*max_value - *min_value)),
                     ) as usize;
-                    *color_table.get(table_entry).unwrap_or(default_color)
+                    // TODO:                                    vvv ----this was default color, what should it be now?
+                    *color_table.get(table_entry).unwrap_or(no_data_color)
                 }
             }
             ColorMapper::ColorMap {
                 color_map,
                 no_data_color,
-                default_color,
                 ..
             } => {
                 if let Ok(value) = NotNan::<f64>::new(value.as_()) {
-                    *color_map.0.get(&value).unwrap_or(default_color)
+                    // TODO:                               vvv -----this was default color, what should it be now?
+                    *color_map.0.get(&value).unwrap_or(no_data_color)
                 } else {
                     *no_data_color
                 }
@@ -721,9 +783,8 @@ mod tests {
                 (10.0, RgbaColor::white()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::transparent(),
-            None,
-            None,
+            RgbaColor::pink(),
+            RgbaColor::pink(),
         )
         .unwrap();
 
@@ -744,9 +805,8 @@ mod tests {
                 (15.0, RgbaColor::white()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::transparent(),
-            Some(RgbaColor::pink()),
-            Some(RgbaColor::pink()),
+            RgbaColor::pink(),
+            RgbaColor::pink(),
         )
         .unwrap();
 
@@ -776,9 +836,8 @@ mod tests {
                 (101.0, RgbaColor::white()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::transparent(),
-            None,
-            None,
+            RgbaColor::pink(),
+            RgbaColor::pink(),
         )
         .unwrap();
 
@@ -802,6 +861,7 @@ mod tests {
 
     #[test]
     fn serialized_palette() {
+        // check for over/under values
         let colorizer = Colorizer::palette(
             [
                 (1.0.try_into().unwrap(), RgbaColor::white()),
@@ -811,9 +871,8 @@ mod tests {
             .copied()
             .collect(),
             RgbaColor::transparent(),
-            RgbaColor::transparent(),
-            None,
-            None,
+            RgbaColor::pink(),
+            RgbaColor::pink(),
         )
         .unwrap();
 
@@ -828,47 +887,6 @@ mod tests {
                     "2": [0, 0, 0, 255]
                 },
                 "noDataColor": [0, 0, 0, 0],
-                "defaultColor": [0, 0, 0, 0],
-                "overColor": null,
-                "underColor": null
-            })
-        );
-
-        assert_eq!(
-            serde_json::from_str::<Colorizer>(&serialized_colorizer.to_string()).unwrap(),
-            colorizer
-        );
-    }
-
-    #[test]
-    fn serialized_palette_with_extrema() {
-        let colorizer = Colorizer::palette(
-            [
-                (1.0.try_into().unwrap(), RgbaColor::white()),
-                (2.0.try_into().unwrap(), RgbaColor::black()),
-            ]
-            .iter()
-            .copied()
-            .collect(),
-            RgbaColor::transparent(),
-            RgbaColor::transparent(),
-            Some(RgbaColor::pink()),
-            Some(RgbaColor::pink()),
-        )
-        .unwrap();
-
-        let serialized_colorizer = serde_json::to_value(&colorizer).unwrap();
-
-        assert_eq!(
-            serialized_colorizer,
-            serde_json::json!({
-                "type": "palette",
-                "colors": {
-                    "1": [255, 255, 255, 255],
-                    "2": [0, 0, 0, 255]
-                },
-                "noDataColor": [0, 0, 0, 0],
-                "defaultColor": [0, 0, 0, 0],
                 "overColor": [255, 0, 255, 255],
                 "underColor": [255, 0, 255, 255]
             })
@@ -876,6 +894,21 @@ mod tests {
 
         assert_eq!(
             serde_json::from_str::<Colorizer>(&serialized_colorizer.to_string()).unwrap(),
+            colorizer
+        );
+
+        let serialized_colorizer_default = serde_json::json!({
+            "type": "palette",
+            "colors": {
+                "1": [255, 255, 255, 255],
+                "2": [0, 0, 0, 255]
+            },
+            "noDataColor": [0, 0, 0, 0],
+            "defaultColor": [255, 0, 255, 255],
+        });
+
+        assert_eq!(
+            serde_json::from_str::<Colorizer>(&serialized_colorizer_default.to_string()).unwrap(),
             colorizer
         );
     }
@@ -888,9 +921,8 @@ mod tests {
                 (2.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::transparent(),
-            None,
-            None,
+            RgbaColor::pink(),
+            RgbaColor::pink(),
         )
         .unwrap();
 
@@ -907,46 +939,6 @@ mod tests {
                     "color": [0, 0, 0, 255]
                 }],
                 "noDataColor": [0, 0, 0, 0],
-                "defaultColor": [0, 0, 0, 0],
-                "overColor": null,
-                "underColor": null
-            })
-        );
-
-        assert_eq!(
-            serde_json::from_str::<Colorizer>(&serialized_colorizer.to_string()).unwrap(),
-            colorizer
-        );
-    }
-
-    #[test]
-    fn serialized_linear_gradient_with_extrema() {
-        let colorizer = Colorizer::linear_gradient(
-            vec![
-                (1.0, RgbaColor::white()).try_into().unwrap(),
-                (2.0, RgbaColor::black()).try_into().unwrap(),
-            ],
-            RgbaColor::transparent(),
-            RgbaColor::transparent(),
-            Some(RgbaColor::pink()),
-            Some(RgbaColor::pink()),
-        )
-        .unwrap();
-
-        let serialized_colorizer = serde_json::to_value(&colorizer).unwrap();
-        assert_eq!(
-            serialized_colorizer,
-            serde_json::json!({
-                "type": "linearGradient",
-                "breakpoints": [{
-                    "value": 1.0,
-                    "color": [255, 255, 255, 255]
-                }, {
-                    "value": 2.0,
-                    "color": [0, 0, 0, 255]
-                }],
-                "noDataColor": [0, 0, 0, 0],
-                "defaultColor": [0, 0, 0, 0],
                 "overColor": [255, 0, 255, 255],
                 "underColor": [255, 0, 255, 255]
             })
@@ -959,6 +951,39 @@ mod tests {
     }
 
     #[test]
+    fn deserialize_legacy_gradient() {
+        let expected = Colorizer::linear_gradient(
+            vec![
+                (1.0, RgbaColor::white()).try_into().unwrap(),
+                (2.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            // this field should be generated from the given legacy default color value
+            RgbaColor::pink(),
+            RgbaColor::pink(),
+        )
+        .unwrap();
+
+        let json = serde_json::json!({
+            "type": "linearGradient",
+            "breakpoints": [{
+                "value": 1.0,
+                "color": [255, 255, 255, 255]
+            }, {
+                "value": 2.0,
+                "color": [0, 0, 0, 255]
+            }],
+            "noDataColor": [0, 0, 0, 0],
+            "defaultColor": [255, 0, 255, 255],
+        })
+        .to_string();
+
+        let actual = serde_json::from_str::<Colorizer>(json.as_str()).unwrap();
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
     fn it_rescales() {
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -967,9 +992,8 @@ mod tests {
                 (3.0, RgbaColor::white()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::transparent(),
-            None,
-            None,
+            RgbaColor::pink(),
+            RgbaColor::pink(),
         )
         .unwrap();
 
@@ -979,42 +1003,6 @@ mod tests {
             Colorizer::LinearGradient {
                 breakpoints,
                 no_data_color: _,
-                default_color: _,
-                ..
-            } => assert_eq!(
-                breakpoints,
-                vec![
-                    (0.0.try_into().unwrap(), RgbaColor::white()).into(),
-                    (3.0.try_into().unwrap(), RgbaColor::black()).into(),
-                    (6.0.try_into().unwrap(), RgbaColor::white()).into(),
-                ]
-            ),
-            _ => unreachable!(),
-        }
-    }
-
-    #[test]
-    fn it_rescales_with_extrema() {
-        let colorizer = Colorizer::linear_gradient(
-            vec![
-                (1.0, RgbaColor::white()).try_into().unwrap(),
-                (2.0, RgbaColor::black()).try_into().unwrap(),
-                (3.0, RgbaColor::white()).try_into().unwrap(),
-            ],
-            RgbaColor::transparent(),
-            RgbaColor::transparent(),
-            Some(RgbaColor::pink()),
-            Some(RgbaColor::pink()),
-        )
-        .unwrap();
-
-        let rescaled = colorizer.rescale(0.0, 6.0).unwrap();
-
-        match rescaled {
-            Colorizer::LinearGradient {
-                breakpoints,
-                no_data_color: _,
-                default_color: _,
                 over_color: _,
                 under_color: _,
             } => assert_eq!(

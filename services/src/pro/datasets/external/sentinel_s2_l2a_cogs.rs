@@ -213,9 +213,8 @@ impl SentinelS2L2aCogsDataProvider {
                                             .expect("valid breakpoint"),
                                     ],
                                     RgbaColor::transparent(),
-                                    RgbaColor::transparent(),
-                                    None,
-                                    None,
+                                    RgbaColor::white(),
+                                    RgbaColor::black(),
                                 )
                                 .expect("valid colorizer")
                                 .into(),

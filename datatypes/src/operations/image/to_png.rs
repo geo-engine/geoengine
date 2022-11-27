@@ -200,9 +200,8 @@ mod tests {
                     .unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
-            None,
-            None,
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
@@ -231,9 +230,8 @@ mod tests {
                     .unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
-            None,
-            None,
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
@@ -264,9 +262,8 @@ mod tests {
             .copied()
             .collect(),
             RgbaColor::transparent(),
-            RgbaColor::transparent(),
-            None,
-            None,
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
@@ -315,9 +312,8 @@ mod tests {
                     .unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
-            None,
-            None,
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
@@ -343,9 +339,8 @@ mod tests {
                     .unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
-            None,
-            None,
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 

@@ -729,9 +729,8 @@ mod tests {
                 (1.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
-            None,
-            None,
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
@@ -786,9 +785,8 @@ mod tests {
                 (255.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
-            None,
-            None,
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
