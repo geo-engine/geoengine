@@ -1407,14 +1407,14 @@ pub struct MultiPoint {
 impl From<geoengine_datatypes::primitives::MultiPoint> for MultiPoint {
     fn from(value: geoengine_datatypes::primitives::MultiPoint) -> Self {
         Self {
-            coordinates: value.points().into_iter().map(|x| (*x).into()).collect(),
+            coordinates: value.points().iter().map(|x| (*x).into()).collect(),
         }
     }
 }
 
 impl From<MultiPoint> for geoengine_datatypes::primitives::MultiPoint {
     fn from(value: MultiPoint) -> Self {
-        Self::new(value.coordinates.into_iter().map(|x| x.into()).collect()).unwrap()
+        Self::new(value.coordinates.into_iter().map(Into::into).collect()).unwrap()
     }
 }
 
@@ -1428,8 +1428,8 @@ impl From<geoengine_datatypes::primitives::MultiLineString> for MultiLineString 
         Self {
             coordinates: value
                 .lines()
-                .into_iter()
-                .map(|x| x.into_iter().map(|x| (*x).into()).collect())
+                .iter()
+                .map(|x| x.iter().map(|x| (*x).into()).collect())
                 .collect(),
         }
     }
@@ -1441,7 +1441,7 @@ impl From<MultiLineString> for geoengine_datatypes::primitives::MultiLineString 
             value
                 .coordinates
                 .into_iter()
-                .map(|x| x.into_iter().map(|x| x.into()).collect())
+                .map(|x| x.into_iter().map(Into::into).collect())
                 .collect(),
         )
         .unwrap()
@@ -1458,10 +1458,10 @@ impl From<geoengine_datatypes::primitives::MultiPolygon> for MultiPolygon {
         Self {
             polygons: value
                 .polygons()
-                .into_iter()
+                .iter()
                 .map(|x| {
-                    x.into_iter()
-                        .map(|y| y.into_iter().map(|y| (*y).into()).collect())
+                    x.iter()
+                        .map(|y| y.iter().map(|y| (*y).into()).collect())
                         .collect()
                 })
                 .collect(),

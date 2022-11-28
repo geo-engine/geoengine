@@ -56,7 +56,7 @@ impl Dataset {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AddDataset {
     pub id: Option<DatasetId>,
@@ -79,49 +79,6 @@ impl UserInput for AddDataset {
 pub struct DatasetDefinition {
     pub properties: AddDataset,
     pub meta_data: MetaDataDefinition,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
-#[schema(example = json!({
-  "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
-  "definition": {
-    "properties": {
-      "name": "Germany Border",
-      "description": "The Outline of Germany",
-      "sourceOperator": "OgrSource"
-    },
-    "metaData": {
-      "type": "OgrMetaData",
-      "loadingInfo": {
-        "fileName": "germany_polygon.gpkg",
-        "layerName": "test_germany",
-        "dataType": "MultiPolygon",
-        "time": {
-          "type": "none"
-        },
-        "columns": {
-          "x": "",
-          "y": null,
-          "text": [],
-          "float": [],
-          "int": [],
-          "bool": [],
-          "datetime": [],
-        },
-        "forceOgrTimeFilter": false,
-        "onError": "ignore"
-      },
-      "resultDescriptor": {
-        "dataType": "MultiPolygon",
-        "spatialReference": "EPSG:4326",
-        "columns": {}
-      }
-    }
-  }
-}))]
-pub struct CreateDataset {
-    pub upload: UploadId,
-    pub definition: crate::api::model::services::DatasetDefinition,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]

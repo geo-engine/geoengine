@@ -55,55 +55,6 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
     }
 }
 
-impl ResultDescriptor for RasterResultDescriptor {
-    type DataType = RasterDataType;
-
-    fn data_type(&self) -> Self::DataType {
-        self.data_type
-    }
-
-    fn spatial_reference(&self) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption {
-        self.spatial_reference.into()
-    }
-
-    fn map_data_type<F>(&self, f: F) -> Self
-    where
-        F: Fn(&Self::DataType) -> Self::DataType,
-    {
-        Self {
-            data_type: f(&self.data_type),
-            measurement: self.measurement.clone(),
-            ..*self
-        }
-    }
-
-    fn map_spatial_reference<F>(&self, f: F) -> Self
-    where
-        F: Fn(
-            &geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-        ) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-    {
-        Self {
-            spatial_reference: f(&self.spatial_reference.into()).into(),
-            measurement: self.measurement.clone(),
-            ..*self
-        }
-    }
-
-    fn map_time<F>(&self, f: F) -> Self
-    where
-        F: Fn(
-            &Option<geoengine_datatypes::primitives::TimeInterval>,
-        ) -> Option<geoengine_datatypes::primitives::TimeInterval>,
-    {
-        Self {
-            time: f(&self.time.map(Into::into)).map(Into::into),
-            measurement: self.measurement.clone(),
-            ..*self
-        }
-    }
-}
-
 /// An enum to differentiate between `Operator` variants
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "operator")]
@@ -192,57 +143,6 @@ impl From<VectorResultDescriptor> for geoengine_operators::engine::VectorResultD
     }
 }
 
-impl ResultDescriptor for VectorResultDescriptor {
-    type DataType = VectorDataType;
-
-    fn data_type(&self) -> Self::DataType {
-        self.data_type
-    }
-
-    fn spatial_reference(&self) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption {
-        self.spatial_reference.into()
-    }
-
-    fn map_data_type<F>(&self, f: F) -> Self
-    where
-        F: Fn(&Self::DataType) -> Self::DataType,
-    {
-        Self {
-            data_type: f(&self.data_type),
-            spatial_reference: self.spatial_reference,
-            columns: self.columns.clone(),
-            ..*self
-        }
-    }
-
-    fn map_spatial_reference<F>(&self, f: F) -> Self
-    where
-        F: Fn(
-            &geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-        ) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-    {
-        Self {
-            data_type: self.data_type,
-            spatial_reference: f(&self.spatial_reference.into()).into(),
-            columns: self.columns.clone(),
-            ..*self
-        }
-    }
-
-    fn map_time<F>(&self, f: F) -> Self
-    where
-        F: Fn(
-            &Option<geoengine_datatypes::primitives::TimeInterval>,
-        ) -> Option<geoengine_datatypes::primitives::TimeInterval>,
-    {
-        Self {
-            time: f(&self.time.map(Into::into)).map(Into::into),
-            columns: self.columns.clone(),
-            ..*self
-        }
-    }
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorColumnInfo {
@@ -283,44 +183,6 @@ impl From<geoengine_operators::engine::PlotResultDescriptor> for PlotResultDescr
             spatial_reference: value.spatial_reference.into(),
             time: value.time.map(Into::into),
             bbox: value.bbox.map(Into::into),
-        }
-    }
-}
-
-impl ResultDescriptor for PlotResultDescriptor {
-    type DataType = (); // TODO: maybe distinguish between image, interactive plot, etc.
-
-    fn data_type(&self) -> Self::DataType {}
-
-    fn spatial_reference(&self) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption {
-        self.spatial_reference.into()
-    }
-
-    fn map_data_type<F>(&self, _f: F) -> Self
-    where
-        F: Fn(&Self::DataType) -> Self::DataType,
-    {
-        *self
-    }
-
-    fn map_spatial_reference<F>(&self, _f: F) -> Self
-    where
-        F: Fn(
-            &geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-        ) -> geoengine_datatypes::spatial_reference::SpatialReferenceOption,
-    {
-        *self
-    }
-
-    fn map_time<F>(&self, f: F) -> Self
-    where
-        F: Fn(
-            &Option<geoengine_datatypes::primitives::TimeInterval>,
-        ) -> Option<geoengine_datatypes::primitives::TimeInterval>,
-    {
-        Self {
-            time: f(&self.time.map(Into::into)).map(Into::into),
-            ..*self
         }
     }
 }
@@ -599,6 +461,7 @@ impl From<GdalMetaDataStatic> for geoengine_operators::source::GdalMetaDataStati
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceDataset {
+    #[schema(value_type = String)]
     pub file_name: PathBuf,
     pub layer_name: String,
     pub data_type: Option<VectorDataType>,
@@ -1024,10 +887,25 @@ impl From<GdalMetaDataRegular> for geoengine_operators::source::GdalMetaDataRegu
     }
 }
 
+#[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
+pub struct GdalConfigOption((String, String));
+
+impl ToSchema for GdalConfigOption {
+    fn schema() -> utoipa::openapi::Schema {
+        use utoipa::openapi::*;
+        ArrayBuilder::new()
+            .items(Object::with_type(SchemaType::String))
+            .min_items(Some(2))
+            .max_items(Some(2))
+            .into()
+    }
+}
+
 /// Parameters for loading data using Gdal
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetParameters {
+    #[schema(value_type = String)]
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
     pub geo_transform: GdalDatasetGeoTransform, // TODO: discuss if we need this at all
@@ -1043,7 +921,7 @@ pub struct GdalDatasetParameters {
     // Configs as key, value pairs that will be set as thread local config options, e.g.
     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
     // TODO: validate the config options: only allow specific keys and specific values
-    pub gdal_config_options: Option<Vec<(String, String)>>, // TODO: does not compile https://github.com/juhaku/utoipa/issues/330
+    pub gdal_config_options: Option<Vec<GdalConfigOption>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
 }
@@ -1062,7 +940,9 @@ impl From<geoengine_operators::source::GdalDatasetParameters> for GdalDatasetPar
                 .properties_mapping
                 .map(|x| x.into_iter().map(Into::into).collect()),
             gdal_open_options: value.gdal_open_options,
-            gdal_config_options: value.gdal_config_options,
+            gdal_config_options: value
+                .gdal_config_options
+                .map(|x| x.into_iter().map(GdalConfigOption).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
         }
     }
@@ -1082,64 +962,11 @@ impl From<GdalDatasetParameters> for geoengine_operators::source::GdalDatasetPar
                 .properties_mapping
                 .map(|x| x.into_iter().map(Into::into).collect()),
             gdal_open_options: value.gdal_open_options,
-            gdal_config_options: value.gdal_config_options,
+            gdal_config_options: value
+                .gdal_config_options
+                .map(|x| x.into_iter().map(|y| y.0).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
         }
-    }
-}
-
-// Utoipa does not support tuple types
-impl ToSchema for GdalDatasetParameters {
-    fn schema() -> utoipa::openapi::Schema {
-        use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property("filePath", Object::with_type(SchemaType::String))
-            .required("filePath")
-            .property("rasterbandChannel", Object::with_type(SchemaType::Boolean))
-            .required("rasterbandChannel")
-            .property(
-                "geoTransform",
-                Ref::from_schema_name("GdalDatasetGeoTransform"),
-            )
-            .required("geoTransform")
-            .property("width", Object::with_type(SchemaType::Integer))
-            .required("width")
-            .property("height", Object::with_type(SchemaType::Integer))
-            .required("height")
-            .property(
-                "fileNotFoundHandling",
-                Ref::from_schema_name("FileNotFoundHandling"),
-            )
-            .required("fileNotFoundHandling")
-            .property(
-                "noDataValue",
-                ObjectBuilder::new()
-                    .schema_type(SchemaType::Number)
-                    .format(Some(SchemaFormat::KnownFormat(KnownFormat::Double))),
-            )
-            .property(
-                "propertiesMapping",
-                ArrayBuilder::new().items(Ref::from_schema_name("GdalMetadataMapping")),
-            )
-            .required("propertiesMapping")
-            .property(
-                "gdalOpenOptions",
-                ArrayBuilder::new().items(Object::with_type(SchemaType::String)),
-            )
-            .property(
-                "gdalConfigOptions",
-                ArrayBuilder::new().items(
-                    ArrayBuilder::new()
-                        .items(Object::with_type(SchemaType::String))
-                        .min_items(Some(2))
-                        .max_items(Some(2)),
-                ),
-            )
-            .property(
-                "allowAlphabandAsMask",
-                Object::with_type(SchemaType::Boolean),
-            )
-            .into()
     }
 }
 

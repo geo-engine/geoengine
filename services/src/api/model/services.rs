@@ -1,7 +1,11 @@
+use crate::api::model::datatypes::DatasetId;
 use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, MockMetaData,
     OgrMetaData,
 };
+use crate::datasets::listing::Provenance;
+use crate::datasets::upload::UploadId;
+use crate::projects::Symbology;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -62,9 +66,76 @@ pub struct MetaDataSuggestion {
     pub meta_data: MetaDataDefinition,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AddDataset {
+    pub id: Option<DatasetId>,
+    pub name: String,
+    pub description: String,
+    pub source_operator: String,
+    pub symbology: Option<Symbology>,
+    pub provenance: Option<Provenance>,
+}
+
+impl From<AddDataset> for crate::datasets::storage::AddDataset {
+    fn from(value: AddDataset) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            description: value.description,
+            source_operator: value.source_operator,
+            symbology: value.symbology,
+            provenance: value.provenance,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetDefinition {
-    pub properties: crate::datasets::storage::AddDataset,
+    pub properties: AddDataset,
     pub meta_data: MetaDataDefinition,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[schema(example = json!({
+    "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+    "definition": {
+        "properties": {
+            "name": "Germany Border",
+            "description": "The Outline of Germany",
+            "sourceOperator": "OgrSource"
+        },
+        "metaData": {
+            "type": "OgrMetaData",
+            "loadingInfo": {
+                "fileName": "germany_polygon.gpkg",
+                "layerName": "test_germany",
+                "dataType": "MultiPolygon",
+                "time": {
+                    "type": "none"
+                },
+                "columns": {
+                    "x": "",
+                    "y": null,
+                    "text": [],
+                    "float": [],
+                    "int": [],
+                    "bool": [],
+                    "datetime": [],
+                },
+                "forceOgrTimeFilter": false,
+                "onError": "ignore"
+            },
+            "resultDescriptor": {
+                "dataType": "MultiPolygon",
+                "spatialReference": "EPSG:4326",
+                "columns": {}
+            }
+        }
+    }
+}))]
+pub struct CreateDataset {
+    pub upload: UploadId,
+    pub definition: DatasetDefinition,
 }
