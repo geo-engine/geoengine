@@ -5,13 +5,12 @@ use std::{
 };
 
 use crate::api::model::datatypes::DatasetId;
-use crate::api::model::services::{MetaDataDefinition, MetaDataSuggestion};
-use crate::datasets::upload::UploadRootPath;
+use crate::api::model::services::{CreateDataset, MetaDataDefinition, MetaDataSuggestion};
+use crate::datasets::upload::{Upload, UploadRootPath};
 use crate::datasets::{
     listing::DatasetProvider,
-    storage::{AddDataset, DatasetStore, SuggestMetaData},
+    storage::{DatasetStore, SuggestMetaData},
 };
-use crate::datasets::{storage::CreateDataset, upload::Upload};
 use crate::error;
 use crate::error::Result;
 use crate::util::user_input::UserInput;
@@ -179,8 +178,9 @@ async fn create_dataset_handler<C: Context>(
 
     let db = ctx.dataset_db_ref();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
+    let properties: crate::datasets::storage::AddDataset = definition.properties.into();
     let id = db
-        .add_dataset(&session, definition.properties.validated()?, meta_data)
+        .add_dataset(&session, properties.validated()?, meta_data)
         .await?;
 
     Ok(web::Json(IdResponse::from(id)))
@@ -247,7 +247,7 @@ async fn auto_create_dataset_handler<C: Context>(
     let main_file_path = upload.id.root_path()?.join(&create.main_file);
     let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
 
-    let properties = AddDataset {
+    let properties = crate::datasets::storage::AddDataset {
         id: None,
         name: create.dataset_name,
         description: create.dataset_description,
