@@ -298,13 +298,19 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
 
                 let mut grid_data = vec![0.; grid_size_x * grid_size_y];
                 while let Some(chunk) = chunks.next().await {
-                    for &coord in chunk?.coordinates() {
-                        if !grid_spatial_bounds.contains_coordinate(&coord) {
-                            continue;
+                    let chunk = chunk?;
+                    grid_data = spawn_blocking(move || {
+                        for &coord in chunk.coordinates() {
+                            if !grid_spatial_bounds.contains_coordinate(&coord) {
+                                continue;
+                            }
+                            let [y, x] = grid_geo_transform.coordinate_to_grid_idx_2d(coord).0;
+                            grid_data[x as usize + y as usize * grid_size_x] += 1.;
                         }
-                        let [y, x] = grid_geo_transform.coordinate_to_grid_idx_2d(coord).0;
-                        grid_data[x as usize + y as usize * grid_size_x] += 1.;
-                    }
+                        grid_data
+                    })
+                    .await
+                    .expect("Should only forward panics from spawned task");
                 }
 
                 let tile_data = spawn_blocking(move || {
