@@ -6,6 +6,7 @@ use crate::engine::{
     TypedVectorQueryProcessor,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
+use std::sync::{Arc, Mutex};
 
 use crate::error;
 use crate::processing::rasterization::GridOrDensity::Grid;
@@ -32,7 +33,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-use crate::util::spawn_blocking;
+use crate::util::{spawn_blocking, spawn_blocking_with_thread_pool};
 use tracing::span;
 use tracing::Level;
 use typetag::serde;
@@ -405,11 +406,12 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
                 while let Some(chunk) = chunks.next().await {
                     let chunk = chunk?;
-                    let (send, mut receive) = tokio::sync::mpsc::unbounded_channel();
-                    ctx.thread_pool().install(|| {
-                        let radius = self.radius;
-                        let stddev = self.stddev;
-                        rayon::spawn(move || {
+                    let radius = self.radius;
+                    let stddev = self.stddev;
+                    tile_data =
+                        spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
+                            let shared_tile_data = Arc::new(Mutex::new(&mut tile_data));
+
                             chunk
                                 .coordinates()
                                 .par_iter()
@@ -452,17 +454,16 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                                             .collect::<Vec<_>>(),
                                     )
                                 })
-                                .for_each_with(send, |send, val| {
-                                    debug_assert!(send.send(val).is_ok());
+                                .for_each(|res| {
+                                    let mut tile_data = shared_tile_data.lock().unwrap();
+                                    for (index, value) in res {
+                                        tile_data[index] += value;
+                                    }
                                 });
-                        });
-                    });
-
-                    while let Some(result) = receive.recv().await {
-                        for (index, value) in result {
-                            tile_data[index] += value;
-                        }
-                    }
+                            tile_data
+                        })
+                        .await
+                        .expect("Should only forward panics from spawned task");
                 }
 
                 Ok(RasterTile2D::new_with_tile_info(
