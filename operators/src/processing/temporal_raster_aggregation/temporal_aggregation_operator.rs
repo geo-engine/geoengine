@@ -22,7 +22,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInstance};
-use geoengine_datatypes::raster::{Pixel, RasterTile2D};
+use geoengine_datatypes::raster::{Pixel, RasterDataType, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -39,6 +39,9 @@ pub struct TemporalRasterAggregationParameters {
     /// Define an anchor point for `window`
     /// If `None`, the anchor point is `1970-01-01T00:00:00Z` by default
     window_reference: Option<TimeInstance>,
+    /// If specified, this will be the output type.
+    /// If not, the output type will be the same as the input type.
+    output_type: Option<RasterDataType>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -94,6 +97,7 @@ impl RasterOperator for TemporalRasterAggregation {
             result_descriptor: source.result_descriptor().clone(),
             source,
             tiling_specification: context.tiling_specification(),
+            output_type: self.params.output_type,
         };
 
         Ok(initialized_operator.boxed())
@@ -109,6 +113,7 @@ pub struct InitializedTemporalRasterAggregation {
     source: Box<dyn InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
+    output_type: Option<RasterDataType>,
 }
 
 impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
@@ -119,9 +124,24 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let source_processor = self.source.query_processor()?;
 
+        let source_processor: TypedRasterQueryProcessor = match self.output_type {
+            Some(RasterDataType::U8) => source_processor.into_u8().into(),
+            Some(RasterDataType::U16) => source_processor.into_u16().into(),
+            Some(RasterDataType::U32) => source_processor.into_u32().into(),
+            Some(RasterDataType::U64) => source_processor.into_u64().into(),
+            Some(RasterDataType::I8) => source_processor.into_i8().into(),
+            Some(RasterDataType::I16) => source_processor.into_i16().into(),
+            Some(RasterDataType::I32) => source_processor.into_i32().into(),
+            Some(RasterDataType::I64) => source_processor.into_i64().into(),
+            Some(RasterDataType::F32) => source_processor.into_f32().into(),
+            Some(RasterDataType::F64) => source_processor.into_f64().into(),
+            // use the same output type as the input type
+            None => source_processor,
+        };
+
         let res = call_on_generic_raster_processor!(
             source_processor, p =>
-           TemporalRasterAggregationProcessor::new(
+            TemporalRasterAggregationProcessor::new(
                 self.aggregation_type,
                 self.window,
                 self.window_reference,
@@ -378,6 +398,7 @@ mod tests {
     use crate::{
         engine::{MockExecutionContext, MockQueryContext},
         mock::{MockRasterSource, MockRasterSourceParams},
+        processing::{Expression, ExpressionParams, ExpressionSources},
     };
 
     use super::*;
@@ -412,6 +433,7 @@ mod tests {
                     step: 20,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -529,6 +551,7 @@ mod tests {
                     step: 20,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -646,6 +669,7 @@ mod tests {
                     step: 20,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -763,6 +787,7 @@ mod tests {
                     step: 20,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -886,6 +911,7 @@ mod tests {
                     step: 20,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -963,6 +989,7 @@ mod tests {
                     step: 30,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1060,6 +1087,7 @@ mod tests {
                     step: 30,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1157,6 +1185,7 @@ mod tests {
                     step: 30,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1254,6 +1283,7 @@ mod tests {
                     step: 30,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1351,6 +1381,7 @@ mod tests {
                     step: 30,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1448,6 +1479,7 @@ mod tests {
                     step: 30,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1529,6 +1561,7 @@ mod tests {
                     step: 20,
                 },
                 window_reference: Some(TimeInstance::from_millis(0).unwrap()),
+                output_type: None,
             },
             sources: SingleRasterSource {
                 raster: MockRasterSource {
@@ -1657,6 +1690,7 @@ mod tests {
                     step: 30,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1754,6 +1788,7 @@ mod tests {
                     step: 30,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1824,6 +1859,142 @@ mod tests {
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
+    async fn test_sum_with_larger_data_type() {
+        let operator = TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: Aggregation::Sum {
+                    ignore_no_data: false,
+                },
+                window: TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
+                    step: 20,
+                },
+                window_reference: Some(TimeInstance::from_millis(0).unwrap()),
+                output_type: Some(RasterDataType::U16),
+            },
+            sources: SingleRasterSource {
+                raster: Expression {
+                    params: ExpressionParams {
+                        expression: "20 * A".to_string(),
+                        output_type: RasterDataType::U8,
+                        output_measurement: Some(Measurement::Unitless),
+                        map_no_data: true,
+                    },
+                    sources: ExpressionSources::new_a(
+                        MockRasterSource {
+                            params: MockRasterSourceParams {
+                                data: make_raster(),
+                                result_descriptor: RasterResultDescriptor {
+                                    data_type: RasterDataType::U8,
+                                    spatial_reference: SpatialReference::epsg_4326().into(),
+                                    measurement: Measurement::Unitless,
+                                    time: None,
+                                    bbox: None,
+                                    resolution: None,
+                                },
+                            },
+                        }
+                        .boxed(),
+                    ),
+                }
+                .boxed(),
+            },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 30),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let query_processor = operator
+            .initialize(&exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u16()
+            .unwrap();
+
+        let result = query_processor
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(
+            result,
+            [
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into(),
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into(),
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into(),
+                )
+            ]
+        );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_count_without_nodata() {
         let operator = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -1835,6 +2006,7 @@ mod tests {
                     step: 20,
                 },
                 window_reference: Some(TimeInstance::from_millis(0).unwrap()),
+                output_type: None,
             },
             sources: SingleRasterSource {
                 raster: MockRasterSource {
@@ -1963,6 +2135,7 @@ mod tests {
                     step: 30,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -2060,6 +2233,7 @@ mod tests {
                     step: 30,
                 },
                 window_reference: None,
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -2157,6 +2331,7 @@ mod tests {
                     step: 30,
                 },
                 window_reference: Some(TimeInstance::EPOCH_START),
+                output_type: None,
             },
             sources: SingleRasterSource { raster: mrs },
         }
