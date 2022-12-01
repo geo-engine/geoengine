@@ -44,10 +44,12 @@ geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
 geojson = {version = "0.24", features = ["geo-types"]}
 image = "0.24"
+keycloak = "20.0"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
 oauth2 = "4.2.3"
+openid = {version = "0.11", features = ["uma2"]}
 openidconnect = "2.3.2"
 opentelemetry = { version = "0.18", default-features = false, features = ["trace"] }
 opentelemetry-jaeger = "0.17"

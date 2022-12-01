@@ -60,6 +60,19 @@ pub enum Error {
     Trace {
         source: opentelemetry::trace::TraceError,
     },
+    #[snafu(context(false))]
+    OpenId {
+        source: openid::error::Error,
+    },
+    #[snafu(context(false))]
+    OpenIdClientError {
+        source: openid::error::ClientError,
+    },
+
+    #[snafu(context(false))]
+    Keycloak {
+        source: keycloak::KeycloakError,
+    },
 
     TokioChannelSend,
 
@@ -398,6 +411,8 @@ pub enum Error {
     OidcError {
         source: crate::pro::users::OidcError,
     },
+    OidcMissingClientSecret,
+    Uma2MissingResourceId,
 
     #[snafu(display(
         "Could not resolve a Proj string for this SpatialReference: {}",

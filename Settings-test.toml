@@ -23,8 +23,8 @@ admin_session_token = "70c3f586-f01b-49cf-9b41-473531b0fb00"
 
 [oidc]
 enabled = true
-issuer = ""
-client_id = ""
-client_secret = ""
+issuer = "http://localhost:8080/realms/TestRealm"
+client_id = "test-client"
+client_secret = "ZXlV2S6aZcfDfe1ILa4dRuk4KlI8k7qg"
 redirect_uri = ""
 scopes = [ ]
