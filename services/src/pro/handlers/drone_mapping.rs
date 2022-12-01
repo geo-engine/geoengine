@@ -387,12 +387,14 @@ mod tests {
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_operators::engine::{MetaData, MetaDataProvider, RasterOperator};
+    use serial_test::serial;
     use std::io::Write;
     use std::io::{Cursor, Read};
     use std::path::PathBuf;
 
     #[allow(clippy::too_many_lines)]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[tokio::test]
+    #[serial]
     async fn it_works() -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 

@@ -5,8 +5,9 @@ use crate::{
     spatial_reference::SpatialReference,
 };
 use snafu::{prelude::*, AsErrorSource, ErrorCompat, IntoError};
-use std::{any::Any, convert::Infallible, sync::Arc};
+use std::{any::Any, convert::Infallible, path::PathBuf, sync::Arc};
 
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub trait ErrorSource: std::error::Error + Send + Sync + Any + 'static + AsErrorSource {
     fn boxed(self) -> Box<dyn ErrorSource>
     where
@@ -313,6 +314,15 @@ pub enum Error {
         a: SpatialReference,
         b: SpatialReference,
     },
+
+    Io {
+        source: std::io::Error,
+    },
+
+    SubPathMustNotEscapeBasePath {
+        base: PathBuf,
+        sub_path: PathBuf,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {
@@ -336,5 +346,11 @@ impl From<Infallible> for Error {
 impl From<gdal::errors::GdalError> for Error {
     fn from(gdal_error: gdal::errors::GdalError) -> Self {
         Self::Gdal { source: gdal_error }
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io { source: e }
     }
 }
