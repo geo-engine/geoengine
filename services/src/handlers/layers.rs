@@ -1,15 +1,18 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
-use actix_web::{web, FromRequest, Responder};
-
+use crate::contexts::AdminSession;
 use crate::error::Result;
-
 use crate::layers::layer::{
-    CollectionItem, LayerCollection, LayerCollectionListing, ProviderLayerCollectionId,
+    AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
+    ProviderLayerCollectionId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
-use crate::layers::storage::{LayerProviderDb, LayerProviderListingOptions};
+use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::user_input::UserInput;
+use crate::util::IdResponse;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
+use actix_web::{web, Either, FromRequest, HttpResponse, Responder};
+use serde::{Deserialize, Serialize};
+use utoipa::IntoParams;
 
 pub const ROOT_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x1c3b_8042_300b_485c_95b5_0147_d9dc_068d);
@@ -23,15 +26,40 @@ where
     C::Session: FromRequest,
 {
     cfg.service(
-        web::resource("/layers/collections")
-            .route(web::get().to(list_root_collections_handler::<C>)),
+        web::scope("/layers")
+            .service(
+                web::scope("/collections")
+                    .route("", web::get().to(list_root_collections_handler::<C>))
+                    .route(
+                        r#"/{provider}/{collection:.+}"#,
+                        web::get().to(list_collection_handler::<C>),
+                    ),
+            )
+            .route("/{provider}/{layer:.+}", web::get().to(layer_handler::<C>)),
     )
     .service(
-        web::resource(r#"/layers/collections/{provider}/{collection:.+}"#)
-            .route(web::get().to(list_collection_handler::<C>)),
-    )
-    .service(
-        web::resource("/layers/{provider}/{layer:.+}").route(web::get().to(layer_handler::<C>)),
+        web::scope("/layerDb").service(
+            web::scope("/collections/{collection}")
+                .service(
+                    web::scope("/layers")
+                        .route("", web::post().to(add_layer::<C>))
+                        .service(
+                            web::resource("/{layer}")
+                                .route(web::post().to(add_existing_layer_to_collection::<C>))
+                                .route(web::delete().to(remove_layer_from_collection::<C>)),
+                        ),
+                )
+                .service(
+                    web::scope("/collections")
+                        .route("", web::post().to(add_collection::<C>))
+                        .service(
+                            web::resource("/{sub_collection}")
+                                .route(web::post().to(add_existing_collection_to_collection::<C>))
+                                .route(web::delete().to(remove_collection_from_collection::<C>)),
+                        ),
+                )
+                .route("", web::delete().to(remove_collection::<C>)),
+        ),
     );
 }
 
@@ -82,7 +110,7 @@ where
     )
 )]
 async fn list_root_collections_handler<C: Context>(
-    _session: C::Session,
+    _session: Either<AdminSession, C::Session>,
     ctx: web::Data<C>,
     options: web::Query<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
@@ -454,4 +482,639 @@ async fn layer_handler<C: Context>(
         .await?;
 
     Ok(web::Json(collection))
+}
+
+/// Add a new layer to a collection
+#[utoipa::path(
+    tag = "Layers",
+    post,
+    path = "/layerDb/collections/{collection}/layers",
+    params(
+        ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
+    ),
+    request_body = AddLayer,
+    responses(
+        (status = 200, description = "OK", body = IdResponse<LayerId>,
+            example = json!({
+                "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn add_layer<C: Context>(
+    _session: AdminSession, // TODO: allow normal users to add layers to their stuff
+    ctx: web::Data<C>,
+    collection: web::Path<LayerCollectionId>,
+    request: web::Json<AddLayer>,
+) -> Result<web::Json<IdResponse<LayerId>>> {
+    let request = request.into_inner();
+
+    let add_layer = request.validated()?;
+
+    let id = ctx.layer_db_ref().add_layer(add_layer, &collection).await?;
+
+    Ok(web::Json(IdResponse { id }))
+}
+
+/// Add a new collection to an existing collection
+#[utoipa::path(
+    tag = "Layers",
+    post,
+    path = "/layerDb/collections/{collection}/collections",
+    params(
+        ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
+    ),
+    request_body = AddLayerCollection,
+    responses(
+        (status = 200, description = "OK", body = IdResponse<LayerCollectionId>,
+            example = json!({
+                "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn add_collection<C: Context>(
+    _session: AdminSession, // TODO: allow normal users to add collections to their stuff
+    ctx: web::Data<C>,
+    collection: web::Path<LayerCollectionId>,
+    request: web::Json<AddLayerCollection>,
+) -> Result<web::Json<IdResponse<LayerCollectionId>>> {
+    let add_collection = request.into_inner().validated()?;
+
+    let id = ctx
+        .layer_db_ref()
+        .add_collection(add_collection, &collection)
+        .await?;
+
+    Ok(web::Json(IdResponse { id }))
+}
+
+/// Remove a collection
+#[utoipa::path(
+    tag = "Layers",
+    delete,
+    path = "/layerDb/collections/{collection}",
+    params(
+        ("collection" = LayerCollectionId, description = "Layer collection id"),
+    ),
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn remove_collection<C: Context>(
+    _session: AdminSession, // TODO: allow normal users to remove their collections
+    ctx: web::Data<C>,
+    collection: web::Path<LayerCollectionId>,
+) -> Result<HttpResponse> {
+    ctx.layer_db_ref().remove_collection(&collection).await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+// TODO: reflect in the API docs that these ids are usually UUIDs in the layer db
+#[derive(Debug, Serialize, Deserialize, IntoParams)]
+struct RemoveLayerFromCollectionParams {
+    collection: LayerCollectionId,
+    layer: LayerId,
+}
+
+/// Remove a layer from a collection
+#[utoipa::path(
+    tag = "Layers",
+    delete,
+    path = "/layerDb/collections/{collection}/layers/{layer}",
+    params(
+        ("collection" = LayerCollectionId, description = "Layer collection id"),
+        ("layer" = LayerId, description = "Layer id"),
+    ),
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn remove_layer_from_collection<C: Context>(
+    _session: AdminSession, // TODO: allow normal users to remove their collections
+    ctx: web::Data<C>,
+    path: web::Path<RemoveLayerFromCollectionParams>,
+) -> Result<HttpResponse> {
+    ctx.layer_db_ref()
+        .remove_layer_from_collection(&path.layer, &path.collection)
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[derive(Debug, Serialize, Deserialize, IntoParams)]
+struct AddExistingLayerToCollectionParams {
+    collection: LayerCollectionId,
+    layer: LayerId,
+}
+
+/// Add an existing layer to a collection
+#[utoipa::path(
+    tag = "Layers",
+    post,
+    path = "/layerDb/collections/{collection}/layers/{layer}",
+    params(
+        ("collection" = LayerCollectionId, description = "Layer collection id"),
+        ("layer" = LayerId, description = "Layer id"),
+    ),
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn add_existing_layer_to_collection<C: Context>(
+    _session: AdminSession, // TODO: allow normal users to remove their collections
+    ctx: web::Data<C>,
+    path: web::Path<AddExistingLayerToCollectionParams>,
+) -> Result<HttpResponse> {
+    ctx.layer_db_ref()
+        .add_layer_to_collection(&path.layer, &path.collection)
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[derive(Debug, Serialize, Deserialize, IntoParams)]
+struct CollectionAndSubCollectionParams {
+    collection: LayerCollectionId,
+    sub_collection: LayerCollectionId,
+}
+
+/// Add an existing collection to a collection
+#[utoipa::path(
+    tag = "Layers",
+    post,
+    path = "/layerDb/collections/{parent}/collections/{collection}",
+    params(
+        ("parent" = LayerCollectionId, description = "Parent layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
+        ("collection" = LayerId, description = "Layer collection id"),
+    ),
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn add_existing_collection_to_collection<C: Context>(
+    _session: AdminSession, // TODO: allow normal users to remove their collections
+    ctx: web::Data<C>,
+    path: web::Path<CollectionAndSubCollectionParams>,
+) -> Result<HttpResponse> {
+    ctx.layer_db_ref()
+        .add_collection_to_parent(&path.sub_collection, &path.collection)
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+/// Delete a collection from a collection
+#[utoipa::path(
+    tag = "Layers",
+    delete,
+    path = "/layerDb/collections/{parent}/collections/{collection}",
+    params(
+        ("parent" = LayerCollectionId, description = "Parent layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
+        ("collection" = LayerId, description = "Layer collection id"),
+    ),
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn remove_collection_from_collection<C: Context>(
+    _session: AdminSession, // TODO: allow normal users to remove their collections
+    ctx: web::Data<C>,
+    path: web::Path<CollectionAndSubCollectionParams>,
+) -> Result<HttpResponse> {
+    ctx.layer_db_ref()
+        .remove_collection_from_parent(&path.sub_collection, &path.collection)
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{
+        contexts::{InMemoryContext, Session},
+        util::tests::send_test_request,
+        workflows::workflow::Workflow,
+    };
+    use actix_web::{http::header, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::{
+        engine::VectorOperator,
+        mock::{MockPointSource, MockPointSourceParams},
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_add_layer_to_collection() {
+        let ctx = InMemoryContext::test_default();
+
+        let admin_session_id = AdminSession::default().id();
+
+        let collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+        let req = test::TestRequest::post()
+            .uri(&format!("/layerDb/collections/{collection_id}/layers"))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ))
+            .set_json(serde_json::json!({
+                "name": "Foo",
+                "description": "Bar",
+                "workflow": {
+                  "type": "Vector",
+                  "operator": {
+                    "type": "MockPointSource",
+                    "params": {
+                      "points": [
+                        { "x": 0.0, "y": 0.1 },
+                        { "x": 1.0, "y": 1.1 }
+                      ]
+                    }
+                  }
+                },
+                "symbology": null,
+            }));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{:?}", response);
+
+        let result: IdResponse<LayerId> = test::read_body_json(response).await;
+
+        ctx.layer_db_ref().get_layer(&result.id).await.unwrap();
+
+        let collection = ctx
+            .layer_db_ref()
+            .collection(
+                &collection_id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(collection.items.iter().any(|item| match item {
+            CollectionItem::Layer(layer) => layer.id.layer_id == result.id,
+            CollectionItem::Collection(_) => false,
+        }));
+    }
+
+    #[tokio::test]
+    async fn test_add_existing_layer_to_collection() {
+        let ctx = InMemoryContext::test_default();
+
+        let admin_session_id = AdminSession::default().id();
+
+        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+        let layer_id = ctx
+            .layer_db_ref()
+            .add_layer(
+                AddLayer {
+                    name: "Layer Name".to_string(),
+                    description: "Layer Description".to_string(),
+                    workflow: Workflow {
+                        operator: MockPointSource {
+                            params: MockPointSourceParams {
+                                points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                            },
+                        }
+                        .boxed()
+                        .into(),
+                    },
+                    symbology: None,
+                }
+                .validated()
+                .unwrap(),
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let collection_id = ctx
+            .layer_db_ref()
+            .add_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let req = test::TestRequest::post()
+            .uri(&format!(
+                "/layerDb/collections/{collection_id}/layers/{layer_id}"
+            ))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{:?}", response);
+
+        let collection = ctx
+            .layer_db_ref()
+            .collection(
+                &collection_id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(collection.items.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_add_collection() {
+        let ctx = InMemoryContext::test_default();
+
+        let admin_session_id = AdminSession::default().id();
+
+        let collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+        let req = test::TestRequest::post()
+            .uri(&format!("/layerDb/collections/{collection_id}/collections"))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ))
+            .set_json(serde_json::json!({
+                "name": "Foo",
+                "description": "Bar",
+            }));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{:?}", response);
+
+        let result: IdResponse<LayerCollectionId> = test::read_body_json(response).await;
+
+        ctx.layer_db_ref()
+            .collection(
+                &result.id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_add_existing_collection_to_collection() {
+        let ctx = InMemoryContext::test_default();
+
+        let admin_session_id = AdminSession::default().id();
+
+        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+        let collection_a_id = ctx
+            .layer_db_ref()
+            .add_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Foo".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let collection_b_id = ctx
+            .layer_db_ref()
+            .add_collection(
+                AddLayerCollection {
+                    name: "Bar".to_string(),
+                    description: "Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let req = test::TestRequest::post()
+            .uri(&format!(
+                "/layerDb/collections/{collection_a_id}/collections/{collection_b_id}"
+            ))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{:?}", response);
+
+        let collection_a = ctx
+            .layer_db_ref()
+            .collection(
+                &collection_a_id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection_a.items.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_remove_layer_from_collection() {
+        let ctx = InMemoryContext::test_default();
+
+        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+        let collection_id = ctx
+            .layer_db_ref()
+            .add_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let layer_id = ctx
+            .layer_db_ref()
+            .add_layer(
+                AddLayer {
+                    name: "Layer Name".to_string(),
+                    description: "Layer Description".to_string(),
+                    workflow: Workflow {
+                        operator: MockPointSource {
+                            params: MockPointSourceParams {
+                                points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                            },
+                        }
+                        .boxed()
+                        .into(),
+                    },
+                    symbology: None,
+                }
+                .validated()
+                .unwrap(),
+                &collection_id,
+            )
+            .await
+            .unwrap();
+
+        let admin_session_id = AdminSession::default().id();
+
+        let req = test::TestRequest::delete()
+            .uri(&format!(
+                "/layerDb/collections/{collection_id}/layers/{layer_id}"
+            ))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(
+            response.status().is_success(),
+            "{:?}: {:?}",
+            response.response().head(),
+            response.response().body()
+        );
+
+        // layer should be gone
+        ctx.layer_db_ref().get_layer(&layer_id).await.unwrap_err();
+    }
+
+    #[tokio::test]
+    async fn test_remove_collection() {
+        let ctx = InMemoryContext::test_default();
+
+        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+        let collection_id = ctx
+            .layer_db_ref()
+            .add_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let admin_session_id = AdminSession::default().id();
+
+        let req = test::TestRequest::delete()
+            .uri(&format!("/layerDb/collections/{collection_id}"))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{:?}", response);
+
+        ctx.layer_db_ref()
+            .collection(
+                &collection_id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+        // try removing root collection id --> should fail
+
+        let req = test::TestRequest::delete()
+            .uri(&format!("/layers/collections/{root_collection_id}"))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_client_error(), "{:?}", response);
+    }
+
+    #[tokio::test]
+    async fn test_remove_collection_from_collection() {
+        let ctx = InMemoryContext::test_default();
+
+        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+        let collection_id = ctx
+            .layer_db_ref()
+            .add_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let admin_session_id = AdminSession::default().id();
+
+        let req = test::TestRequest::delete()
+            .uri(&format!(
+                "/layerDb/collections/{root_collection_id}/collections/{collection_id}"
+            ))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
+        let response = send_test_request(req, ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{:?}", response);
+
+        let root_collection = ctx
+            .layer_db_ref()
+            .collection(
+                &root_collection_id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            !root_collection
+                .items
+                .iter()
+                .any(|item| item.name() == "Foo"),
+            "{:#?}",
+            root_collection
+        );
+    }
 }
