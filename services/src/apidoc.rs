@@ -42,6 +42,7 @@ use utoipa::{Modify, OpenApi};
         crate::util::server::available_handler,
         crate::util::server::server_info_handler,
         handlers::layers::layer_handler,
+        handlers::layers::layer_to_workflow_id_handler,
         handlers::layers::list_collection_handler,
         handlers::layers::list_root_collections_handler,
         handlers::layers::add_layer,
