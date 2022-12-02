@@ -19,7 +19,7 @@ pub use result::Result;
 ///
 /// This only works if the `Path` you are referring to actually exists.
 ///
-pub fn canonicalize_subpath(base: &Path, sub_path: &Path) -> crate::error::Result<PathBuf> {
+pub fn canonicalize_subpath(base: &Path, sub_path: &Path) -> Result<PathBuf> {
     let base = base.canonicalize()?;
     let path = base.join(sub_path).canonicalize()?;
 

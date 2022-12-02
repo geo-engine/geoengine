@@ -785,7 +785,7 @@ mod tests {
         let bst = booster_vec.pop().unwrap();
 
         // test tile looks like this:
-        //          GREEN           ||           BLUE             ||        TEMP
+        //         GREEN            ||           BLUE             ||        TEMP
         //   0,   0,   0,   0,   0  ||   100, 100, 100, 100, 100  ||  0,  0,  0,  0,  0
         //   0,   0, 255,   0,   0  ||   100,   0,   0, 255, 100  ||  0, 60, 15,  5,  0
         //   0, 255,   0, 255,   0  ||   100,   0,   0,   0, 100  ||  0, 15, 60, 15,  0

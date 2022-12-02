@@ -7,7 +7,8 @@ use crate::{
 use snafu::{prelude::*, AsErrorSource, ErrorCompat, IntoError};
 use std::{any::Any, convert::Infallible, path::PathBuf, sync::Arc};
 
-pub type Result<T, E = Error> = std::result::Result<T, E>;
+use crate::util::Result;
+
 pub trait ErrorSource: std::error::Error + Send + Sync + Any + 'static + AsErrorSource {
     fn boxed(self) -> Box<dyn ErrorSource>
     where
