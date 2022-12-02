@@ -2,7 +2,8 @@ use std::convert::TryInto;
 use std::path::Path;
 
 use crate::api::model::datatypes::DatasetId;
-use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
+use crate::api::model::services::AddDataset;
+use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;

@@ -660,11 +660,12 @@ mod tests {
 
     use super::*;
     use crate::api::model::datatypes::{DataProviderId, DatasetId};
+    use crate::api::model::services::AddDataset;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
-    use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataDefinition};
+    use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::layers::layer::{
