@@ -13,6 +13,7 @@ pub use histogram::{Histogram, HistogramBuilder};
 pub use histogram2d::{Histogram2D, HistogramDimension};
 pub use multi_line_plot::{DataPoint, MultiLineChart};
 pub use scatter_plot::ScatterPlot;
+use serde_json::Value;
 
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
@@ -31,11 +32,25 @@ pub trait Plot {
     // fn to_png(&self, width_px: u16, height_px: u16) -> Vec<u8>;
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Deserialize, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotData {
     pub vega_string: String,
     pub metadata: PlotMetaData,
+}
+
+impl PartialEq for PlotData {
+    fn eq(&self, other: &Self) -> bool {
+        let verga_strings_match = match (
+            serde_json::from_str::<Value>(&self.vega_string),
+            serde_json::from_str::<Value>(&other.vega_string),
+        ) {
+            (Ok(self_json), Ok(other_json)) => self_json == other_json,
+            _ => false,
+        };
+
+        verga_strings_match && self.metadata == other.metadata
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]

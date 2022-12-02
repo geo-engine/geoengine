@@ -514,7 +514,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "Raster-1": {
                     "valueCount": 64_800, // 360*180
@@ -525,7 +525,6 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                 }
             })
-            .to_string()
         );
     }
 
@@ -620,7 +619,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "Raster-1": {
                     "valueCount": 64_800, // 360*180
@@ -639,7 +638,6 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
             })
-            .to_string()
         );
     }
 
@@ -734,7 +732,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "A": {
                     "valueCount": 64_800, // 360*180
@@ -753,7 +751,6 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
             })
-            .to_string()
         );
     }
 
@@ -905,7 +902,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "foo": {
                     "valueCount": 7,
@@ -924,7 +921,6 @@ mod tests {
                     "stddev": 1.699_673_171_197_595
                 },
             })
-            .to_string()
         );
     }
 
@@ -1001,7 +997,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "foo": {
                     "valueCount": 7,
@@ -1012,7 +1008,6 @@ mod tests {
                     "stddev": 2.054_804_667_656_325_6
                 },
             })
-            .to_string()
         );
     }
 
@@ -1089,7 +1084,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "foo": {
                     "valueCount": 7,
@@ -1108,7 +1103,6 @@ mod tests {
                     "stddev": 1.699_673_171_197_595
                 },
             })
-            .to_string()
         );
     }
 }
