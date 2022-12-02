@@ -2,8 +2,9 @@ use std::collections::HashSet;
 use std::io::{Cursor, Write};
 
 use crate::api::model::datatypes::{DataId, DatasetId};
+use crate::api::model::services::AddDataset;
 use crate::datasets::listing::{DatasetProvider, ProvenanceOutput};
-use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
+use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error::Result;
 use crate::handlers::Context;

@@ -5,14 +5,13 @@ use std::{
 };
 
 use crate::api::model::datatypes::DatasetId;
-use crate::datasets::upload::UploadRootPath;
+use crate::api::model::services::{
+    AddDataset, CreateDataset, MetaDataDefinition, MetaDataSuggestion,
+};
+use crate::datasets::upload::{Upload, UploadRootPath};
 use crate::datasets::{
     listing::DatasetProvider,
-    storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData},
-};
-use crate::datasets::{
-    storage::{CreateDataset, MetaDataDefinition},
-    upload::Upload,
+    storage::{DatasetStore, SuggestMetaData},
 };
 use crate::error;
 use crate::error::Result;
@@ -37,7 +36,7 @@ use geoengine_operators::{
     engine::{StaticMetaData, VectorColumnInfo, VectorResultDescriptor},
     source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
-        OgrSourceTimeFormat,
+        OgrSourceErrorSpec, OgrSourceTimeFormat,
     },
     util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
@@ -58,35 +57,40 @@ where
     .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)));
 }
 
-/// Lists available [Datasets](crate::datasets::listing::DatasetListing).
-///
-/// # Example
-///
-/// ```text
-/// GET /datasets?filter=Germany&offset=0&limit=2&order=NameAsc
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-/// Response:
-/// ```text
-/// [
-///   {
-///     "id": {
-///       "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
-///     },
-///     "name": "Germany",
-///     "description": "Boundaries of Germany",
-///     "tags": [],
-///     "sourceOperator": "OgrSource",
-///     "resultDescriptor": {
-///       "vector": {
-///         "dataType": "MultiPolygon",
-///         "spatialReference": "EPSG:4326",
-///         "columns": {}
-///       }
-///     }
-///   }
-/// ]
-/// ```
+/// Lists available datasets.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/datasets",
+    responses(
+        (status = 200, description = "OK", body = [DatasetListing],
+            example = json!([
+                {
+                    "id": {
+                        "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
+                    },
+                    "name": "Germany",
+                    "description": "Boundaries of Germany",
+                    "tags": [],
+                    "sourceOperator": "OgrSource",
+                    "resultDescriptor": {
+                        "vector": {
+                            "dataType": "MultiPolygon",
+                            "spatialReference": "EPSG:4326",
+                            "columns": {}
+                        }
+                    }
+                }
+            ])
+        )
+    ),
+    params(
+        DatasetListOptions
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn list_datasets_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -97,32 +101,37 @@ async fn list_datasets_handler<C: Context>(
     Ok(web::Json(list))
 }
 
-/// Retrieves details about a [Dataset](crate::datasets::listing::DatasetListing) using the internal id.
-///
-/// # Example
-///
-/// ```text
-/// GET /dataset/internal/9c874b9e-cea0-4553-b727-a13cb26ae4bb
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": {
-///     "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
-///   },
-///   "name": "Germany",
-///   "description": "Boundaries of Germany",
-///   "resultDescriptor": {
-///     "vector": {
-///       "dataType": "MultiPolygon",
-///       "spatialReference": "EPSG:4326",
-///       "columns": {}
-///     }
-///   },
-///   "sourceOperator": "OgrSource"
-/// }
-/// ```
+/// Retrieves details about a dataset using the internal id.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/{dataset}",
+    responses(
+        (status = 200, description = "OK", body = Dataset,
+            example = json!({
+                "id": {
+                    "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
+                },
+                "name": "Germany",
+                "description": "Boundaries of Germany",
+                "resultDescriptor": {
+                    "vector": {
+                        "dataType": "MultiPolygon",
+                        "spatialReference": "EPSG:4326",
+                        "columns": {}
+                    }
+                },
+                "sourceOperator": "OgrSource"
+            })
+        )
+    ),
+    params(
+        ("dataset" = DatasetId, description = "Dataset id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn get_dataset_handler<C: Context>(
     dataset: web::Path<DatasetId>,
     session: C::Session,
@@ -135,60 +144,26 @@ async fn get_dataset_handler<C: Context>(
     Ok(web::Json(dataset))
 }
 
-/// Creates a new [Dataset](CreateDataset) using previously uploaded files.
+/// Creates a new dataset using previously uploaded files.
 /// Information about the file contents must be manually supplied.
-///
-/// # Example
-///
-/// ```text
-/// POST /dataset
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
-///   "definition": {
-///     "properties": {
-///       "name": "Germany Border",
-///       "description": "The Outline of Germany",
-///       "sourceOperator": "OgrSource"
-///     },
-///     "metaData": {
-///       "OgrMetaData": {
-///         "loadingInfo": {
-///           "fileName": "germany_polygon.gpkg",
-///           "layerName": "test_germany",
-///           "dataType": "MultiPolygon",
-///           "time": "none",
-///           "columns": {
-///             "x": "",
-///             "y": null,
-///             "text": [],
-///             "float": [],
-///             "int": [],
-///             "bool": [],
-///             "datetime": [],
-///           },
-///           "forceOgrTimeFilter": false,
-///           "onError": "ignore"
-///         },
-///         "resultDescriptor": {
-///           "dataType": "MultiPolygon",
-///           "spatialReference": "EPSG:4326",
-///           "columns": {}
-///         }
-///       }
-///     }
-///   }
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": {
-///     "internal": "8d3471ab-fcf7-4c1b-bbc1-00477adf07c8"
-///   }
-/// }
-/// ```
+#[utoipa::path(
+    tag = "Datasets",
+    post,
+    path = "/dataset",
+    request_body = CreateDataset,
+    responses(
+        (status = 200, description = "OK", body = IdResponse,
+            example = json!({
+                "id": {
+                    "internal": "8d3471ab-fcf7-4c1b-bbc1-00477adf07c8"
+                }
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn create_dataset_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -204,7 +179,7 @@ async fn create_dataset_handler<C: Context>(
     adjust_user_path_to_upload_path(&mut definition.meta_data, &upload)?;
 
     let db = ctx.dataset_db_ref();
-    let meta_data = db.wrap_meta_data(definition.meta_data);
+    let meta_data = db.wrap_meta_data(definition.meta_data.into());
     let id = db
         .add_dataset(&session, definition.properties.validated()?, meta_data)
         .await?;
@@ -214,20 +189,20 @@ async fn create_dataset_handler<C: Context>(
 
 fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Upload) -> Result<()> {
     match meta {
-        crate::datasets::storage::MetaDataDefinition::MockMetaData(_) => {}
-        crate::datasets::storage::MetaDataDefinition::OgrMetaData(m) => {
+        MetaDataDefinition::MockMetaData(_) => {}
+        MetaDataDefinition::OgrMetaData(m) => {
             m.loading_info.file_name = upload.adjust_file_path(&m.loading_info.file_name)?;
         }
-        crate::datasets::storage::MetaDataDefinition::GdalMetaDataRegular(m) => {
+        MetaDataDefinition::GdalMetaDataRegular(m) => {
             m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
         }
-        crate::datasets::storage::MetaDataDefinition::GdalStatic(m) => {
+        MetaDataDefinition::GdalStatic(m) => {
             m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
         }
-        crate::datasets::storage::MetaDataDefinition::GdalMetadataNetCdfCf(m) => {
+        MetaDataDefinition::GdalMetadataNetCdfCf(m) => {
             m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
         }
-        crate::datasets::storage::MetaDataDefinition::GdalMetaDataList(m) => {
+        MetaDataDefinition::GdalMetaDataList(m) => {
             for p in &mut m.params {
                 if let Some(ref mut params) = p.params {
                     params.file_path = upload.adjust_file_path(&params.file_path)?;
@@ -238,30 +213,26 @@ fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Uploa
     Ok(())
 }
 
-/// Creates a new [Dataset](AutoCreateDataset) using previously uploaded files.
+/// Creates a new dataset using previously uploaded files.
 /// The format of the files will be automatically detected when possible.
-///
-/// # Example
-///
-/// ```text
-/// POST /dataset
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
-///   "datasetName": "Germany Border (auto)",
-///   "datasetDescription": "The Outline of Germany (auto detected format)",
-///   "mainFile": "germany_polygon.gpkg"
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": {
-///     "internal": "664d4b3c-c9d7-4e57-b34d-8c709c1c26e8"
-///   }
-/// }
-/// ```
+#[utoipa::path(
+    tag = "Datasets",
+    post,
+    path = "/dataset/auto",
+    request_body = AutoCreateDataset,
+    responses(
+        (status = 200, description = "OK", body = IdResponse,
+            example = json!({
+                "id": {
+                    "internal": "664d4b3c-c9d7-4e57-b34d-8c709c1c26e8"
+                }
+            })
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn auto_create_dataset_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -295,6 +266,60 @@ async fn auto_create_dataset_handler<C: Context>(
     Ok(web::Json(IdResponse::from(id)))
 }
 
+/// Inspects an upload and suggests metadata that can be used when creating a new dataset based on it.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/suggest",
+    responses(
+        (status = 200, description = "OK", body = MetaDataSuggestion,
+            example = json!({
+                "mainFile": "germany_polygon.gpkg",
+                "metaData": {
+                    "type": "OgrMetaData",
+                    "loadingInfo": {
+                        "fileName": "upload/23c9ea9e-15d6-453b-a243-1390967a5669/germany_polygon.gpkg",
+                        "layerName": "test_germany",
+                        "dataType": "MultiPolygon",
+                        "time": {
+                            "type": "none"
+                        },
+                        "defaultGeometry": null,
+                        "columns": {
+                            "formatSpecifics": null,
+                            "x": "",
+                            "y": null,
+                            "int": [],
+                            "float": [],
+                            "text": [],
+                            "bool": [],
+                            "datetime": [],
+                            "rename": null
+                        },
+                        "forceOgrTimeFilter": false,
+                        "forceOgrSpatialFilter": false,
+                        "onError": "ignore",
+                        "sqlQuery": null,
+                        "attributeQuery": null
+                    },
+                    "resultDescriptor": {
+                        "dataType": "MultiPolygon",
+                        "spatialReference": "EPSG:4326",
+                        "columns": {},
+                        "time": null,
+                        "bbox": null
+                    }
+                }
+            })
+        )
+    ),
+    params(
+        SuggestMetaData
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn suggest_meta_data_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -317,7 +342,7 @@ async fn suggest_meta_data_handler<C: Context>(
 
     Ok(web::Json(MetaDataSuggestion {
         main_file,
-        meta_data,
+        meta_data: meta_data.into(),
     }))
 }
 
@@ -339,7 +364,9 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
     None
 }
 
-fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDefinition> {
+fn auto_detect_meta_data_definition(
+    main_file_path: &Path,
+) -> Result<crate::datasets::storage::MetaDataDefinition> {
     let dataset = gdal_open_dataset(main_file_path).context(error::Operator)?;
     let layer = {
         if let Ok(layer) = dataset.layer(0) {
@@ -370,58 +397,56 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
 
     let time = detect_time_type(&columns_vecs);
 
-    Ok(MetaDataDefinition::OgrMetaData(StaticMetaData::<
-        _,
-        _,
-        VectorQueryRectangle,
-    > {
-        loading_info: OgrSourceDataset {
-            file_name: main_file_path.into(),
-            layer_name: geometry.layer_name.unwrap_or_else(|| layer.name()),
-            data_type: Some(geometry.data_type),
-            time,
-            default_geometry: None,
-            columns: Some(OgrSourceColumnSpec {
-                format_specifics: None,
-                x,
-                y,
-                int: columns_vecs.int,
-                float: columns_vecs.float,
-                text: columns_vecs.text,
-                bool: vec![],
-                datetime: columns_vecs.date,
-                rename: None,
-            }),
-            force_ogr_time_filter: false,
-            force_ogr_spatial_filter: false,
-            on_error: geoengine_operators::source::OgrSourceErrorSpec::Ignore,
-            sql_query: None,
-            attribute_query: None,
+    Ok(crate::datasets::storage::MetaDataDefinition::OgrMetaData(
+        StaticMetaData::<_, _, VectorQueryRectangle> {
+            loading_info: OgrSourceDataset {
+                file_name: main_file_path.into(),
+                layer_name: geometry.layer_name.unwrap_or_else(|| layer.name()),
+                data_type: Some(geometry.data_type),
+                time,
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
+                    x,
+                    y,
+                    int: columns_vecs.int,
+                    float: columns_vecs.float,
+                    text: columns_vecs.text,
+                    bool: vec![],
+                    datetime: columns_vecs.date,
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            },
+            result_descriptor: VectorResultDescriptor {
+                data_type: geometry.data_type,
+                spatial_reference: geometry.spatial_reference,
+                columns: columns_map
+                    .into_iter()
+                    .filter_map(|(k, v)| {
+                        v.try_into()
+                            .map(|v| {
+                                (
+                                    k,
+                                    VectorColumnInfo {
+                                        data_type: v,
+                                        measurement: Measurement::Unitless,
+                                    },
+                                )
+                            })
+                            .ok()
+                    }) // ignore all columns here that don't have a corresponding type in our collections
+                    .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
         },
-        result_descriptor: VectorResultDescriptor {
-            data_type: geometry.data_type,
-            spatial_reference: geometry.spatial_reference,
-            columns: columns_map
-                .into_iter()
-                .filter_map(|(k, v)| {
-                    v.try_into()
-                        .map(|v| {
-                            (
-                                k,
-                                VectorColumnInfo {
-                                    data_type: v,
-                                    measurement: Measurement::Unitless,
-                                },
-                            )
-                        })
-                        .ok()
-                }) // ignore all columns here that don't have a corresponding type in our collections
-                .collect(),
-            time: None,
-            bbox: None,
-        },
-        phantom: Default::default(),
-    }))
+    ))
 }
 
 /// create Gdal dataset with autodetect parameters based on available columns
@@ -637,10 +662,24 @@ impl TryFrom<ColumnDataType> for FeatureDataType {
 
     fn try_from(value: ColumnDataType) -> Result<Self, Self::Error> {
         match value {
-            ColumnDataType::Int => Ok(FeatureDataType::Int),
-            ColumnDataType::Float => Ok(FeatureDataType::Float),
-            ColumnDataType::Text => Ok(FeatureDataType::Text),
-            ColumnDataType::Date => Ok(FeatureDataType::DateTime),
+            ColumnDataType::Int => Ok(Self::Int),
+            ColumnDataType::Float => Ok(Self::Float),
+            ColumnDataType::Text => Ok(Self::Text),
+            ColumnDataType::Date => Ok(Self::DateTime),
+            ColumnDataType::Unknown => Err(error::Error::NoFeatureDataTypeForColumnDataType),
+        }
+    }
+}
+
+impl TryFrom<ColumnDataType> for crate::api::model::datatypes::FeatureDataType {
+    type Error = error::Error;
+
+    fn try_from(value: ColumnDataType) -> Result<Self, Self::Error> {
+        match value {
+            ColumnDataType::Int => Ok(Self::Int),
+            ColumnDataType::Float => Ok(Self::Float),
+            ColumnDataType::Text => Ok(Self::Text),
+            ColumnDataType::Date => Ok(Self::DateTime),
             ColumnDataType::Unknown => Err(error::Error::NoFeatureDataTypeForColumnDataType),
         }
     }
@@ -695,7 +734,7 @@ mod tests {
     use super::*;
     use crate::api::model::datatypes::DatasetId;
     use crate::contexts::{InMemoryContext, Session, SessionId, SimpleContext, SimpleSession};
-    use crate::datasets::storage::{AddDataset, DatasetStore};
+    use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::UploadId;
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
@@ -1087,7 +1126,8 @@ mod tests {
         ))
         .unwrap();
 
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+        if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+        {
             if let Some(columns) = &mut meta_data.loading_info.columns {
                 columns.text.sort();
             }
@@ -1095,7 +1135,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
                     layer_name: "ne_10m_ports".to_string(),
@@ -1180,7 +1220,8 @@ mod tests {
             auto_detect_meta_data_definition(test_data!("vector/data/points_with_iso_time.json"))
                 .unwrap();
 
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+        if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+        {
             if let Some(columns) = &mut meta_data.loading_info.columns {
                 columns.datetime.sort();
             }
@@ -1188,7 +1229,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points_with_iso_time.json").into(),
                     layer_name: "points_with_iso_time".to_string(),
@@ -1253,7 +1294,8 @@ mod tests {
             auto_detect_meta_data_definition(test_data!("vector/data/points_with_time.gpkg"))
                 .unwrap();
 
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+        if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+        {
             if let Some(columns) = &mut meta_data.loading_info.columns {
                 columns.datetime.sort();
             }
@@ -1261,7 +1303,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points_with_time.gpkg").into(),
                     layer_name: "points_with_time".to_string(),
@@ -1326,7 +1368,8 @@ mod tests {
             auto_detect_meta_data_definition(test_data!("vector/data/points_with_date.shp"))
                 .unwrap();
 
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+        if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+        {
             if let Some(columns) = &mut meta_data.loading_info.columns {
                 columns.datetime.sort();
             }
@@ -1334,7 +1377,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points_with_date.shp").into(),
                     layer_name: "points_with_date".to_string(),
@@ -1402,7 +1445,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points_with_iso_start_duration.json").into(),
                     layer_name: "points_with_iso_start_duration".to_string(),
@@ -1465,7 +1508,8 @@ mod tests {
         let mut meta_data =
             auto_detect_meta_data_definition(test_data!("vector/data/lonlat.csv")).unwrap();
 
-        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+        if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+        {
             if let Some(columns) = &mut meta_data.loading_info.columns {
                 columns.text.sort();
             }
@@ -1473,7 +1517,7 @@ mod tests {
 
         assert_eq!(
             meta_data,
-            MetaDataDefinition::OgrMetaData(StaticMetaData {
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat.csv").into(),
                     layer_name: "lonlat".to_string(),
