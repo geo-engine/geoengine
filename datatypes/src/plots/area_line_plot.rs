@@ -42,7 +42,7 @@ impl Plot for AreaLineChart {
             .zip(&self.values)
             .map(|(timestamp, value)| {
                 serde_json::json!({
-                    "x": timestamp.as_rfc3339(),
+                    "x": timestamp.as_datetime_string(),
                     "y": value,
                 })
             })

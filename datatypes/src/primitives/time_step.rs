@@ -587,8 +587,8 @@ mod tests {
             t_result,
             t_expect,
             "left: {} right: {}",
-            t_1.as_rfc3339(),
-            t_result.as_rfc3339()
+            t_1.as_datetime_string(),
+            t_result.as_datetime_string()
         );
     }
 

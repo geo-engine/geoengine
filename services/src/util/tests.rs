@@ -1,8 +1,8 @@
 use crate::api::model::datatypes::Colorizer;
+use crate::api::model::services::AddDataset;
 use crate::contexts::SimpleContext;
 use crate::contexts::SimpleSession;
 use crate::datasets::listing::Provenance;
-use crate::datasets::storage::AddDataset;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
 use crate::datasets::upload::UploadRootPath;
@@ -194,6 +194,7 @@ pub async fn send_test_request<C: SimpleContext>(
             )
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::layers::init_layer_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(handlers::projects::init_project_routes::<C>)
             .configure(handlers::session::init_session_routes::<C>)

@@ -540,7 +540,7 @@ fn create_subdataset_tiff(
     subdataset: &Dataset,
     time_idx: usize,
 ) -> Result<CreateSubdatasetTiffResult> {
-    let time_str = time_step.as_rfc3339_with_millis();
+    let time_str = time_step.as_datetime_string_with_millis();
     let destination = conversion
         .dataset_out_base
         .join(entity.to_string())
@@ -725,7 +725,7 @@ fn generate_loading_info(
 
                 params.file_path = params
                     .file_path
-                    .with_file_name(time_instance.as_rfc3339_with_millis() + ".tiff");
+                    .with_file_name(time_instance.as_datetime_string_with_millis() + ".tiff");
 
                 let time_interval = TimeInterval::new_instant(*time_instance)
                     .context(error::InvalidTimeCoverageInterval)?;
