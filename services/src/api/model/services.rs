@@ -5,7 +5,9 @@ use crate::api::model::operators::{
 };
 use crate::datasets::listing::Provenance;
 use crate::datasets::upload::UploadId;
+use crate::error::Result;
 use crate::projects::Symbology;
+use crate::util::user_input::UserInput;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -77,16 +79,10 @@ pub struct AddDataset {
     pub provenance: Option<Provenance>,
 }
 
-impl From<AddDataset> for crate::datasets::storage::AddDataset {
-    fn from(value: AddDataset) -> Self {
-        Self {
-            id: value.id,
-            name: value.name,
-            description: value.description,
-            source_operator: value.source_operator,
-            symbology: value.symbology,
-            provenance: value.provenance,
-        }
+impl UserInput for AddDataset {
+    fn validate(&self) -> Result<()> {
+        // TODO
+        Ok(())
     }
 }
 

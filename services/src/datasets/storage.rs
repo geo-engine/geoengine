@@ -1,5 +1,6 @@
 use crate::api::model::datatypes::{DataProviderId, DatasetId};
 use crate::api::model::operators::TypedResultDescriptor;
+use crate::api::model::services::AddDataset;
 use crate::contexts::Session;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
@@ -53,24 +54,6 @@ impl Dataset {
             result_descriptor: self.result_descriptor.clone(),
             symbology: self.symbology.clone(),
         }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct AddDataset {
-    pub id: Option<DatasetId>,
-    pub name: String,
-    pub description: String,
-    pub source_operator: String,
-    pub symbology: Option<Symbology>,
-    pub provenance: Option<Provenance>,
-}
-
-impl UserInput for AddDataset {
-    fn validate(&self) -> Result<()> {
-        // TODO
-        Ok(())
     }
 }
 
