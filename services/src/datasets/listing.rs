@@ -1,4 +1,5 @@
 use crate::api::model::datatypes::{DataId, DatasetId};
+use crate::api::model::operators::TypedResultDescriptor;
 use crate::contexts::Session;
 use crate::datasets::storage::Dataset;
 use crate::error;
@@ -9,16 +10,15 @@ use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaData, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
-    VectorResultDescriptor,
+    MetaData, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetListing {
     pub id: DatasetId,
@@ -31,12 +31,16 @@ pub struct DatasetListing {
     // TODO: meta data like bounds, resolution
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, IntoParams)]
 pub struct DatasetListOptions {
     // TODO: permissions
+    #[param(example = "Germany")]
     pub filter: Option<String>,
+    #[param(example = "NameAsc")]
     pub order: OrderBy,
+    #[param(example = 0)]
     pub offset: u32,
+    #[param(example = 2)]
     pub limit: u32,
 }
 
@@ -65,7 +69,7 @@ impl UserInput for DatasetListOptions {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 pub enum OrderBy {
     NameAsc,
     NameDesc,

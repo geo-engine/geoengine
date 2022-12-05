@@ -1,4 +1,6 @@
 use crate::api::model::datatypes::{DataProviderId, DatasetId};
+use crate::api::model::operators::TypedResultDescriptor;
+use crate::api::model::services::AddDataset;
 use crate::contexts::Session;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
@@ -13,14 +15,12 @@ use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::MetaData;
 use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
-use geoengine_operators::{
-    engine::TypedResultDescriptor, mock::MockDatasetDataSourceLoadingInfo,
-    source::GdalMetaDataStatic,
-};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
+use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::fmt::Debug;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use super::listing::Provenance;
@@ -31,7 +31,7 @@ pub const DATASET_DB_LAYER_PROVIDER_ID: DataProviderId =
 pub const DATASET_DB_ROOT_COLLECTION_ID: Uuid =
     Uuid::from_u128(0x5460_73b6_d535_4205_b601_9967_5c9f_6dd7);
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Dataset {
     pub id: DatasetId,
@@ -57,39 +57,21 @@ impl Dataset {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct AddDataset {
-    pub id: Option<DatasetId>,
-    pub name: String,
-    pub description: String,
-    pub source_operator: String,
-    pub symbology: Option<Symbology>,
-    pub provenance: Option<Provenance>,
-}
-
-impl UserInput for AddDataset {
-    fn validate(&self) -> Result<()> {
-        // TODO
-        Ok(())
-    }
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetDefinition {
     pub properties: AddDataset,
     pub meta_data: MetaDataDefinition,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct CreateDataset {
-    pub upload: UploadId,
-    pub definition: DatasetDefinition,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(example = json!({
+    "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+    "datasetName": "Germany Border (auto)",
+    "datasetDescription": "The Outline of Germany (auto detected format)",
+    "mainFile": "germany_polygon.gpkg"
+}))]
 pub struct AutoCreateDataset {
     pub upload: UploadId,
     pub dataset_name: String,
@@ -112,14 +94,16 @@ impl UserInput for AutoCreateDataset {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub struct SuggestMetaData {
+    #[param(example = "420b06de-0a7e-45cb-9c1c-ea901b46ab69")]
     pub upload: UploadId,
+    #[param(example = "germany_polygon.gpkg")]
     pub main_file: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MetaDataSuggestion {
     pub main_file: String,
@@ -127,7 +111,7 @@ pub struct MetaDataSuggestion {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(PartialEq, Deserialize, Serialize, Debug, Clone)]
+#[derive(PartialEq, Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(tag = "type")]
 pub enum MetaDataDefinition {
     MockMetaData(

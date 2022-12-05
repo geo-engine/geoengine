@@ -2,12 +2,13 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use crate::api::model::datatypes::{DataId, DatasetId, LayerId};
+use crate::api::model::services::AddDataset;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::listing::SessionMetaDataProvider;
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
 use crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID;
 use crate::datasets::storage::{
-    AddDataset, Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
+    Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
 };
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
