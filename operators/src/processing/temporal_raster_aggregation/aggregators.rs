@@ -105,7 +105,7 @@ impl<P: Pixel> BinaryOperation<P> for Count {
     }
 
     fn op(state: P, _value: P) -> P {
-        state + P::one()
+        state.saturating_add(P::one())
     }
 }
 
