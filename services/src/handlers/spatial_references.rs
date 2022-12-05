@@ -299,10 +299,13 @@ mod tests {
                 proj_string: "+proj=longlat +datum=WGS84 +no_defs +type=crs".to_owned(),
                 extent: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into())
                     .into(),
-                axis_labels: Some((
-                    "Geodetic longitude".to_owned(),
-                    "Geodetic latitude".to_owned()
-                )),
+                axis_labels: Some(
+                    (
+                        "Geodetic longitude".to_owned(),
+                        "Geodetic latitude".to_owned()
+                    )
+                        .into()
+                ),
                 axis_order: Some(AxisOrder::NorthEast),
             },
             spec
@@ -332,7 +335,7 @@ mod tests {
         ));
         assert_eq!(
             spec.axis_labels,
-            Some(("Easting".to_owned(), "Northing".to_owned()))
+            Some(("Easting".to_owned(), "Northing".to_owned()).into())
         );
         assert_eq!(spec.axis_order, Some(AxisOrder::EastNorth));
     }
@@ -347,10 +350,13 @@ mod tests {
                 proj_string: "+proj=longlat +datum=WGS84 +no_defs +type=crs".to_owned(),
                 extent: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into())
                     .into(),
-                axis_labels: Some((
-                    "Geodetic longitude".to_owned(),
-                    "Geodetic latitude".to_owned()
-                )),
+                axis_labels: Some(
+                    (
+                        "Geodetic longitude".to_owned(),
+                        "Geodetic latitude".to_owned()
+                    )
+                        .into()
+                ),
                 axis_order: Some(AxisOrder::NorthEast),
             },
             spec
@@ -371,7 +377,7 @@ mod tests {
                     (833_978.556_919_460_4, 9_329_005.182_447_437).into()
                 )
                 .into(),
-                axis_labels: Some(("Easting".to_owned(), "Northing".to_owned())),
+                axis_labels: Some(("Easting".to_owned(), "Northing".to_owned()).into()),
                 axis_order: Some(AxisOrder::EastNorth),
             },
             spec
