@@ -3,7 +3,7 @@ use crate::{
     handlers, pro,
     pro::{
         contexts::ProContext,
-        datasets::Role,
+        datasets::{Role, UpdateDatasetPermissions},
         projects::ProProjectDb,
         users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
     },
@@ -95,6 +95,7 @@ pub async fn send_pro_test_request<C>(req: test::TestRequest, ctx: C) -> Service
 where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
+    C::DatasetDB: UpdateDatasetPermissions,
 {
     #[allow(unused_mut)]
     let mut app = App::new()
@@ -106,7 +107,7 @@ where
         )
         .wrap(middleware::NormalizePath::trim())
         .configure(configure_extractors)
-        .configure(handlers::datasets::init_dataset_routes::<C>)
+        .configure(pro::handlers::datasets::init_dataset_routes::<C>)
         .configure(handlers::plots::init_plot_routes::<C>)
         .configure(pro::handlers::projects::init_project_routes::<C>)
         .configure(pro::handlers::users::init_user_routes::<C>)

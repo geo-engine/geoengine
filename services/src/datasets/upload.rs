@@ -3,15 +3,37 @@ use std::path::{Path, PathBuf};
 use crate::contexts::Session;
 use crate::error::Result;
 use crate::identifier;
+use crate::util::path_with_base_path;
 use crate::{
     error,
     util::config::{self, get_config_element},
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 identifier!(UploadId);
 identifier!(FileId);
+identifier!(VolumeId);
+
+pub trait AdjustFilePath {
+    fn adjust_file_path(&self, file_path: &Path) -> Result<PathBuf>;
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
+pub struct Volume {
+    pub id: VolumeId,
+    #[schema(value_type = String)]
+    pub path: PathBuf,
+}
+
+impl AdjustFilePath for Volume {
+    fn adjust_file_path(&self, file_path: &Path) -> Result<PathBuf> {
+        let _file_name = file_path.file_name().ok_or(error::Error::PathIsNotAFile)?;
+
+        path_with_base_path(&self.path, file_path)
+    }
+}
 
 pub trait UploadRootPath {
     fn root_path(&self) -> Result<PathBuf>;
@@ -30,9 +52,9 @@ pub struct Upload {
     pub files: Vec<FileUpload>,
 }
 
-impl Upload {
+impl AdjustFilePath for Upload {
     /// turns a user defined file path (pattern) into a path that points to the upload directory
-    pub fn adjust_file_path(&self, file_path: &Path) -> Result<PathBuf> {
+    fn adjust_file_path(&self, file_path: &Path) -> Result<PathBuf> {
         let file_name = file_path.file_name().ok_or(error::Error::PathIsNotAFile)?;
 
         Ok(self.id.root_path()?.join(file_name))

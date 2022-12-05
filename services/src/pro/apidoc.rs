@@ -18,12 +18,13 @@ use crate::api::model::operators::{
     VectorResultDescriptor,
 };
 use crate::api::model::services::{
-    AddDataset, CreateDataset, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
+    AddDataset, CreateSystemDataset, CreateUserDataset, DatasetDefinition, MetaDataDefinition,
+    MetaDataSuggestion,
 };
 use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
-use crate::datasets::upload::UploadId;
+use crate::datasets::upload::{UploadId, Volume, VolumeId};
 use crate::handlers;
 use crate::handlers::tasks::TaskAbortOptions;
 use crate::handlers::wcs::CoverageResponse;
@@ -94,8 +95,10 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::register_user_handler,
         pro::handlers::users::session_handler,
         handlers::datasets::list_datasets_handler,
+        handlers::datasets::list_volumes_handler,
         handlers::datasets::get_dataset_handler,
-        handlers::datasets::create_dataset_handler,
+        handlers::datasets::create_user_dataset_handler,
+        pro::handlers::datasets::create_system_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
     ),
@@ -124,6 +127,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             ProviderLayerId,
             ProviderLayerCollectionId,
             LayerCollectionId,
+            VolumeId,
 
             TimeInstance,
             TimeInterval,
@@ -226,7 +230,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             FeatureType,
             Coordinates,
 
-            CreateDataset,
+            CreateUserDataset,
+            CreateSystemDataset,
             AutoCreateDataset,
             OrderBy,
             DatasetListing,
@@ -269,6 +274,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             Dataset,
             DatasetDefinition,
             AddDataset,
+            Volume
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

@@ -415,6 +415,7 @@ mod tests {
 
     use crate::contexts::Session;
     use crate::handlers::ErrorResponse;
+    use crate::pro::datasets::UpdateDatasetPermissions;
     use crate::pro::util::tests::mock_oidc::{
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
     };
@@ -444,6 +445,7 @@ mod tests {
     ) -> ServiceResponse
     where
         C::ProjectDB: ProProjectDb,
+        C::DatasetDB: UpdateDatasetPermissions,
     {
         let user = UserRegistration {
             email: email.to_string(),

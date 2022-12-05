@@ -7,6 +7,7 @@ use crate::pro::contexts::PostgresContext;
 use crate::pro::contexts::{ProContext, ProInMemoryContext};
 use crate::util::config::{self, get_config_element, Backend};
 
+use super::datasets::UpdateDatasetPermissions;
 use super::projects::ProProjectDb;
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
@@ -34,6 +35,7 @@ async fn start<C>(
 where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
+    C::DatasetDB: UpdateDatasetPermissions,
 {
     let wrapped_ctx = web::Data::new(ctx);
 
@@ -49,7 +51,7 @@ where
             )
             .wrap(middleware::Logger::default())
             .configure(configure_extractors)
-            .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(pro::handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(pro::handlers::projects::init_project_routes::<C>)

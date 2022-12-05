@@ -158,3 +158,6 @@ scopes = [ ]
 [open_telemetry]
 enabled = false
 endpoint = "127.0.0.1:6831"
+
+[data]
+volumes = { f6aa9f3d-a211-43e8-9b91-b23ab9632791 = "test_data/"}

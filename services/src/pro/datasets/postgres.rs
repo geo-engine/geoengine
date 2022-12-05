@@ -536,7 +536,7 @@ where
 
         ensure!(
             auth.is_ok(),
-            error::UpateDatasetPermission {
+            error::UpdateDatasetPermission {
                 role: session.user.id.to_string(),
                 dataset: permission.dataset,
                 permission: format!("{:?}", permission.permission),

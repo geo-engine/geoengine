@@ -155,13 +155,17 @@ pub enum Error {
 
     UnknownDatasetId,
 
+    UnknownVolumeId,
+    OnyAdminsCanCreateDatasetFromVolume,
+    AdminsCannotCreateDatasetFromUpload,
+
     #[snafu(display("Permission denied for dataset with id {:?}", dataset))]
     DatasetPermissionDenied {
         dataset: DatasetId,
     },
 
     #[snafu(display("Updating permission ({}, {:?}, {}) denied", role, dataset, permission))]
-    UpateDatasetPermission {
+    UpdateDatasetPermission {
         role: String,
         dataset: DatasetId,
         permission: String,
