@@ -1485,3 +1485,29 @@ impl From<MultiPolygon> for geoengine_datatypes::primitives::MultiPolygon {
         .unwrap()
     }
 }
+
+#[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
+pub struct StringPair((String, String));
+
+impl ToSchema for StringPair {
+    fn schema() -> utoipa::openapi::Schema {
+        use utoipa::openapi::*;
+        ArrayBuilder::new()
+            .items(Object::with_type(SchemaType::String))
+            .min_items(Some(2))
+            .max_items(Some(2))
+            .into()
+    }
+}
+
+impl From<(String, String)> for StringPair {
+    fn from(value: (String, String)) -> Self {
+        Self(value)
+    }
+}
+
+impl From<StringPair> for (String, String) {
+    fn from(value: StringPair) -> Self {
+        value.0
+    }
+}

@@ -1,6 +1,6 @@
 use crate::api::model::datatypes::{
     Coordinate2D, DateTimeParseFormat, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
-    QueryRectangle, RasterPropertiesEntryType, RasterPropertiesKey, SpatialResolution,
+    QueryRectangle, RasterPropertiesEntryType, RasterPropertiesKey, SpatialResolution, StringPair,
     TimeInstance, TimeStep, VectorQueryRectangle,
 };
 use async_trait::async_trait;
@@ -887,20 +887,6 @@ impl From<GdalMetaDataRegular> for geoengine_operators::source::GdalMetaDataRegu
     }
 }
 
-#[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
-pub struct GdalConfigOption((String, String));
-
-impl ToSchema for GdalConfigOption {
-    fn schema() -> utoipa::openapi::Schema {
-        use utoipa::openapi::*;
-        ArrayBuilder::new()
-            .items(Object::with_type(SchemaType::String))
-            .min_items(Some(2))
-            .max_items(Some(2))
-            .into()
-    }
-}
-
 /// Parameters for loading data using Gdal
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -921,7 +907,7 @@ pub struct GdalDatasetParameters {
     // Configs as key, value pairs that will be set as thread local config options, e.g.
     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
     // TODO: validate the config options: only allow specific keys and specific values
-    pub gdal_config_options: Option<Vec<GdalConfigOption>>,
+    pub gdal_config_options: Option<Vec<StringPair>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
 }
@@ -942,7 +928,7 @@ impl From<geoengine_operators::source::GdalDatasetParameters> for GdalDatasetPar
             gdal_open_options: value.gdal_open_options,
             gdal_config_options: value
                 .gdal_config_options
-                .map(|x| x.into_iter().map(GdalConfigOption).collect()),
+                .map(|x| x.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
         }
     }
@@ -964,7 +950,7 @@ impl From<GdalDatasetParameters> for geoengine_operators::source::GdalDatasetPar
             gdal_open_options: value.gdal_open_options,
             gdal_config_options: value
                 .gdal_config_options
-                .map(|x| x.into_iter().map(|y| y.0).collect()),
+                .map(|x| x.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
         }
     }

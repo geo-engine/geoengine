@@ -4,11 +4,11 @@ use crate::api::model::datatypes::{
     FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
     Palette, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
     RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority,
-    SpatialReferenceOption, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
-    TimeStep, VectorDataType,
+    SpatialReferenceOption, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
+    TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
-    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
+    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
     GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
     GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
     MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
@@ -238,7 +238,7 @@ use utoipa::{Modify, OpenApi};
             RasterPropertiesKey,
             RasterPropertiesEntryType,
             OgrMetaData,
-            GdalConfigOption,
+            StringPair,
             MockDatasetDataSourceLoadingInfo,
             OgrSourceDataset,
             OgrSourceColumnSpec,

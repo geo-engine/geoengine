@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{
-    BoundingBox2D, Coordinate2D, SpatialReference, SpatialReferenceAuthority,
+    BoundingBox2D, Coordinate2D, SpatialReference, SpatialReferenceAuthority, StringPair,
 };
 use crate::handlers::Context;
 use crate::{error, error::Error, error::Result};
@@ -23,42 +23,15 @@ where
 
 /// The specification of a spatial reference, where extent and axis labels are given
 /// in natural order (x, y) = (east, north)
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SpatialReferenceSpecification {
     pub name: String,
     pub spatial_reference: SpatialReference,
     pub proj_string: String,
     pub extent: BoundingBox2D,
-    pub axis_labels: Option<(String, String)>,
+    pub axis_labels: Option<StringPair>,
     pub axis_order: Option<AxisOrder>,
-}
-
-impl ToSchema for SpatialReferenceSpecification {
-    fn schema() -> utoipa::openapi::Schema {
-        use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property("name", Object::with_type(SchemaType::String))
-            .required("name")
-            .property(
-                "spatialReference",
-                Ref::from_schema_name("SpatialReference"),
-            )
-            .required("spatialReference")
-            .property("projString", Object::with_type(SchemaType::String))
-            .required("projString")
-            .property("extent", Ref::from_schema_name("BoundingBox2D"))
-            .required("extent")
-            .property(
-                "axisLabels",
-                ArrayBuilder::new()
-                    .items(Object::with_type(SchemaType::String))
-                    .min_items(Some(2))
-                    .max_items(Some(2)),
-            )
-            .property("axisOrder", Ref::from_schema_name("AxisOrder"))
-            .into()
-    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
@@ -257,7 +230,9 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
         return Ok(sref);
     }
 
-    let spatial_reference = SpatialReference::from_str(srs_string)?;
+    let spatial_reference =
+        geoengine_datatypes::spatial_reference::SpatialReference::from_str(srs_string)
+            .context(error::DataType)?;
     let json = proj_json(srs_string).ok_or_else(|| Error::UnknownSrsString {
         srs_string: srs_string.to_owned(),
     })?;
@@ -265,10 +240,9 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
         srs_string: srs_string.to_owned(),
     })?;
 
-    let extent: geoengine_datatypes::primitives::BoundingBox2D =
-        geoengine_datatypes::spatial_reference::SpatialReference::from(spatial_reference)
-            .area_of_use_projected()
-            .context(error::DataType)?;
+    let extent: geoengine_datatypes::primitives::BoundingBox2D = spatial_reference
+        .area_of_use_projected()
+        .context(error::DataType)?;
 
     let axis_labels = json.coordinate_system.axis.as_ref().map(|axes| {
         let a0 = axes.get(0).map_or(String::new(), |a| a.name.clone());
@@ -282,10 +256,10 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
     let spec = SpatialReferenceSpecification {
         axis_order: json.axis_order(),
         name: json.name,
-        spatial_reference,
+        spatial_reference: spatial_reference.into(),
         proj_string,
         extent: extent.into(),
-        axis_labels,
+        axis_labels: axis_labels.map(Into::into),
     };
     Ok(spec)
 }
