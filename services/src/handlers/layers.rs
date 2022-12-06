@@ -10,6 +10,7 @@ use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptio
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
+use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
 use actix_web::{web, Either, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
@@ -36,10 +37,10 @@ where
                         web::get().to(list_collection_handler::<C>),
                     ),
             )
-            .service(web::scope("/workflowId").route(
-                "/{provider}/{layer}",
+            .route(
+                "/{provider}/{layer:.*}/workflowId",
                 web::post().to(layer_to_workflow_id_handler::<C>),
-            ))
+            )
             .route("/{provider}/{layer:.+}", web::get().to(layer_handler::<C>)),
     )
     .service(
@@ -493,7 +494,7 @@ async fn layer_handler<C: Context>(
 #[utoipa::path(
     tag = "Layers",
     post,
-    path = "/layers/workflowId/{provider}/{layer}",
+    path = "/layers/{provider}/{layer}/workflowId",
     responses(
         (status = 200, description = "OK", body = IdResponse<WorkflowId>,
             example = json!({
@@ -512,7 +513,7 @@ async fn layer_handler<C: Context>(
 async fn layer_to_workflow_id_handler<C: Context>(
     ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerId)>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<WorkflowId>> {
     let (provider, item) = path.into_inner();
 
     let layer = match provider {
