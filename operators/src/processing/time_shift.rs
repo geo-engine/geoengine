@@ -521,7 +521,7 @@ mod tests {
             serde_json::json!({
                 "params": {
                     "type": "absolute",
-                    "time_interval": {
+                    "timeInterval": {
                         "start": 1_293_840_000_000_i64,
                         "end": 1_325_376_000_000_i64
                     }
