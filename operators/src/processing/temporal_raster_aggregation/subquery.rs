@@ -63,7 +63,7 @@ where
             }
 
             GridOrEmpty::Empty(_) => {
-                // TODO: handle case where this could stays empty
+                // TODO: handle case where this could stay empty
 
                 let map_fn = |lin_idx: usize, _acc_values_option| {
                     let new_value_option = in_tile_grid.get_at_grid_index_unchecked(lin_idx);
