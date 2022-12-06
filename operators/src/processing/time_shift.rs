@@ -34,11 +34,13 @@ impl OperatorName for TimeShift {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum TimeShiftParams {
     /// Shift the query rectangle relative with a time step
+    #[serde(rename_all = "camelCase")]
     Relative {
         granularity: TimeGranularity,
         value: i32,
     },
     /// Set the time interval to a fixed value
+    #[serde(rename_all = "camelCase")]
     Absolute { time_interval: TimeInterval },
 }
 
