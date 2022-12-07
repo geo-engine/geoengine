@@ -376,6 +376,15 @@ impl ConfigElement for Session {
     const KEY: &'static str = "session";
 }
 
+#[derive(Debug, Deserialize)]
+pub struct MachineLearning {
+    pub model_defs_path: PathBuf,
+}
+
+impl ConfigElement for MachineLearning {
+    const KEY: &'static str = "machinelearning";
+}
+
 #[cfg(feature = "nfdi")]
 #[derive(Debug, Deserialize)]
 pub struct GFBio {
