@@ -399,7 +399,7 @@ async fn create_dataset<C: Context>(
         let time = Some(loading_info_slice.time);
         let params = loading_info_slice
             .params
-            .expect("params is always set in raster_stream_to_geotiff"); //TODO: What is the use-case for None in the GdalMetaDataList?
+            .expect("datasets with exactly one timestep should have data");
         MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
             time,
             params,

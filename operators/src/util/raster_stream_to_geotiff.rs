@@ -96,12 +96,9 @@ where
     )
     .await?
     .into_iter()
-    .map(|x| {
-        gdal::vsi::get_vsi_mem_file_bytes_owned(
-            x.params
-                .expect("params is always set in raster_stream_to_geotiff")
-                .file_path,
-        )
+    .map(|x| match x.params {
+        Some(p) => gdal::vsi::get_vsi_mem_file_bytes_owned(p.file_path),
+        None => Ok(vec![]),
     })
     .collect::<Result<Vec<_>, _>>()?;
 
@@ -161,8 +158,7 @@ where
                     });
                 }
 
-                let mut dataset_holder =
-                    dataset_holder.expect("dataset description should exist before writing a tile");
+                let mut dataset_holder = dataset_holder?;
                 let tile = tile?;
 
                 let current_interval = tile.time;
