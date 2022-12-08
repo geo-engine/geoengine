@@ -315,6 +315,26 @@ pub enum Error {
 
     AbortTriggerAlreadyUsed,
 
+    SubPathMustNotEscapeBasePath {
+        base: PathBuf,
+        sub_path: PathBuf,
+    },
+
+    InvalidDataProviderConfig,
+
+    InvalidMachineLearningConfig,
+
+    MachineLearningModelNotFound,
+
+    InvalidMlModelPath,
+    CouldNotGetMlModelDirectory,
+
+    #[cfg(feature = "pro")]
+    #[snafu(context(false))]
+    XGBoost {
+        source: crate::pro::ml::xgboost::XGBoostModuleError,
+    },
+
     #[snafu(display(
         "InvalidNumberOfTimeStepsError: expected \"{}\" found \"{}\"",
         expected,
