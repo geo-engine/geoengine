@@ -334,6 +334,16 @@ pub enum Error {
     XGBoost {
         source: crate::pro::ml::xgboost::XGBoostModuleError,
     },
+
+    #[snafu(display(
+        "InvalidNumberOfTimeStepsError: expected \"{}\" found \"{}\"",
+        expected,
+        found
+    ))]
+    InvalidNumberOfTimeSteps {
+        expected: usize,
+        found: usize,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
