@@ -214,6 +214,8 @@ impl SentinelS2L2aCogsDataProvider {
                                     ],
                                     RgbaColor::transparent(),
                                     RgbaColor::transparent(),
+                                    None,
+                                    None,
                                 )
                                 .expect("valid colorizer")
                                 .into(),

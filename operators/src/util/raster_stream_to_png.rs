@@ -90,6 +90,8 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Result<Colorizer> {
         ],
         RgbaColor::transparent(),
         RgbaColor::pink(),
+        None,
+        None,
     )
     .map_err(error::Error::from)
 }

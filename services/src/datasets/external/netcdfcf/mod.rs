@@ -703,6 +703,8 @@ fn fallback_colorizer() -> Result<Colorizer> {
         ],
         RgbaColor::transparent(),
         RgbaColor::transparent(),
+        None,
+        None,
     )
     .context(error::CannotCreateFallbackColorizer)
 }

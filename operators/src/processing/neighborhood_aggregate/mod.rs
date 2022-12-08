@@ -662,6 +662,8 @@ mod tests {
             ],
             RgbaColor::transparent(),
             RgbaColor::pink(),
+            None,
+            None,
         )
         .unwrap();
 
@@ -730,6 +732,8 @@ mod tests {
             ],
             RgbaColor::transparent(),
             RgbaColor::pink(),
+            None,
+            None,
         )
         .unwrap();
 

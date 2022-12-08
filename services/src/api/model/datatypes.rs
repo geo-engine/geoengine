@@ -1214,6 +1214,7 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 breakpoints,
                 no_data_color,
                 default_color,
+                ..
             } => Self::LinearGradient {
                 breakpoints: breakpoints
                     .into_iter()
@@ -1226,6 +1227,7 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 breakpoints,
                 no_data_color,
                 default_color,
+                ..
             } => Self::LogarithmicGradient {
                 breakpoints: breakpoints
                     .into_iter()
@@ -1238,6 +1240,7 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 colors,
                 no_data_color,
                 default_color,
+                ..
             } => Self::Palette {
                 colors: colors.into(),
                 no_data_color: no_data_color.into(),
