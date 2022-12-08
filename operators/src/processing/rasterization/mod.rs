@@ -180,6 +180,7 @@ impl InitializedDensityRasterization {
         radius: f64,
         stddev: f64,
     ) -> Result<Self, error::Error> {
+        // TODO check for valid combination of radius and stddev for inverse function
         ensure!(
             radius > 0.,
             error::InvalidOperatorSpec {
@@ -383,6 +384,15 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
             let tile_size_x = tiling_strategy.tile_size_in_pixels.axis_size_x();
             let tile_size_y = tiling_strategy.tile_size_in_pixels.axis_size_y();
 
+            // Determine radius from cutoff percentage
+            // Use rounding factor calculated from query resolution to extend in full pixel units
+            let rounding_factor = f64::max(
+                1. / query.spatial_resolution.x,
+                1. / query.spatial_resolution.y,
+            );
+            let radius = (gaussian_inverse(self.radius, self.stddev) * rounding_factor).ceil()
+                / rounding_factor;
+
             let tiles = stream::iter(
                 tiling_strategy.tile_information_iterator(query.spatial_bounds),
             )
@@ -392,7 +402,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                 let vector_query = VectorQueryRectangle {
                     spatial_bounds: extended_bounding_box_from_spatial_partition(
                         tile_bounds,
-                        self.radius,
+                        radius,
                     ),
                     time_interval: query.time_interval,
                     spatial_resolution: query.spatial_resolution,
@@ -406,7 +416,6 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
                 while let Some(chunk) = chunks.next().await {
                     let chunk = chunk?;
-                    let radius = self.radius;
                     let stddev = self.stddev;
                     tile_data =
                         spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
@@ -513,7 +522,7 @@ fn generate_zeroed_tiles<'a>(
 }
 
 fn spatial_partition_around_point(coordinate: Coordinate2D, extent: f64) -> SpatialPartition2D {
-    SpatialPartition2D::new_unchecked(
+    SpatialPartition2D::new(
         Coordinate2D::new(
             coordinate.x.sub_checked(extent).unwrap_or(f64::MIN),
             coordinate.y.add_checked(extent).unwrap_or(f64::MAX),
@@ -523,6 +532,7 @@ fn spatial_partition_around_point(coordinate: Coordinate2D, extent: f64) -> Spat
             coordinate.y.sub_checked(extent).unwrap_or(f64::MIN),
         ),
     )
+    .unwrap()
 }
 
 fn extended_bounding_box_from_spatial_partition(
@@ -562,6 +572,12 @@ fn extended_bounding_box_from_spatial_partition(
 /// `stddev`, the standard deviation
 fn gaussian(x: f64, stddev: f64) -> f64 {
     (1. / (f64::sqrt(2. * f64::PI()) * stddev)) * f64::exp(-(x * x) / (2. * stddev * stddev))
+}
+
+/// The inverse function of [gaussian](gaussian)
+fn gaussian_inverse(x: f64, stddev: f64) -> f64 {
+    f64::sqrt(2.)
+        * f64::sqrt(stddev * stddev * f64::ln(1. / (f64::sqrt(2. * f64::PI()) * stddev * x)))
 }
 
 #[cfg(test)]
@@ -921,7 +937,7 @@ mod tests {
         let rasterization = Rasterization {
             params: RasterizationParams {
                 grid_or_density: GridOrDensity::Density(DensityParams {
-                    radius: 1.0,
+                    radius: gaussian(0.99, 1.0),
                     stddev: 1.0,
                 }),
             },
@@ -1002,7 +1018,7 @@ mod tests {
         let rasterization = Rasterization {
             params: RasterizationParams {
                 grid_or_density: GridOrDensity::Density(DensityParams {
-                    radius: 2.0,
+                    radius: gaussian(1.99, 1.0),
                     stddev: 1.0,
                 }),
             },
