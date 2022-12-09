@@ -1,6 +1,7 @@
 mod box_plot;
 mod class_histogram;
 mod histogram;
+mod pie_chart;
 mod scatter_plot;
 mod statistics;
 mod temporal_raster_mean_plot;
