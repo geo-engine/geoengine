@@ -3,7 +3,7 @@ use crate::{
     api::model::datatypes::ResamplingMethod,
     datasets::{external::netcdfcf::NetCdfCfDataProvider, storage::MetaDataDefinition},
     tasks::{TaskContext, TaskStatusInfo},
-    util::{canonicalize_subpath, config::get_config_element, path_with_base_path},
+    util::{config::get_config_element, path_with_base_path},
 };
 use gdal::{
     cpl::CslStringList,
@@ -14,6 +14,7 @@ use gdal::{
     Dataset, DatasetOptions, GdalOpenFlags,
 };
 use gdal_sys::GDALGetRasterStatistics;
+use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{DateTimeParseFormat, TimeInstance, TimeInterval},
