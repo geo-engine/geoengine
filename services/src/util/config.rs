@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 
 use crate::contexts::SessionId;
-use crate::datasets::upload::VolumeId;
+use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 
@@ -392,7 +392,7 @@ impl ConfigElement for GFBio {
 
 #[derive(Debug, Deserialize)]
 pub struct Data {
-    pub volumes: HashMap<VolumeId, PathBuf>,
+    pub volumes: HashMap<VolumeName, PathBuf>,
 }
 
 impl ConfigElement for Data {

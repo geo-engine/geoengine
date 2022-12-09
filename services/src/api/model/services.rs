@@ -4,7 +4,7 @@ use crate::api::model::operators::{
     OgrMetaData,
 };
 use crate::datasets::listing::Provenance;
-use crate::datasets::upload::{UploadId, VolumeId};
+use crate::datasets::upload::{UploadId, VolumeName};
 use crate::error::Result;
 use crate::projects::Symbology;
 use crate::util::user_input::UserInput;
@@ -175,6 +175,6 @@ pub struct CreateUserDataset {
     }
 }))]
 pub struct CreateSystemDataset {
-    pub volume: VolumeId,
+    pub volume: VolumeName,
     pub definition: DatasetDefinition,
 }

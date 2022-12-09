@@ -24,7 +24,7 @@ use crate::api::model::services::{
 use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
-use crate::datasets::upload::{UploadId, Volume, VolumeId};
+use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::handlers;
 use crate::handlers::tasks::TaskAbortOptions;
 use crate::handlers::wcs::CoverageResponse;
@@ -110,7 +110,6 @@ use utoipa::{Modify, OpenApi};
             ProviderLayerId,
             ProviderLayerCollectionId,
             LayerCollectionId,
-            VolumeId,
 
             TimeInstance,
             TimeInterval,
@@ -258,7 +257,8 @@ use utoipa::{Modify, OpenApi};
             Dataset,
             DatasetDefinition,
             AddDataset,
-            Volume
+            Volume,
+            VolumeName
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

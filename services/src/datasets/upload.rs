@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 
 use crate::contexts::Session;
@@ -9,12 +10,11 @@ use crate::{
     util::config::{self, get_config_element},
 };
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::ToSchema;
 
 identifier!(UploadId);
 identifier!(FileId);
-identifier!(VolumeId);
 
 pub trait AdjustFilePath {
     fn adjust_file_path(&self, file_path: &Path) -> Result<PathBuf>;
@@ -22,9 +22,37 @@ pub trait AdjustFilePath {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 pub struct Volume {
-    pub id: VolumeId,
+    pub name: VolumeName,
     #[schema(value_type = String)]
     pub path: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ToSchema, Serialize, Hash)]
+pub struct VolumeName(pub String);
+
+impl Display for VolumeName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for VolumeName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+
+        if s.chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
+            Ok(VolumeName(s))
+        } else {
+            Err(serde::de::Error::custom(
+                "Volume name must only contain alphanumeric characters, underscores and dashes",
+            ))
+        }
+    }
 }
 
 impl AdjustFilePath for Volume {

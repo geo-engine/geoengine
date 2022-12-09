@@ -155,7 +155,7 @@ pub enum Error {
 
     UnknownDatasetId,
 
-    UnknownVolumeId,
+    UnknownVolume,
     OnyAdminsCanCreateDatasetFromVolume,
     AdminsCannotCreateDatasetFromUpload,
 

@@ -91,7 +91,7 @@ pub async fn list_volumes_handler(_session: AdminSession) -> Result<impl Respond
     let volumes = get_config_element::<Data>()?
         .volumes
         .into_iter()
-        .map(|(id, path)| Volume { id, path })
+        .map(|(name, path)| Volume { name, path })
         .collect::<Vec<_>>();
     Ok(web::Json(volumes))
 }
@@ -218,9 +218,9 @@ where
     let volumes = get_config_element::<Data>()?.volumes;
     let volume_path = volumes
         .get(&create.volume)
-        .ok_or(error::Error::UnknownVolumeId)?;
+        .ok_or(error::Error::UnknownVolume)?;
     let volume = Volume {
-        id: create.volume,
+        name: create.volume,
         path: volume_path.clone(),
     };
 
@@ -834,7 +834,7 @@ mod tests {
     use crate::api::model::services::DatasetDefinition;
     use crate::contexts::{InMemoryContext, Session, SessionId, SimpleContext, SimpleSession};
     use crate::datasets::storage::DatasetStore;
-    use crate::datasets::upload::{UploadId, VolumeId};
+    use crate::datasets::upload::{UploadId, VolumeName};
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
     use crate::test_data;
@@ -1223,7 +1223,7 @@ mod tests {
     async fn it_creates_system_dataset() -> Result<()> {
         let ctx = InMemoryContext::test_default();
 
-        let volume = VolumeId::from_str("f6aa9f3d-a211-43e8-9b91-b23ab9632791").unwrap();
+        let volume = VolumeName("test_data".to_string());
 
         let mut meta_data = create_ndvi_meta_data();
 

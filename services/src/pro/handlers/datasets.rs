@@ -76,9 +76,9 @@ where
     let volumes = get_config_element::<Data>()?.volumes;
     let volume_path = volumes
         .get(&create.volume)
-        .ok_or(error::Error::UnknownVolumeId)?;
+        .ok_or(error::Error::UnknownVolume)?;
     let volume = Volume {
-        id: create.volume,
+        name: create.volume,
         path: volume_path.clone(),
     };
 
@@ -124,8 +124,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::TryStreamExt;
@@ -145,7 +143,7 @@ mod tests {
     use crate::{
         api::model::services::{AddDataset, DatasetDefinition, MetaDataDefinition},
         contexts::{Context, Session, SessionId},
-        datasets::upload::{UploadId, UploadRootPath, VolumeId},
+        datasets::upload::{UploadId, UploadRootPath, VolumeName},
         pro::{
             contexts::ProInMemoryContext, projects::ProProjectDb, users::UserDb,
             util::tests::send_pro_test_request,
@@ -366,7 +364,7 @@ mod tests {
     async fn it_creates_system_dataset() -> Result<()> {
         let ctx = ProInMemoryContext::test_default();
 
-        let volume = VolumeId::from_str("f6aa9f3d-a211-43e8-9b91-b23ab9632791").unwrap();
+        let volume = VolumeName("test_data".to_string());
 
         let mut meta_data = create_ndvi_meta_data();
 
