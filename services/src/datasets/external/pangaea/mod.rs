@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
-use crate::datasets::external::pangaea::meta::PangeaMetaData;
+pub use crate::datasets::external::pangaea::meta::PangeaMetaData;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{Layer, LayerCollection, LayerCollectionListOptions};

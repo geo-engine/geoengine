@@ -11,6 +11,7 @@ use crate::layers::layer::{
     ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::util::postgres::DatabaseConnectionConfig;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -39,35 +40,6 @@ use snafu::ensure;
 
 pub const GFBIO_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x907f_9f5b_0304_4a0e_a5ef_28de_62d1_c0f9);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct DatabaseConnectionConfig {
-    host: String,
-    port: u16,
-    database: String,
-    schema: String,
-    user: String,
-    password: String,
-}
-
-impl DatabaseConnectionConfig {
-    fn pg_config(&self) -> Config {
-        let mut config = Config::new();
-        config
-            .user(&self.user)
-            .password(&self.password)
-            .host(&self.host)
-            .dbname(&self.database);
-        config
-    }
-
-    fn ogr_pg_config(&self) -> String {
-        format!(
-            "PG:host={} port={} dbname={} user={} password={}",
-            self.host, self.port, self.database, self.user, self.password
-        )
-    }
-}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -124,7 +96,7 @@ impl GfbioDataProvider {
         })
     }
 
-    async fn resolve_columns(
+    pub async fn resolve_columns(
         conn: PooledConnection<'_, PostgresConnectionManager<NoTls>>,
         schema: &str,
     ) -> Result<(HashMap<String, String>, HashMap<String, String>)> {
@@ -151,7 +123,7 @@ impl GfbioDataProvider {
         ))
     }
 
-    fn build_attribute_query(surrogate_key: i32) -> String {
+    pub fn build_attribute_query(surrogate_key: i32) -> String {
         format!("surrogate_key = {surrogate}", surrogate = surrogate_key)
     }
 
