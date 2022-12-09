@@ -15,6 +15,10 @@ pub use self::histogram::{
     Histogram, HistogramBounds, HistogramParams, HistogramRasterQueryProcessor,
     HistogramVectorQueryProcessor, InitializedHistogram,
 };
+pub use self::pie_chart::{
+    CountPieChartVectorQueryProcessor, InitializedCountPieChart, PieChart, PieChartError,
+    PieChartParams,
+};
 pub use self::statistics::{
     InitializedStatistics, Statistics, StatisticsParams, StatisticsRasterQueryProcessor,
     StatisticsVectorQueryProcessor,

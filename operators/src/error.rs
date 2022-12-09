@@ -334,6 +334,11 @@ pub enum Error {
     XGBoost {
         source: crate::pro::ml::xgboost::XGBoostModuleError,
     },
+
+    #[snafu(context(false))]
+    PieChart {
+        source: crate::plot::PieChartError,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
