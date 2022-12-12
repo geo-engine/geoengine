@@ -511,9 +511,10 @@ impl GdalRasterLoader {
             };
             let elapsed = start.elapsed();
             debug!(
-                "file not found -> returning error = {}, took {:?}",
+                "file not found -> returning error = {}, took: {:?}, file: {:?}",
                 err_result.is_err(),
-                elapsed
+                elapsed,
+                dataset_params.file_path
             );
             return err_result;
         };

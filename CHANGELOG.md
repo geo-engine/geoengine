@@ -9,8 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a handler (`/layers/{provider}/{layer}/workflowId`) to register a layer by id and return the resulting workflow id.
+
+  - https://github.com/geo-engine/geoengine/pull/692
+
 - Added a new operator `XGBoost`. This operator allows to use a pretrained model in order to make predictions based on some set of raster tile data.
-  
+
   - https://github.com/geo-engine/geoengine/pull/639
 
 - Added a handler (`/available`) to the API to check if the service is available.
