@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a new operator `XGBoost`. This operator allows to use a pretrained model in order to make predictions based on some set of raster tile data.
+  
+  - https://github.com/geo-engine/geoengine/pull/639
+
 - Added a handler (`/available`) to the API to check if the service is available.
 
   - https://github.com/geo-engine/geoengine/pull/681
@@ -54,6 +58,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a `RasterScale` operator
 
   - https://github.com/geo-engine/geoengine/pull/610
+
+- Added method to create dataset from the result of the workflow via a task
+
+  - https://github.com/geo-engine/geoengine/pull/675
 
 ### Changed
 

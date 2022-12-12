@@ -134,6 +134,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
+    use serial_test::serial;
 
     #[tokio::test]
     async fn session() {
@@ -202,7 +203,8 @@ mod tests {
         check_allowed_http_methods(anonymous_test_helper, &[Method::POST]).await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[tokio::test]
+    #[serial]
     async fn it_disables_anonymous_access() {
         config::set_config(
             "session.fixed_session_token",
