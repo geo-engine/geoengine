@@ -25,7 +25,6 @@ use crate::layers::listing::LayerCollectionProvider;
 use crate::projects::RasterSymbology;
 use crate::projects::Symbology;
 use crate::tasks::TaskContext;
-use crate::util::canonicalize_subpath;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -39,6 +38,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::TypedOperator;
 use geoengine_operators::source::GdalSource;

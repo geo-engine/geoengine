@@ -276,6 +276,141 @@ impl TypedRasterQueryProcessor {
         }
     }
 
+    pub fn into_u8(self) -> BoxRasterQueryProcessor<u8> {
+        match self {
+            Self::U8(r) => r,
+            Self::U16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+        }
+    }
+
+    pub fn into_u16(self) -> BoxRasterQueryProcessor<u16> {
+        match self {
+            Self::U8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U16(r) => r,
+            Self::U32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+        }
+    }
+
+    pub fn into_u32(self) -> BoxRasterQueryProcessor<u32> {
+        match self {
+            Self::U8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U32(r) => r,
+            Self::U64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+        }
+    }
+
+    pub fn into_u64(self) -> BoxRasterQueryProcessor<u64> {
+        match self {
+            Self::U8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U64(r) => r,
+            Self::I8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+        }
+    }
+
+    pub fn into_f32(self) -> BoxRasterQueryProcessor<f32> {
+        match self {
+            Self::U8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F32(r) => r,
+            Self::F64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+        }
+    }
+
+    pub fn into_i8(self) -> BoxRasterQueryProcessor<i8> {
+        match self {
+            Self::U8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I8(r) => r,
+            Self::I16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+        }
+    }
+
+    pub fn into_i16(self) -> BoxRasterQueryProcessor<i16> {
+        match self {
+            Self::U8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I16(r) => r,
+            Self::I32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+        }
+    }
+
+    pub fn into_i32(self) -> BoxRasterQueryProcessor<i32> {
+        match self {
+            Self::U8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I32(r) => r,
+            Self::I64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+        }
+    }
+
+    pub fn into_i64(self) -> BoxRasterQueryProcessor<i64> {
+        match self {
+            Self::U8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::U64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I16(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::I64(r) => r,
+            Self::F32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+            Self::F64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
+        }
+    }
+
     pub fn into_f64(self) -> BoxRasterQueryProcessor<f64> {
         match self {
             Self::U8(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),

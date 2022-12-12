@@ -437,6 +437,7 @@ mod tests {
     use httptest::responders::status_code;
     use httptest::{Expectation, Server};
     use serde_json::json;
+    use serial_test::serial;
 
     async fn register_test_helper<C: ProContext>(
         ctx: C,
@@ -856,7 +857,8 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[tokio::test]
+    #[serial]
     async fn it_disables_anonymous_access() {
         let ctx = ProInMemoryContext::test_default();
 
@@ -883,7 +885,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[tokio::test]
+    #[serial]
     async fn it_disables_user_registration() {
         let ctx = ProInMemoryContext::test_default();
 
