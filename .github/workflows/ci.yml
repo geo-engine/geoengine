@@ -85,18 +85,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Check with Clippy
         run: cargo clippy --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
-        env:
-          # utoipa packages the UI part of the SwaggerUI and the build.rs of utoipa moves this into a "wrong" folder.
-          # The folder where it is moved is not covered by the cache.
-          # However, utoipa tries to access the UI files and this crashes the test/build process.
-          # Using the CARGO_TARGET_DIR we can force cargo to move all build dependecies into a specific folder.
-          # TODO: remove this when utoipa is fixed
-          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
       - name: Run tests
         run: cargo test ${{ matrix.features }} ${{ matrix.build }} --verbose
-        env:
-          # TODO: remove this when utoipa is fixed
-          CARGO_TARGET_DIR: /home/runner/work/geoengine/geoengine/target
 
   build:
     runs-on: ${{matrix.os}}
