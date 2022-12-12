@@ -329,7 +329,7 @@ pub enum Error {
     InvalidMlModelPath,
     CouldNotGetMlModelDirectory,
 
-    #[cfg(feature = "pro")]
+    #[cfg(feature = "xgboost")]
     #[snafu(context(false))]
     XGBoost {
         source: crate::pro::ml::xgboost::XGBoostModuleError,
