@@ -3,7 +3,7 @@ use crate::{
     api::model::datatypes::ResamplingMethod,
     datasets::{external::netcdfcf::NetCdfCfDataProvider, storage::MetaDataDefinition},
     tasks::{TaskContext, TaskStatusInfo},
-    util::{canonicalize_subpath, config::get_config_element, path_with_base_path},
+    util::{config::get_config_element, path_with_base_path},
 };
 use gdal::{
     cpl::CslStringList,
@@ -14,6 +14,7 @@ use gdal::{
     Dataset, DatasetOptions, GdalOpenFlags,
 };
 use gdal_sys::GDALGetRasterStatistics;
+use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{DateTimeParseFormat, TimeInstance, TimeInterval},
@@ -540,7 +541,7 @@ fn create_subdataset_tiff(
     subdataset: &Dataset,
     time_idx: usize,
 ) -> Result<CreateSubdatasetTiffResult> {
-    let time_str = time_step.as_rfc3339_with_millis();
+    let time_str = time_step.as_datetime_string_with_millis();
     let destination = conversion
         .dataset_out_base
         .join(entity.to_string())
@@ -725,7 +726,7 @@ fn generate_loading_info(
 
                 params.file_path = params
                     .file_path
-                    .with_file_name(time_instance.as_rfc3339_with_millis() + ".tiff");
+                    .with_file_name(time_instance.as_datetime_string_with_millis() + ".tiff");
 
                 let time_interval = TimeInterval::new_instant(*time_instance)
                     .context(error::InvalidTimeCoverageInterval)?;

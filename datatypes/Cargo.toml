@@ -38,6 +38,7 @@ uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
 criterion = "0.4"
+tempfile = "3.1"
 
 [[bench]]
 name = "multi_point_collection"

@@ -337,7 +337,7 @@ pub enum Error {
 
     #[snafu(context(false))]
     LayerDb {
-        source: crate::layers::storage::LayerDbError,
+        source: crate::layers::LayerDbError,
     },
 
     UnknownOperator {
