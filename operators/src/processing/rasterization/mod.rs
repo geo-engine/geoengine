@@ -66,9 +66,9 @@ pub enum GridOrDensity {
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DensityParams {
-    /// Limits the distance (in coordinate units) to which a point is taken
+    /// Defines the cutoff (as percentage of maximum density) down to which a point is taken
     /// into account for an output pixel density value
-    radius: f64,
+    cutoff: f64,
     /// The standard deviation parameter for the gaussian function
     stddev: f64,
 }
@@ -126,7 +126,7 @@ impl RasterOperator for Rasterization {
                 vector_source,
                 out_desc,
                 tiling_specification,
-                params.radius,
+                params.cutoff,
                 params.stddev,
             )
             .map(InitializedRasterOperator::boxed),
@@ -177,15 +177,13 @@ impl InitializedDensityRasterization {
         source: Box<dyn InitializedVectorOperator>,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
-        radius: f64,
+        cutoff: f64,
         stddev: f64,
     ) -> Result<Self, error::Error> {
-        // TODO check for valid combination of radius and stddev for inverse function
         ensure!(
-            radius > 0.,
+            (0. ..1.).contains(&cutoff),
             error::InvalidOperatorSpec {
-                reason: "The radius for density rasterization must be strictly positive."
-                    .to_string()
+                reason: "The cutoff for density rasterization must be in [0, 1).".to_string()
             }
         );
         ensure!(
@@ -195,6 +193,9 @@ impl InitializedDensityRasterization {
                     .to_string()
             }
         );
+
+        // Determine radius from cutoff percentage
+        let radius = gaussian_inverse(cutoff * gaussian(0., stddev), stddev);
 
         Ok(InitializedDensityRasterization {
             source,
@@ -384,14 +385,12 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
             let tile_size_x = tiling_strategy.tile_size_in_pixels.axis_size_x();
             let tile_size_y = tiling_strategy.tile_size_in_pixels.axis_size_y();
 
-            // Determine radius from cutoff percentage
             // Use rounding factor calculated from query resolution to extend in full pixel units
             let rounding_factor = f64::max(
                 1. / query.spatial_resolution.x,
                 1. / query.spatial_resolution.y,
             );
-            let radius = (gaussian_inverse(self.radius, self.stddev) * rounding_factor).ceil()
-                / rounding_factor;
+            let radius = (self.radius * rounding_factor).ceil() / rounding_factor;
 
             let tiles = stream::iter(
                 tiling_strategy.tile_information_iterator(query.spatial_bounds),
@@ -937,7 +936,7 @@ mod tests {
         let rasterization = Rasterization {
             params: RasterizationParams {
                 grid_or_density: GridOrDensity::Density(DensityParams {
-                    radius: gaussian(0.99, 1.0),
+                    cutoff: gaussian(0.99, 1.0) / gaussian(0., 1.0),
                     stddev: 1.0,
                 }),
             },
@@ -1018,7 +1017,7 @@ mod tests {
         let rasterization = Rasterization {
             params: RasterizationParams {
                 grid_or_density: GridOrDensity::Density(DensityParams {
-                    radius: gaussian(1.99, 1.0),
+                    cutoff: gaussian(1.99, 1.0) / gaussian(0., 1.0),
                     stddev: 1.0,
                 }),
             },
