@@ -583,6 +583,7 @@ impl LayerCollectionProvider for NFDIDataProvider {
                     },
                     name: ds.name,
                     description: ds.description,
+                    properties: vec![],
                 })
             })
             .collect();

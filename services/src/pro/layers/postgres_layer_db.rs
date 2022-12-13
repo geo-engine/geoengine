@@ -598,6 +598,7 @@ where
                         },
                         name: row.get(1),
                         description: row.get(2),
+                        properties: vec![],
                     })
                 } else {
                     CollectionItem::Collection(LayerCollectionListing {

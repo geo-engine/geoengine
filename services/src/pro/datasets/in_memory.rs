@@ -514,6 +514,7 @@ impl LayerCollectionProvider for ProHashMapDatasetDb {
                     },
                     name: d.name.clone(),
                     description: d.description.clone(),
+                    properties: vec![],
                 })
             })
             .collect();

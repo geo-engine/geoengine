@@ -16,7 +16,7 @@ use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::bb8::{Pool, PooledConnection};
-use bb8_postgres::tokio_postgres::{Config, NoTls};
+use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
@@ -200,6 +200,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
                     },
                     name: row.get(1),
                     description: row.try_get(2).unwrap_or_else(|_| String::new()),
+                    properties: vec![],
                 })
             })
             .collect();
@@ -466,6 +467,7 @@ mod tests {
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
     use rand::RngCore;
+    use tokio_postgres::Config;
 
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
@@ -577,6 +579,7 @@ mod tests {
                     },
                     name: "Example Title".to_string(),
                     description: String::new(),
+                    properties: vec![],
                 })],
                 entry_label: None,
                 properties: vec![],

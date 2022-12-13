@@ -1,15 +1,15 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
 use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
-use crate::datasets::listing::{Provenance, ProvenanceOutput};
+use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Result;
-use crate::error::{self, Error};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
-    LayerListing, ProviderLayerCollectionId, ProviderLayerId,
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::parsing::string_or_string_array;
@@ -17,20 +17,21 @@ use crate::util::postgres::DatabaseConnectionConfig;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-use bb8_postgres::bb8::{Pool, PooledConnection};
-use bb8_postgres::tokio_postgres::{Config, NoTls};
+use bb8_postgres::bb8::Pool;
+use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
+use futures::future::join_all;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
-    RasterOperator, StaticMetaData, TypedOperator, VectorColumnInfo, VectorOperator,
+    StaticMetaData, TypedOperator, VectorColumnInfo, VectorOperator,
 };
 use geoengine_operators::source::{
-    GdalSource, GdalSourceParameters, OgrSource, OgrSourceColumnSpec, OgrSourceDatasetTimeType,
-    OgrSourceErrorSpec, OgrSourceParameters,
+    OgrSource, OgrSourceColumnSpec, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
+    OgrSourceParameters,
 };
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
@@ -39,7 +40,6 @@ use geoengine_operators::{
 };
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 use url::Url;
 use uuid::Uuid;
 
@@ -65,7 +65,6 @@ impl DataProviderDefinition for GfbioCollectionsDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(
             GfbioCollectionsDataProvider::new(
-                self.name,
                 self.collection_api_url,
                 self.collection_api_auth_token,
                 self.abcd_db_config,
@@ -90,7 +89,6 @@ impl DataProviderDefinition for GfbioCollectionsDataProviderDefinition {
 
 #[derive(Debug)]
 pub struct GfbioCollectionsDataProvider {
-    name: String,
     collection_api_url: Url,
     collection_api_auth_token: String,
     abcd_db_config: DatabaseConnectionConfig,
@@ -99,35 +97,35 @@ pub struct GfbioCollectionsDataProvider {
 }
 
 #[derive(Debug, Deserialize)]
-struct CollectionResponse {
-    id: Uuid,
-    external_user_id: Option<String>,
-    origin: String,
-    set: Vec<CollectionEntry>,
-    created: String, // TODO: datetime
-    service: isize,
+pub struct CollectionResponse {
+    pub id: Uuid,
+    pub external_user_id: Option<String>,
+    pub origin: String,
+    pub set: Vec<CollectionEntry>,
+    pub created: String, // TODO: datetime
+    pub service: isize,
 }
 
 #[derive(Debug, Deserialize)]
-struct CollectionEntry {
+pub struct CollectionEntry {
     #[serde(rename = "_id")]
-    id: String,
+    pub id: String,
     #[serde(rename = "_type")]
-    type_: String,
+    pub type_: String,
     #[serde(rename = "_source")]
-    source: CollectionEntrySource,
-    // TODO: more fields
+    pub source: CollectionEntrySource,
 }
 
 #[derive(Debug, Deserialize)]
-struct CollectionEntrySource {
+pub struct CollectionEntrySource {
     #[serde(rename = "type", deserialize_with = "string_or_string_array")]
-    type_: Vec<String>,
-    datalink: Option<String>,
-    citation_title: String,
+    pub type_: Vec<String>,
+    pub datalink: Option<String>,
+    pub citation_title: String,
     #[serde(rename = "abcdDatasetIdentifier")]
-    abcd_dataset_identifier: Option<String>,
-    // TODO: more fields
+    pub abcd_dataset_identifier: Option<String>,
+    #[serde(rename = "vatVisualizable")]
+    pub vat_visualizable: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -155,7 +153,7 @@ impl FromStr for GfBioCollectionId {
             },
             ["collections", collection, "pangaea", layer] => GfBioCollectionId::PangaeaLayer {
                 collection: collection.to_string(),
-                layer: layer.replace("__", "/").to_string(), // decode the DOI,
+                layer: layer.replace("__", "/"), // decode the DOI,
             },
             _ => return Err(crate::error::Error::InvalidLayerCollectionId),
         })
@@ -198,9 +196,25 @@ impl TryFrom<GfBioCollectionId> for LayerId {
     }
 }
 
+#[derive(Debug, Clone)]
+enum LayerStatus {
+    Ok,
+    Unavailable,
+    Error,
+}
+
+impl fmt::Display for LayerStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            LayerStatus::Ok => write!(f, "ok"),
+            LayerStatus::Unavailable => write!(f, "unavailable"),
+            LayerStatus::Error => write!(f, "error"),
+        }
+    }
+}
+
 impl GfbioCollectionsDataProvider {
     async fn new(
-        name: String,
         url: Url,
         auth_token: String,
         db_config: DatabaseConnectionConfig,
@@ -210,7 +224,6 @@ impl GfbioCollectionsDataProvider {
         let pool = Pool::builder().build(pg_mgr).await?;
 
         Ok(Self {
-            name,
             collection_api_url: url,
             collection_api_auth_token: auth_token,
             abcd_db_config: db_config,
@@ -219,41 +232,9 @@ impl GfbioCollectionsDataProvider {
         })
     }
 
-    #[allow(clippy::unused_async)] // TODO remove when properly implemented
-    async fn get_collections(
-        &self,
-        _options: Validated<LayerCollectionListOptions>,
-    ) -> Result<LayerCollection> {
-        // TODO: use options
-
-        // TODO: get collection for current user from GFBio collections API
-        //       for this we need to get current user id and need test data that is associated to a user
-
-        let mock_collections = [
-            ("4917f014-834f-432f-9dbc-66b2d794036f", "1 ABCD Collection"),
-            (
-                "63cf68e4-6e11-469d-8f35-af83ee6586dc",
-                "2 ABCD Units + 2 PANGAEA Units",
-            ),
-        ];
-
-        let items: Result<Vec<CollectionItem>> = mock_collections
-            .into_iter()
-            .map(|(id, name)| {
-                Ok(CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
-                        collection_id: (GfBioCollectionId::Collection {
-                            collection: id.to_string(),
-                        })
-                        .try_into()?,
-                    },
-                    name: name.to_string(),
-                    description: String::new(),
-                }))
-            })
-            .collect();
-
+    fn get_collections() -> Result<LayerCollection> {
+        // return an empty collection because we do not support browsing the collections
+        // but rather accessing them directly via their ID
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
                 provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
@@ -261,7 +242,7 @@ impl GfbioCollectionsDataProvider {
             },
             name: "GFBio Collections".to_owned(),
             description: String::new(),
-            items: items?,
+            items: vec![],
             entry_label: None,
             properties: vec![],
         })
@@ -270,7 +251,8 @@ impl GfbioCollectionsDataProvider {
     async fn get_collection(
         &self,
         collection: &str,
-        _options: Validated<LayerCollectionListOptions>,
+        offset: u32,
+        limit: u32,
     ) -> Result<LayerCollection> {
         let client = Client::new();
 
@@ -291,29 +273,14 @@ impl GfbioCollectionsDataProvider {
         let items = response
             .set
             .into_iter()
-            .map(|entry| {
-                let layer_id = match entry.source.abcd_dataset_identifier {
-                    Some(id) => GfBioCollectionId::AbcdLayer {
-                        collection: collection.to_string(),
-                        layer: id, // TODO: maybe use entry.id and extract the relevant part instead?
-                    },
-                    None => GfBioCollectionId::PangaeaLayer {
-                        collection: collection.to_string(),
-                        layer: entry.id,
-                    },
-                };
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
-                        layer_id: layer_id
-                            .try_into()
-                            .expect("AbcdLayer and PangaeaLayer should be valid LayerIds"),
-                    },
-                    name: entry.source.citation_title,
-                    description: String::new(),
-                })
-            })
-            .collect();
+            .skip(offset as usize)
+            .take(limit as usize)
+            .map(|entry| self.create_layer_listing(collection, entry));
+
+        let items = join_all(items)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
@@ -323,7 +290,7 @@ impl GfbioCollectionsDataProvider {
                 }
                 .try_into()?,
             },
-            name: "Collection Name".to_string(), // TODO
+            name: "GfBio Collection".to_string(), // no info available via API
             description: String::new(),
             items,
             entry_label: None,
@@ -331,21 +298,79 @@ impl GfbioCollectionsDataProvider {
         })
     }
 
-    fn extract_gfbio_dataset_id_from_collection_entry_id(entry_id: &str) -> Result<String> {
-        // TODO: do we need this or not?
-        // // the entry id is of the form "urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0612"
-        // // but we need to extract the dataset id "urn:gfbio.org:abcd:3_259_402"
-        // let entry_id = entry_id
-        //     .strip_prefix("urn:gfbio.org:abcd:")
-        //     .ok_or(crate::error::Error::InvalidLayerId)?;
+    async fn create_layer_listing(
+        &self,
+        collection: &str,
+        entry: CollectionEntry,
+    ) -> Result<CollectionItem> {
+        match entry.source.abcd_dataset_identifier.as_ref() {
+            Some(_) => self.create_abcd_layer_listing(collection, entry).await,
+            None => Ok(Self::create_pangaea_layer_listing(collection, entry)),
+        }
+    }
 
-        // Ok(match entry_id.find(":") {
-        //     Some(pos) => &entry_id[..pos],
-        //     None => entry_id,
-        // }
-        // .to_string())
+    async fn create_abcd_layer_listing(
+        &self,
+        collection: &str,
+        entry: CollectionEntry,
+    ) -> Result<CollectionItem> {
+        let abcd_dataset_identifier = entry
+            .source
+            .abcd_dataset_identifier
+            .expect("abcd_dataset_identifier should be present because it was checked in `create_layer_listing`");
 
-        Ok(entry_id.to_string())
+        let status = if entry.source.vat_visualizable {
+            let in_database = self
+                .get_surrogate_key_for_gfbio_dataset(&abcd_dataset_identifier)
+                .await
+                .is_ok();
+
+            if in_database {
+                LayerStatus::Ok
+            } else {
+                LayerStatus::Error
+            }
+        } else {
+            LayerStatus::Unavailable
+        };
+
+        Ok(CollectionItem::Layer(LayerListing {
+            id: ProviderLayerId {
+                provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
+                layer_id: GfBioCollectionId::AbcdLayer {
+                    collection: collection.to_string(),
+                    layer: abcd_dataset_identifier,
+                }
+                .try_into()
+                .expect("AbcdLayer should be a valid LayerId"),
+            },
+            name: entry.source.citation_title,
+            description: String::new(),
+            properties: vec![("status".to_string(), status.to_string()).into()],
+        }))
+    }
+
+    fn create_pangaea_layer_listing(collection: &str, entry: CollectionEntry) -> CollectionItem {
+        let status = if entry.source.vat_visualizable {
+            LayerStatus::Ok
+        } else {
+            LayerStatus::Unavailable
+        };
+
+        CollectionItem::Layer(LayerListing {
+            id: ProviderLayerId {
+                provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
+                layer_id: GfBioCollectionId::PangaeaLayer {
+                    collection: collection.to_string(),
+                    layer: entry.id,
+                }
+                .try_into()
+                .expect("PangaeaLayer should be a valid LayerId"),
+            },
+            name: entry.source.citation_title,
+            description: String::new(),
+            properties: vec![("status".to_string(), status.to_string()).into()],
+        })
     }
 
     async fn get_surrogate_key_for_gfbio_dataset(&self, dataset_id: &str) -> Result<i32> {
@@ -361,28 +386,23 @@ impl GfbioCollectionsDataProvider {
             ))
             .await?;
 
-        let row = conn.query_one(&stmt, &[&dataset_id]).await.unwrap(); // TODO: handle error
+        let row = conn.query_one(&stmt, &[&dataset_id]).await?;
 
         Ok(row.get(0))
     }
 
     async fn create_gfbio_loading_info(
         &self,
-        layer: &str,
+        abcd_dataset_id: &str,
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
-        let abcd_dataset_id =
-            Self::extract_gfbio_dataset_id_from_collection_entry_id(layer).unwrap(); // TODO: handle error
-
         let surrogate_key = self
-            .get_surrogate_key_for_gfbio_dataset(&abcd_dataset_id)
-            .await
-            .unwrap(); // TODO: handle error
+            .get_surrogate_key_for_gfbio_dataset(abcd_dataset_id)
+            .await?;
 
         let (column_hash_to_name, column_name_to_hash) =
             GfbioDataProvider::resolve_columns(self.pool.get().await?, &self.abcd_db_config.schema)
-                .await
-                .unwrap(); // TODO: handle error
+                .await?;
 
         Ok(Box::new(StaticMetaData {
             loading_info: OgrSourceDataset {
@@ -485,13 +505,15 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
-        // TODO: offset & limit
         let collection = GfBioCollectionId::from_str(&collection.0)?;
 
+        let options = options.user_input;
+
         match collection {
-            GfBioCollectionId::Collections => self.get_collections(options).await,
+            GfBioCollectionId::Collections => Self::get_collections(),
             GfBioCollectionId::Collection { collection } => {
-                self.get_collection(&collection, options).await
+                self.get_collection(&collection, options.offset, options.limit)
+                    .await
             }
             _ => Err(crate::error::Error::InvalidLayerCollectionId),
         }
@@ -502,39 +524,63 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
     }
 
     async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
-        let id = GfBioCollectionId::from_str(&id.0)?;
-        dbg!(&id);
+        let gfbio_collection_id = GfBioCollectionId::from_str(&id.0)?;
 
-        // TODO: maybe dispatch to existing Abcd/Pangaea providers? Or just delegate to the code
-        match &id {
-            GfBioCollectionId::AbcdLayer { collection, layer }
-            | GfBioCollectionId::PangaeaLayer { collection, layer } => Ok(Layer {
-                id: ProviderLayerId {
-                    provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
-                    layer_id: id.clone().try_into()?,
-                },
-                name: "Layer Name".to_string(), // TODO
-                description: String::new(),
-                workflow: Workflow {
-                    operator: TypedOperator::Vector(
-                        OgrSource {
-                            params: OgrSourceParameters {
-                                data: DataId::External(ExternalDataId {
-                                    provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
-                                    layer_id: id.try_into()?,
-                                })
-                                .into(),
-                                attribute_filters: None,
-                                attribute_projection: None,
-                            },
+        match &gfbio_collection_id {
+            GfBioCollectionId::AbcdLayer {
+                collection,
+                layer: _,
+            }
+            | GfBioCollectionId::PangaeaLayer {
+                collection,
+                layer: _,
+            } => {
+                // get the layer information by reusing the code for listing the collections
+                let collection = self.get_collection(collection, 0, std::u32::MAX).await?;
+
+                let layer = collection
+                    .items
+                    .into_iter()
+                    .filter_map(|l| match l {
+                        CollectionItem::Layer(l) => Some(l),
+                        CollectionItem::Collection(_) => None,
+                    })
+                    .find(|l| {
+                        l.id == ProviderLayerId {
+                            provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
+                            layer_id: id.clone(),
                         }
-                        .boxed(),
-                    ),
-                },
-                symbology: None,
-                properties: vec![],
-                metadata: HashMap::new(),
-            }),
+                    })
+                    .unwrap(); // TODO: handle error
+
+                Ok(Layer {
+                    id: ProviderLayerId {
+                        provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
+                        layer_id: id.clone(),
+                    },
+                    name: layer.name,
+                    description: String::new(),
+                    workflow: Workflow {
+                        operator: TypedOperator::Vector(
+                            OgrSource {
+                                params: OgrSourceParameters {
+                                    data: DataId::External(ExternalDataId {
+                                        provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
+                                        layer_id: id.clone(),
+                                    })
+                                    .into(),
+                                    attribute_filters: None,
+                                    attribute_projection: None,
+                                },
+                            }
+                            .boxed(),
+                        ),
+                    },
+                    symbology: None,
+                    properties: layer.properties,
+                    metadata: HashMap::new(),
+                })
+            }
             _ => return Err(crate::error::Error::InvalidLayerId),
         }
     }
@@ -542,7 +588,7 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
 
 #[async_trait]
 impl DataProvider for GfbioCollectionsDataProvider {
-    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
+    async fn provenance(&self, _id: &DataId) -> Result<ProvenanceOutput> {
         todo!()
     }
 }
@@ -554,7 +600,7 @@ impl
 {
     async fn meta_data(
         &self,
-        id: &geoengine_datatypes::dataset::DataId,
+        _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -600,12 +646,11 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
             GfBioCollectionId::PangaeaLayer {
                 collection: _,
                 layer,
-            } => self
-                .create_pangaea_loading_info(&dbg!(layer))
-                .await
-                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+            } => self.create_pangaea_loading_info(&layer).await.map_err(|e| {
+                geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(e),
-                }),
+                }
+            }),
             _ => Err(geoengine_operators::error::Error::InvalidDataId),
         }
     }
@@ -641,7 +686,6 @@ mod tests {
         // TODO: mock the Pangaea API
 
         let provider = GfbioCollectionsDataProvider::new(
-            "GFBIO Collections".to_string(),
             "https://collections.gfbio.dev/api/".parse().unwrap(),
             "Token 6bc06a951394f222eeb576c6f86a4ad73ab805f6".to_string(),
             DatabaseConnectionConfig {
@@ -671,24 +715,24 @@ mod tests {
             .await
             .unwrap();
 
-        let child = if let CollectionItem::Collection(c) = &collections.items[0] {
+        let _child = if let CollectionItem::Collection(c) = &collections.items[0] {
             &c.id
         } else {
             panic!("expected collection");
         };
 
-        let collections = provider
-            .collection(
-                &child.collection_id,
-                LayerCollectionListOptions {
-                    offset: 0,
-                    limit: 10,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        // let collections = provider
+        //     .collection(
+        //         &child.collection_id,
+        //         LayerCollectionListOptions {
+        //             offset: 0,
+        //             limit: 10,
+        //         }
+        //         .validated()
+        //         .unwrap(),
+        //     )
+        //     .await
+        //     .unwrap();
 
         // provider.meta_data(id)
         // urn:gfbio.org:abcd:3_259_402

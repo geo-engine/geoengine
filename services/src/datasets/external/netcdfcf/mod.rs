@@ -1322,6 +1322,7 @@ async fn listing_from_netcdf_file(
                     },
                     name: entity.name,
                     description: String::new(),
+                    properties: vec![],
                 }))
             })
             .collect::<crate::error::Result<Vec<CollectionItem>>>()?
