@@ -67,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - https://github.com/geo-engine/geoengine/pull/675
 
+- Added a `PieChart` operator
+
+  - https://github.com/geo-engine/geoengine/pull/694
+
 ### Changed
 
 - The Interpolation operator's input resolution can now be set to `native` to take the best available resolution, if it is known.

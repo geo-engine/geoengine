@@ -1,6 +1,7 @@
 mod box_plot;
 mod class_histogram;
 mod histogram;
+mod pie_chart;
 mod scatter_plot;
 mod statistics;
 mod temporal_raster_mean_plot;
@@ -13,6 +14,10 @@ pub use self::class_histogram::{
 pub use self::histogram::{
     Histogram, HistogramBounds, HistogramParams, HistogramRasterQueryProcessor,
     HistogramVectorQueryProcessor, InitializedHistogram,
+};
+pub use self::pie_chart::{
+    CountPieChartVectorQueryProcessor, InitializedCountPieChart, PieChart, PieChartError,
+    PieChartParams,
 };
 pub use self::statistics::{
     InitializedStatistics, Statistics, StatisticsParams, StatisticsRasterQueryProcessor,
