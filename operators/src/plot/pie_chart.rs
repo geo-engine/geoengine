@@ -18,8 +18,8 @@ use tracing::{span, Level};
 
 pub const PIE_CHART_OPERATOR_NAME: &str = "PieChart";
 
-/// If the number of pies in the result is greater than this, the operator will fail.
-pub const MAX_NUMBER_OF_PIES: usize = 32;
+/// If the number of slices in the result is greater than this, the operator will fail.
+pub const MAX_NUMBER_OF_SLICES: usize = 32;
 
 /// A pie chart plot about a column of a vector input.
 pub type PieChart = Operator<PieChartParams, SingleVectorSource>;
@@ -210,7 +210,7 @@ impl CountPieChartVectorQueryProcessor {
         query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<<CountPieChartVectorQueryProcessor as PlotQueryProcessor>::OutputFormat> {
-        let mut pies: HashMap<String, f64> = HashMap::new();
+        let mut slices: HashMap<String, f64> = HashMap::new();
 
         // TODO: parallelize
 
@@ -229,11 +229,11 @@ impl CountPieChartVectorQueryProcessor {
                         continue; // ignore no data
                     }
 
-                    *pies.entry(v).or_insert(0.0) += 1.0;
+                    *slices.entry(v).or_insert(0.0) += 1.0;
                 }
 
-                if pies.len() > MAX_NUMBER_OF_PIES {
-                    return Err(PieChartError::TooManyPies.into());
+                if slices.len() > MAX_NUMBER_OF_SLICES {
+                    return Err(PieChartError::TooManySlices.into());
                 }
             }
         });
@@ -241,7 +241,7 @@ impl CountPieChartVectorQueryProcessor {
         // TODO: display NO-DATA count?
 
         let bar_chart = geoengine_datatypes::plots::PieChart::new(
-            pies.into_iter().collect(),
+            slices.into_iter().collect(),
             self.column_label.clone(),
             self.donut,
         )?;
@@ -258,8 +258,11 @@ impl CountPieChartVectorQueryProcessor {
     module(error),
 )]
 pub enum PieChartError {
-    #[snafu(display("The number of pies is too high. Maximum is {}.", MAX_NUMBER_OF_PIES))]
-    TooManyPies,
+    #[snafu(display(
+        "The number of slices is too high. Maximum is {}.",
+        MAX_NUMBER_OF_SLICES
+    ))]
+    TooManySlices,
 }
 
 #[cfg(test)]
@@ -612,7 +615,7 @@ mod tests {
 
         assert_eq!(
             result.to_string(),
-            "PieChart: The number of pies is too high. Maximum is 32."
+            "PieChart: The number of slices is too high. Maximum is 32."
         );
 
         let pie_chart = PieChart {

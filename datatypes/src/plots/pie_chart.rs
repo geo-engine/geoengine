@@ -10,13 +10,13 @@ use std::collections::BTreeMap;
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PieChart {
-    pies: BTreeMap<String, f64>,
+    slices: BTreeMap<String, f64>,
     legend_label: String,
     donut: bool,
 }
 
 impl PieChart {
-    pub fn new(pies: BTreeMap<String, f64>, legend_label: String, donut: bool) -> Result<Self> {
+    pub fn new(slices: BTreeMap<String, f64>, legend_label: String, donut: bool) -> Result<Self> {
         ensure!(
             !legend_label.is_empty(),
             error::Plot {
@@ -24,14 +24,14 @@ impl PieChart {
             }
         );
         ensure!(
-            pies.values().all(|&v| v > 0.0),
+            slices.values().all(|&v| v > 0.0),
             error::Plot {
-                details: "All pies of the pie chart must have a positive value".to_string()
+                details: "All slices of the pie chart must have a positive value".to_string()
             }
         );
 
         Ok(Self {
-            pies,
+            slices,
             legend_label,
             donut,
         })
@@ -39,13 +39,13 @@ impl PieChart {
 }
 
 #[derive(Debug)]
-struct PieChartValue {
+struct PieChartSlice {
     legend_label: String,
     label: String,
     value: f64,
 }
 
-impl Serialize for PieChartValue {
+impl Serialize for PieChartSlice {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::ser::Serializer,
@@ -62,8 +62,8 @@ impl Plot for PieChart {
         let measurement = self.legend_label.clone();
 
         let mut values = Vec::new();
-        for (label, value) in &self.pies {
-            values.push(PieChartValue {
+        for (label, value) in &self.slices {
+            values.push(PieChartSlice {
                 legend_label: measurement.clone(),
                 label: label.clone(),
                 value: *value,
