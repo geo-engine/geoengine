@@ -86,7 +86,7 @@ impl GfbioDataProvider {
         let pool = Pool::builder().build(pg_mgr).await?;
 
         let (column_hash_to_name, column_name_to_hash) =
-            Self::resolve_columns(pool.get().await?, &db_config.schema).await?;
+            Self::resolve_columns(&pool.get().await?, &db_config.schema).await?;
 
         Ok(Self {
             db_config,
@@ -97,7 +97,7 @@ impl GfbioDataProvider {
     }
 
     pub async fn resolve_columns(
-        conn: PooledConnection<'_, PostgresConnectionManager<NoTls>>,
+        conn: &PooledConnection<'_, PostgresConnectionManager<NoTls>>,
         schema: &str,
     ) -> Result<(HashMap<String, String>, HashMap<String, String>)> {
         let stmt = conn
@@ -142,6 +142,43 @@ impl GfbioDataProvider {
         let row = conn.query_one(&stmt, &[&dataset_id]).await.ok();
 
         Ok(row.map(|r| r.get::<usize, i32>(0)))
+    }
+
+    pub async fn get_provenance(
+        id: &DataId,
+        surrogate_key: i32,
+        column_name_to_hash: &HashMap<String, String>,
+        conn: &PooledConnection<'_, PostgresConnectionManager<NoTls>>,
+        schema: &str,
+    ) -> Result<ProvenanceOutput> {
+        let stmt = conn
+            .prepare(&format!(
+                r#"
+        SELECT "{citation}", "{license}", "{uri}"
+        FROM {schema}.abcd_datasets WHERE surrogate_key = $1;"#,
+                citation = column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/IPRStatements/Citations/Citation/Text")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                uri = column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/Description/Representation/URI")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                license = column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/IPRStatements/Licenses/License/Text")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                schema = schema
+            ))
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&surrogate_key]).await?;
+
+        Ok(ProvenanceOutput {
+            data: id.clone(),
+            provenance: Some(Provenance {
+                citation: row.try_get(0).unwrap_or_else(|_| String::new()),
+                license: row.try_get(1).unwrap_or_else(|_| String::new()),
+                uri: row.try_get(2).unwrap_or_else(|_| String::new()),
+            }),
+        })
     }
 }
 
@@ -282,50 +319,20 @@ impl DataProvider for GfbioDataProvider {
     async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
         let surrogate_key: i32 = id
             .external()
-            .ok_or(Error::InvalidDataId)
-            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            })?
+            .ok_or(Error::InvalidDataId)?
             .layer_id
             .0
             .parse()
-            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            })?;
+            .map_err(|_| Error::InvalidDataId)?;
 
-        let conn = self.pool.get().await?;
-
-        let stmt = conn
-            .prepare(&format!(
-                r#"
-            SELECT "{citation}", "{license}", "{uri}"
-            FROM {schema}.abcd_datasets WHERE surrogate_key = $1;"#,
-                citation = self
-                    .column_name_to_hash
-                    .get("/DataSets/DataSet/Metadata/IPRStatements/Citations/Citation/Text")
-                    .ok_or(Error::GfbioMissingAbcdField)?,
-                uri = self
-                    .column_name_to_hash
-                    .get("/DataSets/DataSet/Metadata/Description/Representation/URI")
-                    .ok_or(Error::GfbioMissingAbcdField)?,
-                license = self
-                    .column_name_to_hash
-                    .get("/DataSets/DataSet/Metadata/IPRStatements/Licenses/License/Text")
-                    .ok_or(Error::GfbioMissingAbcdField)?,
-                schema = self.db_config.schema
-            ))
-            .await?;
-
-        let row = conn.query_one(&stmt, &[&surrogate_key]).await?;
-
-        Ok(ProvenanceOutput {
-            data: id.clone(),
-            provenance: Some(Provenance {
-                citation: row.try_get(0).unwrap_or_else(|_| String::new()),
-                license: row.try_get(1).unwrap_or_else(|_| String::new()),
-                uri: row.try_get(2).unwrap_or_else(|_| String::new()),
-            }),
-        })
+        Self::get_provenance(
+            id,
+            surrogate_key,
+            &self.column_hash_to_name,
+            &self.pool.get().await?,
+            &self.db_config.schema,
+        )
+        .await
     }
 }
 

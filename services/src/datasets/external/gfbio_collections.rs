@@ -44,7 +44,7 @@ use url::Url;
 use uuid::Uuid;
 
 use super::gfbio::GfbioDataProvider;
-use super::pangaea::PangeaMetaData;
+use super::pangaea::{PangaeaDataProvider, PangaeaMetaData};
 
 pub const GFBIO_COLLECTIONS_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0xf64e_2d5b_3b80_476a_83f5_c330_956b_2909);
@@ -400,9 +400,11 @@ impl GfbioCollectionsDataProvider {
             .get_surrogate_key_for_gfbio_dataset(abcd_dataset_id)
             .await?;
 
-        let (column_hash_to_name, column_name_to_hash) =
-            GfbioDataProvider::resolve_columns(self.pool.get().await?, &self.abcd_db_config.schema)
-                .await?;
+        let (column_hash_to_name, column_name_to_hash) = GfbioDataProvider::resolve_columns(
+            &self.pool.get().await?,
+            &self.abcd_db_config.schema,
+        )
+        .await?;
 
         Ok(Box::new(StaticMetaData {
             loading_info: OgrSourceDataset {
@@ -468,11 +470,13 @@ impl GfbioCollectionsDataProvider {
         layer: &str,
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
-        let doi = layer.strip_prefix("oai:pangaea.de:doi:").unwrap(); // TODO: handle error
+        let doi = layer
+            .strip_prefix("oai:pangaea.de:doi:")
+            .ok_or(crate::error::Error::InvalidLayerId)?;
 
         let client = reqwest::Client::new();
 
-        let pmd: PangeaMetaData = client
+        let pmd: PangaeaMetaData = client
             .get(format!(
                 "{}/{}?format=metadata_jsonld",
                 self.pangaea_url, doi
@@ -551,7 +555,7 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
                             layer_id: id.clone(),
                         }
                     })
-                    .unwrap(); // TODO: handle error
+                    .ok_or(crate::error::Error::UnknownLayerId { id: id.clone() })?;
 
                 Ok(Layer {
                     id: ProviderLayerId {
@@ -588,8 +592,48 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
 
 #[async_trait]
 impl DataProvider for GfbioCollectionsDataProvider {
-    async fn provenance(&self, _id: &DataId) -> Result<ProvenanceOutput> {
-        todo!()
+    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
+        let external_id = id.external().ok_or(crate::error::Error::InvalidDataId)?;
+        let gfbio_id = GfBioCollectionId::from_str(&external_id.layer_id.0)?;
+
+        match gfbio_id {
+            GfBioCollectionId::AbcdLayer {
+                collection: _,
+                layer,
+            } => {
+                let conn = self.pool.get().await?;
+
+                let (_column_hash_to_name, column_name_to_hash) =
+                    GfbioDataProvider::resolve_columns(&conn, &self.abcd_db_config.schema).await?;
+
+                let surrogate_key = self.get_surrogate_key_for_gfbio_dataset(&layer).await?;
+
+                GfbioDataProvider::get_provenance(
+                    id,
+                    surrogate_key,
+                    &column_name_to_hash,
+                    &conn,
+                    &self.abcd_db_config.schema,
+                )
+                .await
+            }
+            GfBioCollectionId::PangaeaLayer {
+                collection: _,
+                layer,
+            } => {
+                let doi = layer
+                    .strip_prefix("oai:pangaea.de:doi:")
+                    .ok_or(crate::error::Error::InvalidLayerId)?;
+                PangaeaDataProvider::get_provenance(
+                    &reqwest::Client::new(),
+                    &self.pangaea_url,
+                    id,
+                    doi,
+                )
+                .await
+            }
+            _ => Err(crate::error::Error::InvalidDataId),
+        }
     }
 }
 
@@ -632,7 +676,8 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
             return Err(geoengine_operators::error::Error::InvalidDataId);
         };
 
-        let id = GfBioCollectionId::from_str(&id.layer_id.0).unwrap(); // TODO: handle Error
+        let id = GfBioCollectionId::from_str(&id.layer_id.0)
+            .map_err(|_| geoengine_operators::error::Error::InvalidDataId)?;
 
         match id {
             GfBioCollectionId::AbcdLayer {
@@ -673,8 +718,6 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
 #[cfg(test)]
 mod tests {
-    use crate::util::user_input::UserInput;
-
     use super::*;
 
     #[tokio::test]
@@ -685,7 +728,7 @@ mod tests {
 
         // TODO: mock the Pangaea API
 
-        let provider = GfbioCollectionsDataProvider::new(
+        let _provider = GfbioCollectionsDataProvider::new(
             "https://collections.gfbio.dev/api/".parse().unwrap(),
             "Token 6bc06a951394f222eeb576c6f86a4ad73ab805f6".to_string(),
             DatabaseConnectionConfig {
@@ -701,40 +744,5 @@ mod tests {
         )
         .await
         .unwrap();
-
-        let collections = provider
-            .collection(
-                &LayerCollectionId("collections".to_string()),
-                LayerCollectionListOptions {
-                    offset: 0,
-                    limit: 10,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let _child = if let CollectionItem::Collection(c) = &collections.items[0] {
-            &c.id
-        } else {
-            panic!("expected collection");
-        };
-
-        // let collections = provider
-        //     .collection(
-        //         &child.collection_id,
-        //         LayerCollectionListOptions {
-        //             offset: 0,
-        //             limit: 10,
-        //         }
-        //         .validated()
-        //         .unwrap(),
-        //     )
-        //     .await
-        //     .unwrap();
-
-        // provider.meta_data(id)
-        // urn:gfbio.org:abcd:3_259_402
     }
 }
