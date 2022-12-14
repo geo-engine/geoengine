@@ -219,7 +219,9 @@ pub fn create_overviews<C: TaskContext>(
     let dataset = gdal_open_dataset_ex(
         &file_path,
         DatasetOptions {
-            open_flags: GdalOpenFlags::GDAL_OF_READONLY | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
+            open_flags: GdalOpenFlags::GDAL_OF_READONLY
+                | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER
+                | GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
             allowed_drivers: Some(&["netCDF"]),
             open_options: None,
             sibling_files: None,
@@ -431,10 +433,22 @@ fn index_subdataset<C: TaskContext>(
         conversion.dataset_out_base.display()
     );
 
+    dbg!(
+        conversion,
+        time_coverage,
+        resampling_method,
+        // task_context,
+        &stats_for_group,
+        conversion_index,
+        number_of_conversions
+    );
+
     let subdataset = gdal_open_dataset_ex(
-        Path::new(&conversion.dataset_in),
+        dbg!(Path::new(&conversion.dataset_in)),
         DatasetOptions {
-            open_flags: GdalOpenFlags::GDAL_OF_READONLY | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
+            open_flags: GdalOpenFlags::GDAL_OF_READONLY
+                | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER
+                | GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
             allowed_drivers: Some(&["netCDF"]),
             open_options: None,
             sibling_files: None,
@@ -544,8 +558,11 @@ fn create_subdataset_tiff(
     let time_str = time_step.as_datetime_string_with_millis();
     let destination = conversion
         .dataset_out_base
+        .canonicalize()
+        .unwrap()
         .join(entity.to_string())
-        .join(time_str + ".tiff");
+        .join(time_str.clone() + ".tiff");
+
     let name = format!("/{}", conversion.array_path);
     let view = format!("[{entity},{time_idx},:,:]",);
     let mut options = vec![
@@ -562,11 +579,18 @@ fn create_subdataset_tiff(
             value = raster_creation_option.value
         ));
     }
-    let overview_dataset = multi_dim_translate(
+
+    dbg!(
+        destination.parent(),
+        destination.parent().unwrap().exists(),
+        destination.parent().unwrap().is_dir()
+    );
+
+    let overview_dataset = dbg!(multi_dim_translate(
         &[subdataset],
-        MultiDimTranslateDestination::path(&destination).context(error::GdalMd)?,
-        Some(MultiDimTranslateOptions::new(options).context(error::GdalMd)?),
-    )
+        MultiDimTranslateDestination::path(dbg!(&destination)).context(error::GdalMd)?,
+        Some(MultiDimTranslateOptions::new(dbg!(options)).context(error::GdalMd)?),
+    ))
     .context(error::GdalMd)?;
     let min_max = (|| unsafe {
         let c_band =
@@ -889,7 +913,7 @@ mod tests {
             &ConversionMetadata {
                 dataset_in,
                 dataset_out_base: tempdir_path.clone(),
-                array_path: "/metric_1/ebv_cube".to_string(),
+                array_path: "metric_1/ebv_cube".to_string(),
                 number_of_entities: 3,
             },
             &TimeCoverage::Regular {
@@ -904,7 +928,7 @@ mod tests {
             &NopTaskContext,
             &mut Default::default(),
             0,
-            1,
+            2,
         )
         .unwrap();
 

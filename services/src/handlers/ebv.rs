@@ -434,7 +434,7 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
                     }),
                     Err(e) => Err(NetCdfCf4DProviderError::CannotCreateOverview {
                         dataset: file,
-                        source: Box::new(e),
+                        source: Box::new(dbg!(e)),
                     }),
                 }
             })
@@ -652,7 +652,8 @@ mod tests {
         let status = ctx.tasks().status(task_response.task_id).await.unwrap();
 
         let mut response = if let TaskStatus::Completed { info, .. } = status {
-            info.as_any_arc()
+            dbg!(info)
+                .as_any_arc()
                 .downcast::<NetCdfCfOverviewResponse>()
                 .unwrap()
                 .as_ref()
