@@ -38,7 +38,7 @@ use tracing::Level;
 use typetag::serde;
 
 /// An operator that rasterizes vector data
-pub type Rasterization = Operator<RasterizationParams, SingleVectorSource>;
+pub type Rasterization = Operator<GridOrDensity, SingleVectorSource>;
 
 impl OperatorName for Rasterization {
     const TYPE_NAME: &'static str = "Rasterization";
@@ -83,13 +83,6 @@ pub struct GridParams {
     grid_size_mode: GridSizeMode,
 }
 
-/// The parameter spec for `Rasterization`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RasterizationParams {
-    grid_or_density: GridOrDensity,
-}
-
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for Rasterization {
@@ -111,7 +104,7 @@ impl RasterOperator for Rasterization {
             resolution: None,
         };
 
-        match self.params.grid_or_density {
+        match self.params {
             Grid(params) => Ok(InitializedGridRasterization {
                 source: vector_source,
                 result_descriptor: out_desc,
@@ -541,7 +534,7 @@ mod tests {
     use crate::mock::{MockPointSource, MockPointSourceParams};
     use crate::processing::rasterization::GridSizeMode::{Fixed, Relative};
     use crate::processing::rasterization::{
-        gaussian, DensityParams, GridOrDensity, GridParams, Rasterization, RasterizationParams,
+        gaussian, DensityParams, GridOrDensity, GridParams, Rasterization,
     };
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{
@@ -579,13 +572,11 @@ mod tests {
             TilingSpecification::new([0., 0.].into(), [2, 2].into()),
         );
         let rasterization = Rasterization {
-            params: RasterizationParams {
-                grid_or_density: GridOrDensity::Grid(GridParams {
-                    spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-                    origin_coordinate: [0., 0.].into(),
-                    grid_size_mode: Fixed,
-                }),
-            },
+            params: GridOrDensity::Grid(GridParams {
+                spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+                origin_coordinate: [0., 0.].into(),
+                grid_size_mode: Fixed,
+            }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
                     params: MockPointSourceParams {
@@ -630,13 +621,11 @@ mod tests {
             TilingSpecification::new([0., 0.].into(), [2, 2].into()),
         );
         let rasterization = Rasterization {
-            params: RasterizationParams {
-                grid_or_density: GridOrDensity::Grid(GridParams {
-                    spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-                    origin_coordinate: [0.5, -0.5].into(),
-                    grid_size_mode: Fixed,
-                }),
-            },
+            params: GridOrDensity::Grid(GridParams {
+                spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+                origin_coordinate: [0.5, -0.5].into(),
+                grid_size_mode: Fixed,
+            }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
                     params: MockPointSourceParams {
@@ -681,13 +670,11 @@ mod tests {
             TilingSpecification::new([0., 0.].into(), [3, 3].into()),
         );
         let rasterization = Rasterization {
-            params: RasterizationParams {
-                grid_or_density: GridOrDensity::Grid(GridParams {
-                    spatial_resolution: SpatialResolution { x: 2.0, y: 2.0 },
-                    origin_coordinate: [0., 0.].into(),
-                    grid_size_mode: Fixed,
-                }),
-            },
+            params: GridOrDensity::Grid(GridParams {
+                spatial_resolution: SpatialResolution { x: 2.0, y: 2.0 },
+                origin_coordinate: [0., 0.].into(),
+                grid_size_mode: Fixed,
+            }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
                     params: MockPointSourceParams {
@@ -732,13 +719,11 @@ mod tests {
             TilingSpecification::new([0., 0.].into(), [3, 3].into()),
         );
         let rasterization = Rasterization {
-            params: RasterizationParams {
-                grid_or_density: GridOrDensity::Grid(GridParams {
-                    spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-                    origin_coordinate: [0., 0.].into(),
-                    grid_size_mode: Relative,
-                }),
-            },
+            params: GridOrDensity::Grid(GridParams {
+                spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+                origin_coordinate: [0., 0.].into(),
+                grid_size_mode: Relative,
+            }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
                     params: MockPointSourceParams {
@@ -784,13 +769,11 @@ mod tests {
             TilingSpecification::new([0., 0.].into(), [3, 3].into()),
         );
         let rasterization = Rasterization {
-            params: RasterizationParams {
-                grid_or_density: GridOrDensity::Grid(GridParams {
-                    spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-                    origin_coordinate: [0.25, -0.25].into(),
-                    grid_size_mode: Relative,
-                }),
-            },
+            params: GridOrDensity::Grid(GridParams {
+                spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+                origin_coordinate: [0.25, -0.25].into(),
+                grid_size_mode: Relative,
+            }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
                     params: MockPointSourceParams {
@@ -836,13 +819,11 @@ mod tests {
             TilingSpecification::new([0., 0.].into(), [2, 2].into()),
         );
         let rasterization = Rasterization {
-            params: RasterizationParams {
-                grid_or_density: GridOrDensity::Grid(GridParams {
-                    spatial_resolution: SpatialResolution { x: 2.0, y: 2.0 },
-                    origin_coordinate: [0., 0.].into(),
-                    grid_size_mode: Relative,
-                }),
-            },
+            params: GridOrDensity::Grid(GridParams {
+                spatial_resolution: SpatialResolution { x: 2.0, y: 2.0 },
+                origin_coordinate: [0., 0.].into(),
+                grid_size_mode: Relative,
+            }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
                     params: MockPointSourceParams {
@@ -887,12 +868,10 @@ mod tests {
             TilingSpecification::new([0., 0.].into(), [2, 2].into()),
         );
         let rasterization = Rasterization {
-            params: RasterizationParams {
-                grid_or_density: GridOrDensity::Density(DensityParams {
-                    cutoff: gaussian(0.99, 1.0) / gaussian(0., 1.0),
-                    stddev: 1.0,
-                }),
-            },
+            params: GridOrDensity::Density(DensityParams {
+                cutoff: gaussian(0.99, 1.0) / gaussian(0., 1.0),
+                stddev: 1.0,
+            }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
                     params: MockPointSourceParams {
@@ -968,12 +947,10 @@ mod tests {
             TilingSpecification::new([0., 0.].into(), [2, 2].into()),
         );
         let rasterization = Rasterization {
-            params: RasterizationParams {
-                grid_or_density: GridOrDensity::Density(DensityParams {
-                    cutoff: gaussian(1.99, 1.0) / gaussian(0., 1.0),
-                    stddev: 1.0,
-                }),
-            },
+            params: GridOrDensity::Density(DensityParams {
+                cutoff: gaussian(1.99, 1.0) / gaussian(0., 1.0),
+                stddev: 1.0,
+            }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
                     params: MockPointSourceParams {
