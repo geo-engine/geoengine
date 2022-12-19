@@ -415,14 +415,13 @@ mod tests {
 
     use crate::contexts::Session;
     use crate::handlers::ErrorResponse;
-    use crate::pro::datasets::UpdateDatasetPermissions;
     use crate::pro::util::tests::mock_oidc::{
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
     };
     use crate::pro::util::tests::{
         create_project_helper, create_session_helper, send_pro_test_request,
     };
-    use crate::pro::{contexts::ProInMemoryContext, projects::ProProjectDb, users::UserId};
+    use crate::pro::{contexts::ProInMemoryContext, users::UserId};
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
     use crate::util::user_input::Validated;
 

@@ -166,10 +166,7 @@ mod tests {
         api::model::services::{AddDataset, DatasetDefinition, MetaDataDefinition},
         contexts::{Context, Session, SessionId},
         datasets::upload::{UploadId, UploadRootPath, VolumeName},
-        pro::{
-            contexts::ProInMemoryContext, projects::ProProjectDb, users::UserDb,
-            util::tests::send_pro_test_request,
-        },
+        pro::{contexts::ProInMemoryContext, users::UserDb, util::tests::send_pro_test_request},
         util::tests::{SetMultipartBody, TestDataUploads},
     };
 
