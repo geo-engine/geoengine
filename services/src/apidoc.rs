@@ -18,8 +18,7 @@ use crate::api::model::operators::{
     VectorResultDescriptor,
 };
 use crate::api::model::services::{
-    AddDataset, CreateSystemDataset, CreateUserDataset, DatasetDefinition, MetaDataDefinition,
-    MetaDataSuggestion,
+    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
 };
 use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
@@ -87,8 +86,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
         handlers::datasets::get_dataset_handler,
-        handlers::datasets::create_user_dataset_handler,
-        handlers::datasets::create_system_dataset_handler,
+        handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
     ),
@@ -212,8 +210,7 @@ use utoipa::{Modify, OpenApi};
             FeatureType,
             Coordinates,
 
-            CreateUserDataset,
-            CreateSystemDataset,
+            CreateDataset,
             AutoCreateDataset,
             OrderBy,
             DatasetListing,
@@ -258,7 +255,8 @@ use utoipa::{Modify, OpenApi};
             DatasetDefinition,
             AddDataset,
             Volume,
-            VolumeName
+            VolumeName,
+            DataPath
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

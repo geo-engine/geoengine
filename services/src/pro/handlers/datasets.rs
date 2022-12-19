@@ -1,14 +1,19 @@
 use actix_web::{web, FromRequest};
 
 use crate::{
-    api::model::{datatypes::DatasetId, services::CreateSystemDataset},
-    contexts::AdminSession,
-    datasets::{storage::DatasetStore, upload::Volume},
+    api::model::{
+        datatypes::DatasetId,
+        services::{CreateDataset, DataPath, DatasetDefinition},
+    },
+    datasets::{
+        storage::DatasetStore,
+        upload::{Volume, VolumeName},
+    },
     error::{self, Result},
     handlers::datasets::{
-        adjust_meta_data_path, auto_create_dataset_handler, create_user_dataset_handler,
+        adjust_meta_data_path, auto_create_dataset_handler, create_user_dataset,
         get_dataset_handler, list_datasets_handler, list_volumes_handler,
-        suggest_meta_data_handler,
+        suggest_meta_data_handler, AdminOrSession,
     },
     pro::{
         contexts::ProContext,
@@ -32,11 +37,8 @@ where
             .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler)))
-            .service(
-                web::resource("/public").route(web::post().to(create_system_dataset_handler::<C>)),
-            )
             .service(web::resource("/{dataset}").route(web::get().to(get_dataset_handler::<C>)))
-            .service(web::resource("").route(web::post().to(create_user_dataset_handler::<C>))), // must come last to not match other routes
+            .service(web::resource("").route(web::post().to(create_dataset_handler::<C>))), // must come last to not match other routes
     )
     .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)));
 }
@@ -48,7 +50,7 @@ where
     tag = "Datasets",
     post,
     path = "/dataset/public", 
-    request_body = CreateSystemDataset,
+    request_body = CreateDataset,
     responses(
         (status = 200, description = "OK", body = IdResponse,
             example = json!({
@@ -62,23 +64,49 @@ where
         ("session_token" = [])
     )
 )]
-async fn create_system_dataset_handler<C: ProContext>(
-    _session: AdminSession,
+async fn create_dataset_handler<C: ProContext>(
+    session: AdminOrSession<C>,
     ctx: web::Data<C>,
-    create: web::Json<CreateSystemDataset>,
+    create: web::Json<CreateDataset>,
 ) -> Result<web::Json<IdResponse<DatasetId>>>
 where
     C::DatasetDB: UpdateDatasetPermissions,
 {
     let create = create.into_inner();
-    let mut definition = create.definition;
+    match (session, create) {
+        (
+            AdminOrSession::Admin,
+            CreateDataset {
+                data_path: DataPath::Volume(upload),
+                definition,
+            },
+        ) => create_system_dataset(ctx, upload, definition).await,
+        (
+            AdminOrSession::Session(session),
+            CreateDataset {
+                data_path: DataPath::Upload(volume),
+                definition,
+            },
+        ) => create_user_dataset(session, ctx, volume, definition).await,
+        (AdminOrSession::Admin, _) => Err(error::Error::AdminsCannotCreateDatasetFromUpload),
+        (AdminOrSession::Session(_), _) => Err(error::Error::OnlyAdminsCanCreateDatasetFromVolume),
+    }
+}
 
+async fn create_system_dataset<C: ProContext>(
+    ctx: web::Data<C>,
+    volume_name: VolumeName,
+    mut definition: DatasetDefinition,
+) -> Result<web::Json<IdResponse<DatasetId>>>
+where
+    C::DatasetDB: UpdateDatasetPermissions,
+{
     let volumes = get_config_element::<Data>()?.volumes;
     let volume_path = volumes
-        .get(&create.volume)
+        .get(&volume_name)
         .ok_or(error::Error::UnknownVolume)?;
     let volume = Volume {
-        name: create.volume,
+        name: volume_name,
         path: volume_path.clone(),
     };
 
@@ -139,6 +167,7 @@ mod tests {
         source::{OgrSource, OgrSourceParameters},
         util::gdal::create_ndvi_meta_data,
     };
+    use serde_json::json;
 
     use crate::{
         api::model::services::{AddDataset, DatasetDefinition, MetaDataDefinition},
@@ -196,8 +225,11 @@ mod tests {
         C::ProjectDB: ProProjectDb,
         C::DatasetDB: UpdateDatasetPermissions,
     {
-        let s = format!("{{\"upload\": \"{}\",", upload_id)
-            + r#""definition": {
+        let s = json!({
+            "dataPath": {
+                "upload": upload_id
+            },
+            "definition": {
                 "properties": {
                     "id": null,
                     "name": "Uploaded Natural Earth 10m Ports",
@@ -264,14 +296,13 @@ mod tests {
                     }
                 }
             }
-        }"#;
+        });
 
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .append_header((header::CONTENT_TYPE, "application/json"))
-            .set_payload(s);
+            .set_json(s);
         let res = send_pro_test_request(req, ctx).await;
         assert_eq!(res.status(), 200);
 
@@ -371,8 +402,8 @@ mod tests {
         // make path relative to volume
         meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
 
-        let create = CreateSystemDataset {
-            volume,
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
             definition: DatasetDefinition {
                 properties: AddDataset {
                     id: None,
@@ -388,7 +419,7 @@ mod tests {
 
         // create via admin session
         let req = actix_web::test::TestRequest::post()
-            .uri("/dataset/public")
+            .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((
                 header::AUTHORIZATION,
@@ -400,7 +431,7 @@ mod tests {
                 ),
             ))
             .append_header((header::CONTENT_TYPE, "application/json"))
-            .set_payload(serde_json::to_string(&create)?);
+            .set_json(create);
         let res = send_pro_test_request(req, ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
@@ -412,9 +443,7 @@ mod tests {
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{}", dataset_id))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-            .append_header((header::CONTENT_TYPE, "application/json"))
-            .set_payload(serde_json::to_string(&create)?);
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
 
         let res = send_pro_test_request(req, ctx.clone()).await;
         assert_eq!(res.status(), 200);

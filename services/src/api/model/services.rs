@@ -94,8 +94,11 @@ pub struct DatasetDefinition {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
 #[schema(example = json!({
-    "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+    "dataPath": {
+        "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+    },
     "definition": {
         "properties": {
             "name": "Germany Border",
@@ -131,50 +134,14 @@ pub struct DatasetDefinition {
         }
     }
 }))]
-pub struct CreateUserDataset {
-    pub upload: UploadId,
+pub struct CreateDataset {
+    pub data_path: DataPath,
     pub definition: DatasetDefinition,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
-#[schema(example = json!({
-    "volume": "f6aa9f3d-a211-43e8-9b91-b23ab9632791",
-    "definition": {
-        "properties": {
-            "name": "Germany Border",
-            "description": "The Outline of Germany",
-            "sourceOperator": "OgrSource"
-        },
-        "metaData": {
-            "type": "OgrMetaData",
-            "loadingInfo": {
-                "fileName": "germany_polygon.gpkg",
-                "layerName": "test_germany",
-                "dataType": "MultiPolygon",
-                "time": {
-                    "type": "none"
-                },
-                "columns": {
-                    "x": "",
-                    "y": null,
-                    "text": [],
-                    "float": [],
-                    "int": [],
-                    "bool": [],
-                    "datetime": [],
-                },
-                "forceOgrTimeFilter": false,
-                "onError": "ignore"
-            },
-            "resultDescriptor": {
-                "dataType": "MultiPolygon",
-                "spatialReference": "EPSG:4326",
-                "columns": {}
-            }
-        }
-    }
-}))]
-pub struct CreateSystemDataset {
-    pub volume: VolumeName,
-    pub definition: DatasetDefinition,
+#[serde(rename_all = "camelCase")]
+pub enum DataPath {
+    Volume(VolumeName),
+    Upload(UploadId),
 }

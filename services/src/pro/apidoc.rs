@@ -18,8 +18,7 @@ use crate::api::model::operators::{
     VectorResultDescriptor,
 };
 use crate::api::model::services::{
-    AddDataset, CreateSystemDataset, CreateUserDataset, DatasetDefinition, MetaDataDefinition,
-    MetaDataSuggestion,
+    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
 };
 use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
@@ -97,8 +96,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
         handlers::datasets::get_dataset_handler,
-        handlers::datasets::create_user_dataset_handler,
-        pro::handlers::datasets::create_system_dataset_handler,
+        handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
     ),
@@ -229,8 +227,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             FeatureType,
             Coordinates,
 
-            CreateUserDataset,
-            CreateSystemDataset,
+            CreateDataset,
             AutoCreateDataset,
             OrderBy,
             DatasetListing,
@@ -274,7 +271,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             DatasetDefinition,
             AddDataset,
             Volume,
-            VolumeName
+            VolumeName,
+            DataPath
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
