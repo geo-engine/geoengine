@@ -718,31 +718,226 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
 #[cfg(test)]
 mod tests {
+    use std::{fs::File, io::Read};
+
+    use bb8_postgres::bb8::ManageConnection;
+    use geoengine_datatypes::test_data;
+    use httptest::{
+        all_of,
+        matchers::{contains, lowercase, request},
+        responders::status_code,
+        Expectation, Server,
+    };
+    use rand::RngCore;
+    use tokio_postgres::Config;
+
+    use crate::{util::config, util::user_input::UserInput};
+
     use super::*;
 
+    /// Create a schema with test tables and return the schema name
+    async fn create_test_data(db_config: &config::Postgres) -> String {
+        let mut pg_config = Config::new();
+        pg_config
+            .user(&db_config.user)
+            .password(&db_config.password)
+            .host(&db_config.host)
+            .dbname(&db_config.database);
+        let pg_mgr = PostgresConnectionManager::new(pg_config, NoTls);
+        let conn = pg_mgr.connect().await.unwrap();
+
+        let mut sql = String::new();
+        File::open(test_data!("gfbio/test_data.sql"))
+            .unwrap()
+            .read_to_string(&mut sql)
+            .unwrap();
+
+        let schema = format!("geoengine_test_{}", rand::thread_rng().next_u64());
+
+        // basic schema
+        conn.batch_execute(&format!(
+            "CREATE SCHEMA {schema}; 
+            SET SEARCH_PATH TO {schema}, public;
+            {sql}",
+            schema = schema,
+            sql = sql
+        ))
+        .await
+        .unwrap();
+
+        // dataset from the collection API
+        conn.batch_execute(r#"
+        INSERT INTO abcd_datasets 
+            (surrogate_key, dataset_id, dataset_path, dataset_landing_page, dataset_provider, ac33b09f59554c61c14db1c2ae1a635cb06c8436, 
+                "8fdde5ff4759fdaa7c55fb172e68527671a2240a", c6b8d2982cdf2e80fa6882734630ec735e9ea05d, b680a531f806d3a31ff486fdad601956d30eff39, 
+                "0a58413cb55a2ddefa3aa83de465fb5d58e4f1df", "9848409ccf22cbd3b5aeebfe6592677478304a64", "9df7aa344cb18001c7c4f173a700f72904bb64af", 
+                e814cff84791402aef987219e408c6957c076e5a, "118bb6a92bc934803314ce2711baca3d8232e4dc", "3375d84219d930ef640032f6993fee32b38e843d", 
+                abbd35a33f3fef7e2e96e1be66daf8bbe26c17f5, "5a3c23f17987c03c35912805398b491cbfe03751", b7f24b1e9e8926c974387814a38d936aacf0aac8
+            ) 
+        VALUES (
+            17,
+            'urn:gfbio.org:abcd:3_259_402',
+            'https://biocase.zfmk.de/biocase/downloads/ZFMK-Collections-v2/ZFMK%20Scorpiones%20collection.ABCD_GGBN.zip',
+            'https://www.zfmk.de/en/research/collections/basal-arthropods',
+            'Data Center ZFMK',
+            'ZFMKDatacenter@leibniz-zfmk.de',
+            'The collections of basal arthropods including Scorpiones at the Zoological Research Museum Alexander Koenig Bonn',
+            'https://creativecommons.org/licenses/by-sa/4.0/',
+            'https://www.zfmk.de/en/research/collections/basal-arthropods',
+            'ZFMK Arthropoda Working Group. (2021). ZFMK Scorpiones collection. [Dataset]. Version: 1.2. Data Publisher: Data Center ZFMK. https://doi.org/10.20363/zfmk-coll.scorpiones-2018-11.',
+            'b.huber@leibniz-zfmk.de',
+            'https://id.zfmk.de/dataset_ZFMK/655',
+            '2021-02-04 16:08:11',
+            'ZFMK Scorpiones collection',
+            'Data Center ZFMK',
+            'Dr. B. Huber',
+            'CC-BY-SA',
+            ''
+        );
+        "#)
+        .await
+        .unwrap();
+
+        schema
+    }
+
+    /// Drop the schema created by `create_test_data`
+    async fn cleanup_test_data(db_config: &config::Postgres, schema: String) {
+        let mut pg_config = Config::new();
+        pg_config
+            .user(&db_config.user)
+            .password(&db_config.password)
+            .host(&db_config.host)
+            .dbname(&db_config.database);
+        let pg_mgr = PostgresConnectionManager::new(pg_config, NoTls);
+        let conn = pg_mgr.connect().await.unwrap();
+
+        conn.batch_execute(&format!("DROP SCHEMA {} CASCADE;", schema))
+            .await
+            .unwrap();
+    }
+
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
-    async fn test() {
-        // TODO: mock GFBio Colletions API
+    async fn it_lists() {
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+        let test_schema = create_test_data(&db_config).await;
 
-        // TODO: create test database schema instead of connecting to abcd database
+        let gfbio_collections_server = Server::run();
+        let gfbio_collections_server_token = "Token 6bc06a951394f222eeb576c6f86a4ad73ab805f6";
 
-        // TODO: mock the Pangaea API
+        let mut gfbio_collection_response = vec![];
+        File::open(test_data!("gfbio/collections_api_response.json"))
+            .unwrap()
+            .read_to_end(&mut gfbio_collection_response)
+            .unwrap();
 
-        let _provider = GfbioCollectionsDataProvider::new(
-            "https://collections.gfbio.dev/api/".parse().unwrap(),
-            "Token 6bc06a951394f222eeb576c6f86a4ad73ab805f6".to_string(),
+        gfbio_collections_server.expect(
+            Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    gfbio_collections_server_token
+                ))),
+                request::headers(contains(("accept", "application/json"))),
+                request::method_path(
+                    "GET",
+                    "/api/collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/",
+                ),
+            ])
+            .times(1)
+            .respond_with(status_code(200).body(gfbio_collection_response)),
+        );
+
+        let provider = GfbioCollectionsDataProvider::new(
+            Url::parse(&gfbio_collections_server.url("/api/").to_string()).unwrap(),
+            gfbio_collections_server_token.to_string(),
             DatabaseConnectionConfig {
-                // TODO: load from config
-                user: "geoengine".to_string(),
-                password: "geoengine".to_string(),
-                host: "localhost".to_string(),
-                port: 5432,
-                database: "abcd".to_string(),
-                schema: "public".to_string(),
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.clone(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
             },
             "https://doi.pangaea.de".parse().unwrap(),
         )
         .await
         .unwrap();
+
+        let root_id = provider.root_collection_id().await.unwrap();
+
+        let collection = provider
+            .collection(
+                &root_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 10,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        // root collection should be empty because we don't support browsing
+        assert_eq!(collection.items.len(), 0);
+
+        let collection = provider
+            .collection(
+                &LayerCollectionId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc".to_string()),
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 10,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection.items,
+            vec![
+            CollectionItem::Layer(LayerListing {
+                 id: ProviderLayerId { 
+                    provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(), 
+                    layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402".to_string()) 
+                }, 
+                name: "Scorpiones, a preserved specimen record of the ZFMK Scorpiones collection dataset [ID: ZFMK Sc0602 ]".to_string(), 
+                description: String::new(), 
+                properties: vec![("status".to_string(), "ok".to_string()).into()]
+                }), 
+                CollectionItem::Layer(LayerListing { 
+                    id: ProviderLayerId { 
+                        provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(), 
+                        layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402".to_string()) 
+                    }, 
+                    name: "Scorpiones, a preserved specimen record of the ZFMK Scorpiones collection dataset [ID: ZFMK Sc0612 ]".to_string(), 
+                    description: String::new(), 
+                    properties: vec![("status".to_string(), "ok".to_string()).into()]
+                    }), 
+                CollectionItem::Layer(LayerListing { 
+                    id: ProviderLayerId { 
+                        provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(), 
+                        layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/pangaea/oai:pangaea.de:doi:10.1594__PANGAEA.747054".to_string()) 
+                    }, 
+                    name: "Meteorological observations during SCORPION cruise from Brunswick to Cape Fear started at 1750-07-01".to_string(), 
+                    description: String::new(), 
+                    properties: vec![("status".to_string(), "ok".to_string()).into()] 
+                    }), 
+                CollectionItem::Layer(LayerListing { 
+                    id: ProviderLayerId { 
+                        provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(), 
+                        layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/pangaea/oai:pangaea.de:doi:10.1594__PANGAEA.747056".to_string()) 
+                    }, 
+                    name: "Meteorological observations during SCORPION cruise from Ocracoke to Southport started at 1750-11-04".to_string(), 
+                    description: String::new(), 
+                    properties: vec![("status".to_string(), "ok".to_string()).into()] 
+                    }
+                )]
+        );
+
+        cleanup_test_data(&db_config, test_schema).await;
     }
 }
