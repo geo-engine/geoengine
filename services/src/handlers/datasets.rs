@@ -1097,8 +1097,11 @@ mod tests {
         upload_id: UploadId,
         session_id: SessionId,
     ) -> DatasetId {
-        let s = format!("{{\"upload\": \"{}\",", upload_id)
-            + r#""definition": {
+        let s = json!({
+            "dataPath": {
+                "upload": upload_id
+            },
+            "definition": {
                 "properties": {
                     "id": null,
                     "name": "Uploaded Natural Earth 10m Ports",
@@ -1165,14 +1168,14 @@ mod tests {
                     }
                 }
             }
-        }"#;
+        });
 
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
-            .set_payload(s);
+            .set_json(s);
         let res = send_test_request(req, ctx).await;
         assert_eq!(res.status(), 200);
 
@@ -1289,7 +1292,7 @@ mod tests {
 
         // create via admin session
         let req = actix_web::test::TestRequest::post()
-            .uri("/dataset/public")
+            .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((
                 header::AUTHORIZATION,
