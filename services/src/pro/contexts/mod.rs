@@ -32,15 +32,26 @@ use crate::util::path_with_base_path;
 
 use async_trait::async_trait;
 
+use super::datasets::UpdateDatasetPermissions;
+use super::projects::ProProjectDb;
+
 /// A pro contexts that extends the default context.
 // TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
 #[async_trait]
 pub trait ProContext: Context<Session = UserSession> {
     type UserDB: UserDb;
+    type ProDatasetDB: DatasetDb<Self::Session> + UpdateDatasetPermissions;
+    type ProProjectDB: ProProjectDb;
 
     fn user_db(&self) -> Arc<Self::UserDB>;
     fn user_db_ref(&self) -> &Self::UserDB;
     fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
+
+    fn pro_dataset_db(&self) -> Arc<Self::ProDatasetDB>;
+    fn pro_dataset_db_ref(&self) -> &Self::ProDatasetDB;
+
+    fn pro_project_db(&self) -> Arc<Self::ProProjectDB>;
+    fn pro_project_db_ref(&self) -> &Self::ProProjectDB;
 }
 
 pub struct ExecutionContextImpl<S, D, L>

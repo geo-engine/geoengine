@@ -540,6 +540,8 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type UserDB = PostgresUserDb<Tls>;
+    type ProDatasetDB = PostgresDatasetDb<Tls>;
+    type ProProjectDB = PostgresProjectDb<Tls>;
 
     fn user_db(&self) -> Arc<Self::UserDB> {
         self.user_db.clone()
@@ -549,6 +551,20 @@ where
     }
     fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
         self.oidc_request_db.as_ref().as_ref()
+    }
+
+    fn pro_dataset_db(&self) -> Arc<Self::ProDatasetDB> {
+        self.dataset_db.clone()
+    }
+    fn pro_dataset_db_ref(&self) -> &Self::ProDatasetDB {
+        &self.dataset_db
+    }
+
+    fn pro_project_db(&self) -> Arc<Self::ProProjectDB> {
+        self.project_db.clone()
+    }
+    fn pro_project_db_ref(&self) -> &Self::ProProjectDB {
+        &self.project_db
     }
 }
 

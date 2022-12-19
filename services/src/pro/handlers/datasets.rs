@@ -30,7 +30,6 @@ pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
     C::Session: FromRequest,
-    C::DatasetDB: UpdateDatasetPermissions,
 {
     cfg.service(
         web::scope("/dataset")
@@ -68,10 +67,7 @@ async fn create_dataset_handler<C: ProContext>(
     session: AdminOrSession<C>,
     ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<web::Json<IdResponse<DatasetId>>>
-where
-    C::DatasetDB: UpdateDatasetPermissions,
-{
+) -> Result<web::Json<IdResponse<DatasetId>>> {
     let create = create.into_inner();
     match (session, create) {
         (
@@ -97,10 +93,7 @@ async fn create_system_dataset<C: ProContext>(
     ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>>
-where
-    C::DatasetDB: UpdateDatasetPermissions,
-{
+) -> Result<web::Json<IdResponse<DatasetId>>> {
     let volumes = get_config_element::<Data>()?.volumes;
     let volume_path = volumes
         .get(&volume_name)
@@ -112,7 +105,7 @@ where
 
     adjust_meta_data_path(&mut definition.meta_data, &volume)?;
 
-    let dataset_db = ctx.dataset_db_ref();
+    let dataset_db = ctx.pro_dataset_db_ref();
     let meta_data = dataset_db.wrap_meta_data(definition.meta_data.into());
 
     let system_session = C::Session::system_session();
@@ -185,11 +178,7 @@ mod tests {
     pub async fn upload_ne_10m_ports_files<C: ProContext>(
         ctx: C,
         session_id: SessionId,
-    ) -> Result<UploadId>
-    where
-        C::ProjectDB: ProProjectDb,
-        C::DatasetDB: UpdateDatasetPermissions,
-    {
+    ) -> Result<UploadId> {
         let files = vec![
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").to_path_buf(),
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shx").to_path_buf(),
@@ -220,11 +209,7 @@ mod tests {
         ctx: C,
         upload_id: UploadId,
         session_id: SessionId,
-    ) -> DatasetId
-    where
-        C::ProjectDB: ProProjectDb,
-        C::DatasetDB: UpdateDatasetPermissions,
-    {
+    ) -> DatasetId {
         let s = json!({
             "dataPath": {
                 "upload": upload_id

@@ -3,8 +3,7 @@ use crate::{
     handlers, pro,
     pro::{
         contexts::ProContext,
-        datasets::{Role, UpdateDatasetPermissions},
-        projects::ProProjectDb,
+        datasets::Role,
         users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
@@ -94,8 +93,6 @@ pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, Proj
 pub async fn send_pro_test_request<C>(req: test::TestRequest, ctx: C) -> ServiceResponse
 where
     C: ProContext,
-    C::ProjectDB: ProProjectDb,
-    C::DatasetDB: UpdateDatasetPermissions,
 {
     #[allow(unused_mut)]
     let mut app = App::new()

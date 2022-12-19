@@ -443,11 +443,7 @@ mod tests {
         ctx: C,
         method: Method,
         email: &str,
-    ) -> ServiceResponse
-    where
-        C::ProjectDB: ProProjectDb,
-        C::DatasetDB: UpdateDatasetPermissions,
-    {
+    ) -> ServiceResponse {
         let user = UserRegistration {
             email: email.to_string(),
             password: "secret123".to_string(),

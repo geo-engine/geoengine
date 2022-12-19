@@ -7,8 +7,6 @@ use crate::pro::contexts::PostgresContext;
 use crate::pro::contexts::{ProContext, ProInMemoryContext};
 use crate::util::config::{self, get_config_element, Backend};
 
-use super::datasets::UpdateDatasetPermissions;
-use super::projects::ProProjectDb;
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
     log_server_info, render_404, render_405, serve_openapi_json,
@@ -34,8 +32,6 @@ async fn start<C>(
 ) -> Result<(), Error>
 where
     C: ProContext,
-    C::ProjectDB: ProProjectDb,
-    C::DatasetDB: UpdateDatasetPermissions,
 {
     let wrapped_ctx = web::Data::new(ctx);
 
