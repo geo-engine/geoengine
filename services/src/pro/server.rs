@@ -97,11 +97,6 @@ where
             );
         }
 
-        #[cfg(feature = "nfdi")]
-        {
-            app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
-        }
-
         app = app.service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls));
 
         if version_api {

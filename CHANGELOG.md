@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a GFBio Collection Data Provider that replaces the custom GFBio API for accessing search results.
+
+  - https://github.com/geo-engine/geoengine/pull/697
+
 - Added a handler (`/layers/{provider}/{layer}/workflowId`) to register a layer by id and return the resulting workflow id.
 
   - https://github.com/geo-engine/geoengine/pull/692
