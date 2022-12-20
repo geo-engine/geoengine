@@ -363,8 +363,10 @@ async fn dataset_from_workflow_handler<C: Context>(
     ctx: web::Data<C>,
     info: web::Json<RasterDatasetFromWorkflow>,
 ) -> Result<impl Responder> {
+    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+
     let task_id = schedule_raster_dataset_from_workflow_task(
-        id.into_inner(),
+        workflow,
         session,
         ctx.into_inner(),
         info.into_inner(),
@@ -395,7 +397,7 @@ mod tests {
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::handlers::ErrorResponse;
     use crate::tasks::util::test::wait_for_task_to_finish;
-    use crate::tasks::{TaskCleanUpStatus, TaskManager, TaskStatus};
+    use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
     use crate::util::tests::{
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
@@ -1190,83 +1192,5 @@ mod tests {
                 as &[u8],
             result.as_slice()
         );
-    }
-
-    #[tokio::test]
-    #[allow(clippy::too_many_lines)]
-    async fn dataset_from_workflow_task_failure() {
-        let exe_ctx_tiling_spec = TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
-            tile_size_in_pixels: GridShape::new([600, 600]),
-        };
-
-        // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-        );
-
-        let session_id = ctx.default_session_ref().await.id();
-
-        let dataset = add_ndvi_to_datasets(&ctx).await;
-
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: dataset.into(),
-                    },
-                }
-                .boxed(),
-            ),
-        };
-
-        let workflow_id = WorkflowId::from_hash(&workflow);
-
-        // create dataset from workflow
-        let req = test::TestRequest::post()
-            .uri(&format!("/datasetFromWorkflow/{}", workflow_id))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
-            .set_payload(
-                r#"{
-                "name": "foo",
-                "description": null,
-                "query": {
-                    "spatialBounds": {
-                        "upperLeftCoordinate": {
-                            "x": -10.0,
-                            "y": 80.0
-                        },
-                        "lowerRightCoordinate": {
-                            "x": 50.0,
-                            "y": 20.0
-                        }
-                    },
-                    "timeInterval": {
-                        "start": 1388534400000,
-                        "end": 1388534401000
-                    },
-                    "spatialResolution": {
-                        "x": 0.1,
-                        "y": 0.1
-                    }
-                }
-            }"#,
-            );
-        let res = send_test_request(req, ctx.clone()).await;
-
-        assert_eq!(res.status(), 200, "{:?}", res.response());
-
-        let task_response =
-            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
-
-        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
-
-        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
-
-        assert!(
-            matches!(status, TaskStatus::Failed { error: _, clean_up } if matches!(clean_up, TaskCleanUpStatus::Completed {..}))
-        ); //TODO: Consider matching error as well.
     }
 }

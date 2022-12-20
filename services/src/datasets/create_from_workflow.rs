@@ -7,8 +7,7 @@ use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
 use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
-use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::WorkflowId;
+use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -56,7 +55,7 @@ pub struct RasterDatasetFromWorkflowResult {
 impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
 
 pub struct RasterDatasetFromWorkflowTask<C: Context> {
-    pub id: WorkflowId,
+    pub workflow: Workflow,
     pub session: C::Session,
     pub ctx: Arc<C>,
     pub info: RasterDatasetFromWorkflow,
@@ -66,9 +65,7 @@ pub struct RasterDatasetFromWorkflowTask<C: Context> {
 
 impl<C: Context> RasterDatasetFromWorkflowTask<C> {
     async fn process(&self) -> error::Result<RasterDatasetFromWorkflowResult> {
-        let workflow = self.ctx.workflow_registry_ref().load(&self.id).await?; //TODO: Maybe task should not start if it would fail here.
-
-        let operator = workflow.operator.clone();
+        let operator = self.workflow.operator.clone();
 
         let operator = operator.get_raster().context(crate::error::Operator)?;
 
@@ -167,7 +164,7 @@ impl<C: Context> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
 }
 
 pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
-    id: WorkflowId,
+    workflow: Workflow,
     session: C::Session,
     ctx: Arc<C>,
     info: RasterDatasetFromWorkflow,
@@ -180,7 +177,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
     let file_path = upload_path.clone();
 
     let task = RasterDatasetFromWorkflowTask {
-        id,
+        workflow,
         session,
         ctx: ctx.clone(),
         info,
