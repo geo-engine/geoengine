@@ -4,7 +4,7 @@ use crate::api::model::operators::{
     OgrMetaData,
 };
 use crate::datasets::listing::Provenance;
-use crate::datasets::upload::UploadId;
+use crate::datasets::upload::{UploadId, VolumeName};
 use crate::error::Result;
 use crate::projects::Symbology;
 use crate::util::user_input::UserInput;
@@ -94,8 +94,11 @@ pub struct DatasetDefinition {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
 #[schema(example = json!({
-    "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+    "dataPath": {
+        "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+    },
     "definition": {
         "properties": {
             "name": "Germany Border",
@@ -132,6 +135,13 @@ pub struct DatasetDefinition {
     }
 }))]
 pub struct CreateDataset {
-    pub upload: UploadId,
+    pub data_path: DataPath,
     pub definition: DatasetDefinition,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum DataPath {
+    Volume(VolumeName),
+    Upload(UploadId),
 }

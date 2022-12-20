@@ -8,7 +8,6 @@ use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::ProContext;
-use crate::pro::projects::ProProjectDb;
 use crate::pro::util::config::Odm;
 use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
@@ -36,7 +35,6 @@ use uuid::Uuid;
 pub(crate) fn init_drone_mapping_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
-    C::ProjectDB: ProProjectDb,
 {
     cfg.service(web::resource("/droneMapping/task").route(web::post().to(start_task_handler::<C>)))
         .service(
@@ -94,10 +92,7 @@ async fn start_task_handler<C: ProContext>(
     _session: C::Session,
     _ctx: web::Data<C>,
     task_start: web::Json<TaskStart>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let base_url = get_config_element::<Odm>()?.endpoint;
 
     // TODO: auth
@@ -200,10 +195,7 @@ async fn dataset_from_drone_mapping_handler<C: ProContext>(
     task_id: web::Path<Uuid>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let base_url = get_config_element::<Odm>()?.endpoint;
 
     // TODO: auth
