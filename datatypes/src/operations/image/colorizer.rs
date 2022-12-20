@@ -921,8 +921,8 @@ mod tests {
                 (2.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
-            RgbaColor::pink(),
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
@@ -939,8 +939,8 @@ mod tests {
                     "color": [0, 0, 0, 255]
                 }],
                 "noDataColor": [0, 0, 0, 0],
-                "overColor": [255, 0, 255, 255],
-                "underColor": [255, 0, 255, 255]
+                "overColor": [255, 255, 255, 255],
+                "underColor": [0, 0, 0, 255]
             })
         );
 
