@@ -328,7 +328,7 @@ impl DataProvider for GfbioDataProvider {
         Self::get_provenance(
             id,
             surrogate_key,
-            &self.column_hash_to_name,
+            &self.column_name_to_hash,
             &self.pool.get().await?,
             &self.db_config.schema,
         )
