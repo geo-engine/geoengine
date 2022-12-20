@@ -335,6 +335,11 @@ pub enum Error {
         source: crate::pro::ml::xgboost::XGBoostModuleError,
     },
 
+    #[snafu(context(false))]
+    PieChart {
+        source: crate::plot::PieChartError,
+    },
+
     #[snafu(display(
         "InvalidNumberOfTimeStepsError: expected \"{}\" found \"{}\"",
         expected,
