@@ -195,9 +195,7 @@ where
         // TODO: use filter directly on struct array when it is implemented
 
         let table_data = self.table.data();
-        let columns = if let arrow::datatypes::DataType::Struct(columns) = table_data.data_type() {
-            columns
-        } else {
+        let arrow::datatypes::DataType::Struct(columns) = table_data.data_type() else {
             unreachable!("`table` field must be a struct")
         };
 
@@ -514,9 +512,7 @@ where
         );
 
         let table_data = self.table.data();
-        let columns = if let DataType::Struct(columns) = table_data.data_type() {
-            columns
-        } else {
+        let DataType::Struct(columns) = table_data.data_type() else {
             unreachable!("`tables` field must be a struct")
         };
 

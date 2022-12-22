@@ -764,7 +764,7 @@ mod tests {
             .connect()
             .await
             .unwrap()
-            .batch_execute(&format!("DROP SCHEMA {} CASCADE;", schema))
+            .batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
             .await
             .unwrap();
     }
@@ -1152,7 +1152,7 @@ mod tests {
     async fn create_projects(ctx: &PostgresContext<NoTls>, session: &UserSession) {
         for i in 0..10 {
             let create = CreateProject {
-                name: format!("Test{}", i),
+                name: format!("Test{i}"),
                 description: format!("Test{}", 10 - i),
                 bounds: STRectangle::new(
                     SpatialReferenceOption::Unreferenced,

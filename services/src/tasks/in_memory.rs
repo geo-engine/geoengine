@@ -278,10 +278,7 @@ fn run_task(
 
         let mut update_lock = task_manager.write_lock_for_update().await;
 
-        let task_handle = match update_lock.tasks_by_id.remove(&task_id) {
-            Some(task_handle) => task_handle,
-            None => return, // never happens
-        };
+        let Some(task_handle) = update_lock.tasks_by_id.remove(&task_id) else { return /* never happens */ };
 
         let task_status = task_handle.status.clone();
 
@@ -406,10 +403,7 @@ async fn clean_up_phase(
 
         let mut update_lock = task_manager.write_lock_for_update().await;
 
-        let task_handle = match update_lock.tasks_by_id.remove(&task_id) {
-            Some(task_handle) => task_handle,
-            None => return, // never happens
-        };
+        let Some(task_handle) = update_lock.tasks_by_id.remove(&task_id) else { return /* never happens */ };
 
         match result {
             Ok(_) => set_status_to_clean_up_completed(&task_handle.status).await,

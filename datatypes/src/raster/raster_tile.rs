@@ -346,7 +346,7 @@ pub fn display_raster_tile_2d<P: Pixel + std::fmt::Debug>(
             let grid = if let Some(grid) = tile.grid_array.as_masked_grid() {
                 let values: Vec<String> = grid
                     .masked_element_ref_iterator()
-                    .map(|v| v.map_or('_'.to_string(), |v| format!("{:?}", v)))
+                    .map(|v| v.map_or('_'.to_string(), |v| format!("{v:?}")))
                     .collect();
                 let max_digits = values.iter().map(String::len).max().unwrap_or(0);
 

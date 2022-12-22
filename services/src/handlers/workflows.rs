@@ -775,7 +775,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/workflow/{}", id))
+            .uri(&format!("/workflow/{id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
@@ -804,7 +804,7 @@ mod tests {
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::get().uri(&format!("/workflow/{}", id));
+        let req = test::TestRequest::get().uri(&format!("/workflow/{id}"));
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
@@ -862,7 +862,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/workflow/{}/metadata", id))
+            .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
@@ -873,7 +873,7 @@ mod tests {
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{:?}", res_body);
+        assert_eq!(res_status, 200, "{res_body:?}");
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
@@ -935,13 +935,13 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/metadata", id))
+            .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{:?}", res_body);
+        assert_eq!(res_status, 200, "{res_body:?}");
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
@@ -995,7 +995,7 @@ mod tests {
             .await
             .unwrap();
 
-        let req = test::TestRequest::get().uri(&format!("/workflow/{}/metadata", id));
+        let req = test::TestRequest::get().uri(&format!("/workflow/{id}/metadata"));
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
@@ -1033,13 +1033,13 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/metadata", id))
+            .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{:?}", res_body);
+        assert_eq!(res_status, 200, "{res_body:?}");
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
@@ -1078,13 +1078,13 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/provenance", id))
+            .uri(&format!("/workflow/{id}/provenance"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{:?}", res_body);
+        assert_eq!(res_status, 200, "{res_body:?}");
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
@@ -1299,7 +1299,7 @@ mod tests {
 
         // create dataset from workflow
         let req = test::TestRequest::post()
-            .uri(&format!("/datasetFromWorkflow/{}", workflow_id))
+            .uri(&format!("/datasetFromWorkflow/{workflow_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(
@@ -1439,7 +1439,7 @@ mod tests {
 
         // create dataset from workflow
         let req = test::TestRequest::post()
-            .uri(&format!("/datasetFromWorkflow/{}", workflow_id))
+            .uri(&format!("/datasetFromWorkflow/{workflow_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(

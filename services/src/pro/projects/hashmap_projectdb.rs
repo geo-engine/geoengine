@@ -395,7 +395,7 @@ mod test {
 
         for i in 0..10 {
             let create = CreateProject {
-                name: format!("Test{}", i),
+                name: format!("Test{i}"),
                 description: format!("Test{}", 10 - i),
                 bounds: STRectangle::new(
                     SpatialReferenceOption::Unreferenced,

@@ -280,8 +280,7 @@ impl SetMultipartBody for test::TestRequest {
             write!(body, "--10196671711503402186283068890\r\n").unwrap();
             write!(
                 body,
-                "Content-Disposition: form-data; name=\"files[]\"; filename=\"{}\"\r\n\r\n",
-                file_name
+                "Content-Disposition: form-data; name=\"files[]\"; filename=\"{file_name}\"\r\n\r\n"
             )
             .unwrap();
             body.append(&mut content.into());

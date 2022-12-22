@@ -359,12 +359,7 @@ mod tests {
             .await
             .unwrap();
 
-        let processor =
-            if let Ok(TypedVectorQueryProcessor::MultiPoint(p)) = source.query_processor() {
-                p
-            } else {
-                panic!()
-            };
+        let Ok(TypedVectorQueryProcessor::MultiPoint(processor)) = source.query_processor() else { panic!() };
 
         let query_rectangle = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
