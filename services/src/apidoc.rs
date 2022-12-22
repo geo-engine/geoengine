@@ -24,10 +24,9 @@ use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::UploadId;
-use crate::datasets::RasterDatasetFromWorkflow;
-use crate::datasets::RasterDatasetFromWorkflowResult;
+use crate::datasets::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::handlers;
-use crate::handlers::tasks::TaskAbortOptions;
+use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
@@ -65,6 +64,7 @@ use utoipa::{Modify, OpenApi};
         handlers::layers::add_existing_layer_to_collection,
         handlers::layers::add_existing_collection_to_collection,
         handlers::layers::remove_collection_from_collection,
+        handlers::layers::layer_to_dataset,
         handlers::session::anonymous_handler,
         handlers::session::session_handler,
         handlers::session::session_project_handler,
@@ -151,6 +151,7 @@ use utoipa::{Modify, OpenApi};
             TaskFilter,
             TaskListOptions,
             TaskStatus,
+            TaskResponse,
 
             Layer,
             LayerListing,

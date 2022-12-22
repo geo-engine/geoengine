@@ -24,10 +24,9 @@ use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::UploadId;
-use crate::datasets::RasterDatasetFromWorkflow;
-use crate::datasets::RasterDatasetFromWorkflowResult;
+use crate::datasets::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::handlers;
-use crate::handlers::tasks::TaskAbortOptions;
+use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
@@ -71,6 +70,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::layers::add_existing_layer_to_collection,
         handlers::layers::add_existing_collection_to_collection,
         handlers::layers::remove_collection_from_collection,
+        handlers::layers::layer_to_dataset,
         handlers::tasks::abort_handler,
         handlers::tasks::list_handler,
         handlers::tasks::status_handler,
@@ -168,6 +168,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             TaskFilter,
             TaskListOptions,
             TaskStatus,
+            TaskResponse,
 
             Layer,
             LayerListing,

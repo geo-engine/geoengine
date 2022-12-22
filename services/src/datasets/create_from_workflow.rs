@@ -31,12 +31,12 @@ use utoipa::ToSchema;
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 #[schema(example = json!({"name": "foo", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}, "spatialResolution": {"x": 0.1, "y": 0.1}}}))]
 pub struct RasterDatasetFromWorkflow {
-    name: String,
-    description: Option<String>,
-    query: RasterQueryRectangle,
+    pub name: String,
+    pub description: Option<String>,
+    pub query: RasterQueryRectangle,
     #[schema(default = default_as_cog)]
     #[serde(default = "default_as_cog")]
-    as_cog: bool,
+    pub as_cog: bool,
 }
 
 /// By default, we set [`RasterDatasetFromWorkflow::as_cog`] to true to produce cloud-optmized `GeoTiff`s.
