@@ -1203,8 +1203,7 @@ pub enum Colorizer {
     Palette {
         colors: Palette,
         no_data_color: RgbaColor,
-        over_color: RgbaColor,
-        under_color: RgbaColor,
+        default_color: RgbaColor,
     },
     Rgba,
 }
@@ -1239,13 +1238,11 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
             geoengine_datatypes::operations::image::Colorizer::Palette {
                 colors,
                 no_data_color,
-                over_color,
-                under_color,
+                default_color,
             } => Self::Palette {
                 colors: colors.into(),
                 no_data_color: no_data_color.into(),
-                over_color: over_color.into(),
-                under_color: under_color.into(),
+                default_color: default_color.into(),
             },
             geoengine_datatypes::operations::image::Colorizer::Rgba => Self::Rgba,
         }

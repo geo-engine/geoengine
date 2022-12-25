@@ -45,8 +45,7 @@ pub enum Colorizer {
     Palette {
         colors: Palette,
         no_data_color: RgbaColor,
-        over_color: RgbaColor,
-        under_color: RgbaColor,
+        default_color: RgbaColor,
     },
     Rgba,
 }
@@ -122,8 +121,7 @@ impl Colorizer {
     pub fn palette(
         colors: HashMap<NotNan<f64>, RgbaColor>,
         no_data_color: RgbaColor,
-        over_color: RgbaColor,
-        under_color: RgbaColor,
+        default_color: RgbaColor,
     ) -> Result<Self> {
         ensure!(
             !colors.is_empty() && colors.len() <= 256,
@@ -135,8 +133,7 @@ impl Colorizer {
         Ok(Self::Palette {
             colors: Palette(colors),
             no_data_color,
-            over_color,
-            under_color,
+            default_color,
         })
     }
 
@@ -236,7 +233,7 @@ impl Colorizer {
                 ColorFields::DefaultColor { default_color } => *default_color,
                 ColorFields::OverUnder { over_color, .. } => *over_color,
             },
-            Colorizer::Palette { over_color, .. } => *over_color,
+            Colorizer::Palette { default_color, .. } => *default_color,
             Colorizer::Rgba => RgbaColor::transparent(),
         }
     }
@@ -248,7 +245,7 @@ impl Colorizer {
                 ColorFields::DefaultColor { default_color } => *default_color,
                 ColorFields::OverUnder { under_color, .. } => *under_color,
             },
-            Colorizer::Palette { under_color, .. } => *under_color,
+            Colorizer::Palette { default_color, .. } => *default_color,
             Colorizer::Rgba => RgbaColor::transparent(),
         }
     }
@@ -314,13 +311,11 @@ impl Colorizer {
             Self::Palette {
                 colors,
                 no_data_color,
-                over_color,
-                under_color,
+                default_color,
             } => ColorMapper::ColorMap {
                 color_map: colors,
                 no_data_color: *no_data_color,
-                over_color: *over_color,
-                under_color: *under_color,
+                default_color: *default_color,
             },
             Self::Rgba => ColorMapper::Rgba,
         }
@@ -453,7 +448,7 @@ impl Colorizer {
             Self::Palette {
                 colors: _,
                 no_data_color: _,
-                ..
+                default_color: _,
             } => Err(Error::ColorizerRescaleNotSupported {
                 colorizer: "palette".to_string(),
             }),
@@ -476,8 +471,7 @@ pub enum ColorMapper<'c> {
     ColorMap {
         color_map: &'c Palette,
         no_data_color: RgbaColor,
-        over_color: RgbaColor,
-        under_color: RgbaColor,
+        default_color: RgbaColor,
     },
     Rgba,
 }
@@ -523,11 +517,10 @@ impl<'c> ColorMapper<'c> {
             ColorMapper::ColorMap {
                 color_map,
                 no_data_color,
-                ..
+                default_color,
             } => {
                 if let Ok(value) = NotNan::<f64>::new(value.as_()) {
-                    // TODO:                               vvv -----this was default color, what should it be now?
-                    *color_map.0.get(&value).unwrap_or(no_data_color)
+                    *color_map.0.get(&value).unwrap_or(default_color)
                 } else {
                     *no_data_color
                 }
@@ -789,7 +782,6 @@ mod tests {
 
     #[test]
     fn serialized_palette() {
-        // check for over/under values
         let colorizer = Colorizer::palette(
             [
                 (1.0.try_into().unwrap(), RgbaColor::white()),
@@ -799,8 +791,7 @@ mod tests {
             .copied()
             .collect(),
             RgbaColor::transparent(),
-            RgbaColor::pink(),
-            RgbaColor::pink(),
+            RgbaColor::transparent(),
         )
         .unwrap();
 
@@ -815,28 +806,12 @@ mod tests {
                     "2": [0, 0, 0, 255]
                 },
                 "noDataColor": [0, 0, 0, 0],
-                "overColor": [255, 0, 255, 255],
-                "underColor": [255, 0, 255, 255]
+                "defaultColor": [0, 0, 0, 0]
             })
         );
 
         assert_eq!(
             serde_json::from_str::<Colorizer>(&serialized_colorizer.to_string()).unwrap(),
-            colorizer
-        );
-
-        let serialized_colorizer_default = serde_json::json!({
-            "type": "palette",
-            "colors": {
-                "1": [255, 255, 255, 255],
-                "2": [0, 0, 0, 255]
-            },
-            "noDataColor": [0, 0, 0, 0],
-            "defaultColor": [255, 0, 255, 255],
-        });
-
-        assert_eq!(
-            serde_json::from_str::<Colorizer>(&serialized_colorizer_default.to_string()).unwrap(),
             colorizer
         );
     }

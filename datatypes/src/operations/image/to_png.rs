@@ -267,8 +267,7 @@ mod tests {
             .copied()
             .collect(),
             RgbaColor::transparent(),
-            RgbaColor::white(),
-            RgbaColor::black(),
+            RgbaColor::transparent(),
         )
         .unwrap();
 
