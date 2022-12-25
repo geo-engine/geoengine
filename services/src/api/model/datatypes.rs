@@ -1,5 +1,6 @@
 use crate::error::{self, Result};
 use crate::identifier;
+use geoengine_datatypes::operations::image::ColorFields;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
@@ -1190,15 +1191,13 @@ pub enum Colorizer {
     LinearGradient {
         breakpoints: Vec<Breakpoint>,
         no_data_color: RgbaColor,
-        over_color: RgbaColor,
-        under_color: RgbaColor,
+        color_fields: ColorFields,
     },
     #[serde(rename_all = "camelCase")]
     LogarithmicGradient {
         breakpoints: Vec<Breakpoint>,
         no_data_color: RgbaColor,
-        over_color: RgbaColor,
-        under_color: RgbaColor,
+        color_fields: ColorFields,
     },
     #[serde(rename_all = "camelCase")]
     Palette {
@@ -1216,30 +1215,26 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
             geoengine_datatypes::operations::image::Colorizer::LinearGradient {
                 breakpoints,
                 no_data_color,
-                over_color,
-                under_color,
+                color_fields,
             } => Self::LinearGradient {
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
                     .collect::<Vec<Breakpoint>>(),
                 no_data_color: no_data_color.into(),
-                over_color: over_color.into(),
-                under_color: under_color.into(),
+                color_fields,
             },
             geoengine_datatypes::operations::image::Colorizer::LogarithmicGradient {
                 breakpoints,
                 no_data_color,
-                over_color,
-                under_color,
+                color_fields,
             } => Self::LogarithmicGradient {
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
                     .collect::<Vec<Breakpoint>>(),
                 no_data_color: no_data_color.into(),
-                over_color: over_color.into(),
-                under_color: under_color.into(),
+                color_fields,
             },
             geoengine_datatypes::operations::image::Colorizer::Palette {
                 colors,
