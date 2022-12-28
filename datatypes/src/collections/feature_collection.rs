@@ -1683,4 +1683,26 @@ mod tests {
             .rename_columns(&[("foo", "baz"), ("bar", "baz")])
             .is_err());
     }
+
+    #[test]
+    fn it_does_not_json_serialize() {
+        let collection = FeatureCollection::<MultiPoint>::from_data(
+            vec![(0.0, 0.1).into()],
+            vec![TimeInterval::new(0, 1).unwrap(); 1],
+            [
+                ("foo".to_string(), FeatureData::Int(vec![1])),
+                ("bar".to_string(), FeatureData::Int(vec![2])),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let struct_array = collection.table;
+        let array: Arc<dyn arrow::array::Array> = Arc::new(struct_array);
+
+        // TODO: if this stops failing, change the strange custom byte serialization to use JSON
+        arrow::json::writer::array_to_json_array(&array).unwrap_err();
+    }
 }
