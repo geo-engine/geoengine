@@ -29,7 +29,7 @@ actix-rt = "2.6"
 actix-web = { version = "4.2", features = ["macros", "compress-brotli", "compress-gzip", "cookies"], default-features = false } # TODO: use default feautures when https://github.com/actix/actix-web/issues/2869 is resolved
 actix-web-httpauth = "0.8"
 async-trait = "0.1"
-base64 = "0.13"
+base64 = "0.20"
 bb8-postgres = { version = "0.8", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"], optional = true }
 bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
@@ -60,7 +60,7 @@ postgres-types = { version = "0.2", features = ["derive"], optional = true }
 proj = "0.22"
 proj-sys = "0.19"
 pwhash = "1.0"
-quick-xml = { version = "0.25", optional = true }
+quick-xml = { version = "0.27", optional = true }
 rayon = "1.5"
 regex = "1.5"
 reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
@@ -90,7 +90,7 @@ walkdir = "2.3"
 zip = "0.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = "0.25"
+nix = "0.26"
 
 [dev-dependencies]
 httptest = "0.15.2"
@@ -98,7 +98,7 @@ rand = "0.8.4"
 tempfile = "3.1"
 wiremock-grpc = "0.0.3-alpha1"
 xml-rs = "0.8.3"
-serial_test = "0.9.0"
+serial_test = "0.10.0"
 
 [build-dependencies]
 vergen = "7"
