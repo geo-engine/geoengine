@@ -147,7 +147,7 @@ impl Colorizer {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor, ColorFields};
     /// use std::convert::TryInto;
     ///
     /// let colorizer = Colorizer::linear_gradient(
@@ -156,7 +156,10 @@ impl Colorizer {
     ///         (1.0, RgbaColor::transparent()).try_into().unwrap(),
     ///     ],
     ///     RgbaColor::transparent(),
-    ///     RgbaColor::transparent(),
+    ///     ColorFields::OverUnder{
+    ///         over_color: RgbaColor::transparent(),
+    ///         under_color: RgbaColor::transparent(),
+    ///      },
     /// ).unwrap();
     ///
     /// assert_eq!(colorizer.min_value(), 0.);
@@ -174,7 +177,7 @@ impl Colorizer {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor, ColorFields};
     /// use std::convert::TryInto;
     ///
     /// let colorizer = Colorizer::logarithmic_gradient(
@@ -183,7 +186,10 @@ impl Colorizer {
     ///         (10.0, RgbaColor::transparent()).try_into().unwrap(),
     ///     ],
     ///     RgbaColor::transparent(),
-    ///     RgbaColor::transparent(),
+    ///     ColorFields::OverUnder{
+    ///         over_color: RgbaColor::transparent(),
+    ///         under_color: RgbaColor::transparent(),
+    ///      },
     /// ).unwrap();
     ///
     /// assert_eq!(colorizer.max_value(), 10.);
@@ -203,7 +209,7 @@ impl Colorizer {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor, ColorFields};
     /// use std::convert::TryInto;
     ///
     /// let colorizer = Colorizer::linear_gradient(
@@ -212,7 +218,10 @@ impl Colorizer {
     ///         (10.0, RgbaColor::white()).try_into().unwrap(),
     ///         ],
     ///     RgbaColor::transparent(),
-    ///     RgbaColor::pink(),
+    ///     ColorFields::OverUnder{
+    ///         over_color: RgbaColor::transparent(),
+    ///         under_color: RgbaColor::transparent(),
+    ///      },
     /// ).unwrap();
     ///
     /// assert_eq!(colorizer.no_data_color(), RgbaColor::transparent());
@@ -255,7 +264,7 @@ impl Colorizer {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor, ColorFields};
     /// use std::convert::TryInto;
     ///
     /// let linear_colorizer = Colorizer::linear_gradient(
@@ -264,7 +273,10 @@ impl Colorizer {
     ///         (1.0, RgbaColor::white()).try_into().unwrap(),
     ///     ],
     ///     RgbaColor::transparent(),
-    ///     RgbaColor::transparent(),
+    ///     ColorFields::OverUnder{
+    ///         over_color: RgbaColor::transparent(),
+    ///         under_color: RgbaColor::transparent(),
+    ///      },
     /// ).unwrap();
     /// let linear_color_mapper = linear_colorizer.create_color_mapper();
     ///
@@ -276,7 +288,10 @@ impl Colorizer {
     ///         (10.0, RgbaColor::white()).try_into().unwrap(),
     ///     ],
     ///     RgbaColor::transparent(),
-    ///     RgbaColor::transparent(),
+    ///     ColorFields::OverUnder{
+    ///         over_color: RgbaColor::transparent(),
+    ///         under_color: RgbaColor::transparent(),
+    ///      },
     /// ).unwrap();
     /// let logarithmic_color_mapper = logarithmic_colorizer.create_color_mapper();
     ///
