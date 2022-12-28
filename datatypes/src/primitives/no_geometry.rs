@@ -137,4 +137,8 @@ impl ArrayBuilder for NoArrowArray {
     fn into_box_any(self: Box<Self>) -> Box<dyn Any> {
         unreachable!("There is no implementation since there is no geometry")
     }
+
+    fn finish_cloned(&self) -> ArrayRef {
+        unreachable!("There is no implementation since there is no geometry")
+    }
 }
