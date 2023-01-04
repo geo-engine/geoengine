@@ -63,6 +63,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - https://github.com/geo-engine/geoengine/pull/610
 
+- Added a `Rasterization` operator
+  
+  - https://github.com/geo-engine/geoengine/pull/683
+
 - Added method to create dataset from the result of the workflow via a task
 
   - https://github.com/geo-engine/geoengine/pull/675
@@ -70,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a `PieChart` operator
 
   - https://github.com/geo-engine/geoengine/pull/694
+
 
 ### Changed
 

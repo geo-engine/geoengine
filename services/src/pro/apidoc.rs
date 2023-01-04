@@ -18,12 +18,12 @@ use crate::api::model::operators::{
     VectorResultDescriptor,
 };
 use crate::api::model::services::{
-    AddDataset, CreateDataset, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
+    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
 };
 use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
-use crate::datasets::upload::UploadId;
+use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::datasets::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::handlers;
 use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
@@ -96,6 +96,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::register_user_handler,
         pro::handlers::users::session_handler,
         handlers::datasets::list_datasets_handler,
+        handlers::datasets::list_volumes_handler,
         handlers::datasets::get_dataset_handler,
         handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
@@ -272,6 +273,9 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             Dataset,
             DatasetDefinition,
             AddDataset,
+            Volume,
+            VolumeName,
+            DataPath
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

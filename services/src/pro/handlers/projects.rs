@@ -10,7 +10,6 @@ use actix_web::{web, HttpResponse, Responder};
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
-    C::ProjectDB: ProProjectDb,
 {
     cfg.service(
         web::resource("/projects")
@@ -96,13 +95,10 @@ pub(crate) async fn load_project_version_handler<C: ProContext>(
     project: web::Path<(ProjectId, ProjectVersionId)>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let project = project.into_inner();
     let id = ctx
-        .project_db_ref()
+        .pro_project_db_ref()
         .load_version(&session, project.0, LoadVersion::Version(project.1))
         .await?;
     Ok(web::Json(id))
@@ -112,12 +108,9 @@ pub(crate) async fn load_project_latest_handler<C: ProContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let id = ctx
-        .project_db_ref()
+        .pro_project_db_ref()
         .load_version(&session, project.into_inner(), LoadVersion::Latest)
         .await?;
     Ok(web::Json(id))
@@ -152,12 +145,9 @@ pub(crate) async fn project_versions_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     project: web::Json<ProjectId>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let versions = ctx
-        .project_db_ref()
+        .pro_project_db_ref()
         .versions(&session, project.into_inner())
         .await?;
     Ok(web::Json(versions))
@@ -182,11 +172,8 @@ pub(crate) async fn add_permission_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     permission: web::Json<UserProjectPermission>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
-    ctx.project_db_ref()
+) -> Result<impl Responder> {
+    ctx.pro_project_db_ref()
         .add_permission(&session, permission.into_inner())
         .await?;
     Ok(HttpResponse::Ok())
@@ -211,11 +198,8 @@ pub(crate) async fn remove_permission_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     permission: web::Json<UserProjectPermission>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
-    ctx.project_db_ref()
+) -> Result<impl Responder> {
+    ctx.pro_project_db_ref()
         .remove_permission(&session, permission.into_inner())
         .await?;
     Ok(HttpResponse::Ok())
@@ -243,12 +227,9 @@ pub(crate) async fn list_permissions_handler<C: ProContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let permissions = ctx
-        .project_db_ref()
+        .pro_project_db_ref()
         .list_permissions(&session, project.into_inner())
         .await?;
     Ok(web::Json(permissions))
