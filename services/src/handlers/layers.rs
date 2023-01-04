@@ -568,7 +568,6 @@ async fn layer_to_dataset<C: Context>(
     path: web::Path<(DataProviderId, LayerId)>,
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();
-    // let dataset_label = info.into_inner();
 
     let layer = match provider {
         crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID => {

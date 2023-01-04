@@ -9,11 +9,13 @@ use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::error::ErrorSource;
-use geoengine_datatypes::primitives::RasterQueryRectangle;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
-use geoengine_operators::engine::{ExecutionContext, InitializedRasterOperator};
+use geoengine_operators::engine::{
+    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor,
+};
 use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
 };
@@ -21,7 +23,7 @@ use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_geotiff, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
 };
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
@@ -115,6 +117,7 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
             self.info.clone(),
             res,
             result_descriptor,
+            query_rect,
             self.ctx.as_ref(),
             self.session.clone(),
         )
@@ -194,11 +197,34 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
 async fn create_dataset<C: Context>(
     info: RasterDatasetFromWorkflow,
     mut slice_info: Vec<GdalLoadingInfoTemporalSlice>,
-    result_descriptor: &geoengine_operators::engine::RasterResultDescriptor,
+    origin_result_descriptor: &RasterResultDescriptor,
+    query_rectangle: RasterQueryRectangle,
     ctx: &C,
     session: <C as Context>::Session,
 ) -> error::Result<DatasetId> {
+    ensure!(!slice_info.is_empty(), error::EmptyDatasetCannotBeImported);
+
     let dataset_id = DatasetId::new();
+    let first_start = slice_info
+        .first()
+        .expect("slice_info should have at least one element")
+        .time
+        .start();
+    let last_end = slice_info
+        .last()
+        .expect("slice_info should have at least one element")
+        .time
+        .end();
+    let result_time_interval = TimeInterval::new(first_start, last_end)?;
+
+    let result_descriptor = RasterResultDescriptor {
+        data_type: origin_result_descriptor.data_type,
+        spatial_reference: origin_result_descriptor.spatial_reference,
+        measurement: origin_result_descriptor.measurement.clone(),
+        time: Some(result_time_interval),
+        bbox: Some(query_rectangle.spatial_bounds),
+        resolution: Some(query_rectangle.spatial_resolution),
+    };
     //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular
     let meta_data = if slice_info.len() == 1 {
         let loading_info_slice = slice_info.pop().expect("slice_info has len one");
@@ -209,11 +235,11 @@ async fn create_dataset<C: Context>(
         MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
             time,
             params,
-            result_descriptor: result_descriptor.clone(),
+            result_descriptor,
         })
     } else {
         MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
-            result_descriptor: result_descriptor.clone(),
+            result_descriptor,
             params: slice_info,
         })
     };
