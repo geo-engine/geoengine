@@ -98,9 +98,7 @@ where
             //       </GetMap>
             //     </Request>
             //     <Exception>
-            //       <Format>XML</Format>
-            //       <Format>INIMAGE</Format>
-            //       <Format>BLANK</Format>
+            //       <Format>application/json</Format>
             //     </Exception>
             //     <Layer queryable="1">
             //       <Name>b709b27b-dea5-5a27-a074-ae3366c49498</Name>
@@ -186,9 +184,7 @@ where
             </GetMap>
         </Request>
         <Exception>
-            <Format>XML</Format>
-            <Format>INIMAGE</Format>
-            <Format>BLANK</Format>
+            <Format>application/json</Format>
         </Exception>
         <Layer queryable="1">
             <Name>{workflow}</Name>
