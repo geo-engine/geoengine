@@ -423,7 +423,7 @@ mod tests {
         // assert dataset is accessible via regular session
         let session = ctx.user_db_ref().anonymous().await.unwrap();
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/{}", dataset_id))
+            .uri(&format!("/dataset/{dataset_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
 

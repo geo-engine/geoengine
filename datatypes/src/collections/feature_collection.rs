@@ -195,9 +195,7 @@ where
         // TODO: use filter directly on struct array when it is implemented
 
         let table_data = self.table.data();
-        let columns = if let arrow::datatypes::DataType::Struct(columns) = table_data.data_type() {
-            columns
-        } else {
+        let arrow::datatypes::DataType::Struct(columns) = table_data.data_type() else {
             unreachable!("`table` field must be a struct")
         };
 
@@ -514,9 +512,7 @@ where
         );
 
         let table_data = self.table.data();
-        let columns = if let DataType::Struct(columns) = table_data.data_type() {
-            columns
-        } else {
+        let DataType::Struct(columns) = table_data.data_type() else {
             unreachable!("`tables` field must be a struct")
         };
 
@@ -1686,5 +1682,27 @@ mod tests {
         assert!(collection
             .rename_columns(&[("foo", "baz"), ("bar", "baz")])
             .is_err());
+    }
+
+    #[test]
+    fn it_does_not_json_serialize() {
+        let collection = FeatureCollection::<MultiPoint>::from_data(
+            vec![(0.0, 0.1).into()],
+            vec![TimeInterval::new(0, 1).unwrap(); 1],
+            [
+                ("foo".to_string(), FeatureData::Int(vec![1])),
+                ("bar".to_string(), FeatureData::Int(vec![2])),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let struct_array = collection.table;
+        let array: Arc<dyn arrow::array::Array> = Arc::new(struct_array);
+
+        // TODO: if this stops failing, change the strange custom byte serialization to use JSON
+        arrow::json::writer::array_to_json_array(&array).unwrap_err();
     }
 }

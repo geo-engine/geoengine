@@ -74,9 +74,7 @@ pub fn deserialize_base_url_option<'de, D>(deserializer: D) -> Result<Option<Url
 where
     D: serde::Deserializer<'de>,
 {
-    let mut url_string = if let Some(url_string) = Option::<String>::deserialize(deserializer)? {
-        url_string
-    } else {
+    let Some(mut url_string) = Option::<String>::deserialize(deserializer)? else {
         return Ok(None);
     };
 

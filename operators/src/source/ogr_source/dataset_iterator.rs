@@ -151,7 +151,7 @@ impl OgrDatasetIterator {
 
         let final_filter = filter_string
             .map(|f| match &dataset_information.attribute_query {
-                Some(a) => format!("({}) AND {}", a, f),
+                Some(a) => format!("({a}) AND {f}"),
                 None => f,
             })
             .or_else(|| dataset_information.attribute_query.clone());
@@ -213,7 +213,7 @@ impl OgrDatasetIterator {
         if let Some(y) = &columns.y {
             let open_opts = &[
                 &format!("X_POSSIBLE_NAMES={}", columns.x),
-                &format!("Y_POSSIBLE_NAMES={}", y),
+                &format!("Y_POSSIBLE_NAMES={y}"),
                 headers.as_str(),
                 "AUTODETECT_TYPE=YES",
             ];

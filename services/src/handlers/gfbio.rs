@@ -292,7 +292,7 @@ impl Basket {
                 return BasketEntry {
                     title,
                     status: BasketEntryStatus::Error {
-                        message: format!("Unable to load meta data: {:?}", e),
+                        message: format!("Unable to load meta data: {e:?}"),
                     },
                 };
             }
@@ -300,7 +300,7 @@ impl Basket {
 
         let status = match md.result_descriptor().await {
             Err(e) => BasketEntryStatus::Error {
-                message: format!("Unable to load meta data: {:?}", e),
+                message: format!("Unable to load meta data: {e:?}"),
             },
             Ok(rd) => BasketEntryStatus::Ok(BasketEntryLoadingDetails {
                 dataset_id: id,

@@ -73,7 +73,7 @@ where
         bool::from_str(&s.to_lowercase())
             .map(Some)
             .map_err(|_error| {
-                D::Error::custom(format_args!("could not parse string as boolean: {}", s))
+                D::Error::custom(format_args!("could not parse string as boolean: {s}"))
             })
     }
 }

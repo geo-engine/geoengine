@@ -144,10 +144,7 @@ mod tests {
         let initialized = mps.initialize(&execution_context).await.unwrap();
 
         let typed_processor = initialized.query_processor();
-        let point_processor = match typed_processor {
-            Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
-            _ => panic!(),
-        };
+        let Ok(TypedVectorQueryProcessor::MultiPoint(point_processor)) = typed_processor else { panic!() };
 
         let query_rectangle = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
