@@ -19,11 +19,17 @@ pub trait SpatialBoundsAccess {
     fn spatial_bounds(&self) -> Self::SpatialBounds;
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BoundingBox2DWithResolution {
+    pub spatial_bounds: BoundingBox2D,
+    pub spatial_resolution: SpatialResolution,
+}
+
 /// A spatio-temporal rectangle with a specified resolution
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryRectangle<SpatialBounds: AxisAlignedRectangle> {
-    spatial_bounds: SpatialBounds,
+    pub spatial_bounds: SpatialBounds,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
 }
