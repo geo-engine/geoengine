@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::{error, util::Result};
@@ -7,7 +8,7 @@ use super::{
     GridSize, GridSpaceToLinearSpace,
 };
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct GridBoundingBox<A>
 where
     A: AsRef<[isize]>,
