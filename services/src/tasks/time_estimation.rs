@@ -2,10 +2,11 @@ use std::fmt::Display;
 
 use geoengine_operators::util::number_statistics::NumberStatistics;
 use serde::{Serialize, Serializer};
+use geoengine_datatypes::primitives::TimeInstance;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TimeEstimation {
-    initial_time_stamp: std::time::Instant,
+    initial_time_stamp: TimeInstance,
     estimate_seconds_per_pct: NumberStatistics,
     time_estimate_seconds: (Option<f64>, Option<f64>),
 }
@@ -13,7 +14,7 @@ pub struct TimeEstimation {
 impl TimeEstimation {
     pub fn new() -> Self {
         Self {
-            initial_time_stamp: std::time::Instant::now(),
+            initial_time_stamp: TimeInstance::now(),
             estimate_seconds_per_pct: NumberStatistics::default(),
             time_estimate_seconds: (None, None),
         }
@@ -61,6 +62,10 @@ impl TimeEstimation {
 
     pub fn time_total(&self) -> String {
         hms_from_secs(self.initial_time_stamp.elapsed().as_secs() as f64)
+    }
+
+    pub fn time_started(&self) -> TimeInstance {
+        TimeInstance(0)
     }
 }
 

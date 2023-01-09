@@ -257,6 +257,12 @@ impl TaskStatus {
             _ => String::new(),
         }
     }
+
+    /*fn time_started(&self) -> String {
+        match self {
+            TaskStatus::Running(info) => info.time_estimate.time
+        }
+    }*/
 }
 
 #[derive(Debug, Serialize)]
