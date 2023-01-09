@@ -456,7 +456,7 @@ pub fn reproject_query<S: AxisAlignedRectangle>(
     query: SpatialQueryRectangle<S>,
     source: SpatialReference,
     target: SpatialReference,
-) -> Result<Option<QueryRectangle<S>>> {
+) -> Result<Option<SpatialQueryRectangle<S>>> {
     let (Some(s_bbox), Some(p_bbox)) = reproject_and_unify_bbox(query.spatial_bounds, target, source)? else { return Ok(None); };
 
     let p_spatial_resolution =
