@@ -64,7 +64,7 @@ impl PlotOperator for Statistics {
 
                 let output_names = if self.params.column_names.is_empty() {
                     (1..=rasters.len())
-                        .map(|i| format!("Raster-{}", i))
+                        .map(|i| format!("Raster-{i}"))
                         .collect::<Vec<_>>()
                 } else {
                     self.params.column_names.clone()
@@ -122,7 +122,7 @@ impl PlotOperator for Statistics {
                         match in_descriptor.column_data_type(cn.as_str()) {
                             Some(column) if !column.is_numeric() => {
                                 return Err(Error::InvalidOperatorSpec {
-                                    reason: format!("Column '{}' is not numeric.", cn),
+                                    reason: format!("Column '{cn}' is not numeric."),
                                 });
                             }
                             Some(_) => {
@@ -266,7 +266,7 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
                 (column.clone(), StatisticsOutput::from(number_statistics))
             })
             .collect();
-        serde_json::to_value(&output).map_err(Into::into)
+        serde_json::to_value(output).map_err(Into::into)
     }
 }
 
@@ -323,7 +323,7 @@ impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
             )
             .map(|number_statistics| {
                 let output: HashMap<String, StatisticsOutput> = number_statistics?.iter().enumerate().map(|(i, stat)| (self.column_names[i].clone(), StatisticsOutput::from(stat))).collect();
-                serde_json::to_value(&output).map_err(Into::into)
+                serde_json::to_value(output).map_err(Into::into)
             })
             .await
     }

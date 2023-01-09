@@ -127,7 +127,7 @@ impl PlotOperator for Histogram {
                     Some(FeatureDataType::Category | FeatureDataType::Text) => {
                         // TODO: incorporate category data
                         return Err(Error::InvalidOperatorSpec {
-                            reason: format!("column `{}` must be numerical", column_name),
+                            reason: format!("column `{column_name}` must be numerical"),
                         });
                     }
                     Some(

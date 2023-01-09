@@ -823,8 +823,7 @@ x;y
             .unwrap();
 
         let req = test::TestRequest::with_uri(&format!(
-            "/wfs/{}?request=GetCapabilities&service=WFS",
-            workflow_id
+            "/wfs/{workflow_id}?request=GetCapabilities&service=WFS"
         ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));

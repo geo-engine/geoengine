@@ -480,8 +480,7 @@ mod tests {
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
         let req = actix_web::test::TestRequest::with_uri(&format!(
-            "/wms/{}?request=GetCapabilities&service=WMS",
-            id
+            "/wms/{id}?request=GetCapabilities&service=WMS"
         ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));

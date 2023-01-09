@@ -19,6 +19,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, ClassificationMeasurement, Coordinate2D, FeatureDataType,
     Measurement, PlotQueryRectangle, RasterQueryRectangle,
 };
+use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt};
 use std::collections::HashMap;
@@ -112,7 +113,7 @@ impl PlotOperator for ClassHistogram {
                     }
                     Some(FeatureDataType::Text | FeatureDataType::DateTime) => {
                         return Err(Error::InvalidOperatorSpec {
-                            reason: format!("column `{}` must be numerical", column_name),
+                            reason: format!("column `{column_name}` must be numerical"),
                         });
                     }
                     Some(
@@ -278,7 +279,7 @@ impl ClassHistogramRasterQueryProcessor {
                     geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
                         g.masked_element_deref_iterator().for_each(|value_option| {
                             if let Some(v) = value_option {
-                                if let Some(count) = class_counts.get_mut(&(v as u8)) {
+                                if let Some(count) = class_counts.get_mut(&v.as_()) {
                                     *count += 1;
                                 }
                             }

@@ -813,7 +813,7 @@ mod tests {
             }));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         let result: IdResponse<LayerId> = test::read_body_json(response).await;
 
@@ -890,7 +890,7 @@ mod tests {
             ));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         let collection = ctx
             .layer_db_ref()
@@ -923,7 +923,7 @@ mod tests {
             }));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         let result: IdResponse<LayerCollectionId> = test::read_body_json(response).await;
 
@@ -982,7 +982,7 @@ mod tests {
             ));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         let collection_a = ctx
             .layer_db_ref()
@@ -1093,7 +1093,7 @@ mod tests {
             ));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         ctx.layer_db_ref()
             .collection(
@@ -1113,7 +1113,7 @@ mod tests {
             ));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_client_error(), "{:?}", response);
+        assert!(response.status().is_client_error(), "{response:?}");
     }
 
     #[tokio::test]
@@ -1148,7 +1148,7 @@ mod tests {
             ));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         let root_collection = ctx
             .layer_db_ref()
@@ -1164,8 +1164,7 @@ mod tests {
                 .items
                 .iter()
                 .any(|item| item.name() == "Foo"),
-            "{:#?}",
-            root_collection
+            "{root_collection:#?}"
         );
     }
 }

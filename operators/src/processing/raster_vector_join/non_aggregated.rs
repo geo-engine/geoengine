@@ -219,9 +219,8 @@ where
 
         for feature_index in 0..collection.len() {
             for grid_idx in covered_pixels.covered_pixels(feature_index, raster) {
-                let value = match raster.get_at_grid_index(grid_idx) {
-                    Ok(value) => value,
-                    Err(_) => continue, // not found in this raster tile
+                let Ok(value) = raster.get_at_grid_index(grid_idx) else {
+                    continue; // not found in this raster tile
                 };
 
                 if let Some(data) = value {
@@ -236,9 +235,8 @@ where
     }
 
     fn into_collection(self, new_column_name: &str) -> Result<FeatureCollection<G>> {
-        let state = match self.state {
-            Some(state) => state,
-            None => return Err(Error::EmptyInput), // TODO: maybe output empty dataset or just nulls
+        let Some(state) = self.state else {
+            return Err(Error::EmptyInput); // TODO: maybe output empty dataset or just nulls
         };
         Ok(state
             .covered_pixels

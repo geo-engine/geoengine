@@ -218,9 +218,8 @@ mod tests {
             TimeInterval::default(),
         );
 
-        let typed_processor = match query_processor {
-            TypedRasterQueryProcessor::F32(rqp) => rqp,
-            _ => panic!("expected TypedRasterQueryProcessor::F32"),
+        let TypedRasterQueryProcessor::F32(typed_processor) = query_processor else {
+            panic!("expected TypedRasterQueryProcessor::F32");
         };
 
         let stream = typed_processor

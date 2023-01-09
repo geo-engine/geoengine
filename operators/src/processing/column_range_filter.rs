@@ -256,10 +256,7 @@ mod tests {
             .await
             .unwrap();
 
-        let point_processor = match initialized.query_processor() {
-            Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
-            _ => panic!(),
-        };
+        let Ok(TypedVectorQueryProcessor::MultiPoint(point_processor)) = initialized.query_processor() else { panic!(); };
 
         let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),

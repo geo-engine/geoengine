@@ -389,9 +389,7 @@ where
                     }
 
                     // all sources produced an output, set the stream to be consumed
-                    let streams = if let Ok(ok_queries) = ok_queries.try_into() {
-                        ok_queries
-                    } else {
+                    let Ok(streams) = ok_queries.try_into() else {
                         unreachable!("RasterArrayTimeAdapter: ok_queries.len() != N");
                     };
                     state.set(ArrayState::ConsumingStream {

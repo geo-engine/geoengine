@@ -122,10 +122,9 @@ struct RasterDb {
 impl RasterDb {
     fn url_from_name(base_url: &Url, name: &str) -> Result<String> {
         let raster_url = base_url.join(&format!(
-            "/rasterdb/{name}/wcs?VERSION=1.0.0&COVERAGE={name}",
-            name = name
+            "/rasterdb/{name}/wcs?VERSION=1.0.0&COVERAGE={name}"
         ))?;
-        Ok(format!("WCS:{}", raster_url))
+        Ok(format!("WCS:{raster_url}"))
     }
 
     fn url(&self, base_url: &Url) -> Result<String> {
@@ -264,9 +263,7 @@ impl LayerCollectionProvider for Nature40DataProvider {
             description: format!(
                 "Band {}: {}",
                 band_index,
-                band_labels
-                    .get((band_index - 1) as usize)
-                    .unwrap_or(&String::new())
+                band_labels.get(band_index - 1).unwrap_or(&String::new())
             ),
             workflow: Workflow {
                 operator: TypedOperator::Raster(

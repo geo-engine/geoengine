@@ -280,7 +280,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
 
         //TODO: Consider making placeholder and time_placeholder format configurable
         let placeholder = "%_START_TIME_%";
-        let placeholder_path = file_path.join(format!("raster_{}.tiff", placeholder));
+        let placeholder_path = file_path.join(format!("raster_{placeholder}.tiff"));
         let path_with_placeholder = PathWithPlaceholder {
             full_path: placeholder_path,
             placeholder: placeholder.to_string(),
@@ -322,8 +322,8 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             allow_alphaband_as_mask: true,
         };
 
-        let uncompressed_byte_size = intermediate_dataset_parameters.width as usize
-            * intermediate_dataset_parameters.height as usize
+        let uncompressed_byte_size = intermediate_dataset_parameters.width
+            * intermediate_dataset_parameters.height
             * std::mem::size_of::<P>();
         let use_big_tiff =
             gdal_tiff_options.force_big_tiff || uncompressed_byte_size >= BIG_TIFF_BYTE_THRESHOLD;
@@ -759,7 +759,7 @@ impl std::fmt::Display for GdalCompressionNumThreads {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::AllCpus => write!(f, "ALL_CPUS"),
-            Self::NumThreads(n) => write!(f, "{}", n),
+            Self::NumThreads(n) => write!(f, "{n}"),
         }
     }
 }

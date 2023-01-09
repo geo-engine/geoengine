@@ -132,9 +132,8 @@ impl GfbioDataProvider {
             .prepare(&format!(
                 r#"
             SELECT hash, name
-            FROM {}.abcd_datasets_translation
-            WHERE hash <> $1 AND hash <> $2;"#,
-                schema
+            FROM {schema}.abcd_datasets_translation
+            WHERE hash <> $1 AND hash <> $2;"#
             ))
             .await?;
 
@@ -152,7 +151,7 @@ impl GfbioDataProvider {
     }
 
     fn build_attribute_query(surrogate_key: i32) -> String {
-        format!("surrogate_key = {surrogate}", surrogate = surrogate_key)
+        format!("surrogate_key = {surrogate_key}")
     }
 
     pub async fn resolve_surrogate_key(&self, dataset_id: &str) -> Result<Option<i32>> {
@@ -524,9 +523,7 @@ mod tests {
         conn.batch_execute(&format!(
             "CREATE SCHEMA {schema}; 
             SET SEARCH_PATH TO {schema}, public;
-            {sql}",
-            schema = schema,
-            sql = sql
+            {sql}"
         ))
         .await
         .unwrap();
@@ -545,7 +542,7 @@ mod tests {
         let pg_mgr = PostgresConnectionManager::new(pg_config, NoTls);
         let conn = pg_mgr.connect().await.unwrap();
 
-        conn.batch_execute(&format!("DROP SCHEMA {} CASCADE;", schema))
+        conn.batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
             .await
             .unwrap();
     }
@@ -689,7 +686,7 @@ mod tests {
             let result_descriptor = meta.result_descriptor().await.map_err(|e| e.to_string())?;
 
             if result_descriptor != expected {
-                return Err(format!("{:?} != {:?}", result_descriptor, expected));
+                return Err(format!("{result_descriptor:?} != {expected:?}"));
             }
 
             let mut loading_info = meta
@@ -713,7 +710,7 @@ mod tests {
 
             let expected = OgrSourceDataset {
                 file_name: PathBuf::from(ogr_pg_string),
-                layer_name: format!("{}.abcd_units", test_schema),
+                layer_name: format!("{test_schema}.abcd_units"),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::None,
                 default_geometry: None,
@@ -780,7 +777,7 @@ mod tests {
             };
 
             if loading_info != expected {
-                return Err(format!("{:?} != {:?}", loading_info, expected));
+                return Err(format!("{loading_info:?} != {expected:?}"));
             }
 
             Ok(())
@@ -886,7 +883,7 @@ mod tests {
             .unwrap();
 
             if result != &expected {
-                return Err(format!("{:?} != {:?}", result, expected));
+                return Err(format!("{result:?} != {expected:?}"));
             }
 
             Ok(())
@@ -944,7 +941,7 @@ mod tests {
             };
 
             if result != expected {
-                return Err(format!("{:?} != {:?}", result, expected));
+                return Err(format!("{result:?} != {expected:?}"));
             }
 
             Ok(())
