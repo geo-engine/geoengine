@@ -173,6 +173,30 @@ impl Sub<i64> for TimeInstance {
     }
 }
 
+impl Add<Duration> for TimeInstance {
+    type Output = Self;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        if self.is_min() || self.is_max() {
+            // begin and end of time are special values, we don't want to do arithmetics on them
+            return self;
+        }
+        TimeInstance::from_millis_unchecked(self.0 + rhs.num_milliseconds())
+    }
+}
+
+impl Sub<Duration> for TimeInstance {
+    type Output = Self;
+
+    fn sub(self, rhs: Duration) -> Self::Output {
+        if self.is_min() || self.is_max() {
+            // begin and end of time are special values, we don't want to do arithmetics on them
+            return self;
+        }
+        TimeInstance::from_millis_unchecked(self.0 - rhs.num_milliseconds())
+    }
+}
+
 impl Sub<TimeInstance> for TimeInstance {
     type Output = Duration;
 
