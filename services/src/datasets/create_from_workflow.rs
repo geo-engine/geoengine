@@ -259,8 +259,6 @@ async fn create_dataset<C: Context>(
         meta_data,
     };
 
-    // TODO: build pyramides, prefereably in the background
-
     let db = ctx.dataset_db_ref();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
     let dataset = db
