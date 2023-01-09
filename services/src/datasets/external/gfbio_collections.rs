@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
@@ -131,9 +131,18 @@ pub struct CollectionEntrySource {
 #[derive(Debug, Clone)]
 enum GfBioCollectionId {
     Collections,
-    Collection { collection: String },
-    AbcdLayer { collection: String, layer: String },
-    PangaeaLayer { collection: String, layer: String },
+    Collection {
+        collection: String,
+    },
+    AbcdLayer {
+        collection: String,
+        dataset: String,
+        unit: Option<String>,
+    },
+    PangaeaLayer {
+        collection: String,
+        dataset: String,
+    },
 }
 
 impl FromStr for GfBioCollectionId {
@@ -147,17 +156,38 @@ impl FromStr for GfBioCollectionId {
             ["collections", collection] => GfBioCollectionId::Collection {
                 collection: collection.to_string(),
             },
-            ["collections", collection, "abcd", layer] => GfBioCollectionId::AbcdLayer {
-                collection: collection.to_string(),
-                layer: layer.to_string(),
-            },
+            ["collections", collection, "abcd", layer] => {
+                let (dataset, unit) = gfbio_dataset_identifier_to_dataset_unit(layer)?;
+
+                GfBioCollectionId::AbcdLayer {
+                    collection: collection.to_string(),
+                    dataset,
+                    unit,
+                }
+            }
             ["collections", collection, "pangaea", layer] => GfBioCollectionId::PangaeaLayer {
                 collection: collection.to_string(),
-                layer: layer.replace("__", "/"), // decode the DOI,
+                dataset: layer.replace("__", "/"), // decode the DOI,
             },
             _ => return Err(crate::error::Error::InvalidLayerCollectionId),
         })
     }
+}
+
+fn gfbio_dataset_identifier_to_dataset_unit(
+    dataset_identifier: &str,
+) -> Result<(String, Option<String>)> {
+    // urn:gfbio.org:abcd:{dataset}:{unit} (unit is optional)
+    let id_parts: Vec<_> = dataset_identifier.split(':').collect();
+
+    Ok(match id_parts.as_slice() {
+        [_, _, _, dataset, unit] => (
+            format!("urn:gfbio.org:abcd:{dataset}"),
+            Some((*unit).to_string()),
+        ),
+        [_, _, _, dataset] => (format!("urn:gfbio.org:abcd:{dataset}"), None),
+        _ => return Err(crate::error::Error::InvalidLayerId),
+    })
 }
 
 impl TryFrom<GfBioCollectionId> for LayerCollectionId {
@@ -179,10 +209,24 @@ impl TryFrom<GfBioCollectionId> for LayerId {
 
     fn try_from(id: GfBioCollectionId) -> Result<Self> {
         let s = match id {
-            GfBioCollectionId::AbcdLayer { collection, layer } => {
-                format!("collections/{collection}/abcd/{layer}")
+            GfBioCollectionId::AbcdLayer {
+                collection,
+                dataset,
+                unit: Some(unit),
+            } => {
+                format!("collections/{collection}/abcd/{dataset}:{unit}")
             }
-            GfBioCollectionId::PangaeaLayer { collection, layer } => {
+            GfBioCollectionId::AbcdLayer {
+                collection,
+                dataset,
+                unit: None,
+            } => {
+                format!("collections/{collection}/abcd/{dataset}")
+            }
+            GfBioCollectionId::PangaeaLayer {
+                collection,
+                dataset: layer,
+            } => {
                 format!(
                     "collections/{}/pangaea/{}",
                     collection,
@@ -334,12 +378,15 @@ impl GfbioCollectionsDataProvider {
             LayerStatus::Unavailable
         };
 
+        let (dataset, unit) = gfbio_dataset_identifier_to_dataset_unit(&entry.id)?;
+
         Ok(CollectionItem::Layer(LayerListing {
             id: ProviderLayerId {
                 provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
                 layer_id: GfBioCollectionId::AbcdLayer {
                     collection: collection.to_string(),
-                    layer: abcd_dataset_identifier,
+                    dataset,
+                    unit,
                 }
                 .try_into()
                 .expect("AbcdLayer should be a valid LayerId"),
@@ -362,7 +409,7 @@ impl GfbioCollectionsDataProvider {
                 provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
                 layer_id: GfBioCollectionId::PangaeaLayer {
                     collection: collection.to_string(),
-                    layer: entry.id,
+                    dataset: entry.id,
                 }
                 .try_into()
                 .expect("PangaeaLayer should be a valid LayerId"),
@@ -394,6 +441,7 @@ impl GfbioCollectionsDataProvider {
     async fn create_gfbio_loading_info(
         &self,
         abcd_dataset_id: &str,
+        abcd_unit_id: Option<&str>,
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
         let surrogate_key = self
@@ -440,7 +488,11 @@ impl GfbioCollectionsDataProvider {
                 force_ogr_spatial_filter: true,
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
-                attribute_query: Some(GfbioAbcdDataProvider::build_attribute_query(surrogate_key)),
+                attribute_query: Some(Self::build_attribute_query(
+                    surrogate_key,
+                    abcd_unit_id,
+                    &column_name_to_hash,
+                )?),
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -500,6 +552,27 @@ impl GfbioCollectionsDataProvider {
 
         Ok(Box::new(smd))
     }
+
+    fn build_attribute_query(
+        surrogate_key: i32,
+        unit_id: Option<&str>,
+        column_name_to_hash: &HashMap<String, String>,
+    ) -> Result<String> {
+        if let Some(unit_id) = unit_id {
+            let id_column = column_name_to_hash
+                .get("/DataSets/DataSet/Units/Unit/UnitID")
+                .ok_or(Error::AbcdUnitIdColumnMissingInDatabase)?;
+
+            // in the collection API the IDs use "+" but in the database we use " "
+            let unit_id = unit_id.replace('+', " ");
+
+            Ok(format!(
+                "surrogate_key = {surrogate_key} AND {id_column} = '{unit_id}'"
+            ))
+        } else {
+            Ok(format!("surrogate_key = {surrogate_key}"))
+        }
+    }
 }
 
 #[async_trait]
@@ -533,11 +606,12 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
         match &gfbio_collection_id {
             GfBioCollectionId::AbcdLayer {
                 collection,
-                layer: _,
+                dataset: _,
+                unit: _,
             }
             | GfBioCollectionId::PangaeaLayer {
                 collection,
-                layer: _,
+                dataset: _,
             } => {
                 // get the layer information by reusing the code for listing the collections
                 let collection = self.get_collection(collection, 0, std::u32::MAX).await?;
@@ -599,7 +673,8 @@ impl DataProvider for GfbioCollectionsDataProvider {
         match gfbio_id {
             GfBioCollectionId::AbcdLayer {
                 collection: _,
-                layer,
+                dataset,
+                unit: _,
             } => {
                 let conn = self.pool.get().await?;
 
@@ -607,7 +682,7 @@ impl DataProvider for GfbioCollectionsDataProvider {
                     GfbioAbcdDataProvider::resolve_columns(&conn, &self.abcd_db_config.schema)
                         .await?;
 
-                let surrogate_key = self.get_surrogate_key_for_gfbio_dataset(&layer).await?;
+                let surrogate_key = self.get_surrogate_key_for_gfbio_dataset(&dataset).await?;
 
                 GfbioAbcdDataProvider::get_provenance(
                     id,
@@ -620,9 +695,9 @@ impl DataProvider for GfbioCollectionsDataProvider {
             }
             GfBioCollectionId::PangaeaLayer {
                 collection: _,
-                layer,
+                dataset,
             } => {
-                let doi = layer
+                let doi = dataset
                     .strip_prefix("oai:pangaea.de:doi:")
                     .ok_or(crate::error::Error::InvalidLayerId)?;
                 PangaeaDataProvider::get_provenance(
@@ -677,24 +752,26 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
         let id = GfBioCollectionId::from_str(&id.layer_id.0)
             .map_err(|_| geoengine_operators::error::Error::InvalidDataId)?;
-
         match id {
             GfBioCollectionId::AbcdLayer {
                 collection: _,
-                layer,
-            } => self.create_gfbio_loading_info(&layer).await.map_err(|e| {
-                geoengine_operators::error::Error::LoadingInfo {
+                dataset,
+                unit,
+            } => self
+                .create_gfbio_loading_info(&dataset, unit.as_deref())
+                .await
+                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(e),
-                }
-            }),
+                }),
             GfBioCollectionId::PangaeaLayer {
                 collection: _,
-                layer,
-            } => self.create_pangaea_loading_info(&layer).await.map_err(|e| {
-                geoengine_operators::error::Error::LoadingInfo {
+                dataset,
+            } => self
+                .create_pangaea_loading_info(&dataset)
+                .await
+                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(e),
-                }
-            }),
+                }),
             _ => Err(geoengine_operators::error::Error::InvalidDataId),
         }
     }
