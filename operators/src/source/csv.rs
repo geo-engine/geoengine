@@ -345,10 +345,7 @@ impl Stream for CsvSourceStream {
                 let mut number_of_entries = 0; // TODO: add size/len to builder
 
                 while number_of_entries < chunk_size {
-                    let record = match records.next() {
-                        Some(r) => r,
-                        None => break,
-                    };
+                    let Some(record) = records.next() else { break; };
 
                     let row = record.context(error::CsvSourceReader)?;
                     let parsed_row = CsvSourceStream::parse_row(header, &row)?;

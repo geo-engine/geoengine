@@ -73,27 +73,8 @@ where
         bool::from_str(&s.to_lowercase())
             .map(Some)
             .map_err(|_error| {
-                D::Error::custom(format_args!("could not parse string as boolean: {}", s))
+                D::Error::custom(format_args!("could not parse string as boolean: {s}"))
             })
-    }
-}
-
-/// Canonicalize `base`/`sub_path` and ensure the `sub_path` doesn't escape the `base`
-/// returns an error if the `sub_path` escapes the `base`
-///
-/// This only works if the `Path` you are referring to actually exists.
-///
-pub fn canonicalize_subpath(base: &Path, sub_path: &Path) -> crate::error::Result<PathBuf> {
-    let base = base.canonicalize()?;
-    let path = base.join(sub_path).canonicalize()?;
-
-    if path.starts_with(&base) {
-        Ok(path)
-    } else {
-        Err(crate::error::Error::SubPathMustNotEscapeBasePath {
-            base,
-            sub_path: sub_path.into(),
-        })
     }
 }
 
@@ -167,23 +148,6 @@ mod mod_tests {
                 .unwrap()
                 .unwrap()
         );
-    }
-
-    #[test]
-    fn it_doesnt_escape_base_path() {
-        let tmp_dir = tempfile::tempdir().unwrap();
-        let tmp_path = tmp_dir.path();
-        std::fs::create_dir_all(tmp_path.join("foo/bar/foobar")).unwrap();
-        std::fs::create_dir_all(tmp_path.join("foo/barfoo")).unwrap();
-
-        assert_eq!(
-            canonicalize_subpath(&tmp_path.join("foo/bar"), Path::new("foobar"))
-                .unwrap()
-                .to_string_lossy(),
-            tmp_path.join("foo/bar/foobar").to_string_lossy()
-        );
-
-        assert!(canonicalize_subpath(&tmp_path.join("foo/bar"), Path::new("../barfoo")).is_err());
     }
 
     #[test]

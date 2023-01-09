@@ -104,7 +104,7 @@ fn hms_from_secs(seconds: f64) -> String {
     let secs = secs % 3600;
     let mins = secs / 60;
     let secs = secs % 60;
-    format!("{:02}:{:02}:{:02}", hours, mins, secs)
+    format!("{hours:02}:{mins:02}:{secs:02}")
 }
 
 #[cfg(test)]

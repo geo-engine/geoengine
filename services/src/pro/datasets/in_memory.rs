@@ -324,7 +324,7 @@ impl UpdateDatasetPermissions for ProHashMapDatasetDb {
                 .dataset_permissions
                 .iter()
                 .any(|p| session.roles.contains(&p.role) && p.permission == Permission::Owner),
-            error::UpateDatasetPermission {
+            error::UpdateDatasetPermission {
                 role: session.user.id.to_string(),
                 dataset: permission.dataset,
                 permission: format!("{:?}", permission.permission),

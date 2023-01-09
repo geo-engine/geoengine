@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::io::{Cursor, Write};
+use std::path::PathBuf;
 
 use crate::api::model::datatypes::{DataId, DatasetId};
 use crate::api::model::services::AddDataset;
@@ -17,20 +18,22 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, RasterQueryRectangle};
+use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
     ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor,
 };
 use geoengine_operators::source::{
-    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
+    GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
 };
 use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_geotiff, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
 };
 use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_typed_operator};
 
+use crate::handlers::tasks::TaskResponse;
+use crate::tasks::{Task, TaskManager, TaskStatusInfo};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use tokio::fs;
@@ -380,16 +383,177 @@ pub struct RasterDatasetFromWorkflowResult {
     upload: UploadId,
 }
 
-/// Create a new dataset from the result of the workflow given by its `id` and the dataset parameters in the request body.
-/// Returns the id of the created dataset and upload
+impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
+
+async fn create_dataset<C: Context>(
+    info: RasterDatasetFromWorkflow,
+    mut slice_info: Vec<GdalLoadingInfoTemporalSlice>,
+    result_descriptor: &geoengine_operators::engine::RasterResultDescriptor,
+    ctx: &C,
+    session: <C as Context>::Session,
+) -> Result<DatasetId> {
+    let dataset_id = DatasetId::new();
+    //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular
+    let meta_data = if slice_info.len() == 1 {
+        let loading_info_slice = slice_info.pop().expect("slice_info has len one");
+        let time = Some(loading_info_slice.time);
+        let params = loading_info_slice
+            .params
+            .expect("datasets with exactly one timestep should have data");
+        MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
+            time,
+            params,
+            result_descriptor: result_descriptor.clone(),
+        })
+    } else {
+        MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
+            result_descriptor: result_descriptor.clone(),
+            params: slice_info,
+        })
+    };
+
+    let dataset_definition = DatasetDefinition {
+        properties: AddDataset {
+            id: Some(dataset_id),
+            name: info.name,
+            description: info.description.unwrap_or_default(),
+            source_operator: "GdalSource".to_owned(),
+            symbology: None,  // TODO add symbology?
+            provenance: None, // TODO add provenance that references the workflow
+        },
+        meta_data,
+    };
+
+    // TODO: build pyramides, prefereably in the background
+
+    let db = ctx.dataset_db_ref();
+    let meta = db.wrap_meta_data(dataset_definition.meta_data);
+    let dataset = db
+        .add_dataset(&session, dataset_definition.properties.validated()?, meta)
+        .await?;
+
+    Ok(dataset)
+}
+
+struct RasterDatasetFromWorkflowTask<C: Context> {
+    id: web::Path<WorkflowId>,
+    session: C::Session,
+    ctx: web::Data<C>,
+    info: web::Json<RasterDatasetFromWorkflow>,
+    upload: UploadId,
+    file_path: PathBuf,
+}
+
+impl<C: Context> RasterDatasetFromWorkflowTask<C> {
+    async fn process(&self) -> Result<RasterDatasetFromWorkflowResult> {
+        let workflow = self.ctx.workflow_registry_ref().load(&self.id).await?; //TODO: Maybe task should not start if it would fail here.
+
+        let operator = workflow
+            .operator
+            .get_raster()
+            .context(crate::error::Operator)?;
+
+        let execution_context = self.ctx.execution_context(self.session.clone())?;
+        let initialized = operator
+            .clone()
+            .initialize(&execution_context)
+            .await
+            .context(crate::error::Operator)?;
+
+        let result_descriptor = initialized.result_descriptor();
+
+        let processor = initialized
+            .query_processor()
+            .context(crate::error::Operator)?;
+
+        let query_rect = self.info.query;
+        let query_ctx = self.ctx.query_context(self.session.clone())?;
+        let request_spatial_ref =
+            Option::<SpatialReference>::from(result_descriptor.spatial_reference)
+                .ok_or(crate::error::Error::MissingSpatialReference)?;
+        let tile_limit = None; // TODO: set a reasonable limit or make configurable?
+
+        // build the geotiff
+        let res = call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
+            &self.file_path,
+            p,
+            query_rect,
+            query_ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Default::default(), // TODO: decide how to handle the no data here
+                spatial_reference: request_spatial_ref,
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
+                as_cog: self.info.as_cog,
+                force_big_tiff: false,
+            },
+            tile_limit,
+            Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
+            execution_context.tiling_specification(),
+        ).await)?
+            .map_err(crate::error::Error::from)?;
+
+        // create the dataset
+        let dataset = create_dataset(
+            self.info.clone(),
+            res,
+            result_descriptor,
+            self.ctx.get_ref(),
+            self.session.clone(),
+        )
+        .await?;
+
+        Ok(RasterDatasetFromWorkflowResult {
+            dataset,
+            upload: self.upload,
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl<C: Context> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
+    async fn run(
+        &self,
+        _ctx: C::TaskContext,
+    ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
+        let response = self.process().await;
+
+        response
+            .map(TaskStatusInfo::boxed)
+            .map_err(ErrorSource::boxed)
+    }
+
+    async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
+        fs::remove_dir_all(&self.file_path)
+            .await
+            .context(crate::error::Io)
+            .map_err(ErrorSource::boxed)?;
+
+        //TODO: Dataset might already be in the database, if task was already close to finishing.
+
+        Ok(())
+    }
+
+    fn task_type(&self) -> &'static str {
+        "create-dataset"
+    }
+
+    fn task_unique_id(&self) -> Option<String> {
+        Some(self.upload.to_string())
+    }
+}
+
+/// Create a task for creating a new dataset from the result of the workflow given by its `id` and the dataset parameters in the request body.
+/// Returns the id of the created task
 #[utoipa::path(
     tag = "Workflows",
     post,
     path = "/datasetFromWorkflow/{id}",
     request_body = RasterDatasetFromWorkflow,
     responses(
-        (status = 200, description = "Id of created dataset and upload", body = RasterDatasetFromWorkflowResult,
-            example = json!({"upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0", "dataset": {"type": "internal", "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"}})
+        (status = 200, description = "Id of created task", body = TaskResponse,
+        example = json!({"task_id": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"})
         )
     ),
     params(
@@ -405,129 +569,28 @@ async fn dataset_from_workflow_handler<C: Context>(
     ctx: web::Data<C>,
     info: web::Json<RasterDatasetFromWorkflow>,
 ) -> Result<impl Responder> {
-    // TODO: support datasets with multiple time steps
+    let inner_context = ctx.clone().into_inner();
 
-    let workflow = ctx.workflow_registry_ref().load(&id).await?;
-
-    let operator = workflow
-        .operator
-        .get_raster()
-        .context(crate::error::Operator)?;
-
-    let execution_context = ctx.execution_context(session.clone())?;
-    let initialized = operator
-        .clone()
-        .initialize(&execution_context)
-        .await
-        .context(crate::error::Operator)?;
-
-    let result_descriptor = initialized.result_descriptor();
-
-    let processor = initialized
-        .query_processor()
-        .context(crate::error::Operator)?;
-
-    // put the created data into a new upload
     let upload = UploadId::new();
     let upload_path = upload.root_path()?;
     fs::create_dir_all(&upload_path)
         .await
         .context(crate::error::Io)?;
-    let file_path = upload_path.join("raster.tiff");
+    let file_path = upload_path.clone();
 
-    let query_rect = info.query;
-    let query_ctx = ctx.query_context(session.clone())?;
-    let request_spatial_ref = Option::<SpatialReference>::from(result_descriptor.spatial_reference)
-        .ok_or(crate::error::Error::MissingSpatialReference)?;
-    let tile_limit = None; // TODO: set a reasonable limit or make configurable?
-
-    // build the geotiff
-    call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
-            &file_path,
-            p,
-            query_rect,
-            query_ctx,
-            GdalGeoTiffDatasetMetadata {
-                no_data_value: Default::default(), // TODO: decide how to handle the no data here
-                spatial_reference: request_spatial_ref,
-            },
-            GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
-                as_cog: info.as_cog,
-                force_big_tiff: false,
-            },
-            tile_limit,
-            Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
-            execution_context.tiling_specification(),
-        ).await)?
-    .map_err(crate::error::Error::from)?;
-
-    // create the dataset
-    let dataset = create_dataset(
-        info.into_inner(),
-        file_path,
-        result_descriptor,
-        ctx.get_ref(),
+    let task = RasterDatasetFromWorkflowTask {
+        id,
         session,
-    )
-    .await?;
-
-    Ok(web::Json(RasterDatasetFromWorkflowResult {
-        dataset,
+        ctx: ctx.clone(),
+        info,
         upload,
-    }))
-}
+        file_path,
+    }
+    .boxed();
 
-async fn create_dataset<C: Context>(
-    info: RasterDatasetFromWorkflow,
-    file_path: std::path::PathBuf,
-    result_descriptor: &geoengine_operators::engine::RasterResultDescriptor,
-    ctx: &C,
-    session: <C as Context>::Session,
-) -> Result<DatasetId> {
-    let dataset_id = DatasetId::new();
-    let dataset_definition = DatasetDefinition {
-        properties: AddDataset {
-            id: Some(dataset_id),
-            name: info.name,
-            description: info.description.unwrap_or_default(),
-            source_operator: "GdalSource".to_owned(),
-            symbology: None,  // TODO add symbology?
-            provenance: None, // TODO add provenance that references the workflow
-        },
-        meta_data: MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
-            time: Some(info.query.time_interval),
-            params: GdalDatasetParameters {
-                file_path,
-                rasterband_channel: 1,
-                geo_transform: GdalDatasetGeoTransform {
-                    origin_coordinate: info.query.spatial_bounds.upper_left(),
-                    x_pixel_size: info.query.spatial_resolution.x,
-                    y_pixel_size: -info.query.spatial_resolution.y,
-                },
-                width: (info.query.spatial_bounds.size_x() / info.query.spatial_resolution.x).ceil()
-                    as usize,
-                height: (info.query.spatial_bounds.size_y() / info.query.spatial_resolution.y)
-                    .ceil() as usize,
-                file_not_found_handling: FileNotFoundHandling::Error,
-                no_data_value: None, // `None` will let the GdalSource detect the correct no-data value.
-                properties_mapping: None, // TODO: add properties
-                gdal_open_options: None,
-                gdal_config_options: None,
-                allow_alphaband_as_mask: true,
-            },
-            result_descriptor: result_descriptor.clone(),
-        }),
-    };
+    let task_id = inner_context.tasks_ref().schedule(task, None).await?;
 
-    // TODO: build pyramides, prefereably in the background
-
-    let db = ctx.dataset_db_ref();
-    let meta = db.wrap_meta_data(dataset_definition.meta_data);
-    let dataset = db
-        .add_dataset(&session, dataset_definition.properties.validated()?, meta)
-        .await?;
-    Ok(dataset)
+    Ok(web::Json(TaskResponse::new(task_id)))
 }
 
 #[derive(Debug, Snafu)]
@@ -549,6 +612,8 @@ mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
     use crate::handlers::ErrorResponse;
+    use crate::tasks::util::test::wait_for_task_to_finish;
+    use crate::tasks::{TaskCleanUpStatus, TaskStatus};
     use crate::util::tests::{
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
         read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
@@ -577,7 +642,7 @@ mod tests {
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
-    use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
+    use geoengine_operators::util::raster_stream_to_geotiff::single_timestep_raster_stream_to_geotiff_bytes;
     use serde_json::json;
     use std::io::Read;
     use zip::read::ZipFile;
@@ -710,7 +775,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/workflow/{}", id))
+            .uri(&format!("/workflow/{id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
@@ -739,7 +804,7 @@ mod tests {
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let req = test::TestRequest::get().uri(&format!("/workflow/{}", id));
+        let req = test::TestRequest::get().uri(&format!("/workflow/{id}"));
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
@@ -797,7 +862,7 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri(&format!("/workflow/{}/metadata", id))
+            .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, ctx).await
     }
@@ -808,7 +873,7 @@ mod tests {
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{:?}", res_body);
+        assert_eq!(res_status, 200, "{res_body:?}");
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
@@ -870,13 +935,13 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/metadata", id))
+            .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{:?}", res_body);
+        assert_eq!(res_status, 200, "{res_body:?}");
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
@@ -930,7 +995,7 @@ mod tests {
             .await
             .unwrap();
 
-        let req = test::TestRequest::get().uri(&format!("/workflow/{}/metadata", id));
+        let req = test::TestRequest::get().uri(&format!("/workflow/{id}/metadata"));
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
@@ -968,13 +1033,13 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/metadata", id))
+            .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{:?}", res_body);
+        assert_eq!(res_status, 200, "{res_body:?}");
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
@@ -1013,13 +1078,13 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/workflow/{}/provenance", id))
+            .uri(&format!("/workflow/{id}/provenance"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{:?}", res_body);
+        assert_eq!(res_status, 200, "{res_body:?}");
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
@@ -1034,134 +1099,6 @@ mod tests {
                     "uri": "http://example.org/"
                 }
             }])
-        );
-    }
-
-    #[tokio::test]
-    #[allow(clippy::too_many_lines)]
-    async fn dataset_from_workflow() {
-        let exe_ctx_tiling_spec = TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
-            tile_size_in_pixels: GridShape::new([600, 600]),
-        };
-
-        // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-        );
-
-        let session_id = ctx.default_session_ref().await.id();
-
-        let dataset = add_ndvi_to_datasets(&ctx).await;
-
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: dataset.into(),
-                    },
-                }
-                .boxed(),
-            ),
-        };
-
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
-            .await
-            .unwrap();
-
-        // create dataset from workflow
-        let req = test::TestRequest::post()
-            .uri(&format!("/datasetFromWorkflow/{}", workflow_id))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
-            .set_payload(
-                r#"{
-                "name": "foo",
-                "description": null,
-                "query": {
-                    "spatialBounds": {
-                        "upperLeftCoordinate": {
-                            "x": -10.0,
-                            "y": 80.0
-                        },
-                        "lowerRightCoordinate": {
-                            "x": 50.0,
-                            "y": 20.0
-                        }
-                    },
-                    "timeInterval": {
-                        "start": 1388534400000,
-                        "end": 1388534401000
-                    },
-                    "spatialResolution": {
-                        "x": 0.1,
-                        "y": 0.1
-                    }
-                }
-            }"#,
-            );
-        let res = send_test_request(req, ctx.clone()).await;
-
-        assert_eq!(res.status(), 200);
-
-        let response: RasterDatasetFromWorkflowResult = test::read_body_json(res).await;
-        // automatically deletes uploads on drop
-        let _test_uploads = TestDataUploads {
-            uploads: vec![response.upload],
-        };
-
-        let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
-        // query the newly created dataset
-        let op = GdalSource {
-            params: GdalSourceParameters {
-                data: dataset_id.into(),
-            },
-        }
-        .boxed();
-
-        let session = ctx.default_session_ref().await.clone();
-        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
-
-        let o = op.initialize(&exe_ctx).await.unwrap();
-
-        let query_ctx = ctx.query_context(session.clone()).unwrap();
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
-
-        let processor = o.query_processor().unwrap().get_u8().unwrap();
-
-        let result = raster_stream_to_geotiff_bytes(
-            processor,
-            query_rect,
-            query_ctx,
-            GdalGeoTiffDatasetMetadata {
-                no_data_value: Some(0.),
-                spatial_reference: SpatialReference::epsg_4326(),
-            },
-            GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
-                    .unwrap()
-                    .compression_num_threads,
-                as_cog: false,
-                force_big_tiff: false,
-            },
-            None,
-            Box::pin(futures::future::pending()),
-            exe_ctx.tiling_specification(),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
-            result
         );
     }
 
@@ -1323,5 +1260,227 @@ mod tests {
                 }
             }])
         );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn dataset_from_workflow_task_success() {
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
+
+        let session_id = ctx.default_session_ref().await.id();
+
+        let dataset = add_ndvi_to_datasets(&ctx).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: dataset.into(),
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let workflow_id = ctx
+            .workflow_registry_ref()
+            .register(workflow)
+            .await
+            .unwrap();
+
+        // create dataset from workflow
+        let req = test::TestRequest::post()
+            .uri(&format!("/datasetFromWorkflow/{workflow_id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
+            .set_payload(
+                r#"{
+                "name": "foo",
+                "description": null,
+                "query": {
+                    "spatialBounds": {
+                        "upperLeftCoordinate": {
+                            "x": -10.0,
+                            "y": 80.0
+                        },
+                        "lowerRightCoordinate": {
+                            "x": 50.0,
+                            "y": 20.0
+                        }
+                    },
+                    "timeInterval": {
+                        "start": 1388534400000,
+                        "end": 1388534401000
+                    },
+                    "spatialResolution": {
+                        "x": 0.1,
+                        "y": 0.1
+                    }
+                }
+            }"#,
+            );
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+
+        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+
+        let response = if let TaskStatus::Completed { info, .. } = status {
+            info.as_any_arc()
+                .downcast::<RasterDatasetFromWorkflowResult>()
+                .unwrap()
+                .as_ref()
+                .clone()
+        } else {
+            panic!("Task must be completed");
+        };
+
+        // automatically deletes uploads on drop
+        let _test_uploads = TestDataUploads {
+            uploads: vec![response.upload],
+        };
+
+        let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
+        // query the newly created dataset
+        let op = GdalSource {
+            params: GdalSourceParameters {
+                data: dataset_id.into(),
+            },
+        }
+        .boxed();
+
+        let session = ctx.default_session_ref().await.clone();
+        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
+
+        let o = op.initialize(&exe_ctx).await.unwrap();
+
+        let query_ctx = ctx.query_context(session.clone()).unwrap();
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
+            time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+
+        let processor = o.query_processor().unwrap().get_u8().unwrap();
+
+        let result = single_timestep_raster_stream_to_geotiff_bytes(
+            processor,
+            query_rect,
+            query_ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
+                    .unwrap()
+                    .compression_num_threads,
+                as_cog: false,
+                force_big_tiff: false,
+            },
+            None,
+            Box::pin(futures::future::pending()),
+            exe_ctx.tiling_specification(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
+                as &[u8],
+            result.as_slice()
+        );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn dataset_from_workflow_task_failure() {
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
+
+        let session_id = ctx.default_session_ref().await.id();
+
+        let dataset = add_ndvi_to_datasets(&ctx).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: dataset.into(),
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let workflow_id = WorkflowId::from_hash(&workflow);
+
+        // create dataset from workflow
+        let req = test::TestRequest::post()
+            .uri(&format!("/datasetFromWorkflow/{workflow_id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
+            .set_payload(
+                r#"{
+                "name": "foo",
+                "description": null,
+                "query": {
+                    "spatialBounds": {
+                        "upperLeftCoordinate": {
+                            "x": -10.0,
+                            "y": 80.0
+                        },
+                        "lowerRightCoordinate": {
+                            "x": 50.0,
+                            "y": 20.0
+                        }
+                    },
+                    "timeInterval": {
+                        "start": 1388534400000,
+                        "end": 1388534401000
+                    },
+                    "spatialResolution": {
+                        "x": 0.1,
+                        "y": 0.1
+                    }
+                }
+            }"#,
+            );
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+
+        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+
+        assert!(
+            matches!(status, TaskStatus::Failed { error: _, clean_up } if matches!(clean_up, TaskCleanUpStatus::Completed {..}))
+        ); //TODO: Consider matching error as well.
     }
 }

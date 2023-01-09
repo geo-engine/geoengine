@@ -4,24 +4,32 @@ use std::{
     path::Path,
 };
 
-use crate::api::model::datatypes::DatasetId;
-use crate::api::model::services::{
-    AddDataset, CreateDataset, MetaDataDefinition, MetaDataSuggestion,
-};
-use crate::datasets::upload::{Upload, UploadRootPath};
-use crate::datasets::{
-    listing::DatasetProvider,
-    storage::{DatasetStore, SuggestMetaData},
-};
-use crate::error;
-use crate::error::Result;
 use crate::util::user_input::UserInput;
+use crate::{api::model::datatypes::DatasetId, contexts::AdminSession};
+use crate::{
+    api::model::services::DataPath,
+    datasets::{
+        listing::DatasetProvider,
+        storage::{DatasetStore, SuggestMetaData},
+    },
+};
+use crate::{api::model::services::DatasetDefinition, datasets::upload::UploadId, error};
+use crate::{
+    api::model::services::{AddDataset, CreateDataset, MetaDataDefinition, MetaDataSuggestion},
+    util::config::{get_config_element, Data},
+};
 use crate::{contexts::Context, datasets::storage::AutoCreateDataset};
+use crate::{
+    contexts::MockableSession,
+    datasets::upload::{AdjustFilePath, Upload, UploadRootPath, Volume},
+};
+use crate::{datasets::upload::VolumeName, error::Result};
 use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
-use actix_web::{web, FromRequest, Responder};
+use actix_web::{web, FromRequest, HttpRequest, Responder};
+use futures::{future::LocalBoxFuture, FutureExt};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use gdal::{
     vector::{Layer, LayerAccess},
@@ -42,6 +50,8 @@ use geoengine_operators::{
 };
 use snafu::ResultExt;
 
+use super::get_token;
+
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: Context,
@@ -51,10 +61,40 @@ where
         web::scope("/dataset")
             .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
+            .service(web::resource("/volumes").route(web::get().to(list_volumes_handler)))
             .service(web::resource("/{dataset}").route(web::get().to(get_dataset_handler::<C>)))
             .service(web::resource("").route(web::post().to(create_dataset_handler::<C>))), // must come last to not match other routes
     )
     .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)));
+}
+
+/// Lists available volumes.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/volumes",
+    responses(
+        (status = 200, description = "OK", body = [Volume],
+            example = json!([
+                {
+                    "id": "f6aa9f3d-a211-43e8-9b91-b23ab9632791",
+                    "path": "./test_data/"
+                }
+            ])
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+#[allow(clippy::unused_async)]
+pub async fn list_volumes_handler(_session: AdminSession) -> Result<impl Responder> {
+    let volumes = get_config_element::<Data>()?
+        .volumes
+        .into_iter()
+        .map(|(name, path)| Volume { name, path })
+        .collect::<Vec<_>>();
+    Ok(web::Json(volumes))
 }
 
 /// Lists available datasets.
@@ -91,7 +131,7 @@ where
         ("session_token" = [])
     )
 )]
-async fn list_datasets_handler<C: Context>(
+pub async fn list_datasets_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
     options: web::Query<DatasetListOptions>,
@@ -132,7 +172,7 @@ async fn list_datasets_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-async fn get_dataset_handler<C: Context>(
+pub async fn get_dataset_handler<C: Context>(
     dataset: web::Path<DatasetId>,
     session: C::Session,
     ctx: web::Data<C>,
@@ -144,8 +184,50 @@ async fn get_dataset_handler<C: Context>(
     Ok(web::Json(dataset))
 }
 
-/// Creates a new dataset using previously uploaded files.
-/// Information about the file contents must be manually supplied.
+pub enum AdminOrSession<C: Context> {
+    Admin,
+    Session(C::Session),
+}
+
+impl<C: Context> FromRequest for AdminOrSession<C> {
+    type Error = crate::error::Error;
+    type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+        let header_token = match get_token(req) {
+            Ok(s) => s,
+            Err(e) => return async { Err(e) }.boxed_local(),
+        };
+
+        let admin_session_token =
+            crate::util::config::get_config_element::<crate::util::config::Session>()
+                .ok()
+                .and_then(|session| session.admin_session_token);
+
+        match admin_session_token {
+            Some(admin_session_token) if header_token == admin_session_token => {
+                async { Ok(AdminOrSession::Admin) }.boxed_local()
+            }
+            _ => {
+                let ctx = req
+                    .app_data::<web::Data<C>>()
+                    .expect("InMemoryContext must be available")
+                    .get_ref()
+                    .clone();
+
+                async move {
+                    ctx.session_by_id(header_token)
+                        .await
+                        .map(|s| AdminOrSession::Session(s))
+                        .map_err(Into::into)
+                }
+                .boxed_local()
+            }
+        }
+    }
+}
+
+/// Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.
 #[utoipa::path(
     tag = "Datasets",
     post,
@@ -164,19 +246,41 @@ async fn get_dataset_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-async fn create_dataset_handler<C: Context>(
-    session: C::Session,
+pub async fn create_dataset_handler<C: Context>(
+    session: AdminOrSession<C>,
     ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<impl Responder> {
-    let upload = ctx
-        .dataset_db_ref()
-        .get_upload(&session, create.upload)
-        .await?;
+) -> Result<web::Json<IdResponse<DatasetId>>> {
+    let create = create.into_inner();
+    match (session, create) {
+        (
+            AdminOrSession::Session(session),
+            CreateDataset {
+                data_path: DataPath::Upload(upload),
+                definition,
+            },
+        ) => create_user_dataset(session, ctx, upload, definition).await,
+        (
+            AdminOrSession::Admin,
+            CreateDataset {
+                data_path: DataPath::Volume(volume),
+                definition,
+            },
+        ) => create_system_dataset(ctx, volume, definition).await,
+        (AdminOrSession::Session(_), _) => Err(error::Error::OnlyAdminsCanCreateDatasetFromVolume),
+        (AdminOrSession::Admin, _) => Err(error::Error::AdminsCannotCreateDatasetFromUpload),
+    }
+}
 
-    let mut definition = create.into_inner().definition;
+pub async fn create_user_dataset<C: Context>(
+    session: C::Session,
+    ctx: web::Data<C>,
+    upload_id: UploadId,
+    mut definition: DatasetDefinition,
+) -> Result<web::Json<IdResponse<DatasetId>>> {
+    let upload = ctx.dataset_db_ref().get_upload(&session, upload_id).await?;
 
-    adjust_user_path_to_upload_path(&mut definition.meta_data, &upload)?;
+    adjust_meta_data_path(&mut definition.meta_data, &upload)?;
 
     let db = ctx.dataset_db_ref();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
@@ -187,25 +291,61 @@ async fn create_dataset_handler<C: Context>(
     Ok(web::Json(IdResponse::from(id)))
 }
 
-fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Upload) -> Result<()> {
+async fn create_system_dataset<C: Context>(
+    ctx: web::Data<C>,
+    volume_name: VolumeName,
+    mut definition: DatasetDefinition,
+) -> Result<web::Json<IdResponse<DatasetId>>>
+where
+    C::Session: MockableSession,
+{
+    let volumes = get_config_element::<Data>()?.volumes;
+    let volume_path = volumes
+        .get(&volume_name)
+        .ok_or(error::Error::UnknownVolume)?;
+    let volume = Volume {
+        name: volume_name,
+        path: volume_path.clone(),
+    };
+
+    adjust_meta_data_path(&mut definition.meta_data, &volume)?;
+
+    let db = ctx.dataset_db_ref();
+    let meta_data = db.wrap_meta_data(definition.meta_data.into());
+
+    let id = db
+        .add_dataset(
+            &C::Session::mock(),
+            definition.properties.validated()?,
+            meta_data,
+        )
+        .await?;
+
+    Ok(web::Json(IdResponse::from(id)))
+}
+
+pub fn adjust_meta_data_path<A: AdjustFilePath>(
+    meta: &mut MetaDataDefinition,
+    adjust: &A,
+) -> Result<()> {
     match meta {
         MetaDataDefinition::MockMetaData(_) => {}
         MetaDataDefinition::OgrMetaData(m) => {
-            m.loading_info.file_name = upload.adjust_file_path(&m.loading_info.file_name)?;
+            m.loading_info.file_name = adjust.adjust_file_path(&m.loading_info.file_name)?;
         }
         MetaDataDefinition::GdalMetaDataRegular(m) => {
-            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
+            m.params.file_path = adjust.adjust_file_path(&m.params.file_path)?;
         }
         MetaDataDefinition::GdalStatic(m) => {
-            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
+            m.params.file_path = adjust.adjust_file_path(&m.params.file_path)?;
         }
         MetaDataDefinition::GdalMetadataNetCdfCf(m) => {
-            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
+            m.params.file_path = adjust.adjust_file_path(&m.params.file_path)?;
         }
         MetaDataDefinition::GdalMetaDataList(m) => {
             for p in &mut m.params {
                 if let Some(ref mut params) = p.params {
-                    params.file_path = upload.adjust_file_path(&params.file_path)?;
+                    params.file_path = adjust.adjust_file_path(&params.file_path)?;
                 }
             }
         }
@@ -233,7 +373,7 @@ fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Uploa
         ("session_token" = [])
     )
 )]
-async fn auto_create_dataset_handler<C: Context>(
+pub async fn auto_create_dataset_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
     create: web::Json<AutoCreateDataset>,
@@ -320,7 +460,7 @@ async fn auto_create_dataset_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-async fn suggest_meta_data_handler<C: Context>(
+pub async fn suggest_meta_data_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
     suggest: web::Query<SuggestMetaData>,
@@ -473,8 +613,8 @@ fn gdal_autodetect(path: &Path, columns: &[String]) -> Option<GdalAutoDetect> {
                 let mut dataset_options = DatasetOptions::default();
 
                 let open_opts = &[
-                    &format!("X_POSSIBLE_NAMES={}", x),
-                    &format!("Y_POSSIBLE_NAMES={}", y),
+                    &format!("X_POSSIBLE_NAMES={x}"),
+                    &format!("Y_POSSIBLE_NAMES={y}"),
                     "AUTODETECT_TYPE=YES",
                 ];
 
@@ -499,7 +639,7 @@ fn gdal_autodetect(path: &Path, columns: &[String]) -> Option<GdalAutoDetect> {
                 let mut dataset_options = DatasetOptions::default();
 
                 let open_opts = &[
-                    &format!("GEOM_POSSIBLE_NAMES={}", column),
+                    &format!("GEOM_POSSIBLE_NAMES={column}"),
                     "AUTODETECT_TYPE=YES",
                 ];
 
@@ -733,9 +873,10 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
 mod tests {
     use super::*;
     use crate::api::model::datatypes::DatasetId;
+    use crate::api::model::services::DatasetDefinition;
     use crate::contexts::{InMemoryContext, Session, SessionId, SimpleContext, SimpleSession};
     use crate::datasets::storage::DatasetStore;
-    use crate::datasets::upload::UploadId;
+    use crate::datasets::upload::{UploadId, VolumeName};
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
     use crate::test_data;
@@ -760,6 +901,7 @@ mod tests {
     use geoengine_operators::source::{
         OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
     };
+    use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use serde_json::{json, Value};
     use std::str::FromStr;
 
@@ -955,8 +1097,11 @@ mod tests {
         upload_id: UploadId,
         session_id: SessionId,
     ) -> DatasetId {
-        let s = format!("{{\"upload\": \"{}\",", upload_id)
-            + r#""definition": {
+        let s = json!({
+            "dataPath": {
+                "upload": upload_id
+            },
+            "definition": {
                 "properties": {
                     "id": null,
                     "name": "Uploaded Natural Earth 10m Ports",
@@ -1023,14 +1168,14 @@ mod tests {
                     }
                 }
             }
-        }"#;
+        });
 
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
-            .set_payload(s);
+            .set_json(s);
         let res = send_test_request(req, ctx).await;
         assert_eq!(res.status(), 200);
 
@@ -1115,6 +1260,68 @@ mod tests {
                 [4.292_873_969, 51.927_222_22].into(),
             ]
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_creates_system_dataset() -> Result<()> {
+        let ctx = InMemoryContext::test_default();
+
+        let volume = VolumeName("test_data".to_string());
+
+        let mut meta_data = create_ndvi_meta_data();
+
+        // make path relative to volume
+        meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    id: None,
+                    name: "ndvi".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                },
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
+
+        // create via admin session
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(
+                    get_config_element::<crate::util::config::Session>()?
+                        .admin_session_token
+                        .unwrap()
+                        .to_string(),
+                ),
+            ))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, ctx.clone()).await;
+        assert_eq!(res.status(), 200);
+
+        let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
+        let dataset_id = dataset_id.id;
+
+        // assert dataset is accessible via regular session
+        let session = ctx.default_session_ref().await.clone();
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_id}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+
+        let res = send_test_request(req, ctx.clone()).await;
+        assert_eq!(res.status(), 200);
 
         Ok(())
     }
@@ -1633,14 +1840,14 @@ mod tests {
             .await?;
 
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/{}", id))
+            .uri(&format!("/dataset/{id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         let res_status = res.status();
         let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
-        assert_eq!(res_status, 200, "{}", res_body);
+        assert_eq!(res_status, 200, "{res_body}");
 
         assert_eq!(
             res_body,
@@ -1735,7 +1942,7 @@ mod tests {
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{}", res_body);
+        assert_eq!(res_status, 200, "{res_body}");
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),

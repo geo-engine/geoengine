@@ -45,6 +45,7 @@ pub trait Pixel:
     + RgbaTransmutable
     + TypedRasterConversion<GridShape2D>
     + TypedRasterConversion<GridShape3D>
+    + SaturatingOps
 {
 }
 
@@ -62,6 +63,70 @@ where
 {
     fn from_(value: V) -> Self {
         value.as_()
+    }
+}
+
+/// Saturating operations for the `Pixel` type that do not overflow.
+pub trait SaturatingOps {
+    fn saturating_add(self, rhs: Self) -> Self;
+}
+
+impl SaturatingOps for u8 {
+    fn saturating_add(self, rhs: Self) -> Self {
+        u8::saturating_add(self, rhs)
+    }
+}
+
+impl SaturatingOps for u16 {
+    fn saturating_add(self, rhs: Self) -> Self {
+        u16::saturating_add(self, rhs)
+    }
+}
+
+impl SaturatingOps for u32 {
+    fn saturating_add(self, rhs: Self) -> Self {
+        u32::saturating_add(self, rhs)
+    }
+}
+
+impl SaturatingOps for u64 {
+    fn saturating_add(self, rhs: Self) -> Self {
+        u64::saturating_add(self, rhs)
+    }
+}
+
+impl SaturatingOps for i8 {
+    fn saturating_add(self, rhs: Self) -> Self {
+        i8::saturating_add(self, rhs)
+    }
+}
+
+impl SaturatingOps for i16 {
+    fn saturating_add(self, rhs: Self) -> Self {
+        i16::saturating_add(self, rhs)
+    }
+}
+
+impl SaturatingOps for i32 {
+    fn saturating_add(self, rhs: Self) -> Self {
+        i32::saturating_add(self, rhs)
+    }
+}
+
+impl SaturatingOps for i64 {
+    fn saturating_add(self, rhs: Self) -> Self {
+        i64::saturating_add(self, rhs)
+    }
+}
+
+impl SaturatingOps for f32 {
+    fn saturating_add(self, rhs: Self) -> Self {
+        self + rhs
+    }
+}
+impl SaturatingOps for f64 {
+    fn saturating_add(self, rhs: Self) -> Self {
+        self + rhs
     }
 }
 

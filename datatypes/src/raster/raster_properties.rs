@@ -142,8 +142,8 @@ impl Display for RasterPropertiesKey {
 impl Display for RasterPropertiesEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            RasterPropertiesEntry::Number(n) => write!(f, "{}", n),
-            RasterPropertiesEntry::String(s) => write!(f, "{}", s),
+            RasterPropertiesEntry::Number(n) => write!(f, "{n}"),
+            RasterPropertiesEntry::String(s) => write!(f, "{s}"),
         }
     }
 }

@@ -370,37 +370,37 @@ where
         match self {
             MetaDataDefinition::MockMetaData(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
             MetaDataDefinition::OgrMetaData(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
             MetaDataDefinition::GdalMetaDataRegular(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
             MetaDataDefinition::GdalStatic(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
             MetaDataDefinition::GdalMetadataNetCdfCf(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
             MetaDataDefinition::GdalMetaDataList(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
@@ -536,7 +536,7 @@ where
 
         ensure!(
             auth.is_ok(),
-            error::UpateDatasetPermission {
+            error::UpdateDatasetPermission {
                 role: session.user.id.to_string(),
                 dataset: permission.dataset,
                 permission: format!("{:?}", permission.permission),

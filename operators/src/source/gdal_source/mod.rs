@@ -276,8 +276,8 @@ impl GdalDatasetGeoTransform {
         GdalReadWindow {
             read_start_x: near_idx_x,
             read_start_y: near_idx_y,
-            read_size_x: read_size_x as usize,
-            read_size_y: read_size_y as usize,
+            read_size_x,
+            read_size_y,
         }
     }
 }
@@ -511,9 +511,10 @@ impl GdalRasterLoader {
             };
             let elapsed = start.elapsed();
             debug!(
-                "file not found -> returning error = {}, took {:?}",
+                "file not found -> returning error = {}, took: {:?}, file: {:?}",
                 err_result.is_err(),
-                elapsed
+                elapsed,
+                dataset_params.file_path
             );
             return err_result;
         };
@@ -917,11 +918,8 @@ where
     let dataset_intersects_tile = gdal_dataset_bounds.intersection(&output_bounds);
     let output_shape = tile_info.tile_size_in_pixels();
 
-    let dataset_intersection_area = match dataset_intersects_tile {
-        Some(i) => i,
-        None => {
-            return Ok(GridOrEmpty::from(EmptyGrid::new(output_shape)));
-        }
+    let Some(dataset_intersection_area) = dataset_intersects_tile else {
+        return Ok(GridOrEmpty::from(EmptyGrid::new(output_shape)));
     };
 
     let tile_geo_transform = tile_info.tile_geo_transform();

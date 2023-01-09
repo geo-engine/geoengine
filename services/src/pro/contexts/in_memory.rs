@@ -155,6 +155,8 @@ impl ProInMemoryContext {
 #[async_trait]
 impl ProContext for ProInMemoryContext {
     type UserDB = HashMapUserDb;
+    type ProDatasetDB = ProHashMapDatasetDb;
+    type ProProjectDB = ProHashMapProjectDb;
 
     fn user_db(&self) -> Arc<Self::UserDB> {
         self.user_db.clone()
@@ -164,6 +166,20 @@ impl ProContext for ProInMemoryContext {
     }
     fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
         self.oidc_request_db.as_ref().as_ref()
+    }
+
+    fn pro_dataset_db(&self) -> Arc<Self::ProDatasetDB> {
+        self.dataset_db.clone()
+    }
+    fn pro_dataset_db_ref(&self) -> &Self::ProDatasetDB {
+        &self.dataset_db
+    }
+
+    fn pro_project_db(&self) -> Arc<Self::ProProjectDB> {
+        self.project_db.clone()
+    }
+    fn pro_project_db_ref(&self) -> &Self::ProProjectDB {
+        &self.project_db
     }
 }
 

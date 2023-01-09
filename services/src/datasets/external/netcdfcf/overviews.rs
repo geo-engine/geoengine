@@ -3,7 +3,7 @@ use crate::{
     api::model::datatypes::ResamplingMethod,
     datasets::{external::netcdfcf::NetCdfCfDataProvider, storage::MetaDataDefinition},
     tasks::{TaskContext, TaskStatusInfo},
-    util::{canonicalize_subpath, config::get_config_element, path_with_base_path},
+    util::{config::get_config_element, path_with_base_path},
 };
 use gdal::{
     cpl::CslStringList,
@@ -14,6 +14,7 @@ use gdal::{
     Dataset, DatasetOptions, GdalOpenFlags,
 };
 use gdal_sys::GDALGetRasterStatistics;
+use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{DateTimeParseFormat, TimeInstance, TimeInterval},
@@ -341,7 +342,7 @@ impl InProgressFlag {
     }
 
     fn remove(self) -> Result<()> {
-        fs::remove_file(&self.path).boxed_context(error::CannotRemoveInProgressFlag)?;
+        fs::remove_file(self.path.as_path()).boxed_context(error::CannotRemoveInProgressFlag)?;
         Ok(())
     }
 
@@ -491,13 +492,10 @@ fn index_subdataset<C: TaskContext>(
             }
         }
 
-        let (overview_dataset, overview_destination) = match first_overview_dataset {
-            Some(overview_dataset) => overview_dataset,
-            None => {
-                return Err(NetCdfCf4DProviderError::NoOverviewsGeneratedForSource {
-                    path: conversion.dataset_out_base.to_string_lossy().to_string(),
-                });
-            }
+        let Some((overview_dataset, overview_destination)) = first_overview_dataset else {
+            return Err(NetCdfCf4DProviderError::NoOverviewsGeneratedForSource {
+                path: conversion.dataset_out_base.to_string_lossy().to_string(),
+            });
         };
 
         let loading_info =

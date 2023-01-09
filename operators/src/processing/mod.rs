@@ -9,6 +9,7 @@ mod point_in_polygon;
 mod raster_scaling;
 mod raster_type_conversion;
 mod raster_vector_join;
+mod rasterization;
 mod reprojection;
 mod temporal_raster_aggregation;
 mod time_projection;

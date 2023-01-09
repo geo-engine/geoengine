@@ -9,6 +9,8 @@ use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
+use crate::workflows::registry::WorkflowRegistry;
+use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
 use actix_web::{web, Either, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
@@ -34,6 +36,10 @@ where
                         r#"/{provider}/{collection:.+}"#,
                         web::get().to(list_collection_handler::<C>),
                     ),
+            )
+            .route(
+                "/{provider}/{layer:.*}/workflowId",
+                web::post().to(layer_to_workflow_id_handler::<C>),
             )
             .route("/{provider}/{layer:.+}", web::get().to(layer_handler::<C>)),
     )
@@ -484,6 +490,51 @@ async fn layer_handler<C: Context>(
     Ok(web::Json(collection))
 }
 
+/// Registers a layer from a provider as a workflow and returns the workflow id
+#[utoipa::path(
+    tag = "Layers",
+    post,
+    path = "/layers/{provider}/{layer}/workflowId",
+    responses(
+        (status = 200, description = "OK", body = IdResponse<WorkflowId>,
+            example = json!({
+                "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+            })
+        )
+    ),
+    params(
+        ("provider" = DataProviderId, description = "Data provider id"),
+        ("layer" = LayerCollectionId, description = "Layer id"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn layer_to_workflow_id_handler<C: Context>(
+    ctx: web::Data<C>,
+    path: web::Path<(DataProviderId, LayerId)>,
+) -> Result<web::Json<WorkflowId>> {
+    let (provider, item) = path.into_inner();
+
+    let layer = match provider {
+        crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID => {
+            ctx.dataset_db_ref().get_layer(&item).await?
+        }
+        crate::layers::storage::INTERNAL_PROVIDER_ID => ctx.layer_db_ref().get_layer(&item).await?,
+        _ => {
+            ctx.layer_provider_db_ref()
+                .layer_provider(provider)
+                .await?
+                .get_layer(&item)
+                .await?
+        }
+    };
+
+    let workflow_id = ctx.workflow_registry().register(layer.workflow).await?;
+
+    Ok(web::Json(workflow_id))
+}
+
 /// Add a new layer to a collection
 #[utoipa::path(
     tag = "Layers",
@@ -762,7 +813,7 @@ mod tests {
             }));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         let result: IdResponse<LayerId> = test::read_body_json(response).await;
 
@@ -839,7 +890,7 @@ mod tests {
             ));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         let collection = ctx
             .layer_db_ref()
@@ -872,7 +923,7 @@ mod tests {
             }));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         let result: IdResponse<LayerCollectionId> = test::read_body_json(response).await;
 
@@ -931,7 +982,7 @@ mod tests {
             ));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         let collection_a = ctx
             .layer_db_ref()
@@ -1042,7 +1093,7 @@ mod tests {
             ));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         ctx.layer_db_ref()
             .collection(
@@ -1062,7 +1113,7 @@ mod tests {
             ));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_client_error(), "{:?}", response);
+        assert!(response.status().is_client_error(), "{response:?}");
     }
 
     #[tokio::test]
@@ -1097,7 +1148,7 @@ mod tests {
             ));
         let response = send_test_request(req, ctx.clone()).await;
 
-        assert!(response.status().is_success(), "{:?}", response);
+        assert!(response.status().is_success(), "{response:?}");
 
         let root_collection = ctx
             .layer_db_ref()
@@ -1113,8 +1164,7 @@ mod tests {
                 .items
                 .iter()
                 .any(|item| item.name() == "Foo"),
-            "{:#?}",
-            root_collection
+            "{root_collection:#?}"
         );
     }
 }

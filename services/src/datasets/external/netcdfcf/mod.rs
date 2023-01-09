@@ -25,7 +25,6 @@ use crate::layers::listing::LayerCollectionProvider;
 use crate::projects::RasterSymbology;
 use crate::projects::Symbology;
 use crate::tasks::TaskContext;
-use crate::util::canonicalize_subpath;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -39,6 +38,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::TypedOperator;
 use geoengine_operators::source::GdalSource;
@@ -258,7 +258,7 @@ impl NetCdfCfDataProvider {
         }
 
         let tree_file_path = overview_dataset_path.join(METADATA_FILE_NAME);
-        let file = std::fs::File::open(&tree_file_path).ok()?;
+        let file = std::fs::File::open(tree_file_path).ok()?;
         let buf_reader = BufReader::new(file);
         serde_json::from_reader::<_, NetCdfOverview>(buf_reader).ok()
     }
@@ -515,15 +515,14 @@ impl NetCdfCfDataProvider {
                 start,
                 end, // TODO: Use this or time dimension size (number of steps)?
                 step,
-                band_offset: dataset_id.entity as usize * dimensions_time,
+                band_offset: dataset_id.entity * dimensions_time,
             }),
             TimeCoverage::List { time_stamps } => {
                 let mut params_list = Vec::with_capacity(time_stamps.len());
                 for (i, time_instance) in time_stamps.iter().enumerate() {
                     let mut params = params.clone();
 
-                    params.rasterband_channel =
-                        dataset_id.entity as usize * dimensions_time + i + 1;
+                    params.rasterband_channel = dataset_id.entity * dimensions_time + i + 1;
 
                     params_list.push(GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new_instant(*time_instance)
@@ -546,16 +545,13 @@ impl NetCdfCfDataProvider {
     ) -> Option<MetaDataDefinition> {
         let loading_info_path = overview_path
             .join(&dataset_id.file_name)
-            .join(&dataset_id.group_names.join("/"))
+            .join(dataset_id.group_names.join("/"))
             .join(dataset_id.entity.to_string())
             .join(LOADING_INFO_FILE_NAME);
 
-        let loading_info_file = match std::fs::File::open(&loading_info_path) {
-            Ok(file) => file,
-            Err(_) => {
-                debug!("No overview for {dataset_id:?}");
-                return None;
-            }
+        let Ok(loading_info_file) = std::fs::File::open(loading_info_path) else {
+            debug!("No overview for {dataset_id:?}");
+            return None;
         };
 
         debug!("Using overview for {dataset_id:?}. Overview path is {overview_path:?}.");
@@ -744,9 +740,7 @@ fn parse_date(input: &str) -> Result<DateTime> {
 }
 
 fn parse_time_step(input: &str) -> Result<Option<TimeStep>> {
-    let duration_str = if let Some(duration_str) = input.strip_prefix('P') {
-        duration_str
-    } else {
+    let Some(duration_str) = input.strip_prefix('P') else {
         return Err(NetCdfCf4DProviderError::TimeCoverageResolutionMustStartWithP);
     };
 

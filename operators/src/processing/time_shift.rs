@@ -34,11 +34,13 @@ impl OperatorName for TimeShift {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum TimeShiftParams {
     /// Shift the query rectangle relative with a time step
+    #[serde(rename_all = "camelCase")]
     Relative {
         granularity: TimeGranularity,
         value: i32,
     },
     /// Set the time interval to a fixed value
+    #[serde(rename_all = "camelCase")]
     Absolute { time_interval: TimeInterval },
 }
 
@@ -519,7 +521,7 @@ mod tests {
             serde_json::json!({
                 "params": {
                     "type": "absolute",
-                    "time_interval": {
+                    "timeInterval": {
                         "start": 1_293_840_000_000_i64,
                         "end": 1_325_376_000_000_i64
                     }

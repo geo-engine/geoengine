@@ -315,7 +315,7 @@ impl<'a> FromSql<'a> for SpatialReferenceOption {
 impl std::fmt::Display for SpatialReferenceOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SpatialReferenceOption::SpatialReference(p) => write!(f, "{}", p),
+            SpatialReferenceOption::SpatialReference(p) => write!(f, "{p}"),
             SpatialReferenceOption::Unreferenced => Ok(()),
         }
     }
