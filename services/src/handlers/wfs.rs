@@ -494,14 +494,14 @@ async fn wfs_feature_handler<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let query_rect = VectorQueryRectangle {
-        spatial_bounds: request.bbox.bounds_naive()?,
-        time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
+    let query_rect = VectorQueryRectangle::with_bounds_and_resolution(
+        request.bbox.bounds_naive()?,
+        request.time.unwrap_or_else(default_time_from_config).into(),
         // TODO: find reasonable default
-        spatial_resolution: request
+        request
             .queryResolution
             .map_or_else(SpatialResolution::zero_point_one, |r| r.0),
-    };
+    );
     let query_ctx = ctx.query_context(session)?;
 
     let json = match processor {

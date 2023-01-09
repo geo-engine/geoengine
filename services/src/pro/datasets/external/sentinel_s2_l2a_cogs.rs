@@ -19,8 +19,8 @@ use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, Measurement, RasterQueryRectangle,
-    SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,
+    AxisAlignedRectangle, DateTime, Duration, Measurement, RasterQueryRectangle,
+    SpatialPartitioned, SpatialQuery, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
@@ -511,11 +511,7 @@ impl SentinelS2L2aCogsMetaData {
             SpatialReference::epsg_4326(),
         )?;
 
-        let spatial_partition = query.spatial_partition(); // TODO: use SpatialPartition2D directly
-        let bbox = BoundingBox2D::new_upper_left_lower_right_unchecked(
-            spatial_partition.upper_left(),
-            spatial_partition.lower_right(),
-        );
+        let bbox = query.spatial_query().spatial_partition().as_bbox(); // TODO: use SpatialPartition2D directly
         let bbox = bbox.reproject_clipped(&projector)?; // TODO: use reproject_clipped on SpatialPartition2D
 
         Ok(bbox.map(|bbox| {
@@ -746,7 +742,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         dataset::DatasetId,
-        primitives::{SpatialPartition2D, SpatialResolution},
+        primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
         util::{gdal::hide_gdal_errors, test::TestDefault, Identifier},
     };
     use geoengine_operators::{
@@ -787,14 +783,14 @@ mod tests {
                 .unwrap();
 
         let loading_info = meta
-            .loading_info(RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
+            .loading_info(RasterQueryRectangle::with_partition_and_resolution(
+                SpatialPartition2D::new_unchecked(
                     (166_021.44, 0.00).into(),
                     (534_994.66, 9_329_005.18).into(),
                 ),
-                time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
-                spatial_resolution: SpatialResolution::one(),
-            })
+                SpatialResolution::one(),
+                TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
+            ))
             .await
             .unwrap();
 
@@ -888,17 +884,15 @@ mod tests {
 
         let processor = op.query_processor()?.get_u16().unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked(
                 (166_021.44, 9_329_005.18).into(),
                 (534_994.66, 0.00).into(),
             ),
-            time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
-            spatial_resolution: SpatialResolution::new_unchecked(
-                166_021.44 / 256.,
-                (9_329_005.18 - 534_994.66) / 256.,
-            ),
-        };
+            SpatialResolution::new_unchecked(166_021.44 / 256., (9_329_005.18 - 534_994.66) / 256.),
+            exe.tiling_specification.origin_coordinate,
+            TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
+        );
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -1118,15 +1112,15 @@ mod tests {
                 .await
                 .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked(
                 (600_000.00, 9_750_100.).into(),
                 (600_100.0, 9_750_000.).into(),
             ),
-            time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44))
-                .unwrap(),
-            spatial_resolution: SpatialResolution::new_unchecked(10., 10.),
-        };
+            SpatialResolution::new_unchecked(10., 10.),
+            Coordinate2D::new(0., 0.), // FIXME: this is the default tiling strategy origin
+            TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44)).unwrap(),
+        );
 
         let loading_info = meta.loading_info(query).await.unwrap();
         let parts =
@@ -1216,17 +1210,15 @@ mod tests {
 
         let stream = gdal_source
             .raster_query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked(
                         (499_980., 9_804_800.).into(),
                         (499_990., 9_804_810.).into(),
                     ),
-                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
-                        2014, 3, 1, 0, 0, 0,
-                    ))
-                    .unwrap(),
-                    spatial_resolution: SpatialResolution::new(10., 10.).unwrap(),
-                },
+                    SpatialResolution::new(10., 10.).unwrap(),
+                    execution_context.tiling_specification.origin_coordinate,
+                    TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+                ),
                 &query_context,
             )
             .await

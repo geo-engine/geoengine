@@ -316,14 +316,13 @@ async fn wms_map_handler<C: Context>(
     let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
     let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 
-    let query_rect = RasterQueryRectangle {
-        spatial_bounds: query_bbox,
-        time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
-        spatial_resolution: SpatialResolution::new_unchecked(
-            x_query_resolution,
-            y_query_resolution,
-        ),
-    };
+    // FIXME: we query with a grid that is snapped to the grid origin. We COULD also query with the origin of the query OR the native origin of the workflow.
+    let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+        query_bbox,
+        SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution),
+        execution_context.tiling_specification().origin_coordinate,
+        request.time.unwrap_or_else(default_time_from_config).into(),
+    );
 
     let query_ctx = ctx.query_context(session)?;
 
@@ -526,15 +525,16 @@ mod tests {
 
         let image_bytes = raster_stream_to_png_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_partition,
-                time_interval: geoengine_datatypes::primitives::TimeInterval::new(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_partition,
+                SpatialResolution::new_unchecked(1.0, 1.0),
+                exe_ctx.tiling_specification().origin_coordinate,
+                geoengine_datatypes::primitives::TimeInterval::new(
                     1_388_534_400_000,
                     1_388_534_400_000 + 1000,
                 )
                 .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
-            },
+            ),
             ctx.query_context(SimpleSession::default()).unwrap(),
             360,
             180,

@@ -1,8 +1,10 @@
 use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
-    primitives::{RasterQueryRectangle, SpatialQuery, TimeInterval},
-    raster::{Blit, EmptyGrid2D, GridOrEmpty, Pixel, RasterTile2D},
+    primitives::{
+        AxisAlignedRectangle, RasterQueryRectangle, SpatialPartitioned, SpatialQuery, TimeInterval,
+    },
+    raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
@@ -38,9 +40,15 @@ where
     let dim = [height as usize, width as usize];
     let query_geo_transform = query_rect.spatial_query().geo_transform;
 
+    let output_geo_transform = GeoTransform::new(
+        query_rect.spatial_query().spatial_partition().upper_left(),
+        query_geo_transform.x_pixel_size(),
+        query_geo_transform.y_pixel_size(),
+    );
+
     let output_tile = Ok(RasterTile2D::new_without_offset(
         time.unwrap_or_default(),
-        query_geo_transform,
+        output_geo_transform,
         GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
     ));
 

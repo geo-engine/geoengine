@@ -411,11 +411,13 @@ async fn wcs_get_coverage_handler<C: Context>(
             }
         };
 
-    let query_rect = RasterQueryRectangle {
-        spatial_bounds: request_partition,
-        time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
+    // FIXME: we query with a grid that is snapped to the grid origin. We COULD also query with the origin of the query OR the native origin of the workflow.
+    let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+        request_partition,
         spatial_resolution,
-    };
+        execution_context.tiling_specification().origin_coordinate,
+        request.time.unwrap_or_else(default_time_from_config).into(),
+    );
 
     let query_ctx = ctx.query_context(session)?;
 

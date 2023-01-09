@@ -1,4 +1,4 @@
-use crate::raster::{GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D};
+use crate::raster::{GeoTransform, GridBoundingBox2D, GridBounds};
 
 use super::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialBounded, SpatialPartition2D,
@@ -80,6 +80,23 @@ impl QueryRectangle<SpatialGridQueryRectangle> {
                 grid_origin,
             ),
             vector_query.time_interval,
+        )
+    }
+
+    /// Creates a new `QueryRectangle` that describes the requested grid.
+    /// The spatial query is defined by a SpatialGridQueryRectangle, which is derived from a `SpatialPartition2D` and a `SpatialResolution`.
+    /// The temporal query is defined by a `TimeInterval`.
+    pub fn with_partition_and_resolution(
+        spatial_partition: SpatialPartition2D,
+        spatial_resolution: SpatialResolution,
+        time_interval: TimeInterval,
+    ) -> Self {
+        Self::new(
+            SpatialGridQueryRectangle::_with_partition_and_resolution(
+                spatial_partition,
+                spatial_resolution,
+            ),
+            time_interval,
         )
     }
 
@@ -237,18 +254,6 @@ impl SpatialGridQueryRectangle {
         Self {
             geo_transform,
             grid_bounds,
-        }
-    }
-
-    pub fn shift_origin(&self, new_origin_pixel: GridIdx2D) -> Self {
-        let grid_offset = self.grid_bounds.min_index() - new_origin_pixel;
-
-        let shifted_geo_transform = self.geo_transform.shift_origin(offset);
-        let shifted_grid_bounds = self.grid_bounds.shift_origin(offset);
-
-        Self {
-            geo_transform: shifted_geo_transform,
-            grid_bounds: shifted_grid_bounds,
         }
     }
 

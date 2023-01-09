@@ -1369,11 +1369,12 @@ mod tests {
         let o = op.initialize(&exe_ctx).await.unwrap();
 
         let query_ctx = ctx.query_context(session.clone()).unwrap();
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
+            SpatialResolution::zero_point_one(),
+            exe_ctx.tiling_specification().origin_coordinate,
+            TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
+        );
 
         let processor = o.query_processor().unwrap().get_u8().unwrap();
 

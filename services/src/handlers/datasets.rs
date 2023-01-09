@@ -1231,11 +1231,11 @@ mod tests {
 
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                },
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    Default::default(),
+                    SpatialResolution::new(1., 1.)?,
+                ),
                 &query_ctx,
             )
             .await
