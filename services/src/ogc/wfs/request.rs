@@ -217,7 +217,7 @@ mod tests {
             ("request", "GetFeature"),
             ("service", "WFS"),
             ("version", "2.0.0"),
-            ("typeNames", &format!("json:{}", op)),
+            ("typeNames", &format!("json:{op}")),
             ("bbox", "-90,-180,90,180"),
             ("crs", "EPSG:4326"),
         ];

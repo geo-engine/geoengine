@@ -139,7 +139,7 @@ async fn start_task_handler<C: ProContext>(
         let response: OdmTaskNewUploadResponse = client
             .post(
                 base_url
-                    .join(&format!("task/new/upload/{}", task_id))
+                    .join(&format!("task/new/upload/{task_id}"))
                     .context(error::Url)?,
             )
             .multipart(form)
@@ -161,7 +161,7 @@ async fn start_task_handler<C: ProContext>(
     client
         .post(
             base_url
-                .join(&format!("task/new/commit/{}", task_id))
+                .join(&format!("task/new/commit/{task_id}"))
                 .context(error::Url)?,
         )
         .send()
@@ -205,7 +205,7 @@ async fn dataset_from_drone_mapping_handler<C: ProContext>(
     let response = client
         .get(
             base_url
-                .join(&format!("task/{}/download/all.zip", task_id))
+                .join(&format!("task/{task_id}/download/all.zip"))
                 .context(error::Url)?,
         )
         .send()
@@ -467,7 +467,7 @@ mod tests {
         mock_nodeodm.expect(
             Expectation::matching(request::method_path(
                 "GET",
-                format!("/task/{}/download/all.zip", task_uuid),
+                format!("/task/{task_uuid}/download/all.zip"),
             ))
             .respond_with(
                 status_code(200)
@@ -478,7 +478,7 @@ mod tests {
 
         // download odm result through geo engine and create dataset
         let req = test::TestRequest::post()
-            .uri(&format!("/droneMapping/dataset/{}", task_uuid))
+            .uri(&format!("/droneMapping/dataset/{task_uuid}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(task);

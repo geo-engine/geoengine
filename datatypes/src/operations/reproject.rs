@@ -226,7 +226,7 @@ where
             .chain(left_line)
             .collect();
 
-        let proj_outline_coordinates = projector.project_coordinates(&outline_coordinates)?;
+        let proj_outline_coordinates = projector.project_coordinates(outline_coordinates)?;
 
         let bbox = MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds();
 
@@ -266,17 +266,11 @@ where
             .map(|use_area| use_area.reproject(&area_of_use_projector))
             .transpose()?;
 
-        let area_of_use_proj = match area_of_use_proj {
-            Some(area_of_use_proj) => area_of_use_proj,
-            None => return Ok(None),
-        };
+        let Some(area_of_use_proj) = area_of_use_proj else { return Ok(None); };
 
         let clipped_bbox = self.intersection(&area_of_use_proj);
 
-        let clipped_bbox = match clipped_bbox {
-            Some(bbox) => bbox,
-            None => return Ok(None),
-        };
+        let Some(clipped_bbox) = clipped_bbox else { return Ok(None); };
 
         // project points on the bbox
         let upper_line = Line::new(clipped_bbox.upper_left(), clipped_bbox.upper_right())
@@ -462,10 +456,7 @@ pub fn reproject_query<S: AxisAlignedRectangle>(
     source: SpatialReference,
     target: SpatialReference,
 ) -> Result<Option<QueryRectangle<S>>> {
-    let (s_bbox, p_bbox) = match reproject_and_unify_bbox(query.spatial_bounds, target, source)? {
-        (Some(s_bbox), Some(p_bbox)) => (s_bbox, p_bbox),
-        _ => return Ok(None),
-    };
+    let (Some(s_bbox), Some(p_bbox)) = reproject_and_unify_bbox(query.spatial_bounds, target, source)? else { return Ok(None); };
 
     let p_spatial_resolution =
         suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;

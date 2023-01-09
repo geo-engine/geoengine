@@ -1,4 +1,3 @@
-#![feature(bench_black_box)]
 use std::{hint::black_box, time::Instant};
 
 use geoengine_operators::util::create_rayon_thread_pool;

@@ -48,7 +48,7 @@ impl VectorDataType {
 
 impl std::fmt::Display for VectorDataType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

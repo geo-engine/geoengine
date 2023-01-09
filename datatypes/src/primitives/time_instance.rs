@@ -95,7 +95,7 @@ impl std::fmt::Display for TimeInstance {
         let datetime = instance
             .as_date_time()
             .expect("time instance was clamped into valid range");
-        write!(f, "{}", datetime)
+        write!(f, "{datetime}")
     }
 }
 
