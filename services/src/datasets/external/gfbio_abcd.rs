@@ -43,20 +43,20 @@ pub const GFBIO_PROVIDER_ID: DataProviderId =
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GfbioDataProviderDefinition {
+pub struct GfbioAbcdDataProviderDefinition {
     name: String,
     db_config: DatabaseConnectionConfig,
 }
 
 #[typetag::serde]
 #[async_trait]
-impl DataProviderDefinition for GfbioDataProviderDefinition {
+impl DataProviderDefinition for GfbioAbcdDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
-        Ok(Box::new(GfbioDataProvider::new(self.db_config).await?))
+        Ok(Box::new(GfbioAbcdDataProvider::new(self.db_config).await?))
     }
 
     fn type_name(&self) -> &'static str {
-        "GFBio"
+        "GFBioABCD"
     }
 
     fn name(&self) -> String {
@@ -70,14 +70,14 @@ impl DataProviderDefinition for GfbioDataProviderDefinition {
 
 // TODO: make schema, table names and column names configurable like in crawler
 #[derive(Debug)]
-pub struct GfbioDataProvider {
+pub struct GfbioAbcdDataProvider {
     db_config: DatabaseConnectionConfig,
     pool: Pool<PostgresConnectionManager<NoTls>>,
     column_hash_to_name: HashMap<String, String>,
     column_name_to_hash: HashMap<String, String>,
 }
 
-impl GfbioDataProvider {
+impl GfbioAbcdDataProvider {
     const COLUMN_NAME_LONGITUDE: &'static str = "e9eefbe81d4343c6a114b7d522017bf493b89cef";
     const COLUMN_NAME_LATITUDE: &'static str = "506e190d0ad979d1c7a816223d1ded3604907d91";
 
@@ -183,7 +183,7 @@ impl GfbioDataProvider {
 }
 
 #[async_trait]
-impl LayerCollectionProvider for GfbioDataProvider {
+impl LayerCollectionProvider for GfbioAbcdDataProvider {
     async fn collection(
         &self,
         collection: &LayerCollectionId,
@@ -315,7 +315,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
 }
 
 #[async_trait]
-impl DataProvider for GfbioDataProvider {
+impl DataProvider for GfbioAbcdDataProvider {
     async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
         let surrogate_key: i32 = id
             .external()
@@ -338,7 +338,7 @@ impl DataProvider for GfbioDataProvider {
 
 #[async_trait]
 impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for GfbioDataProvider
+    for GfbioAbcdDataProvider
 {
     async fn meta_data(
         &self,
@@ -397,7 +397,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 force_ogr_spatial_filter: true,
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
-                attribute_query: Some(GfbioDataProvider::build_attribute_query(surrogate_key)),
+                attribute_query: Some(GfbioAbcdDataProvider::build_attribute_query(surrogate_key)),
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -426,7 +426,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
 #[async_trait]
 impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for GfbioDataProvider
+    for GfbioAbcdDataProvider
 {
     async fn meta_data(
         &self,
@@ -442,7 +442,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 #[async_trait]
 impl
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for GfbioDataProvider
+    for GfbioAbcdDataProvider
 {
     async fn meta_data(
         &self,
@@ -537,7 +537,7 @@ mod tests {
 
         let test_schema = create_test_data(&db_config).await;
 
-        let provider = Box::new(GfbioDataProviderDefinition {
+        let provider = Box::new(GfbioAbcdDataProviderDefinition {
             name: "GFBio".to_string(),
             db_config: DatabaseConnectionConfig {
                 host: db_config.host.clone(),
@@ -609,7 +609,7 @@ mod tests {
 
             let ogr_pg_string = provider_db_config.ogr_pg_config();
 
-            let provider = Box::new(GfbioDataProviderDefinition {
+            let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
                 db_config: provider_db_config,
             })
@@ -782,7 +782,7 @@ mod tests {
     #[tokio::test]
     async fn it_loads() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
-            let provider = Box::new(GfbioDataProviderDefinition {
+            let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
@@ -888,7 +888,7 @@ mod tests {
     #[tokio::test]
     async fn it_cites() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
-            let provider = Box::new(GfbioDataProviderDefinition {
+            let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),

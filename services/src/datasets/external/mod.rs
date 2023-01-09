@@ -1,5 +1,5 @@
 #[cfg(feature = "nfdi")]
-pub mod gfbio; // TODO: rename to "gfbio_abcd"?
+pub mod gfbio_abcd; // TODO: rename to "gfbio_abcd"?
 #[cfg(feature = "nfdi")]
 pub mod gfbio_collections;
 pub mod mock;

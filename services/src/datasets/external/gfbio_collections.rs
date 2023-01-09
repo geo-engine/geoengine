@@ -43,7 +43,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
-use super::gfbio::GfbioDataProvider;
+use super::gfbio_abcd::GfbioAbcdDataProvider;
 use super::pangaea::{PangaeaDataProvider, PangaeaMetaData};
 
 pub const GFBIO_COLLECTIONS_PROVIDER_ID: DataProviderId =
@@ -400,7 +400,7 @@ impl GfbioCollectionsDataProvider {
             .get_surrogate_key_for_gfbio_dataset(abcd_dataset_id)
             .await?;
 
-        let (column_hash_to_name, column_name_to_hash) = GfbioDataProvider::resolve_columns(
+        let (column_hash_to_name, column_name_to_hash) = GfbioAbcdDataProvider::resolve_columns(
             &self.pool.get().await?,
             &self.abcd_db_config.schema,
         )
@@ -440,7 +440,7 @@ impl GfbioCollectionsDataProvider {
                 force_ogr_spatial_filter: true,
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
-                attribute_query: Some(GfbioDataProvider::build_attribute_query(surrogate_key)),
+                attribute_query: Some(GfbioAbcdDataProvider::build_attribute_query(surrogate_key)),
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -604,11 +604,12 @@ impl DataProvider for GfbioCollectionsDataProvider {
                 let conn = self.pool.get().await?;
 
                 let (_column_hash_to_name, column_name_to_hash) =
-                    GfbioDataProvider::resolve_columns(&conn, &self.abcd_db_config.schema).await?;
+                    GfbioAbcdDataProvider::resolve_columns(&conn, &self.abcd_db_config.schema)
+                        .await?;
 
                 let surrogate_key = self.get_surrogate_key_for_gfbio_dataset(&layer).await?;
 
-                GfbioDataProvider::get_provenance(
+                GfbioAbcdDataProvider::get_provenance(
                     id,
                     surrogate_key,
                     &column_name_to_hash,
