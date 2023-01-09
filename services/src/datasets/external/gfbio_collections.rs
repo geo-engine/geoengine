@@ -166,7 +166,7 @@ impl TryFrom<GfBioCollectionId> for LayerCollectionId {
     fn try_from(id: GfBioCollectionId) -> Result<Self> {
         let s = match id {
             GfBioCollectionId::Collections => "collections".to_string(),
-            GfBioCollectionId::Collection { collection } => format!("collections/{}", collection),
+            GfBioCollectionId::Collection { collection } => format!("collections/{collection}"),
             _ => return Err(crate::error::Error::InvalidLayerCollectionId),
         };
 
@@ -180,7 +180,7 @@ impl TryFrom<GfBioCollectionId> for LayerId {
     fn try_from(id: GfBioCollectionId) -> Result<Self> {
         let s = match id {
             GfBioCollectionId::AbcdLayer { collection, layer } => {
-                format!("collections/{}/abcd/{}", collection, layer,)
+                format!("collections/{collection}/abcd/{layer}")
             }
             GfBioCollectionId::PangaeaLayer { collection, layer } => {
                 format!(
@@ -259,7 +259,7 @@ impl GfbioCollectionsDataProvider {
         let response = client
             .get(
                 self.collection_api_url
-                    .join(&format!("collections/{}/", collection))?,
+                    .join(&format!("collections/{collection}/"))?,
             )
             .header(header::AUTHORIZATION, &self.collection_api_auth_token)
             .header(header::ACCEPT, "application/json")
@@ -671,9 +671,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let id = if let geoengine_datatypes::dataset::DataId::External(id) = id {
-            id
-        } else {
+        let geoengine_datatypes::dataset::DataId::External(id) = id else {
             return Err(geoengine_operators::error::Error::InvalidDataId);
         };
 
@@ -759,9 +757,7 @@ mod tests {
         conn.batch_execute(&format!(
             "CREATE SCHEMA {schema}; 
             SET SEARCH_PATH TO {schema}, public;
-            {sql}",
-            schema = schema,
-            sql = sql
+            {sql}"
         ))
         .await
         .unwrap();
@@ -813,7 +809,7 @@ mod tests {
         let pg_mgr = PostgresConnectionManager::new(pg_config, NoTls);
         let conn = pg_mgr.connect().await.unwrap();
 
-        conn.batch_execute(&format!("DROP SCHEMA {} CASCADE;", schema))
+        conn.batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
             .await
             .unwrap();
     }

@@ -421,7 +421,7 @@ mod tests {
     use crate::pro::util::tests::{
         create_project_helper, create_session_helper, send_pro_test_request,
     };
-    use crate::pro::{contexts::ProInMemoryContext, projects::ProProjectDb, users::UserId};
+    use crate::pro::{contexts::ProInMemoryContext, users::UserId};
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
     use crate::util::user_input::Validated;
 
@@ -442,10 +442,7 @@ mod tests {
         ctx: C,
         method: Method,
         email: &str,
-    ) -> ServiceResponse
-    where
-        C::ProjectDB: ProProjectDb,
-    {
+    ) -> ServiceResponse {
         let user = UserRegistration {
             email: email.to_string(),
             password: "secret123".to_string(),
@@ -827,7 +824,7 @@ mod tests {
         let (session, project) = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::post()
-            .uri(&format!("/session/project/{}", project))
+            .uri(&format!("/session/project/{project}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_pro_test_request(req, ctx.clone()).await;
 

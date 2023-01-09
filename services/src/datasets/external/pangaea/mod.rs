@@ -73,7 +73,7 @@ impl PangaeaDataProvider {
         doi: &str,
     ) -> Result<ProvenanceOutput> {
         let pmd: PangaeaMetaData = client
-            .get(format!("{}{}?format=metadata_jsonld", base_url, doi))
+            .get(format!("{base_url}{doi}?format=metadata_jsonld"))
             .send()
             .await?
             .json()
@@ -83,7 +83,7 @@ impl PangaeaDataProvider {
             })?;
 
         let citation_text = client
-            .get(format!("{}{}?format=citation_text", base_url, doi))
+            .get(format!("{base_url}{doi}?format=citation_text"))
             .send()
             .await?
             .text()
@@ -301,7 +301,7 @@ mod tests {
 
         server.expect(
             Expectation::matching(all_of![
-                request::method_path(method.to_string(), format!("/{}", doi)),
+                request::method_path(method.to_string(), format!("/{doi}")),
                 request::query(url_decoded(contains(("format", format_param.to_owned()))))
             ])
             .times(count)
@@ -444,9 +444,8 @@ mod tests {
         let initialized_op = src.initialize(&context).await.unwrap();
         let proc = initialized_op.query_processor().unwrap();
 
-        let proc = match proc {
-            TypedVectorQueryProcessor::Data(qp) => qp,
-            _ => panic!("Expected Data QueryProcessor"),
+        let TypedVectorQueryProcessor::Data(proc) = proc else {
+            panic!("Expected Data QueryProcessor");
         };
 
         let query_rectangle = VectorQueryRectangle {
@@ -501,9 +500,8 @@ mod tests {
 
         let proc = initialized_op.query_processor().unwrap();
 
-        let proc = match proc {
-            TypedVectorQueryProcessor::MultiPoint(qp) => qp,
-            _ => panic!("Expected MultiPoint QueryProcessor"),
+        let TypedVectorQueryProcessor::MultiPoint(proc) = proc else {
+            panic!("Expected MultiPoint QueryProcessor");
         };
 
         let query_rectangle = VectorQueryRectangle {
@@ -569,9 +567,8 @@ mod tests {
 
         let proc = initialized_op.query_processor().unwrap();
 
-        let proc = match proc {
-            TypedVectorQueryProcessor::MultiPolygon(qp) => qp,
-            _ => panic!("Expected MultiPolygon QueryProcessor"),
+        let TypedVectorQueryProcessor::MultiPolygon(proc) = proc else {
+            panic!("Expected MultiPolygon QueryProcessor");
         };
 
         let query_rectangle = VectorQueryRectangle {
@@ -632,9 +629,8 @@ mod tests {
         let initialized_op = src.initialize(&context).await.unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
-        let proc = match proc {
-            TypedVectorQueryProcessor::MultiPoint(qp) => qp,
-            _ => panic!("Expected MultiPoint QueryProcessor"),
+        let TypedVectorQueryProcessor::MultiPoint(proc) = proc else {
+            panic!("Expected MultiPoint QueryProcessor");
         };
 
         let query_rectangle = VectorQueryRectangle {

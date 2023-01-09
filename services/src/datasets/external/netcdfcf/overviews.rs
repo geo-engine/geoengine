@@ -342,7 +342,7 @@ impl InProgressFlag {
     }
 
     fn remove(self) -> Result<()> {
-        fs::remove_file(&self.path).boxed_context(error::CannotRemoveInProgressFlag)?;
+        fs::remove_file(self.path.as_path()).boxed_context(error::CannotRemoveInProgressFlag)?;
         Ok(())
     }
 
@@ -492,13 +492,10 @@ fn index_subdataset<C: TaskContext>(
             }
         }
 
-        let (overview_dataset, overview_destination) = match first_overview_dataset {
-            Some(overview_dataset) => overview_dataset,
-            None => {
-                return Err(NetCdfCf4DProviderError::NoOverviewsGeneratedForSource {
-                    path: conversion.dataset_out_base.to_string_lossy().to_string(),
-                });
-            }
+        let Some((overview_dataset, overview_destination)) = first_overview_dataset else {
+            return Err(NetCdfCf4DProviderError::NoOverviewsGeneratedForSource {
+                path: conversion.dataset_out_base.to_string_lossy().to_string(),
+            });
         };
 
         let loading_info =

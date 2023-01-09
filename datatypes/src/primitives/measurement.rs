@@ -109,14 +109,14 @@ impl fmt::Display for Measurement {
                 measurement,
                 unit: unit_option,
             }) => {
-                write!(f, "{}", measurement)?;
+                write!(f, "{measurement}")?;
                 if let Some(unit) = unit_option {
-                    return write!(f, " in {}", unit);
+                    return write!(f, " in {unit}");
                 }
                 Ok(())
             }
             Measurement::Classification(ClassificationMeasurement { measurement, .. }) => {
-                write!(f, "{}", measurement)
+                write!(f, "{measurement}")
             }
         }
     }

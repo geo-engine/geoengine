@@ -94,7 +94,7 @@ where
                         // new time slice => consume old aggregator and create new one
                         temporal_aggregator.add_feature_data(
                             feature_aggregator.into_data(),
-                            time_span.time_interval.duration_ms() as u64, // TODO: use individual feature duration?
+                            time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
                         )?;
 
                         feature_aggregator =
@@ -136,7 +136,7 @@ where
 
             temporal_aggregator.add_feature_data(
                 feature_aggregator.into_data(),
-                time_span.time_interval.duration_ms() as u64, // TODO: use individual feature duration?
+                time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
             )?;
 
             if temporal_aggregator.is_satisfied() {

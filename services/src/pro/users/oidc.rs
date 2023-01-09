@@ -187,7 +187,7 @@ impl OidcRequestDb {
         for scope in &self.scopes {
             if !scopes_supported.contains(&Scope::new(scope.clone())) {
                 return Err(OidcError::IllegalProvider {
-                    reason: format!("provider does not support requested scope: '{}'", scope),
+                    reason: format!("provider does not support requested scope: '{scope}'"),
                 });
             }
         }

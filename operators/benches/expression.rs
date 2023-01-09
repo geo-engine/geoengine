@@ -1,5 +1,3 @@
-#![feature(bench_black_box)]
-
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
     primitives::{

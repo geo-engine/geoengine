@@ -155,9 +155,7 @@ async fn wcs_capabilities_handler<C: Context>(
                     <wcs:Identifier>{workflow}</wcs:Identifier>
                 </wcs:CoverageSummary>
             </wcs:Contents>
-    </wcs:Capabilities>"#,
-        wcs_url = wcs_url,
-        workflow = workflow
+    </wcs:Capabilities>"#
     );
 
     Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
@@ -493,7 +491,7 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let (_, workflow_id) = register_ndvi_workflow_helper(&ctx).await;
 
         let params = &[
             ("service", "WCS"),
@@ -504,7 +502,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wcs/{}?{}",
-                &id.to_string(),
+                &workflow_id.to_string(),
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -565,8 +563,7 @@ mod tests {
                     <wcs:Identifier>{workflow_id}</wcs:Identifier>
                 </wcs:CoverageSummary>
             </wcs:Contents>
-    </wcs:Capabilities>"#,
-                workflow_id = id
+    </wcs:Capabilities>"#
             ),
             body
         );
@@ -577,19 +574,19 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let (_, workflow_id) = register_ndvi_workflow_helper(&ctx).await;
 
         let params = &[
             ("service", "WCS"),
             ("request", "DescribeCoverage"),
             ("version", "1.1.1"),
-            ("identifiers", &id.to_string()),
+            ("identifiers", &workflow_id.to_string()),
         ];
 
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wcs/{}?{}",
-                &id.to_string(),
+                &workflow_id.to_string(),
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -627,8 +624,7 @@ mod tests {
             <wcs:SupportedCRS>EPSG:4326</wcs:SupportedCRS>
             <wcs:SupportedFormat>image/tiff</wcs:SupportedFormat>
         </wcs:CoverageDescription>
-    </wcs:CoverageDescriptions>"#,
-                workflow_id = id
+    </wcs:CoverageDescriptions>"#
             ),
             body
         );

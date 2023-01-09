@@ -145,11 +145,9 @@ where
     ///
     pub fn push_data(&mut self, column: &str, data: FeatureDataValue) -> Result<()> {
         // also checks that column exists
-        let (data_builder, column_type) = if let (Some(builder), Some(column_type)) =
+        let (Some(data_builder), Some(column_type)) =
             (self.builders.get_mut(column), self.types.get(column))
-        {
-            (builder, column_type)
-        } else {
+         else {
             return Err(FeatureCollectionError::ColumnDoesNotExist {
                 name: column.to_string(),
             }
@@ -226,9 +224,7 @@ where
     /// Append a null to `column` if possible
     pub fn push_null(&mut self, column: &str) -> Result<()> {
         // also checks that column exists
-        let data_builder = if let Some(builder) = self.builders.get_mut(column) {
-            builder
-        } else {
+        let Some(data_builder) = self.builders.get_mut(column) else {
             return Err(FeatureCollectionError::ColumnDoesNotExist {
                 name: column.to_string(),
             }

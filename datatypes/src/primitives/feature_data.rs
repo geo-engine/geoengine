@@ -790,14 +790,14 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 ///
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextDataRef<'f> {
-    data_buffer: arrow::buffer::Buffer,
+    data_buffer: &'f [u8],
     offsets: &'f [i32],
     valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
 }
 
 impl<'f> AsRef<[u8]> for TextDataRef<'f> {
     fn as_ref(&self) -> &[u8] {
-        self.data_buffer.as_slice()
+        self.data_buffer
     }
 }
 
@@ -820,7 +820,7 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
 
             let text = unsafe {
                 byte_ptr_to_str(
-                    self.data_buffer.slice(start as usize).as_ptr(),
+                    self.data_buffer[start as usize..].as_ptr(),
                     (end - start) as usize,
                 )
             };
@@ -961,7 +961,7 @@ impl<'r> From<TextDataRef<'r>> for FeatureDataRef<'r> {
 
 impl<'r> TextDataRef<'r> {
     pub fn new(
-        data_buffer: arrow::buffer::Buffer,
+        data_buffer: &'r [u8],
         offsets: &'r [i32],
         valid_bitmap: Option<&'r arrow::bitmap::Bitmap>,
     ) -> Self {
@@ -1000,7 +1000,7 @@ impl<'r> TextDataRef<'r> {
 
         let text = unsafe {
             byte_ptr_to_str(
-                self.data_buffer.slice(start as usize).as_ptr(),
+                self.data_buffer[start as usize..].as_ptr(),
                 (end - start) as usize,
             )
         };

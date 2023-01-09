@@ -18,12 +18,12 @@ use crate::api::model::operators::{
     VectorResultDescriptor,
 };
 use crate::api::model::services::{
-    AddDataset, CreateDataset, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
+    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
 };
 use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
-use crate::datasets::upload::UploadId;
+use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::handlers;
 use crate::handlers::tasks::TaskAbortOptions;
 use crate::handlers::wcs::CoverageResponse;
@@ -85,6 +85,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::load_workflow_handler,
         handlers::workflows::register_workflow_handler,
         handlers::datasets::list_datasets_handler,
+        handlers::datasets::list_volumes_handler,
         handlers::datasets::get_dataset_handler,
         handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
@@ -253,7 +254,10 @@ use utoipa::{Modify, OpenApi};
             UnixTimeStampType,
             Dataset,
             DatasetDefinition,
-            AddDataset
+            AddDataset,
+            Volume,
+            VolumeName,
+            DataPath
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

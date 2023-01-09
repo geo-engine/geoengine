@@ -174,13 +174,13 @@ impl TryFrom<EbvCollectionId> for LayerCollectionId {
     fn try_from(id: EbvCollectionId) -> Result<Self> {
         let s = match id {
             EbvCollectionId::Classes => "classes".to_string(),
-            EbvCollectionId::Class { class } => format!("classes/{}", class),
-            EbvCollectionId::Ebv { class, ebv } => format!("classes/{}/{}", class, ebv),
+            EbvCollectionId::Class { class } => format!("classes/{class}"),
+            EbvCollectionId::Ebv { class, ebv } => format!("classes/{class}/{ebv}"),
             EbvCollectionId::Dataset {
                 class,
                 ebv,
                 dataset,
-            } => format!("classes/{}/{}/{}", class, ebv, dataset),
+            } => format!("classes/{class}/{ebv}/{dataset}"),
             EbvCollectionId::Group {
                 class,
                 ebv,

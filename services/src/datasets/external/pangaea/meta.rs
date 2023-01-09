@@ -189,7 +189,7 @@ impl PangaeaMetaData {
     {
         let url = self.get_tsv_file().ok_or(Error::PangaeaNoTsv)?.url.as_str();
         let offset = PangaeaMetaData::begin_of_data(client, url).await?;
-        let url = format!("CSV:/vsisubfile/{},/vsicurl_streaming/{}", offset, url);
+        let url = format!("CSV:/vsisubfile/{offset},/vsicurl_streaming/{url}");
 
         let omd = self.get_ogr_source_ds(url.as_str());
         Ok(StaticMetaData {
@@ -302,12 +302,12 @@ impl PangeaParam {
                 description,
                 unit,
             } => PangeaParam::Numeric {
-                name: format!("{} {}", name, suffix),
+                name: format!("{name} {suffix}"),
                 description,
                 unit,
             },
             PangeaParam::String { name, description } => PangeaParam::String {
-                name: format!("{} {}", name, suffix),
+                name: format!("{name} {suffix}"),
                 description,
             },
         }
