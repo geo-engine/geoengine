@@ -404,11 +404,7 @@ where
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let (time_interval, state) = self.shift.shift(query.time_interval)?;
 
-        let query = VectorQueryRectangle {
-            spatial_bounds: query.spatial_bounds,
-            time_interval,
-            spatial_resolution: query.spatial_resolution,
-        };
+        let query = VectorQueryRectangle::new(query.spatial_bounds, time_interval);
         let stream = self.processor.vector_query(query, ctx).await?;
 
         let stream = stream.then(move |collection| async move {
@@ -449,11 +445,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         let (time_interval, state) = self.shift.shift(query.time_interval)?;
-        let query = RasterQueryRectangle {
-            spatial_bounds: query.spatial_bounds,
-            time_interval,
-            spatial_resolution: query.spatial_resolution,
-        };
+        let query = RasterQueryRectangle::new(query.spatial_bounds, time_interval);
         let stream = self.processor.raster_query(query, ctx).await?;
 
         let stream = stream.map(move |raster| {
@@ -647,15 +639,15 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2009, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2012, 1, 1, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                    SpatialResolution::one(),
+                ),
                 &query_context,
             )
             .await
@@ -733,15 +725,15 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                    SpatialResolution::one(),
+                ),
                 &query_context,
             )
             .await
@@ -897,18 +889,16 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (4., 0.).into(),
-                    ),
-                    time_interval: TimeInterval::new(
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+                    SpatialResolution::one(),
+                    execution_context.tiling_specification.origin_coordinate,
+                    TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                ),
                 &query_context,
             )
             .await
@@ -1057,18 +1047,16 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (4., 0.).into(),
-                    ),
-                    time_interval: TimeInterval::new(
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+                    SpatialResolution::one(),
+                    execution_context.tiling_specification.origin_coordinate,
+                    TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                ),
                 &query_context,
             )
             .await
@@ -1142,17 +1130,12 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (-180., 90.).into(),
-                        (180., -90.).into(),
-                    ),
-                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
-                        2014, 3, 1, 0, 0, 0,
-                    ))
-                    .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
+                    SpatialResolution::one(),
+                    execution_context.tiling_specification.origin_coordinate,
+                    TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+                ),
                 &query_context,
             )
             .await
@@ -1208,17 +1191,12 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (-180., 90.).into(),
-                        (180., -90.).into(),
-                    ),
-                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
-                        2014, 3, 1, 0, 0, 0,
-                    ))
-                    .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
+                    SpatialResolution::one(),
+                    execution_context.tiling_specification.origin_coordinate,
+                    TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+                ),
                 &query_context,
             )
             .await

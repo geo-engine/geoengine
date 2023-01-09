@@ -7,8 +7,8 @@ use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint,
-    MultiPointAccess, VectorQueryRectangle,
+    Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint, MultiPointAccess,
+    SpatialBounded, VectorQueryRectangle, VectorSpatialQueryRectangle,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -347,7 +347,7 @@ struct GridFoldState {
 #[async_trait]
 impl QueryProcessor for VisualPointClusteringProcessor {
     type Output = MultiPointCollection;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
@@ -363,11 +363,14 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             .map(|(name, column_info)| (name.clone(), column_info.data_type))
             .collect();
 
-        let joint_resolution = f64::max(query.spatial_resolution.x, query.spatial_resolution.y);
+        let joint_resolution = f64::max(
+            query.spatial_bounds.spatial_resolution.x,
+            query.spatial_bounds.spatial_resolution.y,
+        );
         let scaled_radius_model = self.radius_model.with_scaled_radii(joint_resolution)?;
 
         let initial_grid_fold_state = Result::<GridFoldState>::Ok(GridFoldState {
-            grid: Grid::new(query.spatial_bounds, scaled_radius_model),
+            grid: Grid::new(query.spatial_bounds.spatial_bounds(), scaled_radius_model),
             column_mapping: self.attribute_mapping.clone(),
         });
 
@@ -434,7 +437,11 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                 column_mapping: _,
             } = grid?;
 
-            let mut cmq = CircleMergingQuadtree::new(query.spatial_bounds, *grid.radius_model(), 1);
+            let mut cmq = CircleMergingQuadtree::new(
+                query.spatial_bounds.spatial_bounds(),
+                *grid.radius_model(),
+                1,
+            );
 
             // TODO: worker thread
             for circle_of_points in grid.drain() {
@@ -456,6 +463,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::primitives::BoundingBox2D;
     use geoengine_datatypes::primitives::FeatureData;
     use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::TimeInterval;
@@ -509,11 +517,11 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-        };
+        let qrect = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::new(0.1, 0.1).unwrap(),
+        );
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
 
@@ -591,11 +599,11 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-        };
+        let qrect = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::new(0.1, 0.1).unwrap(),
+        );
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
 
@@ -674,11 +682,11 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-        };
+        let qrect = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::new(0.1, 0.1).unwrap(),
+        );
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
 
@@ -765,11 +773,11 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-        };
+        let qrect = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::new(0.1, 0.1).unwrap(),
+        );
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
 

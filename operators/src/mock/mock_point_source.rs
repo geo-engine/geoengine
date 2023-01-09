@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::DataId;
-use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::primitives::{SpatialQuery, VectorQueryRectangle};
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::{Coordinate2D, TimeInterval},
@@ -33,10 +33,12 @@ impl VectorQueryProcessor for MockPointSourceProcessor {
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let chunk_size = usize::from(ctx.chunk_byte_size()) / std::mem::size_of::<Coordinate2D>();
-        let bounding_box = query.spatial_bounds;
+        let spatial_query = query.spatial_query();
 
         Ok(stream::iter(&self.points)
-            .filter(move |&coord| std::future::ready(bounding_box.contains_coordinate(coord)))
+            .filter(move |&coord| {
+                std::future::ready(spatial_query.spatial_bounds.contains_coordinate(coord))
+            })
             .chunks(chunk_size)
             .map(move |chunk| {
                 Ok(MultiPointCollection::from_data(
@@ -149,11 +151,11 @@ mod tests {
             _ => panic!(),
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::zero_point_one(),
+        );
         let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 
         let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();

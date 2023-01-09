@@ -19,11 +19,11 @@ use geoengine_datatypes::collections::GeometryCollection;
 
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, Measurement, RasterQueryRectangle,
-    SpatialPartition2D, SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
+    SpatialPartition2D, SpatialPartitioned, SpatialQuery, SpatialResolution, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{
     GeoTransform, Grid2D, GridOrEmpty, GridSize, GridSpaceToLinearSpace, RasterDataType,
-    RasterTile2D, TilingSpecification,
+    RasterTile2D, TilingSpecification, TilingStrategy,
 };
 
 use num_traits::FloatConst;
@@ -241,105 +241,122 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> util::Result<BoxStream<'a, util::Result<RasterTile2D<Self::RasterType>>>> {
+        let query_resolution = query.spatial_query().spatial_resolution();
+
         if let MultiPoint(points_processor) = &self.input {
             let grid_resolution = match self.grid_size_mode {
                 GridSizeMode::Fixed => SpatialResolution {
-                    x: f64::max(self.spatial_resolution.x, query.spatial_resolution.x),
-                    y: f64::max(self.spatial_resolution.y, query.spatial_resolution.y),
+                    x: f64::max(self.spatial_resolution.x, query_resolution.x),
+                    y: f64::max(self.spatial_resolution.y, query_resolution.y),
                 },
                 GridSizeMode::Relative => SpatialResolution {
                     x: f64::max(
-                        self.spatial_resolution.x * query.spatial_resolution.x,
-                        query.spatial_resolution.x,
+                        self.spatial_resolution.x * query_resolution.x,
+                        query_resolution.x,
                     ),
                     y: f64::max(
-                        self.spatial_resolution.y * query.spatial_resolution.y,
-                        query.spatial_resolution.y,
+                        self.spatial_resolution.y * query_resolution.y,
+                        query_resolution.y,
                     ),
                 },
             };
 
-            let tiling_strategy = self
-                .tiling_specification
-                .strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
+            // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
+            assert_eq!(
+                query.spatial_query().geo_transform.origin_coordinate(),
+                self.tiling_specification.origin_coordinate,
+                "The query origin coordinate must match the tiling strategy's origin for now."
+            );
+
+            let tiling_strategy = TilingStrategy::new(
+                self.tiling_specification.tile_size_in_pixels,
+                query.spatial_query().geo_transform,
+            );
             let tile_shape = tiling_strategy.tile_size_in_pixels;
+            let query_spatial_partition = query.spatial_query().spatial_partition();
 
-            let tiles = stream::iter(
-                tiling_strategy.tile_information_iterator(query.spatial_bounds),
-            )
-            .then(move |tile_info| async move {
-                let grid_spatial_bounds = tile_info
-                    .spatial_partition()
-                    .snap_to_grid(self.origin_coordinate, grid_resolution);
+            let tiles =
+                stream::iter(tiling_strategy.tile_information_iterator(query_spatial_partition))
+                    .then(move |tile_info| async move {
+                        let grid_spatial_bounds = tile_info
+                            .spatial_partition()
+                            .snap_to_grid(self.origin_coordinate, grid_resolution);
 
-                let grid_size_x =
-                    f64::ceil(grid_spatial_bounds.size_x() / grid_resolution.x) as usize;
-                let grid_size_y =
-                    f64::ceil(grid_spatial_bounds.size_y() / grid_resolution.y) as usize;
+                        let grid_size_x =
+                            f64::ceil(grid_spatial_bounds.size_x() / grid_resolution.x) as usize;
+                        let grid_size_y =
+                            f64::ceil(grid_spatial_bounds.size_y() / grid_resolution.y) as usize;
 
-                let vector_query = VectorQueryRectangle {
-                    spatial_bounds: grid_spatial_bounds.as_bbox(),
-                    time_interval: query.time_interval,
-                    spatial_resolution: grid_resolution,
-                };
+                        let vector_query = VectorQueryRectangle::with_bounds_and_resolution(
+                            grid_spatial_bounds.as_bbox(),
+                            query.time_interval,
+                            grid_resolution,
+                        );
 
-                let grid_geo_transform = GeoTransform::new(
-                    grid_spatial_bounds.upper_left(),
-                    grid_resolution.x,
-                    -grid_resolution.y,
-                );
+                        let grid_geo_transform = GeoTransform::new(
+                            grid_spatial_bounds.upper_left(),
+                            grid_resolution.x,
+                            -grid_resolution.y,
+                        );
 
-                let mut chunks = points_processor.query(vector_query, ctx).await?;
+                        let mut chunks = points_processor.query(vector_query, ctx).await?;
 
-                let mut grid_data = vec![0.; grid_size_x * grid_size_y];
-                while let Some(chunk) = chunks.next().await {
-                    let chunk = chunk?;
-                    grid_data = spawn_blocking(move || {
-                        for &coord in chunk.coordinates() {
-                            if !grid_spatial_bounds.contains_coordinate(&coord) {
-                                continue;
-                            }
-                            let [y, x] = grid_geo_transform.coordinate_to_grid_idx_2d(coord).0;
-                            grid_data[x as usize + y as usize * grid_size_x] += 1.;
+                        let mut grid_data = vec![0.; grid_size_x * grid_size_y];
+                        while let Some(chunk) = chunks.next().await {
+                            let chunk = chunk?;
+                            grid_data = spawn_blocking(move || {
+                                for &coord in chunk.coordinates() {
+                                    if !grid_spatial_bounds.contains_coordinate(&coord) {
+                                        continue;
+                                    }
+                                    let [y, x] =
+                                        grid_geo_transform.coordinate_to_grid_idx_2d(coord).0;
+                                    grid_data[x as usize + y as usize * grid_size_x] += 1.;
+                                }
+                                grid_data
+                            })
+                            .await
+                            .expect("Should only forward panics from spawned task");
                         }
-                        grid_data
-                    })
-                    .await
-                    .expect("Should only forward panics from spawned task");
-                }
 
-                let tile_data = spawn_blocking(move || {
-                    let mut tile_data = Vec::with_capacity(tile_shape.number_of_elements());
-                    for tile_y in 0..tile_shape.axis_size_y() as isize {
-                        for tile_x in 0..tile_shape.axis_size_x() as isize {
-                            let pixel_coordinate = tile_info
-                                .tile_geo_transform()
-                                .grid_idx_to_pixel_center_coordinate_2d([tile_y, tile_x].into());
-                            if query.spatial_bounds.contains_coordinate(&pixel_coordinate) {
-                                let [grid_y, grid_x] = grid_geo_transform
-                                    .coordinate_to_grid_idx_2d(pixel_coordinate)
-                                    .0;
-                                tile_data.push(
-                                    grid_data[grid_x as usize + grid_y as usize * grid_size_x],
-                                );
-                            } else {
-                                tile_data.push(0.);
+                        let tile_data = spawn_blocking(move || {
+                            let mut tile_data = Vec::with_capacity(tile_shape.number_of_elements());
+                            for tile_y in 0..tile_shape.axis_size_y() as isize {
+                                for tile_x in 0..tile_shape.axis_size_x() as isize {
+                                    let pixel_coordinate = tile_info
+                                        .tile_geo_transform()
+                                        .grid_idx_to_pixel_center_coordinate_2d(
+                                            [tile_y, tile_x].into(),
+                                        );
+                                    if query_spatial_partition
+                                        .contains_coordinate(&pixel_coordinate)
+                                    {
+                                        let [grid_y, grid_x] = grid_geo_transform
+                                            .coordinate_to_grid_idx_2d(pixel_coordinate)
+                                            .0;
+                                        tile_data.push(
+                                            grid_data
+                                                [grid_x as usize + grid_y as usize * grid_size_x],
+                                        );
+                                    } else {
+                                        tile_data.push(0.);
+                                    }
+                                }
                             }
-                        }
-                    }
-                    tile_data
-                })
-                .await
-                .expect("Should only forward panics from spawned task");
-                let tile_grid = Grid2D::new(tile_shape, tile_data)
-                    .expect("Data vector length should match the number of pixels in the tile");
+                            tile_data
+                        })
+                        .await
+                        .expect("Should only forward panics from spawned task");
+                        let tile_grid = Grid2D::new(tile_shape, tile_data).expect(
+                            "Data vector length should match the number of pixels in the tile",
+                        );
 
-                Ok(RasterTile2D::new_with_tile_info(
-                    query.time_interval,
-                    tile_info,
-                    GridOrEmpty::Grid(tile_grid.into()),
-                ))
-            });
+                        Ok(RasterTile2D::new_with_tile_info(
+                            query.time_interval,
+                            tile_info,
+                            GridOrEmpty::Grid(tile_grid.into()),
+                        ))
+                    });
             Ok(tiles.boxed())
         } else {
             Ok(generate_zeroed_tiles(self.tiling_specification, query))
@@ -370,71 +387,81 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
         ctx: &'a dyn QueryContext,
     ) -> util::Result<BoxStream<'a, util::Result<RasterTile2D<Self::RasterType>>>> {
         if let MultiPoint(points_processor) = &self.input {
-            let tiling_strategy = self
-                .tiling_specification
-                .strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
+            // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
+            assert_eq!(
+                query.spatial_query().geo_transform.origin_coordinate(),
+                self.tiling_specification.origin_coordinate,
+                "The query origin coordinate must match the tiling strategy's origin for now."
+            );
+
+            let tiling_strategy = TilingStrategy::new(
+                self.tiling_specification.tile_size_in_pixels,
+                query.spatial_query().geo_transform,
+            );
 
             let tile_size_x = tiling_strategy.tile_size_in_pixels.axis_size_x();
             let tile_size_y = tiling_strategy.tile_size_in_pixels.axis_size_y();
 
+            let query_spatial_resolution = query.spatial_query().spatial_resolution();
+            let query_spatial_partition = query.spatial_query().spatial_partition();
+
             // Use rounding factor calculated from query resolution to extend in full pixel units
             let rounding_factor = f64::max(
-                1. / query.spatial_resolution.x,
-                1. / query.spatial_resolution.y,
+                1. / query_spatial_resolution.x,
+                1. / query_spatial_resolution.y,
             );
             let radius = (self.radius * rounding_factor).ceil() / rounding_factor;
 
-            let tiles = stream::iter(
-                tiling_strategy.tile_information_iterator(query.spatial_bounds),
-            )
-            .then(move |tile_info| async move {
-                let tile_bounds = tile_info.spatial_partition();
+            let tiles =
+                stream::iter(tiling_strategy.tile_information_iterator(query_spatial_partition))
+                    .then(move |tile_info| async move {
+                        let tile_bounds = tile_info.spatial_partition();
 
-                let vector_query = VectorQueryRectangle {
-                    spatial_bounds: extended_bounding_box_from_spatial_partition(
-                        tile_bounds,
-                        radius,
-                    ),
-                    time_interval: query.time_interval,
-                    spatial_resolution: query.spatial_resolution,
-                };
+                        let vector_query = VectorQueryRectangle::with_bounds_and_resolution(
+                            extended_bounding_box_from_spatial_partition(tile_bounds, radius),
+                            query.time_interval,
+                            query_spatial_resolution,
+                        );
 
-                let tile_geo_transform = tile_info.tile_geo_transform();
+                        let tile_geo_transform = tile_info.tile_geo_transform();
 
-                let mut chunks = points_processor.query(vector_query, ctx).await?;
+                        let mut chunks = points_processor.query(vector_query, ctx).await?;
 
-                let mut tile_data = vec![0.; tile_size_x * tile_size_y];
+                        let mut tile_data = vec![0.; tile_size_x * tile_size_y];
 
-                while let Some(chunk) = chunks.next().await {
-                    let chunk = chunk?;
-                    let stddev = self.stddev;
-                    tile_data =
-                        spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
-                            tile_data.par_iter_mut().enumerate().for_each(
-                                |(linear_index, pixel)| {
-                                    let pixel_coordinate = tile_geo_transform
-                                        .grid_idx_to_pixel_center_coordinate_2d(
-                                            tile_geo_transform
-                                                .spatial_to_grid_bounds(&tile_bounds)
-                                                .grid_idx_unchecked(linear_index),
-                                        );
+                        while let Some(chunk) = chunks.next().await {
+                            let chunk = chunk?;
+                            let stddev = self.stddev;
+                            tile_data = spawn_blocking_with_thread_pool(
+                                ctx.thread_pool().clone(),
+                                move || {
+                                    tile_data.par_iter_mut().enumerate().for_each(
+                                        |(linear_index, pixel)| {
+                                            let pixel_coordinate = tile_geo_transform
+                                                .grid_idx_to_pixel_center_coordinate_2d(
+                                                    tile_geo_transform
+                                                        .spatial_to_grid_bounds(&tile_bounds)
+                                                        .grid_idx_unchecked(linear_index),
+                                                );
 
-                                    for coord in chunk.coordinates() {
-                                        let distance = coord.euclidean_distance(&pixel_coordinate);
+                                            for coord in chunk.coordinates() {
+                                                let distance =
+                                                    coord.euclidean_distance(&pixel_coordinate);
 
-                                        if distance <= radius {
-                                            *pixel += gaussian(distance, stddev);
-                                        }
-                                    }
+                                                if distance <= radius {
+                                                    *pixel += gaussian(distance, stddev);
+                                                }
+                                            }
+                                        },
+                                    );
+
+                                    tile_data
                                 },
-                            );
+                            )
+                            .await?;
+                        }
 
-                            tile_data
-                        })
-                        .await?;
-                }
-
-                Ok(RasterTile2D::new_with_tile_info(
+                        Ok(RasterTile2D::new_with_tile_info(
                     query.time_interval,
                     tile_info,
                     GridOrEmpty::Grid(
@@ -445,7 +472,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                             .into(),
                     ),
                 ))
-            });
+                    });
 
             Ok(tiles.boxed())
         } else {
@@ -458,13 +485,23 @@ fn generate_zeroed_tiles<'a>(
     tiling_specification: TilingSpecification,
     query: RasterQueryRectangle,
 ) -> BoxStream<'a, util::Result<RasterTile2D<f64>>> {
-    let tiling_strategy =
-        tiling_specification.strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
+    // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
+    assert_eq!(
+        query.spatial_query().geo_transform.origin_coordinate(),
+        tiling_specification.origin_coordinate,
+        "The query origin coordinate must match the tiling strategy's origin for now."
+    );
+
+    let tiling_strategy = TilingStrategy::new(
+        tiling_specification.tile_size_in_pixels,
+        query.spatial_query().geo_transform,
+    );
+    let query_spatial_partition = query.spatial_query().spatial_partition();
     let tile_shape = tiling_strategy.tile_size_in_pixels;
 
     stream::iter(
         tiling_strategy
-            .tile_information_iterator(query.spatial_bounds)
+            .tile_information_iterator(query_spatial_partition)
             .map(move |tile_info| {
                 let tile_data = vec![0.; tile_shape.number_of_elements()];
                 let tile_grid = Grid2D::new(tile_shape, tile_data)
@@ -596,11 +633,12 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., -2.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new([-2., 2.].into(), [2., -2.].into()).unwrap(),
+            SpatialResolution { x: 1.0, y: 1.0 },
+            execution_context.tiling_specification.origin_coordinate,
+            Default::default(),
+        );
 
         let res = get_results(rasterization, query).await;
 
@@ -645,11 +683,12 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., -2.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new([-2., 2.].into(), [2., -2.].into()).unwrap(),
+            SpatialResolution { x: 1.0, y: 1.0 },
+            execution_context.tiling_specification.origin_coordinate,
+            Default::default(),
+        );
 
         let res = get_results(rasterization, query).await;
 
@@ -694,11 +733,12 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-3., 3.].into(), [3., -3.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new([-3., 3.].into(), [3., -3.].into()).unwrap(),
+            SpatialResolution { x: 1.0, y: 1.0 },
+            execution_context.tiling_specification.origin_coordinate,
+            Default::default(),
+        );
 
         let res = get_results(rasterization, query).await;
 
@@ -743,12 +783,12 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-1.5, 1.5].into(), [1.5, -1.5].into())
-                .unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new([-1.5, 1.5].into(), [1.5, -1.5].into()).unwrap(),
+            SpatialResolution { x: 0.5, y: 0.5 },
+            execution_context.tiling_specification.origin_coordinate,
+            Default::default(),
+        );
 
         let res = get_results(rasterization, query).await;
 
@@ -793,12 +833,12 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-1.5, 1.5].into(), [1.5, -1.5].into())
-                .unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new([-1.5, 1.5].into(), [1.5, -1.5].into()).unwrap(),
+            SpatialResolution { x: 0.5, y: 0.5 },
+            execution_context.tiling_specification.origin_coordinate,
+            Default::default(),
+        );
 
         let res = get_results(rasterization, query).await;
 
@@ -843,11 +883,12 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-1., 1.].into(), [1., -1.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new([-1., 1.].into(), [1., -1.].into()).unwrap(),
+            SpatialResolution { x: 0.5, y: 0.5 },
+            execution_context.tiling_specification.origin_coordinate,
+            Default::default(),
+        );
 
         let res = get_results(rasterization, query).await;
 
@@ -886,11 +927,12 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., 0.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new([-2., 2.].into(), [2., 0.].into()).unwrap(),
+            SpatialResolution { x: 1.0, y: 1.0 },
+            execution_context.tiling_specification.origin_coordinate,
+            Default::default(),
+        );
 
         let res = get_results(rasterization, query).await;
 
@@ -965,11 +1007,12 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., 0.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new([-2., 2.].into(), [2., 0.].into()).unwrap(),
+            SpatialResolution { x: 1.0, y: 1.0 },
+            execution_context.tiling_specification.origin_coordinate,
+            Default::default(),
+        );
 
         let res = get_results(rasterization, query).await;
 

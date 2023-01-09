@@ -130,22 +130,24 @@ mod test_util {
         let sr = SpatialResolution::new_unchecked(3_000.403_165_817_261, 3_000.403_165_817_261);
         let ul = (0., 0.).into();
         let lr = (599. * sr.x, -599. * sr.y).into();
-        RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(ul, lr),
-            time_interval: TimeInterval::new_unchecked(
+        RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked(ul, lr),
+            sr,
+            ul, // TODO: should be exe_ctx.tiling_specification.origin_coordinate
+            TimeInterval::new_unchecked(
                 TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 0, 0)),
                 TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 15, 0)),
             ),
-            spatial_resolution: sr,
-        }
+        )
     }
 
     pub(crate) fn create_mock_query() -> RasterQueryRectangle {
-        RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-        }
+        RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
+            SpatialResolution::one(),
+            (0., 0.).into(), // TODO: should be exe_ctx.tiling_specification.origin_coordinate
+            Default::default(),
+        )
     }
 
     pub(crate) fn create_mock_source<P: Pixel>(

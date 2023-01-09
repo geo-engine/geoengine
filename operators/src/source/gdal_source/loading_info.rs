@@ -474,8 +474,8 @@ mod tests {
     use geoengine_datatypes::{
         hashmap,
         primitives::{
-            DateTime, DateTimeParseFormat, Measurement, SpatialPartition2D, SpatialResolution,
-            TimeGranularity,
+            Coordinate2D, DateTime, DateTimeParseFormat, Measurement, SpatialPartition2D,
+            SpatialResolution, TimeGranularity,
         },
         raster::RasterDataType,
         spatial_reference::SpatialReference,
@@ -551,14 +551,14 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 30),
-                    spatial_resolution: SpatialResolution::one(),
-                })
+                .loading_info(
+                    RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                        SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                        SpatialResolution::one(),
+                        Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+                        TimeInterval::new_unchecked(0, 30),
+                    )
+                )
                 .await
                 .unwrap()
                 .info
@@ -593,14 +593,14 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                })
+                .loading_info(
+                    RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                        SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                        SpatialResolution::one(),
+                        Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+                        TimeInterval::default(),
+                    )
+                )
                 .await
                 .unwrap()
                 .info
@@ -637,14 +637,14 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(-10, -5),
-                    spatial_resolution: SpatialResolution::one(),
-                })
+                .loading_info(
+                    RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                        SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                        SpatialResolution::one(),
+                        Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+                        TimeInterval::new_unchecked(-10, -5),
+                    )
+                )
                 .await
                 .unwrap()
                 .info
@@ -666,14 +666,14 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(50, 55),
-                    spatial_resolution: SpatialResolution::one(),
-                })
+                .loading_info(
+                    RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                        SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                        SpatialResolution::one(),
+                        Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+                        TimeInterval::new_unchecked(50, 55),
+                    )
+                )
                 .await
                 .unwrap()
                 .info
@@ -695,14 +695,14 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 22),
-                    spatial_resolution: SpatialResolution::one(),
-                })
+                .loading_info(
+                    RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                        SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                        SpatialResolution::one(),
+                        Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+                        TimeInterval::new_unchecked(0, 22),
+                    )
+                )
                 .await
                 .unwrap()
                 .info
@@ -733,14 +733,14 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 20),
-                    spatial_resolution: SpatialResolution::one(),
-                })
+                .loading_info(
+                    RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                        SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                        SpatialResolution::one(),
+                        Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+                        TimeInterval::new_unchecked(0, 20),
+                    )
+                )
                 .await
                 .unwrap()
                 .info
@@ -844,14 +844,14 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 3),
-                    spatial_resolution: SpatialResolution::one(),
-                })
+                .loading_info(
+                    RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                        SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                        SpatialResolution::one(),
+                        Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+                        TimeInterval::new_unchecked(0, 3),
+                    )
+                )
                 .await
                 .unwrap()
                 .info
@@ -909,11 +909,12 @@ mod tests {
             band_offset: 0,
         };
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            time_interval: TimeInterval::new(time_start, time_end).unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
+            SpatialResolution::one(),
+            Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+            TimeInterval::new(time_start, time_end).unwrap(),
+        );
 
         let loading_info = metadata.loading_info(query).await.unwrap();
         let mut iter = loading_info.info;
@@ -974,11 +975,12 @@ mod tests {
             band_offset: 1,
         };
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            time_interval: TimeInterval::new(time_start, time_end).unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
+            SpatialResolution::one(),
+            Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+            TimeInterval::new(time_start, time_end).unwrap(),
+        );
 
         let loading_info = metadata.loading_info(query).await.unwrap();
         let mut iter = loading_info.info;
@@ -1039,14 +1041,15 @@ mod tests {
             band_offset: 0,
         };
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
+            SpatialResolution::one(),
+            Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+            TimeInterval::new_unchecked(
                 TimeInstance::from(DateTime::new_utc(2009, 7, 1, 0, 0, 0)),
                 TimeInstance::from(DateTime::new_utc(2013, 3, 1, 0, 0, 0)),
             ),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        );
 
         let loading_info = metadata.loading_info(query).await.unwrap();
         let mut iter = loading_info.info;

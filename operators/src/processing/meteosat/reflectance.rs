@@ -16,7 +16,7 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     ClassificationMeasurement, ContinuousMeasurement, DateTime, Measurement, RasterQueryRectangle,
-    SpatialPartition2D,
+    RasterSpatialQueryRectangle,
 };
 use geoengine_datatypes::raster::{
     GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey, RasterTile2D,
@@ -255,10 +255,10 @@ fn calculate_esd(timestamp: &DateTime) -> f64 {
 #[async_trait]
 impl<Q> QueryProcessor for ReflectanceProcessor<Q>
 where
-    Q: QueryProcessor<Output = RasterTile2D<PixelOut>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<Output = RasterTile2D<PixelOut>, SpatialQuery = RasterSpatialQueryRectangle>,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,

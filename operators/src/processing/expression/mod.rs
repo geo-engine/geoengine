@@ -580,7 +580,7 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let raster_a = make_raster(Some(3));
 
@@ -603,7 +603,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ctx)
+        .initialize(&exe_ctx)
         .await
         .unwrap();
 
@@ -612,14 +612,12 @@ mod tests {
         let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
+                    SpatialResolution::one(),
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    Default::default(),
+                ),
                 &ctx,
             )
             .await
@@ -649,7 +647,7 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let raster_a = make_raster(Some(3));
 
@@ -672,7 +670,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ctx)
+        .initialize(&exe_ctx)
         .await
         .unwrap();
 
@@ -681,14 +679,12 @@ mod tests {
         let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
+                    SpatialResolution::one(),
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    Default::default(),
+                ),
                 &ctx,
             )
             .await
@@ -718,7 +714,7 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let raster_a = make_raster(None);
         let raster_b = make_raster(None);
@@ -742,7 +738,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ctx)
+        .initialize(&exe_ctx)
         .await
         .unwrap();
 
@@ -751,14 +747,12 @@ mod tests {
         let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
+                    SpatialResolution::one(),
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    Default::default(),
+                ),
                 &ctx,
             )
             .await
@@ -784,7 +778,7 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let raster_a = make_raster(Some(3));
         let raster_b = make_raster(None);
@@ -815,7 +809,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ctx)
+        .initialize(&exe_ctx)
         .await
         .unwrap();
 
@@ -824,14 +818,12 @@ mod tests {
         let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
+                    SpatialResolution::one(),
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    Default::default(),
+                ),
                 &ctx,
             )
             .await
@@ -864,7 +856,7 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let raster_a = make_raster(no_data_value_option);
         let raster_b = make_raster(no_data_value_option);
@@ -889,7 +881,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ctx)
+        .initialize(&exe_ctx)
         .await
         .unwrap();
 
@@ -898,14 +890,12 @@ mod tests {
         let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
+                    SpatialResolution::one(),
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    Default::default(),
+                ),
                 &ctx,
             )
             .await
@@ -943,7 +933,7 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let raster_a = make_raster(no_data_value_option);
         let raster_b = make_raster(no_data_value_option);
@@ -973,7 +963,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ctx)
+        .initialize(&exe_ctx)
         .await
         .unwrap();
 
@@ -982,14 +972,12 @@ mod tests {
         let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
+                    SpatialResolution::one(),
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    Default::default(),
+                ),
                 &ctx,
             )
             .await
@@ -1016,7 +1004,7 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let raster_a = make_raster(Some(no_data_value));
 
@@ -1039,7 +1027,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ectx)
+        .initialize(&exe_ctx)
         .await
         .unwrap();
 
@@ -1048,14 +1036,12 @@ mod tests {
         let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
+                    SpatialResolution::one(),
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    Default::default(),
+                ),
                 &ctx,
             )
             .await

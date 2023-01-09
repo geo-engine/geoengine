@@ -36,7 +36,9 @@ pub use multi_point::{MultiPoint, MultiPointAccess, MultiPointRef};
 pub use multi_polygon::{MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 pub use no_geometry::NoGeometry;
 pub use query_rectangle::{
-    PlotQueryRectangle, QueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
+    PlotQueryRectangle, PlotSpatialQueryRectangle, QueryRectangle, RasterQueryRectangle,
+    RasterSpatialQueryRectangle, SpatialGridQueryRectangle, SpatialQuery, SpatialQueryRectangle,
+    TemporalQuery, VectorQueryRectangle, VectorSpatialQueryRectangle,
 };
 pub use spatial_partition::{
     partitions_extent, AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned,

@@ -11,9 +11,11 @@ use futures::{
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialPartitioned, SpatialQuery,
 };
-use geoengine_datatypes::raster::{EmptyGrid2D, GridBoundingBox2D, GridBounds, GridStep};
+use geoengine_datatypes::raster::{
+    EmptyGrid2D, GridBoundingBox2D, GridBounds, GridStep, TilingStrategy,
+};
 use geoengine_datatypes::{
     primitives::TimeInstance,
     raster::{Blit, Pixel, RasterTile2D, TileInformation},
@@ -128,14 +130,14 @@ where
         query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
     ) -> Self {
-        debug_assert!(query_rect_to_answer.spatial_resolution.y > 0.);
-
-        let tiling_strat = tiling_spec.strategy(
-            query_rect_to_answer.spatial_resolution.x,
-            -query_rect_to_answer.spatial_resolution.y,
+        // FIXME: we should not need to create a new tiling strategy here
+        let tiling_strat = TilingStrategy::new(
+            tiling_spec.tile_size_in_pixels,
+            query_rect_to_answer.spatial_query().geo_transform,
         );
 
-        let grid_bounds = tiling_strat.tile_grid_box(query_rect_to_answer.spatial_partition());
+        let grid_bounds = tiling_strat
+            .raster_spatial_query_to_tling_grid_box(&query_rect_to_answer.spatial_query());
 
         let first_tile_spec = TileInformation {
             global_geo_transform: tiling_strat.geo_transform,
@@ -193,8 +195,10 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> FusedStream
     for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType:
-        QueryProcessor<Output = RasterTile2D<PixelType>, SpatialBounds = SpatialPartition2D>,
+    RasterProcessorType: QueryProcessor<
+        Output = RasterTile2D<PixelType>,
+        SpatialQuery = RasterSpatialQueryRectangle,
+    >,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
     fn is_terminated(&self) -> bool {
@@ -206,8 +210,10 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> Stream
     for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType:
-        QueryProcessor<Output = RasterTile2D<PixelType>, SpatialBounds = SpatialPartition2D>,
+    RasterProcessorType: QueryProcessor<
+        Output = RasterTile2D<PixelType>,
+        SpatialQuery = RasterSpatialQueryRectangle,
+    >,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
     type Item = Result<Option<RasterTile2D<PixelType>>>;
@@ -524,11 +530,18 @@ where
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
     ) -> Result<Option<RasterQueryRectangle>> {
-        Ok(Some(RasterQueryRectangle {
-            spatial_bounds: tile_info.spatial_partition(),
-            time_interval: TimeInterval::new_instant(start_time)?,
-            spatial_resolution: query_rect.spatial_resolution,
-        }))
+        // FIXME: here we should use the pixel coordinates directly. For that we need a global grid bound the tile info?
+        Ok(Some(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                tile_info.spatial_partition(),
+                query_rect
+                    .spatial_query()
+                    .geo_transform
+                    .spatial_resolution(),
+                query_rect.spatial_query().geo_transform.origin_coordinate,
+                TimeInterval::new_instant(start_time)?,
+            ),
+        ))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {
@@ -662,11 +675,12 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 10),
+        );
 
         let query_ctx = MockQueryContext::test_default();
         let tiling_strat = exe_ctx.tiling_specification;

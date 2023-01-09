@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::{
-    primitives::{RasterQueryRectangle, SpatialPartition2D},
+    primitives::{RasterQueryRectangle, RasterSpatialQueryRectangle},
     raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
@@ -119,7 +119,7 @@ where
     Q: RasterQueryProcessor<RasterType = PIn>,
 {
     type Output = RasterTile2D<POut>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
 
     async fn _query<'b>(
         &'b self,
@@ -211,11 +211,12 @@ mod tests {
 
         let query_processor = initialized_op.query_processor().unwrap();
 
-        let query = geoengine_datatypes::primitives::RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-            time_interval: TimeInterval::default(),
-        };
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
+            SpatialResolution::one(),
+            ctx.tiling_specification().origin_coordinate,
+            TimeInterval::default(),
+        );
 
         let typed_processor = match query_processor {
             TypedRasterQueryProcessor::F32(rqp) => rqp,

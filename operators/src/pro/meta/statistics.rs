@@ -9,7 +9,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle};
+use geoengine_datatypes::primitives::{QueryRectangle, SpatialQuery};
 
 pub struct InitializedProcessorStatistics<S> {
     source: S,
@@ -127,16 +127,16 @@ where
 #[async_trait]
 impl<Q, T, S> QueryProcessor for ProcessorStatisticsProcessor<Q, T>
 where
-    Q: QueryProcessor<Output = T, SpatialBounds = S>,
-    S: AxisAlignedRectangle + Send + Sync + 'static,
+    Q: QueryProcessor<Output = T, SpatialQuery = S>,
+    S: SpatialQuery + Send + Sync + 'static,
     T: Send,
 {
     type Output = T;
-    type SpatialBounds = S;
+    type SpatialQuery = S;
 
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialBounds>,
+        query: QueryRectangle<Self::SpatialQuery>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let quota = ctx

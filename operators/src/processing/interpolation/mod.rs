@@ -15,12 +15,13 @@ use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
-    SpatialPartitioned, SpatialResolution, TimeInstance, TimeInterval,
+    AxisAlignedRectangle, Coordinate2D, RasterQueryRectangle, RasterSpatialQueryRectangle,
+    SpatialPartition2D, SpatialPartitioned, SpatialQuery, SpatialResolution, TimeInstance,
+    TimeInterval,
 };
 use geoengine_datatypes::raster::{
     Bilinear, Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, GridSize, InterpolationAlgorithm,
-    NearestNeighbor, Pixel, RasterTile2D, TileInformation, TilingSpecification,
+    NearestNeighbor, Pixel, RasterTile2D, TileInformation, TilingSpecification, TilingStrategy,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -180,12 +181,12 @@ where
 #[async_trait]
 impl<Q, P, I> QueryProcessor for InterploationProcessor<Q, P, I>
 where
-    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialQuery = RasterSpatialQueryRectangle>,
     P: Pixel,
     I: InterpolationAlgorithm<P>,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
@@ -193,8 +194,9 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // do not interpolate if the source resolution is already fine enough
-        if query.spatial_resolution.x >= self.input_resolution.x
-            && query.spatial_resolution.y >= self.input_resolution.y
+        let query_resolution = query.spatial_query().spatial_resolution();
+        if query_resolution.x >= self.input_resolution.x
+            && query_resolution.y >= self.input_resolution.y
         {
             // TODO: should we use the query or the input resolution here?
             return self.source.query(query, ctx).await;
@@ -271,11 +273,14 @@ where
             spatial_bounds.lower_right() + enlarge,
         )?;
 
-        Ok(Some(RasterQueryRectangle {
-            spatial_bounds,
-            time_interval: TimeInterval::new_instant(start_time)?,
-            spatial_resolution: self.input_resolution,
-        }))
+        Ok(Some(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                spatial_bounds,
+                self.input_resolution,
+                self.tiling_specification.origin_coordinate,
+                TimeInterval::new_instant(start_time)?,
+            ),
+        ))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {
@@ -338,15 +343,23 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
     pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
 ) -> impl Future<Output = Result<InterpolationAccu<T, I>>> {
+    // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
+    assert_eq!(
+        query_rect.spatial_query().geo_transform.origin_coordinate(),
+        tiling_specification.origin_coordinate,
+        "The query origin coordinate must match the tiling strategy's origin for now."
+    );
+
     // create an accumulator as a single tile that fits all the input tiles
     crate::util::spawn_blocking(move || {
-        let tiling = tiling_specification.strategy(
-            query_rect.spatial_resolution.x,
-            -query_rect.spatial_resolution.y,
+        let tiling = TilingStrategy::new(
+            tiling_specification.tile_size_in_pixels,
+            query_rect.spatial_query().geo_transform,
         );
 
+        // TODO: use tile grid bounds not the spatial bounds
         let origin_coordinate = tiling
-            .tile_information_iterator(query_rect.spatial_bounds)
+            .tile_information_iterator(query_rect.spatial_query().spatial_partition())
             .next()
             .expect("a query contains at least one tile")
             .spatial_partition()
@@ -354,11 +367,11 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
 
         let geo_transform = GeoTransform::new(
             origin_coordinate,
-            query_rect.spatial_resolution.x,
-            -query_rect.spatial_resolution.y,
+            query_rect.spatial_query().geo_transform.x_pixel_size(),
+            query_rect.spatial_query().geo_transform.y_pixel_size(),
         );
 
-        let bbox = tiling.tile_grid_box(query_rect.spatial_bounds);
+        let bbox = tiling.tile_grid_box(query_rect.spatial_query().spatial_partition());
 
         let shape = [
             bbox.axis_size_y() * tiling.tile_size_in_pixels.axis_size_y(),
@@ -462,11 +475,12 @@ mod tests {
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 20),
-            spatial_resolution: SpatialResolution::zero_point_five(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
+            SpatialResolution::zero_point_five(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 20),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let result_stream = processor.query(query_rect, &query_ctx).await?;

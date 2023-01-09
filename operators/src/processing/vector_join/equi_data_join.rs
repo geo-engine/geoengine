@@ -11,7 +11,7 @@ use geoengine_datatypes::collections::{
     GeometryRandomAccess,
 };
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
+    FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle, VectorSpatialQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -350,7 +350,7 @@ where
     FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
@@ -431,15 +431,11 @@ mod tests {
         let left_processor = left.query_processor().unwrap().multi_point().unwrap();
         let right_processor = right.query_processor().unwrap().data().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new(
-                (f64::MIN, f64::MIN).into(),
-                (f64::MAX, f64::MAX).into(),
-            )
-            .unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((f64::MIN, f64::MIN).into(), (f64::MAX, f64::MAX).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::zero_point_one(),
+        );
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 

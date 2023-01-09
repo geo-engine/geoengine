@@ -23,7 +23,7 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
-    SpatialPartition2D, SpatialPartitioned,
+    RasterSpatialQueryRectangle, SpatialPartition2D, SpatialPartitioned, SpatialQuery,
 };
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
@@ -542,9 +542,10 @@ impl GdalRasterLoader {
         info: GdalLoadingInfoTemporalSlice,
         tiling_strategy: TilingStrategy,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> {
-        stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds)).map(
-            move |tile| GdalRasterLoader::load_tile_async(info.params.clone(), tile, info.time),
+        stream::iter(
+            tiling_strategy.tile_information_iterator(query.spatial_bounds.spatial_partition()),
         )
+        .map(move |tile| GdalRasterLoader::load_tile_async(info.params.clone(), tile, info.time))
     }
 
     fn loading_info_to_tile_stream<
@@ -573,7 +574,7 @@ where
     P: Pixel + gdal::raster::GdalType + FromPrimitive,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
@@ -593,7 +594,17 @@ where
             start.elapsed()
         );
 
-        let spatial_resolution = query.spatial_resolution;
+        let query_geo_transform = query.spatial_query().geo_transform;
+
+        assert_eq!(
+            query_geo_transform.origin_coordinate,
+            self.tiling_specification.origin_coordinate
+        );
+
+        let tiling_strategy = TilingStrategy::new(
+            self.tiling_specification.tile_size_in_pixels,
+            query.spatial_query().geo_transform,
+        );
 
         // A `GeoTransform` maps pixel space to world space.
         // Usually a SRS has axis directions pointing "up" (y-axis) and "up" (y-axis).
@@ -601,16 +612,12 @@ where
         // However, there are spatial reference systems where the y-axis points downwards.
         // The standard "pixel-space" starts at the top-left corner of a `GeoTransform` and points down-right.
         // Therefore, the pixel size on the x-axis is always increasing
-        let pixel_size_x = spatial_resolution.x;
+        let pixel_size_x = query_geo_transform.x_pixel_size();
         debug_assert!(pixel_size_x.is_sign_positive());
         // and the y-axis should only be positive if the y-axis of the spatial reference system also "points down".
         // NOTE: at the moment we do not allow "down pointing" y-axis.
-        let pixel_size_y = spatial_resolution.y * -1.0;
+        let pixel_size_y = query_geo_transform.y_pixel_size();
         debug_assert!(pixel_size_y.is_sign_negative());
-
-        let tiling_strategy = self
-            .tiling_specification
-            .strategy(pixel_size_x, pixel_size_y);
 
         let result_descriptor = self.meta_data.result_descriptor().await?;
 
@@ -619,7 +626,7 @@ where
         debug!("query bbox: {:?}", query.spatial_bounds);
 
         if let Some(data_spatial_bounds) = result_descriptor.bbox {
-            if !data_spatial_bounds.intersects(&query.spatial_bounds) {
+            if !data_spatial_bounds.intersects(&query.spatial_query().spatial_partition()) {
                 debug!("query does not intersect spatial data bounds");
                 empty = true;
             }
@@ -652,7 +659,7 @@ where
         // use SparseTilesFillAdapter to fill all the gaps
         let filled_stream = SparseTilesFillAdapter::new(
             source_stream,
-            tiling_strategy.tile_grid_box(query.spatial_partition()),
+            tiling_strategy.tile_grid_box(query.spatial_query().spatial_partition()),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
         );
@@ -1114,11 +1121,12 @@ mod tests {
             .get_u8()
             .unwrap()
             .raster_query(
-                RasterQueryRectangle {
-                    spatial_bounds: output_bounds,
-                    time_interval,
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    output_bounds,
                     spatial_resolution,
-                },
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    time_interval,
+                ),
                 query_ctx,
             )
             .await

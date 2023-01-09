@@ -3,6 +3,7 @@ use std::time::Instant;
 use std::{hint::black_box, marker::PhantomData};
 
 use futures::StreamExt;
+use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::{
@@ -106,60 +107,58 @@ fn bench_raster_processor<
 }
 
 fn bench_no_data_tiles() {
+    let tiling_origin = Coordinate2D::new(0., 0.);
+    let spatial_resolution = SpatialResolution::zero_point_one();
+
     let qrects = vec![
         (
             "1 tile",
-            RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((0., 60.).into(), (60., 0.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new((0., 60.).into(), (60., 0.).into()).unwrap(),
+                spatial_resolution,
+                tiling_origin,
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
         ),
         (
             "2 tiles",
-            RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((0., 50.).into(), (60., -10.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new((0., 50.).into(), (60., -10.).into()).unwrap(),
+                spatial_resolution,
+                tiling_origin,
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
         ),
         (
             "4 tiles",
-            RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((-5., 50.).into(), (55., -10.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new((-5., 50.).into(), (55., -10.).into()).unwrap(),
+                spatial_resolution,
+                tiling_origin,
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
         ),
         (
             "2 tiles, 2 no-data tiles",
-            RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((130., 120.).into(), (190., 60.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new((130., 120.).into(), (190., 60.).into()).unwrap(),
+                spatial_resolution,
+                tiling_origin,
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
         ),
         (
             "empty tiles",
-            RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((-5., 50.).into(), (55., -10.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new(1_000_000_000_000, 1_000_000_000_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new((-5., 50.).into(), (55., -10.).into()).unwrap(),
+                spatial_resolution,
+                tiling_origin,
+                TimeInterval::new(1_000_000_000_000, 1_000_000_000_000 + 1000).unwrap(),
+            ),
         ),
     ];
 
-    let tiling_specs = vec![TilingSpecification::new((0., 0.).into(), [600, 600].into())];
+    let tiling_specs = vec![TilingSpecification::new(tiling_origin, [600, 600].into())];
 
     let run_time = tokio::runtime::Runtime::new().unwrap();
     let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, 8);
@@ -183,31 +182,33 @@ fn bench_no_data_tiles() {
 }
 
 fn bench_tile_size() {
+    let tiling_origin = Coordinate2D::new(0., 0.);
+
     let qrects = vec![(
         "World in 36000x18000 pixels",
-        RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                .unwrap(),
-            time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-            spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        },
+        RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+            SpatialResolution::new(0.01, 0.01).unwrap(),
+            tiling_origin,
+            TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        ),
     )];
 
     let run_time = tokio::runtime::Runtime::new().unwrap();
     let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, 8);
 
     let tiling_specs = vec![
-        TilingSpecification::new((0., 0.).into(), [32, 32].into()),
-        TilingSpecification::new((0., 0.).into(), [64, 64].into()),
-        TilingSpecification::new((0., 0.).into(), [128, 128].into()),
-        TilingSpecification::new((0., 0.).into(), [256, 256].into()),
-        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
-        TilingSpecification::new((0., 0.).into(), [600, 600].into()),
-        TilingSpecification::new((0., 0.).into(), [900, 900].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
-        TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
+        TilingSpecification::new(tiling_origin, [32, 32].into()),
+        TilingSpecification::new(tiling_origin, [64, 64].into()),
+        TilingSpecification::new(tiling_origin, [128, 128].into()),
+        TilingSpecification::new(tiling_origin, [256, 256].into()),
+        TilingSpecification::new(tiling_origin, [512, 512].into()),
+        TilingSpecification::new(tiling_origin, [600, 600].into()),
+        TilingSpecification::new(tiling_origin, [900, 900].into()),
+        TilingSpecification::new(tiling_origin, [1024, 1024].into()),
+        TilingSpecification::new(tiling_origin, [2048, 2048].into()),
+        TilingSpecification::new(tiling_origin, [4096, 4096].into()),
+        TilingSpecification::new(tiling_origin, [9000, 9000].into()),
     ];
 
     bench_raster_processor(

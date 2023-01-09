@@ -25,10 +25,10 @@ use geoengine_datatypes::{
         CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
     primitives::{
-        BoundingBox2D, Geometry, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
-        SpatialResolution, VectorQueryRectangle,
+        Geometry, RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialPartition2D,
+        SpatialQuery, SpatialResolution, VectorQueryRectangle, VectorSpatialQueryRectangle,
     },
-    raster::{Pixel, RasterTile2D, TilingSpecification},
+    raster::{Pixel, RasterTile2D, TilingSpecification, TilingStrategy},
     spatial_reference::SpatialReference,
     util::arrow::ArrowTyped,
 };
@@ -230,7 +230,13 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(
                     source,
-                    move |query| reproject_query(query, source_srs, target_srs).map_err(From::from),
+                    move |query: VectorQueryRectangle| {
+                        reproject_query(query.spatial_query(), source_srs, target_srs)
+                            .map(|sqr| {
+                                sqr.map(|x| VectorQueryRectangle::new(x, query.time_interval))
+                            })
+                            .map_err(From::from)
+                    },
                     (),
                 )
                 .boxed(),
@@ -275,19 +281,22 @@ where
 #[async_trait]
 impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
-    Q: QueryProcessor<Output = FeatureCollection<G>, SpatialBounds = BoundingBox2D>,
+    Q: QueryProcessor<Output = FeatureCollection<G>, SpatialQuery = VectorSpatialQueryRectangle>,
     FeatureCollection<G>: Reproject<CoordinateProjector, Out = FeatureCollection<G>>,
     G: Geometry + ArrowTyped,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let rewritten_query = reproject_query(query, self.from, self.to)?;
+        let rewritten_spatial_query = reproject_query(query.spatial_query(), self.from, self.to)?;
+
+        let rewritten_query =
+            rewritten_spatial_query.map(|rwq| VectorQueryRectangle::new(rwq, query.time_interval));
 
         if let Some(rewritten_query) = rewritten_query {
             Ok(self
@@ -492,11 +501,11 @@ where
 #[async_trait]
 impl<Q, P> QueryProcessor for RasterReprojectionProcessor<Q, P>
 where
-    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialQuery = RasterSpatialQueryRectangle>,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
@@ -511,7 +520,7 @@ where
             let in_spatial_res = suggest_pixel_size_from_diag_cross_projected(
                 valid_bounds_out,
                 valid_bounds_in,
-                query.spatial_resolution,
+                query.spatial_query().geo_transform.spatial_resolution(),
             )?;
 
             // setup the subquery
@@ -537,11 +546,15 @@ where
         } else {
             log::debug!("No intersection between source data / srs and target srs");
 
-            let tiling_strat = self
-                .tiling_spec
-                .strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
+            // FIXME: we should not need to create a new tiling strategy here
+            let tiling_strat = TilingStrategy::new(
+                self.tiling_spec.tile_size_in_pixels,
+                query.spatial_query().geo_transform,
+            );
 
-            let grid_bounds = tiling_strat.tile_grid_box(query.spatial_partition());
+            let grid_bounds =
+                tiling_strat.raster_spatial_query_to_tling_grid_box(&query.spatial_query());
+
             Ok(Box::pin(SparseTilesFillAdapter::new(
                 stream::empty(),
                 grid_bounds,
@@ -582,7 +595,7 @@ mod tests {
         dataset::{DataId, DatasetId},
         hashmap,
         primitives::{
-            BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon, QueryRectangle,
+            BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
             SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
         },
         raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
@@ -640,15 +653,15 @@ mod tests {
 
         let query_processor = query_processor.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new(
+        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
             )
             .unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+            TimeInterval::default(),
+            SpatialResolution::zero_point_one(),
+        );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
@@ -711,15 +724,15 @@ mod tests {
 
         let query_processor = query_processor.multi_line_string().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new(
+        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
             )
             .unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+            TimeInterval::default(),
+            SpatialResolution::zero_point_one(),
+        );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
@@ -789,15 +802,15 @@ mod tests {
 
         let query_processor = query_processor.multi_polygon().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new(
+        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
             )
             .unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+            TimeInterval::default(),
+            SpatialResolution::zero_point_one(),
+        );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
@@ -902,11 +915,12 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 10),
+        );
 
         let a = qp.raster_query(query_rect, &query_ctx).await?;
 
@@ -924,8 +938,9 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
+        let tiling_origin_coordinate = (0., 0.).into();
         exe_ctx.tiling_specification =
-            TilingSpecification::new((0.0, 0.0).into(), [450, 450].into());
+            TilingSpecification::new(tiling_origin_coordinate, [450, 450].into());
 
         let output_shape: GridShape2D = [900, 1800].into();
         let output_bounds =
@@ -967,11 +982,12 @@ mod tests {
 
         let qs = qp
             .raster_query(
-                RasterQueryRectangle {
-                    spatial_bounds: output_bounds,
-                    time_interval,
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    output_bounds,
                     spatial_resolution,
-                },
+                    tiling_origin_coordinate,
+                    time_interval,
+                ),
                 &query_ctx,
             )
             .await
@@ -1002,11 +1018,11 @@ mod tests {
 
     #[test]
     fn query_rewrite_4326_3857() {
-        let query = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let query = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+            TimeInterval::default(),
+            SpatialResolution::zero_point_one(),
+        );
 
         let expected = BoundingBox2D::new_unchecked(
             (-20_037_508.342_789_244, -20_048_966.104_014_594).into(),
@@ -1014,7 +1030,7 @@ mod tests {
         );
 
         let reprojected = reproject_query(
-            query,
+            query.spatial_query(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
             SpatialReference::epsg_4326(),
         )
@@ -1119,11 +1135,12 @@ mod tests {
 
         let qs = qp
             .raster_query(
-                QueryRectangle {
-                    spatial_bounds: output_bounds,
-                    time_interval,
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    output_bounds,
                     spatial_resolution,
-                },
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    time_interval,
+                ),
                 &query_ctx,
             )
             .await
@@ -1251,11 +1268,12 @@ mod tests {
 
         let result = qp
             .raster_query(
-                QueryRectangle {
-                    spatial_bounds: output_bounds,
-                    time_interval,
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    output_bounds,
                     spatial_resolution,
-                },
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    time_interval,
+                ),
                 &query_ctx,
             )
             .await
@@ -1320,11 +1338,11 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                QueryRectangle {
+                VectorQueryRectangle::with_bounds_and_resolution(
                     spatial_bounds,
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                },
+                    TimeInterval::default(),
+                    SpatialResolution::zero_point_one(),
+                ),
                 &query_ctx,
             )
             .await
@@ -1396,11 +1414,11 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                QueryRectangle {
+                VectorQueryRectangle::with_bounds_and_resolution(
                     spatial_bounds,
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                },
+                    TimeInterval::default(),
+                    SpatialResolution::zero_point_one(),
+                ),
                 &query_ctx,
             )
             .await
@@ -1473,11 +1491,11 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                QueryRectangle {
+                VectorQueryRectangle::with_bounds_and_resolution(
                     spatial_bounds,
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                },
+                    TimeInterval::default(),
+                    SpatialResolution::zero_point_one(),
+                ),
                 &query_ctx,
             )
             .await

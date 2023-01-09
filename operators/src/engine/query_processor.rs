@@ -8,8 +8,8 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, PlotQueryRectangle, QueryRectangle, RasterQueryRectangle,
-    SpatialPartition2D, VectorQueryRectangle,
+    PlotQueryRectangle, QueryRectangle, RasterQueryRectangle, RasterSpatialQueryRectangle,
+    SpatialQuery, VectorQueryRectangle, VectorSpatialQueryRectangle,
 };
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
@@ -18,18 +18,18 @@ use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2
 #[async_trait]
 pub trait QueryProcessor: Send + Sync {
     type Output;
-    type SpatialBounds: AxisAlignedRectangle + Send + Sync;
+    type SpatialQuery: SpatialQuery + Send + Sync;
 
     /// inner logic of the processor
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialBounds>,
+        query: QueryRectangle<Self::SpatialQuery>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>>;
 
     async fn query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialBounds>,
+        query: QueryRectangle<Self::SpatialQuery>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         Ok(Box::pin(
@@ -63,7 +63,9 @@ pub type BoxRasterQueryProcessor<P> = Box<dyn RasterQueryProcessor<RasterType = 
 #[async_trait]
 impl<S, T> RasterQueryProcessor for S
 where
-    S: QueryProcessor<Output = RasterTile2D<T>, SpatialBounds = SpatialPartition2D> + Sync + Send,
+    S: QueryProcessor<Output = RasterTile2D<T>, SpatialQuery = RasterSpatialQueryRectangle>
+        + Sync
+        + Send,
     T: Pixel,
 {
     type RasterType = T;
@@ -97,7 +99,7 @@ pub trait VectorQueryProcessor: Sync + Send {
 #[async_trait]
 impl<S, VD> VectorQueryProcessor for S
 where
-    S: QueryProcessor<Output = VD, SpatialBounds = BoundingBox2D> + Sync + Send,
+    S: QueryProcessor<Output = VD, SpatialQuery = VectorSpatialQueryRectangle> + Sync + Send,
 {
     type VectorType = VD;
 
@@ -132,12 +134,12 @@ pub trait PlotQueryProcessor: Sync + Send {
 }
 
 #[async_trait]
-impl<T, S> QueryProcessor for Box<dyn QueryProcessor<Output = T, SpatialBounds = S>>
+impl<T, S> QueryProcessor for Box<dyn QueryProcessor<Output = T, SpatialQuery = S>>
 where
-    S: AxisAlignedRectangle + Send + Sync,
+    S: SpatialQuery + Send + Sync,
 {
     type Output = T;
-    type SpatialBounds = S;
+    type SpatialQuery = S;
 
     async fn _query<'a>(
         &'a self,
@@ -154,7 +156,7 @@ where
     T: Pixel,
 {
     type Output = RasterTile2D<T>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
@@ -171,7 +173,7 @@ where
     V: 'static,
 {
     type Output = V;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,

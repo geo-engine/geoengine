@@ -18,7 +18,10 @@ use crate::processing::raster_vector_join::aggregator::{
 use crate::processing::raster_vector_join::TemporalAggregationMethod;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{BoundingBox2D, Geometry, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    Coordinate2D, Geometry, RasterQueryRectangle, SpatialQuery, VectorQueryRectangle,
+    VectorSpatialQueryRectangle,
+};
 
 use super::util::{CoveredPixels, FeatureTimeSpanIter, PixelCoverCreator};
 use super::{create_feature_aggregator, FeatureAggregationMethod};
@@ -71,13 +74,14 @@ where
         let collection = covered_pixels.collection_ref();
 
         for time_span in FeatureTimeSpanIter::new(collection.time_intervals()) {
-            let query = VectorQueryRectangle {
-                spatial_bounds: query.spatial_bounds,
-                time_interval: time_span.time_interval,
-                spatial_resolution: query.spatial_resolution,
-            };
+            let query = VectorQueryRectangle::new(query.spatial_query(), time_span.time_interval);
 
-            let mut rasters = raster_processor.raster_query(query.into(), ctx).await?;
+            let raster_query = RasterQueryRectangle::with_vector_query_and_grid_origin(
+                query,
+                Coordinate2D::new(0.0, 0.0), // FIXME: this is the default global tiling origin. It should be set from the execution context OR (even better) the raster processor should be able to provide it.
+            );
+
+            let mut rasters = raster_processor.raster_query(raster_query, ctx).await?;
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
@@ -186,7 +190,7 @@ where
     FeatureCollection<G>: PixelCoverCreator<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
@@ -286,11 +290,11 @@ mod tests {
             "foo",
             FeatureAggregationMethod::First,
             TemporalAggregationMethod::First,
-            VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
-                time_interval: Default::default(),
-                spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-            },
+            VectorQueryRectangle::with_bounds_and_resolution(
+                BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
+                Default::default(),
+                SpatialResolution::new(1., 1.).unwrap(),
+            ),
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
         .await
@@ -371,11 +375,11 @@ mod tests {
             "foo",
             FeatureAggregationMethod::First,
             TemporalAggregationMethod::Mean,
-            VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
-                time_interval: Default::default(),
-                spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-            },
+            VectorQueryRectangle::with_bounds_and_resolution(
+                BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
+                Default::default(),
+                SpatialResolution::new(1., 1.).unwrap(),
+            ),
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
         .await
@@ -479,11 +483,11 @@ mod tests {
             "foo",
             FeatureAggregationMethod::Mean,
             TemporalAggregationMethod::Mean,
-            VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
-                time_interval: Default::default(),
-                spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-            },
+            VectorQueryRectangle::with_bounds_and_resolution(
+                BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
+                Default::default(),
+                SpatialResolution::new(1., 1.).unwrap(),
+            ),
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
         .await
@@ -593,11 +597,11 @@ mod tests {
             "foo",
             FeatureAggregationMethod::Mean,
             TemporalAggregationMethod::Mean,
-            VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
-                time_interval: Default::default(),
-                spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-            },
+            VectorQueryRectangle::with_bounds_and_resolution(
+                BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
+                Default::default(),
+                SpatialResolution::new(1., 1.).unwrap(),
+            ),
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
         .await

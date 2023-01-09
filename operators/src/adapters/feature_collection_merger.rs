@@ -171,11 +171,11 @@ mod tests {
                 unreachable!();
             };
 
-        let qrect = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let qrect = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
+            Default::default(),
+            SpatialResolution::zero_point_one(),
+        );
         let cx = MockQueryContext::new((std::mem::size_of::<Coordinate2D>() * 2).into());
 
         let number_of_source_chunks = processor
@@ -243,11 +243,11 @@ mod tests {
                 unreachable!();
             };
 
-        let qrect = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let qrect = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
+            Default::default(),
+            SpatialResolution::zero_point_one(),
+        );
         let cx = MockQueryContext::new((0).into());
 
         let collections =

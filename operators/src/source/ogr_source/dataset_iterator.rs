@@ -8,7 +8,7 @@ use crate::util::Result;
 use gdal::vector::sql::Dialect;
 use gdal::vector::{Feature, LayerAccess};
 use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::primitives::{SpatialBounded, SpatialQuery, VectorQueryRectangle};
 use log::debug;
 use ouroboros::self_referencing;
 use std::cell::Cell;
@@ -140,7 +140,7 @@ impl OgrDatasetIterator {
                 query_rectangle.spatial_bounds, &dataset_information.layer_name
             );
             // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
-            features_provider.set_spatial_filter(&query_rectangle.spatial_bounds);
+            features_provider.set_spatial_filter(&query_rectangle.spatial_query().spatial_bounds());
         }
 
         let filter_string = if dataset.driver().short_name() == "CSV" {

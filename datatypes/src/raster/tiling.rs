@@ -1,5 +1,9 @@
 use crate::{
-    primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialPartitioned},
+    primitives::{
+        AxisAlignedRectangle, Coordinate2D, RasterSpatialQueryRectangle, SpatialPartition2D,
+        SpatialPartitioned,
+    },
+    raster::GridBounds,
     util::test::TestDefault,
 };
 
@@ -95,6 +99,21 @@ impl TilingStrategy {
     pub fn tile_grid_box(&self, partition: SpatialPartition2D) -> GridBoundingBox2D {
         let start = self.pixel_idx_to_tile_idx(self.geo_transform.upper_left_pixel_idx(&partition));
         let end = self.pixel_idx_to_tile_idx(self.geo_transform.lower_right_pixel_idx(&partition));
+        GridBoundingBox2D::new_unchecked(start, end)
+    }
+
+    pub fn raster_spatial_query_to_tling_grid_box(
+        &self,
+        raster_spatial_query: &RasterSpatialQueryRectangle,
+    ) -> GridBoundingBox2D {
+        // FIXME: The query must match the tiling strategy's geo transform for now.
+        assert_eq!(
+            raster_spatial_query.geo_transform, self.geo_transform,
+            "The query geotransform must match the tiling strategy's geo transform for now."
+        );
+
+        let start = self.pixel_idx_to_tile_idx(raster_spatial_query.grid_bounds.min_index());
+        let end = self.pixel_idx_to_tile_idx(raster_spatial_query.grid_bounds.max_index());
         GridBoundingBox2D::new_unchecked(start, end)
     }
 

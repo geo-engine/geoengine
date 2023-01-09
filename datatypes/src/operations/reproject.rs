@@ -3,7 +3,8 @@ use crate::{
     primitives::{
         AxisAlignedRectangle, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
         MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
-        MultiPolygonAccess, MultiPolygonRef, QueryRectangle, SpatialBounded, SpatialResolution,
+        MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialQueryRectangle,
+        SpatialResolution,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -458,10 +459,10 @@ pub fn project_coordinates_fail_tolerant<P: CoordinateProjection>(
 /// this method performs the transformation of a query rectangle in `target` projection
 /// to a new query rectangle with coordinates in the `source` projection
 pub fn reproject_query<S: AxisAlignedRectangle>(
-    query: QueryRectangle<S>,
+    query: SpatialQueryRectangle<S>,
     source: SpatialReference,
     target: SpatialReference,
-) -> Result<Option<QueryRectangle<S>>> {
+) -> Result<Option<SpatialQueryRectangle<S>>> {
     let (s_bbox, p_bbox) = match reproject_and_unify_bbox(query.spatial_bounds, target, source)? {
         (Some(s_bbox), Some(p_bbox)) => (s_bbox, p_bbox),
         _ => return Ok(None),
@@ -469,10 +470,9 @@ pub fn reproject_query<S: AxisAlignedRectangle>(
 
     let p_spatial_resolution =
         suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
-    Ok(Some(QueryRectangle {
+    Ok(Some(SpatialQueryRectangle {
         spatial_bounds: p_bbox,
         spatial_resolution: p_spatial_resolution,
-        time_interval: query.time_interval,
     }))
 }
 

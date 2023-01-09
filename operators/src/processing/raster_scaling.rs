@@ -329,11 +329,13 @@ mod tests {
 
         let query_processor = initialized_op.query_processor().unwrap();
 
-        let query = geoengine_datatypes::primitives::RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-            time_interval: TimeInterval::default(),
-        };
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
+            SpatialResolution::one(),
+            ctx.tiling_specification().origin_coordinate,
+            TimeInterval::default(),
+            
+        );
 
         let typed_processor = match query_processor {
             TypedRasterQueryProcessor::U8(rqp) => rqp,
@@ -446,11 +448,12 @@ mod tests {
 
         let query_processor = initialized_op.query_processor().unwrap();
 
-        let query = geoengine_datatypes::primitives::RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-            time_interval: TimeInterval::default(),
-        };
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
+            SpatialResolution::one(),
+            ctx.tiling_specification().origin_coordinate,
+            TimeInterval::default(),
+        );
 
         let typed_processor = match query_processor {
             TypedRasterQueryProcessor::U8(rqp) => rqp,

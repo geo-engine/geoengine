@@ -227,11 +227,10 @@ fn expand_query_rectangle(
     step_reference: TimeInstance,
     query: VectorQueryRectangle,
 ) -> Result<VectorQueryRectangle, TimeProjectionError> {
-    Ok(VectorQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
-        time_interval: expand_time_interval(step, step_reference, query.time_interval)?,
-        spatial_resolution: query.spatial_resolution,
-    })
+    Ok(VectorQueryRectangle::new(
+        query.spatial_bounds,
+        expand_time_interval(step, step_reference, query.time_interval)?,
+    ))
 }
 
 fn expand_time_interval(
@@ -448,15 +447,15 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2010, 4, 3, 0, 0, 0),
                         DateTime::new_utc(2010, 5, 14, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                    SpatialResolution::one(),
+                ),
                 &query_context,
             )
             .await
@@ -550,15 +549,15 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2010, 4, 3, 0, 0, 0),
                         DateTime::new_utc(2010, 5, 14, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                    SpatialResolution::one(),
+                ),
                 &query_context,
             )
             .await
