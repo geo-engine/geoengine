@@ -5,7 +5,6 @@ use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefiniti
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
-use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::error::ErrorSource;
@@ -20,7 +19,8 @@ use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
 };
 use geoengine_operators::util::raster_stream_to_geotiff::{
-    raster_stream_to_geotiff, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+    raster_stream_to_geotiff, GdalCompressionNumThreads, GdalGeoTiffDatasetMetadata,
+    GdalGeoTiffOptions,
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
@@ -63,6 +63,7 @@ pub struct RasterDatasetFromWorkflowTask<C: Context> {
     pub info: RasterDatasetFromWorkflow,
     pub upload: UploadId,
     pub file_path: PathBuf,
+    pub compression_num_threads: GdalCompressionNumThreads,
 }
 
 impl<C: Context> RasterDatasetFromWorkflowTask<C> {
@@ -73,7 +74,6 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
 
         let execution_context = self.ctx.execution_context(self.session.clone())?;
         let initialized = operator
-            .clone()
             .initialize(&execution_context)
             .await
             .context(crate::error::Operator)?;
@@ -92,7 +92,8 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
         let tile_limit = None; // TODO: set a reasonable limit or make configurable?
 
         // build the geotiff
-        let res = call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
+        let res =
+            call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
             &self.file_path,
             p,
             query_rect,
@@ -102,7 +103,7 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
                 spatial_reference: request_spatial_ref,
             },
             GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
+                compression_num_threads: self.compression_num_threads,
                 as_cog: self.info.as_cog,
                 force_big_tiff: false,
             },
@@ -171,6 +172,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
     session: C::Session,
     ctx: Arc<C>,
     info: RasterDatasetFromWorkflow,
+    compression_num_threads: GdalCompressionNumThreads,
 ) -> error::Result<TaskId> {
     let upload = UploadId::new();
     let upload_path = upload.root_path()?;
@@ -186,6 +188,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
         info,
         upload,
         file_path,
+        compression_num_threads,
     }
     .boxed();
 

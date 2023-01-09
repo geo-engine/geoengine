@@ -9,6 +9,7 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
+use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
@@ -589,8 +590,8 @@ async fn layer_to_dataset<C: Context>(
 
     let raster_operator = layer
         .workflow
-        .clone()
         .operator
+        .clone()
         .get_raster()?
         .initialize(&execution_context)
         .await?;
@@ -625,11 +626,15 @@ async fn layer_to_dataset<C: Context>(
         as_cog: true,
     };
 
+    let compression_num_threads =
+        get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
+
     let task_id = schedule_raster_dataset_from_workflow_task(
         layer.workflow,
         session,
         ctx.into_inner(),
         from_workflow,
+        compression_num_threads,
     )
     .await?;
 

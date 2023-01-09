@@ -17,6 +17,7 @@ use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescri
 
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::handlers::tasks::TaskResponse;
+use crate::util::config::get_config_element;
 use snafu::{ResultExt, Snafu};
 use zip::{write::FileOptions, ZipWriter};
 
@@ -364,12 +365,15 @@ async fn dataset_from_workflow_handler<C: Context>(
     info: web::Json<RasterDatasetFromWorkflow>,
 ) -> Result<impl Responder> {
     let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let compression_num_threads =
+        get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         workflow,
         session,
         ctx.into_inner(),
         info.into_inner(),
+        compression_num_threads,
     )
     .await?;
 
