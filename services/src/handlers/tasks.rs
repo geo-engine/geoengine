@@ -366,7 +366,7 @@ mod tests {
         assert_eq!(res_body["status"], json!("completed"));
         assert_eq!(res_body["info"], json!("completed"));
         assert_eq!(res_body["timeTotal"], json!("00:00:00"));
-        assert!(res_body["time_started"].is_number());
+        assert!(res_body["timeStarted"].is_number());
     }
 
     #[tokio::test]
@@ -433,7 +433,7 @@ mod tests {
         assert_eq!(res_body["status"], json!("completed"));
         assert_eq!(res_body["info"], json!("completed"));
         assert_eq!(res_body["timeTotal"], json!("00:00:00"));
-        assert!(res_body["time_started"].is_number());
+        assert!(res_body["timeStarted"].is_number());
     }
 
     #[tokio::test]
