@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
+use geoengine_datatypes::primitives::TimeInstance;
 use geoengine_operators::util::number_statistics::NumberStatistics;
 use serde::{Serialize, Serializer};
-use geoengine_datatypes::primitives::TimeInstance;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TimeEstimation {
@@ -20,10 +20,10 @@ impl TimeEstimation {
         }
     }
 
-    pub fn update(&mut self, time_stamp: std::time::Instant, pct_complete: f64) {
+    pub fn update(&mut self, time_stamp: TimeInstance, pct_complete: f64) {
         let pct_complete = pct_complete.clamp(0., 1.);
 
-        let elapsed_secs = (time_stamp - self.initial_time_stamp).as_secs() as f64;
+        let elapsed_secs = (time_stamp - self.initial_time_stamp).num_seconds() as f64;
 
         // we only update if there is progress in time and pct
         if elapsed_secs <= 0. || pct_complete <= 0. {
@@ -57,15 +57,15 @@ impl TimeEstimation {
     }
 
     pub fn update_now(&mut self, pct_complete: f64) {
-        self.update(std::time::Instant::now(), pct_complete);
+        self.update(TimeInstance::now(), pct_complete);
     }
 
     pub fn time_total(&self) -> String {
-        hms_from_secs(self.initial_time_stamp.elapsed().as_secs() as f64)
+        hms_from_secs((TimeInstance::now() - self.initial_time_stamp).num_seconds() as f64)
     }
 
     pub fn time_started(&self) -> TimeInstance {
-        TimeInstance(0)
+        self.initial_time_stamp
     }
 }
 
@@ -110,25 +110,23 @@ fn hms_from_secs(seconds: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::primitives::Duration;
 
     #[test]
     fn test_time_estimation() {
         let mut time_estimation = TimeEstimation::new();
 
-        let next_timestamp =
-            time_estimation.initial_time_stamp + std::time::Duration::from_secs(60);
+        let next_timestamp = time_estimation.initial_time_stamp + Duration::seconds(60);
         time_estimation.update(next_timestamp, 0.1);
 
         assert_eq!(time_estimation.to_string(), "00:09:00 (± ?)");
 
-        let next_timestamp =
-            time_estimation.initial_time_stamp + std::time::Duration::from_secs(30);
+        let next_timestamp = time_estimation.initial_time_stamp + Duration::seconds(30);
         time_estimation.update(next_timestamp, 0.2);
 
         assert_eq!(time_estimation.to_string(), "00:05:00 (± 00:03:00)");
 
-        let next_timestamp =
-            time_estimation.initial_time_stamp + std::time::Duration::from_secs(200);
+        let next_timestamp = time_estimation.initial_time_stamp + Duration::seconds(200);
         time_estimation.update(next_timestamp, 1.0);
 
         assert_eq!(time_estimation.to_string(), "00:00:00 (± 00:00:00)");

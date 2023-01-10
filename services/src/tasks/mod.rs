@@ -14,12 +14,12 @@ use crate::{
 };
 pub use error::TaskError;
 use futures::channel::oneshot;
+use geoengine_datatypes::primitives::TimeInstance;
 use geoengine_datatypes::{error::ErrorSource, util::AsAnyArc};
 pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
 use snafu::ensure;
 use std::{fmt, sync::Arc};
-use utoipa::openapi::{ObjectBuilder, OneOfBuilder, Schema, SchemaType};
 use utoipa::{IntoParams, ToSchema};
 
 /// A database that allows scheduling and retrieving tasks.
@@ -102,6 +102,7 @@ pub enum TaskStatus {
     Completed {
         info: Arc<dyn TaskStatusInfo>,
         time_total: String,
+        time_started: TimeInstance,
     },
     #[serde(rename_all = "camelCase")]
     Aborted {
@@ -116,8 +117,9 @@ pub enum TaskStatus {
 }
 
 // TODO: replace TaskStatus with a more API friendly type
-impl ToSchema for TaskStatus {
-    fn schema() -> Schema {
+impl utoipa::ToSchema for TaskStatus {
+    fn schema() -> utoipa::openapi::Schema {
+        use utoipa::openapi::*;
         OneOfBuilder::new()
             .item(
                 ObjectBuilder::new()
@@ -127,7 +129,10 @@ impl ToSchema for TaskStatus {
                             .schema_type(SchemaType::String)
                             .enum_values::<[&str; 1], &str>(Some(["running"])),
                     )
-                    .build(),
+                    .property("info", Object::new())
+                    .property("pct_complete", Object::with_type(SchemaType::String))
+                    .property("time_estimate", Object::with_type(SchemaType::String))
+                    .property("time_started", Object::with_type(SchemaType::Integer)),
             )
             .item(
                 ObjectBuilder::new()
@@ -137,12 +142,9 @@ impl ToSchema for TaskStatus {
                             .schema_type(SchemaType::String)
                             .enum_values::<[&str; 1], &str>(Some(["completed"])),
                     )
-                    .property("info", utoipa::openapi::Object::new())
-                    .property(
-                        "timeTotal",
-                        ObjectBuilder::new().schema_type(SchemaType::String),
-                    )
-                    .build(),
+                    .property("info", Object::new())
+                    .property("timeTotal", Object::with_type(SchemaType::String))
+                    .property("timeStarted", Object::with_type(SchemaType::Integer)),
             )
             .item(
                 ObjectBuilder::new()
@@ -152,8 +154,7 @@ impl ToSchema for TaskStatus {
                             .schema_type(SchemaType::String)
                             .enum_values::<[&str; 1], &str>(Some(["aborted"])),
                     )
-                    .property("cleanUp", utoipa::openapi::Object::new())
-                    .build(),
+                    .property("cleanUp", Object::new()),
             )
             .item(
                 ObjectBuilder::new()
@@ -163,9 +164,8 @@ impl ToSchema for TaskStatus {
                             .schema_type(SchemaType::String)
                             .enum_values::<[&str; 1], &str>(Some(["failed"])),
                     )
-                    .property("error", utoipa::openapi::Object::new())
-                    .property("cleanUp", utoipa::openapi::Object::new())
-                    .build(),
+                    .property("error", Object::new())
+                    .property("cleanUp", Object::new()),
             )
             .into()
     }
@@ -205,6 +205,7 @@ impl TaskStatus {
         Self::Completed {
             info,
             time_total: self.time_total(),
+            time_started: self.time_started(),
         }
     }
 
@@ -258,26 +259,30 @@ impl TaskStatus {
         }
     }
 
-    /*fn time_started(&self) -> String {
+    fn time_started(&self) -> TimeInstance {
         match self {
-            TaskStatus::Running(info) => info.time_estimate.time
+            TaskStatus::Running(info) => info.time_estimate.time_started(),
+            _ => TimeInstance::MIN,
         }
-    }*/
+    }
 }
 
 #[derive(Debug, Serialize)]
 pub struct RunningTaskStatusInfo {
     #[serde(serialize_with = "serialize_as_pct")]
     pct_complete: f64,
+    time_started: TimeInstance,
     time_estimate: TimeEstimation,
     info: Box<dyn TaskStatusInfo>,
 }
 
 impl RunningTaskStatusInfo {
     pub fn new(pct_complete: f64, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
+        let time_estimate = TimeEstimation::new();
         Arc::new(RunningTaskStatusInfo {
             pct_complete: pct_complete.clamp(0., 1.),
-            time_estimate: TimeEstimation::new(),
+            time_started: time_estimate.time_started(),
+            time_estimate,
             info,
         })
     }
@@ -290,6 +295,7 @@ impl RunningTaskStatusInfo {
 
         Arc::new(RunningTaskStatusInfo {
             pct_complete,
+            time_started: self.time_started,
             time_estimate,
             info,
         })
