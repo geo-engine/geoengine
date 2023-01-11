@@ -422,7 +422,7 @@ pub enum Error {
     },
 
     #[snafu(display("Result Descriptor field '{}' {}", field, cause))]
-    InvalidLayerResultDescriptor {
+    LayerResultDescriptorMissingFields {
         field: String,
         cause: String,
     },

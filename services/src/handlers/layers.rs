@@ -599,20 +599,20 @@ async fn layer_to_dataset<C: Context>(
     let result_descriptor = raster_operator.result_descriptor();
 
     let qr = QueryRectangle {
-        spatial_bounds: result_descriptor
-            .bbox
-            .ok_or(Error::InvalidLayerResultDescriptor {
+        spatial_bounds: result_descriptor.bbox.ok_or(
+            Error::LayerResultDescriptorMissingFields {
                 field: "bbox".to_string(),
                 cause: "is None".to_string(),
-            })?,
+            },
+        )?,
         time_interval: result_descriptor
             .time
-            .ok_or(Error::InvalidLayerResultDescriptor {
+            .ok_or(Error::LayerResultDescriptorMissingFields {
                 field: "time".to_string(),
                 cause: "is None".to_string(),
             })?,
         spatial_resolution: result_descriptor.resolution.ok_or(
-            Error::InvalidLayerResultDescriptor {
+            Error::LayerResultDescriptorMissingFields {
                 field: "spatial_resolution".to_string(),
                 cause: "is None".to_string(),
             },
