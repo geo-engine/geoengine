@@ -794,10 +794,13 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::Read};
+    use std::{fs::File, io::Read, path::PathBuf};
 
     use bb8_postgres::bb8::ManageConnection;
-    use geoengine_datatypes::test_data;
+    use geoengine_datatypes::{
+        primitives::{BoundingBox2D, SpatialResolution, TimeInterval},
+        test_data,
+    };
     use httptest::{
         all_of,
         matchers::{contains, lowercase, request},
@@ -807,7 +810,7 @@ mod tests {
     use rand::RngCore;
     use tokio_postgres::Config;
 
-    use crate::{util::config, util::user_input::UserInput};
+    use crate::{datasets::listing::Provenance, util::config, util::user_input::UserInput};
 
     use super::*;
 
@@ -894,124 +897,385 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn it_lists() {
-        let db_config = config::get_config_element::<config::Postgres>().unwrap();
-        let test_schema = create_test_data(&db_config).await;
+        async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
+            let gfbio_collections_server = Server::run();
+            let gfbio_collections_server_token = "Token 6bc06a951394f222eeb576c6f86a4ad73ab805f6";
 
-        let gfbio_collections_server = Server::run();
-        let gfbio_collections_server_token = "Token 6bc06a951394f222eeb576c6f86a4ad73ab805f6";
+            let mut gfbio_collection_response = vec![];
+            File::open(test_data!("gfbio/collections_api_response.json"))
+                .unwrap()
+                .read_to_end(&mut gfbio_collection_response)
+                .unwrap();
 
-        let mut gfbio_collection_response = vec![];
-        File::open(test_data!("gfbio/collections_api_response.json"))
-            .unwrap()
-            .read_to_end(&mut gfbio_collection_response)
-            .unwrap();
+            gfbio_collections_server.expect(
+                Expectation::matching(all_of![
+                    request::headers(contains((
+                        lowercase("authorization"),
+                        gfbio_collections_server_token
+                    ))),
+                    request::headers(contains(("accept", "application/json"))),
+                    request::method_path(
+                        "GET",
+                        "/api/collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/",
+                    ),
+                ])
+                .times(1)
+                .respond_with(status_code(200).body(gfbio_collection_response)),
+            );
 
-        gfbio_collections_server.expect(
-            Expectation::matching(all_of![
-                request::headers(contains((
-                    lowercase("authorization"),
-                    gfbio_collections_server_token
-                ))),
-                request::headers(contains(("accept", "application/json"))),
-                request::method_path(
-                    "GET",
-                    "/api/collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/",
-                ),
-            ])
-            .times(1)
-            .respond_with(status_code(200).body(gfbio_collection_response)),
-        );
-
-        let provider = GfbioCollectionsDataProvider::new(
-            Url::parse(&gfbio_collections_server.url("/api/").to_string()).unwrap(),
-            gfbio_collections_server_token.to_string(),
-            DatabaseConnectionConfig {
-                host: db_config.host.clone(),
-                port: db_config.port,
-                database: db_config.database.clone(),
-                schema: test_schema.clone(),
-                user: db_config.user.clone(),
-                password: db_config.password.clone(),
-            },
-            "https://doi.pangaea.de".parse().unwrap(),
-        )
-        .await
-        .unwrap();
-
-        let root_id = provider.root_collection_id().await.unwrap();
-
-        let collection = provider
-            .collection(
-                &root_id,
-                LayerCollectionListOptions {
-                    offset: 0,
-                    limit: 10,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await;
-
-        let collection = collection.unwrap();
-
-        // root collection should be empty because we don't support browsing
-        assert_eq!(collection.items.len(), 0);
-
-        let collection = provider
-            .collection(
-                &LayerCollectionId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc".to_string()),
-                LayerCollectionListOptions {
-                    offset: 0,
-                    limit: 10,
-                }
-                .validated()
-                .unwrap(),
+            let provider = GfbioCollectionsDataProvider::new(
+                Url::parse(&gfbio_collections_server.url("/api/").to_string()).unwrap(),
+                gfbio_collections_server_token.to_string(),
+                DatabaseConnectionConfig {
+                    host: db_config.host.clone(),
+                    port: db_config.port,
+                    database: db_config.database.clone(),
+                    schema: test_schema.to_string(),
+                    user: db_config.user.clone(),
+                    password: db_config.password.clone(),
+                },
+                "https://doi.pangaea.de".parse().unwrap(),
             )
             .await
             .unwrap();
 
-        assert_eq!(
+            let root_id = provider.root_collection_id().await.unwrap();
+
+            let collection = provider
+                .collection(
+                    &root_id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await;
+
+            let collection = collection.unwrap();
+
+            // root collection should be empty because we don't support browsing
+            assert_eq!(collection.items.len(), 0);
+
+            let collection = provider
+                .collection(
+                    &LayerCollectionId(
+                        "collections/63cf68e4-6e11-469d-8f35-af83ee6586dc".to_string(),
+                    ),
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
             collection.items,
             vec![
-            CollectionItem::Layer(LayerListing {
-                 id: ProviderLayerId {
-                    provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
-                    layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0602".to_string())
-                },
-                name: "Scorpiones, a preserved specimen record of the ZFMK Scorpiones collection dataset [ID: ZFMK Sc0602 ]".to_string(),
-                description: String::new(),
-                properties: vec![("status".to_string(), "ok".to_string()).into()]
-                }),
-            CollectionItem::Layer(LayerListing {
-                id: ProviderLayerId {
-                    provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
-                    layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0612".to_string())
-                },
-                name: "Scorpiones, a preserved specimen record of the ZFMK Scorpiones collection dataset [ID: ZFMK Sc0612 ]".to_string(),
-                description: String::new(),
-                properties: vec![("status".to_string(), "ok".to_string()).into()]
-                }),
-            CollectionItem::Layer(LayerListing {
-                id: ProviderLayerId {
-                    provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
-                    layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/pangaea/oai:pangaea.de:doi:10.1594__PANGAEA.747054".to_string())
-                },
-                name: "Meteorological observations during SCORPION cruise from Brunswick to Cape Fear started at 1750-07-01".to_string(),
-                description: String::new(),
-                properties: vec![("status".to_string(), "ok".to_string()).into()]
-                }),
-            CollectionItem::Layer(LayerListing {
-                id: ProviderLayerId {
-                    provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
-                    layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/pangaea/oai:pangaea.de:doi:10.1594__PANGAEA.747056".to_string()) 
-                },
-                name: "Meteorological observations during SCORPION cruise from Ocracoke to Southport started at 1750-11-04".to_string(), 
-                description: String::new(),
-                properties: vec![("status".to_string(), "ok".to_string()).into()] 
-                }
-            )]
-        );
+                CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
+                        layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0602".to_string())
+                    },
+                    name: "Scorpiones, a preserved specimen record of the ZFMK Scorpiones collection dataset [ID: ZFMK Sc0602 ]".to_string(),
+                    description: String::new(),
+                    properties: vec![("status".to_string(), "ok".to_string()).into()]
+                    }),
+                CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
+                        layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0612".to_string())
+                    },
+                    name: "Scorpiones, a preserved specimen record of the ZFMK Scorpiones collection dataset [ID: ZFMK Sc0612 ]".to_string(),
+                    description: String::new(),
+                    properties: vec![("status".to_string(), "ok".to_string()).into()]
+                    }),
+                CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
+                        layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/pangaea/oai:pangaea.de:doi:10.1594__PANGAEA.747054".to_string())
+                    },
+                    name: "Meteorological observations during SCORPION cruise from Brunswick to Cape Fear started at 1750-07-01".to_string(),
+                    description: String::new(),
+                    properties: vec![("status".to_string(), "ok".to_string()).into()]
+                    }),
+                CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
+                        layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/pangaea/oai:pangaea.de:doi:10.1594__PANGAEA.747056".to_string()) 
+                    },
+                    name: "Meteorological observations during SCORPION cruise from Ocracoke to Southport started at 1750-11-04".to_string(), 
+                    description: String::new(),
+                    properties: vec![("status".to_string(), "ok".to_string()).into()] 
+                    }
+                )]
+            );
+            Ok(())
+        }
+
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let test = test(&db_config, &test_schema).await;
 
         cleanup_test_data(&db_config, test_schema).await;
+
+        assert!(test.is_ok());
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn it_creates_abcd_meta_data() {
+        async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
+            let gfbio_collections_server_token = "Token 6bc06a951394f222eeb576c6f86a4ad73ab805f6";
+
+            let provider_db_config = DatabaseConnectionConfig {
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.to_string(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
+            };
+
+            let ogr_pg_string = provider_db_config.ogr_pg_config();
+
+            let provider = GfbioCollectionsDataProvider::new(
+                Url::parse("http://foo.bar/api").unwrap(),
+                gfbio_collections_server_token.to_string(),
+                provider_db_config,
+                "https://doi.pangaea.de".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+            let meta: Box<
+                dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+            > = provider
+                .meta_data(
+                    &DataId::External(ExternalDataId {
+                        provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
+                        layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0602".to_string()),
+                    })
+                    .into(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let text_column = VectorColumnInfo {
+                data_type: FeatureDataType::Text,
+                measurement: Measurement::Unitless,
+            };
+
+            let expected = VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns:  [
+                    ("/DataSets/DataSet/Units/Unit/DateLastEdited".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/Agents/GatheringAgent/AgentText".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/Country/ISO3166Code".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/Country/Name".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/DateTime/ISODateTimeBegin".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/LocalityText".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/SiteCoordinateSets/SiteCoordinates/CoordinatesLatLong/SpatialDatum".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonName".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonRank".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/ScientificName/FullScientificNameString".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Creator".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/FileURI".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Format".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Details".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Text".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/URI".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/RecordBasis".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/RecordURI".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/SourceID".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/SourceInstitutionID".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/UnitID".to_owned(), text_column.clone()),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+            };
+
+            let result_descriptor = meta.result_descriptor().await.map_err(|e| e.to_string())?;
+
+            if result_descriptor != expected {
+                return Err(format!("{result_descriptor:?} != {expected:?}"));
+            }
+
+            let mut loading_info = meta
+                .loading_info(VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new_unchecked(
+                        (-180., -90.).into(),
+                        (180., 90.).into(),
+                    ),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::zero_point_one(),
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+
+            loading_info
+                .columns
+                .as_mut()
+                .ok_or_else(|| "missing columns".to_owned())?
+                .text
+                .sort();
+
+            let expected = OgrSourceDataset {
+                file_name: PathBuf::from(ogr_pg_string),
+                layer_name: format!("{test_schema}.abcd_units"),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::None,
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
+                    x: String::new(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![
+                        "09e05cff5522bf112eedf91c5c2f1432539e59aa".to_owned(),
+                        "0dcf8788cadda41eaa5831f44227d8c531411953".to_owned(),                        
+                        "150ac8760faba3bbf29ee77713fc0402641eea82".to_owned(),                        
+                        "2598ba17aa170832b45c3c206f8133ddddc52c6e".to_owned(),                        
+                        "2b603312fc185489ffcffd5763bcd47c4b126f31".to_owned(),                        
+                        "46b0ed7a1faa8d25b0c681fbbdc2cca60cecbdf0".to_owned(),                        
+                        "4f885a9545b143d322f3bf34bf2c5148e07d578a".to_owned(),                        
+                        "54a52959a34f3c19fa1b0e22cea2ae5c8ce78602".to_owned(),                        
+                        "624516976f697c1eacc7bccfb668d2c25ae7756e".to_owned(),                        
+                        "6df446e57190f19d63fcf99ba25476510c5c8ce6".to_owned(),                        
+                        "7fdf1ed68add3ac2f4a1b2c89b75245260890dfe".to_owned(),                        
+                        "8003ddd80b42736ebf36b87018e51db3ee84efaf".to_owned(),                        
+                        "83fb54d8cfa58d729125f3dccac3a6820d95ccaa".to_owned(),                        
+                        "8603069b15071933545a8ce6563308da4d8ee019".to_owned(),                        
+                        "9691f318c0f84b4e71e3c125492902af3ad22a81".to_owned(),                        
+                        "abc0ceb08b2723a43274e1db093dfe1f333fe453".to_owned(),                        
+                        "adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71".to_owned(),                        
+                        "bad2f7cae88e4219f2c3b186628189c5380f3c52".to_owned(),                        
+                        "d22ecb7dd0e5de6e8b2721977056d30aefda1b75".to_owned(),                        
+                        "f2374ad051911a65bc0d0a46c13ada2625f55a10".to_owned(),                        
+                        "f65b72bbbd0b17e7345821a34c1da49d317ca28b".to_owned()
+                    ],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: Some([
+                        ("8003ddd80b42736ebf36b87018e51db3ee84efaf".to_owned(), "/DataSets/DataSet/Units/Unit/Gathering/Country/Name".to_owned()),
+                        ("f2374ad051911a65bc0d0a46c13ada2625f55a10".to_owned(), "/DataSets/DataSet/Units/Unit/SourceID".to_owned()),
+                        ("d22ecb7dd0e5de6e8b2721977056d30aefda1b75".to_owned(), "/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonName".to_owned()),
+                        ("6df446e57190f19d63fcf99ba25476510c5c8ce6".to_owned(), "/DataSets/DataSet/Units/Unit/Gathering/Agents/GatheringAgent/AgentText".to_owned()),
+                        ("09e05cff5522bf112eedf91c5c2f1432539e59aa".to_owned(), "/DataSets/DataSet/Units/Unit/Gathering/Country/ISO3166Code".to_owned(),),
+                        ("46b0ed7a1faa8d25b0c681fbbdc2cca60cecbdf0".to_owned(), "/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Details".to_owned()),
+                        ("bad2f7cae88e4219f2c3b186628189c5380f3c52".to_owned(), "/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonRank".to_owned()),
+                        ("f65b72bbbd0b17e7345821a34c1da49d317ca28b".to_owned(), "/DataSets/DataSet/Units/Unit/Gathering/SiteCoordinateSets/SiteCoordinates/CoordinatesLatLong/SpatialDatum".to_owned()),
+                        ("2598ba17aa170832b45c3c206f8133ddddc52c6e".to_owned(), "/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Text".to_owned()),
+                        ("54a52959a34f3c19fa1b0e22cea2ae5c8ce78602".to_owned(), "/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/URI".to_owned()),
+                        ("abc0ceb08b2723a43274e1db093dfe1f333fe453".to_owned(), "/DataSets/DataSet/Units/Unit/Gathering/LocalityText".to_owned()),
+                        ("9691f318c0f84b4e71e3c125492902af3ad22a81".to_owned(), "/DataSets/DataSet/Units/Unit/Gathering/DateTime/ISODateTimeBegin".to_owned()),
+                        ("2b603312fc185489ffcffd5763bcd47c4b126f31".to_owned(), "/DataSets/DataSet/Units/Unit/SourceInstitutionID".to_owned()),
+                        ("624516976f697c1eacc7bccfb668d2c25ae7756e".to_owned(), "/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/ScientificName/FullScientificNameString".to_owned()),
+                        ("8603069b15071933545a8ce6563308da4d8ee019".to_owned(), "/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/FileURI".to_owned()),
+                        ("150ac8760faba3bbf29ee77713fc0402641eea82".to_owned(), "/DataSets/DataSet/Units/Unit/DateLastEdited".to_owned(),),
+                        ("adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71".to_owned(), "/DataSets/DataSet/Units/Unit/UnitID".to_owned()),
+                        ("0dcf8788cadda41eaa5831f44227d8c531411953".to_owned(), "/DataSets/DataSet/Units/Unit/RecordURI".to_owned()),
+                        ("7fdf1ed68add3ac2f4a1b2c89b75245260890dfe".to_owned(), "/DataSets/DataSet/Units/Unit/RecordBasis".to_owned()),
+                        ("83fb54d8cfa58d729125f3dccac3a6820d95ccaa".to_owned(), "/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Format".to_owned()),
+                        ("4f885a9545b143d322f3bf34bf2c5148e07d578a".to_owned(), "/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Creator".to_owned())
+                    ].iter().cloned().collect()),
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: true,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: Some("surrogate_key = 17 AND adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71 = 'ZFMK Sc0602'".to_string()),
+            };
+
+            if loading_info != expected {
+                return Err(format!("{loading_info:?} != {expected:?}"));
+            }
+
+            Ok(())
+        }
+
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let test = test(&db_config, &test_schema).await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        assert!(test.is_ok());
+    }
+
+    #[tokio::test]
+    async fn it_cites_abcd() {
+        async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
+            let gfbio_collections_server_token = "Token 6bc06a951394f222eeb576c6f86a4ad73ab805f6";
+
+            let provider_db_config = DatabaseConnectionConfig {
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.to_string(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
+            };
+
+            let provider = GfbioCollectionsDataProvider::new(
+                Url::parse("http://foo.bar/api").unwrap(),
+                gfbio_collections_server_token.to_string(),
+                provider_db_config,
+                "https://doi.pangaea.de".parse().unwrap(),
+            )
+            .await
+            .unwrap();
+
+            let dataset = DataId::External(ExternalDataId {
+                provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
+                layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0602".to_string()),
+            });
+
+            let result = provider
+                .provenance(&dataset)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let expected = ProvenanceOutput {
+                data: DataId::External(ExternalDataId {
+                    provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
+                    layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0602".to_string()),
+                }),
+                provenance: Some(Provenance {
+                    citation: "ZFMK Arthropoda Working Group. (2021). ZFMK Scorpiones collection. [Dataset]. Version: 1.2. Data Publisher: Data Center ZFMK. https://doi.org/10.20363/zfmk-coll.scorpiones-2018-11.".to_owned(),
+                    license: "CC-BY-SA".to_owned(),
+                    uri: "https://www.zfmk.de/en/research/collections/basal-arthropods".to_owned(),
+                }),
+            };
+
+            if result != expected {
+                return Err(format!("{result:?} != {expected:?}"));
+            }
+
+            Ok(())
+        }
+
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let result = test(&db_config, &test_schema).await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        assert!(result.is_ok());
     }
 }
