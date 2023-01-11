@@ -390,7 +390,6 @@ where
             State::FillAndProduceNextTile if this.sc.is_next_tile_stored() => {
                 // take the tile (replace in state with NONE)
                 let next_tile = this.sc.next_tile.take().expect("checked by case");
-                debug_assert!(this.sc.current_time == next_tile.time);
                 debug_assert!(this.sc.current_idx == next_tile.tile_position);
 
                 this.sc.current_time = next_tile.time;
