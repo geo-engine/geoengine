@@ -76,7 +76,12 @@ impl<T: Pixel> StateContainer<T> {
     /// Check if the next tile to produce is the stored one
     fn is_next_tile_stored(&self) -> bool {
         if let Some(t) = &self.next_tile {
-            t.tile_position == self.current_idx && t.time == self.current_time
+            // The stored tile is the one we are looking for if the tile position is the next to produce
+            self.grid_idx_is_the_next_to_produce(t.tile_position) &&
+            // and the time equals the current state time
+                (self.time_equals_current_state(t.time)
+                // or it starts a new time step, and the time directly follows the current state time
+                || (self.current_idx_is_first_in_grid_run() && self.time_directly_following_current_state(t.time)))
         } else {
             false
         }
