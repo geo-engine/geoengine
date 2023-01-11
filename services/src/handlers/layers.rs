@@ -1624,7 +1624,7 @@ mod tests {
         ErrorResponse::assert(
             res,
             400,
-            "InvalidLayerResultDescriptor",
+            "LayerResultDescriptorMissingFields",
             "Result Descriptor field 'time' is None",
         )
         .await;
@@ -1647,7 +1647,7 @@ mod tests {
         ErrorResponse::assert(
             res,
             400,
-            "InvalidLayerResultDescriptor",
+            "LayerResultDescriptorMissingFields",
             "Result Descriptor field 'bbox' is None",
         )
         .await;
@@ -1670,7 +1670,7 @@ mod tests {
         ErrorResponse::assert(
             res,
             400,
-            "InvalidLayerResultDescriptor",
+            "LayerResultDescriptorMissingFields",
             "Result Descriptor field 'spatial_resolution' is None",
         )
         .await;
