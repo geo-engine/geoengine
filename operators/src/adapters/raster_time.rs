@@ -300,7 +300,14 @@ where
                                     // time step of the other one
 
                                     // advance current query rectangle
-                                    let new_start = min(tile_a.time.end(), tile_b.time.end());
+                                    let mut new_start = min(tile_a.time.end(), tile_b.time.end());
+
+                                    if new_start == query_rect.time_interval.start() {
+                                        // in the case that the time interval has no length, i.e. start=end,
+                                        // we have to advance `new_start` to prevent infinite loops.
+                                        // Otherwise, the new query rectangle would be equal to the previous one.
+                                        new_start += 1;
+                                    }
 
                                     if new_start >= query_rect.time_interval.end() {
                                         // the query window is exhausted, end the stream

@@ -1515,19 +1515,35 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use super::*;
 
-    use crate::tasks::util::NopTaskContext;
+    use crate::contexts::{Context, MockableSession, SimpleSession};
+    use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
+    use crate::layers::storage::LayerProviderDb;
+    use crate::util::user_input::UserInput;
+    use crate::{
+        contexts::InMemoryContext, tasks::util::NopTaskContext,
+        util::tests::add_land_cover_to_datasets,
+    };
+    use geoengine_datatypes::plots::{PlotData, PlotMetaData};
     use geoengine_datatypes::{
-        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{
+            BoundingBox2D, PlotQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        },
         spatial_reference::SpatialReferenceAuthority,
         test_data,
-        util::gdal::hide_gdal_errors,
+        util::{gdal::hide_gdal_errors, test::TestDefault},
     };
-    use geoengine_operators::source::{
-        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-        GdalLoadingInfoTemporalSlice,
+    use geoengine_operators::{
+        engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor},
+        plot::{
+            MeanRasterPixelValuesOverTime, MeanRasterPixelValuesOverTimeParams,
+            MeanRasterPixelValuesOverTimePosition,
+        },
+        processing::{Expression, ExpressionParams, ExpressionSources},
+        source::{
+            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+            GdalLoadingInfoTemporalSlice,
+        },
     };
-
-    use crate::util::user_input::UserInput;
 
     #[test]
     fn it_parses_netcdf_layer_collection_ids() {
@@ -2179,5 +2195,103 @@ mod tests {
                 properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string()).into()]
             }
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_irregular_time_series() {
+        let ctx = InMemoryContext::test_default();
+
+        let land_cover_dataset_id = add_land_cover_to_datasets(&ctx).await;
+
+        let provider_definition: Box<dyn DataProviderDefinition> =
+            Box::new(EbvPortalDataProviderDefinition {
+                name: "EBV Portal".to_string(),
+                path: test_data!("netcdf4d/").into(),
+                base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
+                overviews: test_data!("netcdf4d/overviews/").into(),
+            });
+        ctx.layer_provider_db_ref()
+            .add_layer_provider(provider_definition)
+            .await
+            .unwrap();
+
+        let operator = MeanRasterPixelValuesOverTime {
+            params: MeanRasterPixelValuesOverTimeParams {
+                time_position: MeanRasterPixelValuesOverTimePosition::Start,
+                area: false,
+            },
+            sources: Expression {
+                params: ExpressionParams {
+                    expression: "A".to_string(),
+                    output_type: RasterDataType::F64,
+                    output_measurement: None,
+                    map_no_data: false,
+                },
+                sources: ExpressionSources::new_a_b(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: ExternalDataId {
+                                provider_id: EBV_PROVIDER_ID,
+                                layer_id: LayerId(
+                                    serde_json::json!({
+                                        "fileName": "dataset_irr_ts.nc",
+                                        "groupNames": ["metric_1"],
+                                        "entity": 0
+                                    })
+                                    .to_string(),
+                                ),
+                            }
+                            .into(),
+                        },
+                    }
+                    .boxed(),
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: land_cover_dataset_id.into(),
+                        },
+                    }
+                    .boxed(),
+                ),
+            }
+            .boxed()
+            .into(),
+        }
+        .boxed();
+
+        // let execution_context = MockExecutionContext::test_default();
+        let execution_context = ctx.execution_context(SimpleSession::mock()).unwrap();
+
+        let initialized_operator = operator.initialize(&execution_context).await.unwrap();
+
+        let TypedPlotQueryProcessor::JsonVega(processor) = initialized_operator.query_processor().unwrap() else {
+            panic!("wrong plot type");
+        };
+
+        let query_context = MockQueryContext::test_default();
+
+        let result = processor
+            .plot_query(
+                PlotQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new(
+                        (46.478_278_849, 40.584_655_660_000_1).into(),
+                        (87.323_796_021_000_1, 55.434_550_273).into(),
+                    )
+                    .unwrap(),
+                    time_interval: TimeInterval::new(
+                        DateTime::new_utc(1900, 4, 1, 0, 0, 0),
+                        DateTime::new_utc_with_millis(2055, 4, 1, 0, 0, 0, 1),
+                    )
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
+                },
+                &query_context,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result, PlotData {
+            vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.34280000000002},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
+            metadata: PlotMetaData::None,
+        });
     }
 }
