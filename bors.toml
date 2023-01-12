@@ -10,8 +10,8 @@ status = [
     "build (ubuntu-22.04, --features pro)",
     "build (ubuntu-22.04, --features pro, --release)",
     "build (ubuntu-22.04, --all-features)",
-    "build (ubuntu-22.04, --all-features, --release)",
-    "coveralls (ubuntu-22.04, --all-features)"
+    "build (ubuntu-22.04, --all-features, --release)"
+    # "coveralls (ubuntu-22.04, --all-features)"
 ]
 
 # One approval necessary for bors to work
