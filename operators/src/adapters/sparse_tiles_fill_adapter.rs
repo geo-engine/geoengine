@@ -681,6 +681,107 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_single_gap_at_end() {
+        let data = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 1, 1, 1]).unwrap().into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![2, 2, 2, 2]).unwrap().into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![3, 3, 3, 3]).unwrap().into(),
+                properties: Default::default(),
+            },
+            // GAP
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [-1, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![101, 101, 101, 110])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [-1, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![102, 102, 102, 102])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [0, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![103, 103, 103, 103])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [0, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![104, 104, 104, 104])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+            },
+        ];
+
+        let result_data = data.into_iter().map(Ok);
+
+        let in_stream = stream::iter(result_data);
+        let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
+        let global_geo_transform = GeoTransform::test_default();
+        let tile_shape = [2, 2].into();
+
+        let adapter = SparseTilesFillAdapter::new(
+            in_stream,
+            grid_bounding_box,
+            global_geo_transform,
+            tile_shape,
+        );
+
+        let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
+
+        let tile_time_positions: Vec<(GridIdx2D, TimeInterval)> = tiles
+            .into_iter()
+            .map(|t| {
+                let g = t.unwrap();
+                (g.tile_position, g.time)
+            })
+            .collect();
+
+        let expected_positions = vec![
+            ([-1, 0].into(), TimeInterval::new_unchecked(0, 5)),
+            ([-1, 1].into(), TimeInterval::new_unchecked(0, 5)),
+            ([0, 0].into(), TimeInterval::new_unchecked(0, 5)),
+            ([0, 1].into(), TimeInterval::new_unchecked(0, 5)),
+            ([-1, 0].into(), TimeInterval::new_unchecked(5, 10)),
+            ([-1, 1].into(), TimeInterval::new_unchecked(5, 10)),
+            ([0, 0].into(), TimeInterval::new_unchecked(5, 10)),
+            ([0, 1].into(), TimeInterval::new_unchecked(5, 10)),
+        ];
+
+        assert_eq!(tile_time_positions, expected_positions);
+    }
+
+    #[tokio::test]
     async fn test_gaps_at_end() {
         let data = vec![
             RasterTile2D {
