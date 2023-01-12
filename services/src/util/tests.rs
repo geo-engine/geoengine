@@ -181,8 +181,8 @@ pub async fn add_land_cover_to_datasets(ctx: &InMemoryContext) -> DatasetId {
                     ]
                     .iter()
                     .copied()
-                    .collect(), 
-                    RgbaColor::transparent(), 
+                    .collect(),
+                    RgbaColor::transparent(),
                     RgbaColor::transparent(),
                 ).unwrap().into(),
             })),
