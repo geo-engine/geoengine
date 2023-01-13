@@ -277,7 +277,7 @@ pub(in crate::pro) mod mock_oidc {
             .set_nonce(mock_token_config.nonce),
             &CoreRsaPrivateSigningKey::from_pem(TEST_PRIVATE_KEY, None)
                 .expect("Cannot create mock of RSA private key"),
-            CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
+            CoreJwsSigningAlgorithm::RsaSsaPssSha256,
             Some(&AccessToken::new(
                 mock_token_config.access_for_id.to_string(),
             )),
