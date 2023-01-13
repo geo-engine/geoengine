@@ -109,7 +109,7 @@ where
             web::scope("/overviews")
                 .route("/all", web::put().to(create_overviews::<C>))
                 .service(
-                    web::scope("/{path:[^{}]+}")
+                    web::scope("/{path}")
                         .route("", web::put().to(create_overview::<C>))
                         .route("", web::delete().to(remove_overview::<C>)),
                 ),

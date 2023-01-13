@@ -33,7 +33,7 @@ where
                 web::scope("/collections")
                     .route("", web::get().to(list_root_collections_handler::<C>))
                     .route(
-                        r#"/{provider}/{collection:.+}"#,
+                        r#"/{provider}/{collection}"#,
                         web::get().to(list_collection_handler::<C>),
                     ),
             )
@@ -41,7 +41,7 @@ where
                 "/{provider}/{layer:.*}/workflowId",
                 web::post().to(layer_to_workflow_id_handler::<C>),
             )
-            .route("/{provider}/{layer:.+}", web::get().to(layer_handler::<C>)),
+            .route("/{provider}/{layer}", web::get().to(layer_handler::<C>)),
     )
     .service(
         web::scope("/layerDb").service(
