@@ -364,7 +364,7 @@ async fn resolve_provenance<C: Context>(
 pub struct RasterDatasetFromWorkflow {
     name: String,
     description: Option<String>,
-    query: RasterQueryRectangle,
+    query: crate::api::model::datatypes::RasterQueryRectangle,
     #[schema(default = default_as_cog)]
     #[serde(default = "default_as_cog")]
     as_cog: bool,
@@ -466,7 +466,14 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
             .query_processor()
             .context(crate::error::Operator)?;
 
-        let query_rect = self.info.query;
+        let api_query_rect = self.info.query;
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            api_query_rect.spatial_bounds.into(),
+            api_query_rect.spatial_resolution.into(),
+            execution_context.tiling_specification().origin_coordinate,
+            api_query_rect.time_interval.into(),
+        );
+
         let query_ctx = self.ctx.query_context(self.session.clone())?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
