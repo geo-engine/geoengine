@@ -453,11 +453,12 @@ mod tests {
 
         // QUERY 1
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(1, 3),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            execution_context.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(1, 3),
+        );
 
         let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
 
@@ -475,11 +476,12 @@ mod tests {
 
         // QUERY 2
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(2, 3),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            execution_context.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(2, 3),
+        );
 
         let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
 
