@@ -936,7 +936,7 @@ mod tests {
         let polygons = MultiPolygonCollection::from_data(
             vec![MultiPolygon::new(vec![vec![vec![
                 (0.5, -0.5).into(),
-                (4., -1.).into(),
+                (3.99, -1.).into(),
                 (0.5, -2.5).into(),
                 (0.5, -0.5).into(),
             ]]])
@@ -993,14 +993,14 @@ mod tests {
                 &[
                     MultiPolygon::new(vec![vec![vec![
                         (0.5, -0.5).into(),
-                        (4., -1.).into(),
+                        (3.99, -1.).into(),
                         (0.5, -2.5).into(),
                         (0.5, -0.5).into(),
                     ]]])
                     .unwrap(),
                     MultiPolygon::new(vec![vec![vec![
                         (0.5, -0.5).into(),
-                        (4., -1.).into(),
+                        (3.99, -1.).into(),
                         (0.5, -2.5).into(),
                         (0.5, -0.5).into(),
                     ]]])
