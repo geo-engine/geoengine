@@ -730,7 +730,7 @@ mod tests {
         // remove overviews that don't exist
 
         let req = actix_web::test::TestRequest::delete()
-            .uri("/ebv/overviews/path/to/dataset.nc?force=true")
+            .uri("/ebv/overviews/path%2Fto%2Fdataset.nc?force=true")
             .append_header((
                 header::AUTHORIZATION,
                 Bearer::new(admin_session_id.to_string()),
@@ -784,7 +784,7 @@ mod tests {
             .unwrap();
 
         let req = actix_web::test::TestRequest::put()
-            .uri("/ebv/overviews/foo/bar.nc")
+            .uri("/ebv/overviews/foo%2Fbar.nc")
             .append_header((
                 header::AUTHORIZATION,
                 Bearer::new(admin_session_id.to_string()),
