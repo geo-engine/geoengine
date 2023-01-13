@@ -613,8 +613,8 @@ fn gdal_autodetect(path: &Path, columns: &[String]) -> Option<GdalAutoDetect> {
                 let mut dataset_options = DatasetOptions::default();
 
                 let open_opts = &[
-                    &format!("X_POSSIBLE_NAMES={}", x),
-                    &format!("Y_POSSIBLE_NAMES={}", y),
+                    &format!("X_POSSIBLE_NAMES={x}"),
+                    &format!("Y_POSSIBLE_NAMES={y}"),
                     "AUTODETECT_TYPE=YES",
                 ];
 
@@ -639,7 +639,7 @@ fn gdal_autodetect(path: &Path, columns: &[String]) -> Option<GdalAutoDetect> {
                 let mut dataset_options = DatasetOptions::default();
 
                 let open_opts = &[
-                    &format!("GEOM_POSSIBLE_NAMES={}", column),
+                    &format!("GEOM_POSSIBLE_NAMES={column}"),
                     "AUTODETECT_TYPE=YES",
                 ];
 
@@ -1314,7 +1314,7 @@ mod tests {
         // assert dataset is accessible via regular session
         let session = ctx.default_session_ref().await.clone();
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/{}", dataset_id))
+            .uri(&format!("/dataset/{dataset_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
@@ -1840,14 +1840,14 @@ mod tests {
             .await?;
 
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/{}", id))
+            .uri(&format!("/dataset/{id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         let res_status = res.status();
         let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
-        assert_eq!(res_status, 200, "{}", res_body);
+        assert_eq!(res_status, 200, "{res_body}");
 
         assert_eq!(
             res_body,
@@ -1942,7 +1942,7 @@ mod tests {
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
-        assert_eq!(res_status, 200, "{}", res_body);
+        assert_eq!(res_status, 200, "{res_body}");
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),

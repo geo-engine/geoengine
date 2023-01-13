@@ -1,4 +1,3 @@
-#![feature(bench_black_box)]
 use std::time::Instant;
 use std::{hint::black_box, marker::PhantomData};
 

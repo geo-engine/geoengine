@@ -95,7 +95,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
                 err,
                 HttpResponse::PayloadTooLarge().json(ErrorResponse {
                     error: "Overflow".to_string(),
-                    message: format!("JSON payload has exceeded limit ({} bytes).", limit),
+                    message: format!("JSON payload has exceeded limit ({limit} bytes)."),
                 }),
             )
             .into(),
@@ -105,8 +105,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
                     HttpResponse::PayloadTooLarge().json(ErrorResponse {
                         error: "Overflow".to_string(),
                         message: format!(
-                            "JSON payload ({} bytes) is larger than allowed (limit: {} bytes).",
-                            length, limit
+                            "JSON payload ({length} bytes) is larger than allowed (limit: {limit} bytes)."
                         ),
                     }),
                 )
@@ -141,7 +140,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
         match err {
             QueryPayloadError::Deserialize(err) => ErrorResponse {
                 error: "UnableToParseQueryString".to_string(),
-                message: format!("Unable to parse query string: {}", err),
+                message: format!("Unable to parse query string: {err}"),
             }
             .into(),
             _ => {

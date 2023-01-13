@@ -23,7 +23,7 @@ fn image_buffer_to_png_bytes(
     DynamicImage::ImageRgba8(image_buffer)
         .write_to(&mut buffer, ImageFormat::Png)
         .map_err(|error| error::Error::Colorizer {
-            details: format!("encoding PNG failed: {}", error),
+            details: format!("encoding PNG failed: {error}"),
         })?;
     Ok(buffer.into_inner())
 }

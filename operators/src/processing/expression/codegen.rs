@@ -350,9 +350,8 @@ pub struct AstFunction {
 
 impl ToTokens for AstFunction {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let function = match FUNCTIONS.get(self.name.as_ref()) {
-            Some(f) => f,
-            None => return, // do nothing if, for some reason, the function doesn't exist
+        let Some(function) = FUNCTIONS.get(self.name.as_ref()) else {
+            return; // do nothing if, for some reason, the function doesn't exist
         };
 
         let prefixed_fn_name =

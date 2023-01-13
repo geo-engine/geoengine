@@ -131,7 +131,7 @@ where
         [Ok(start), Ok(end)] => geoengine_datatypes::primitives::TimeInterval::new(start, end)
             .map(Into::into)
             .map_err(D::Error::custom),
-        _ => Err(D::Error::custom(format!("Invalid time {}", s))),
+        _ => Err(D::Error::custom(format!("Invalid time {s}"))),
     }
 }
 
@@ -178,8 +178,7 @@ where
         }
         _ => {
             return Err(D::Error::custom(&format!(
-                "cannot parse bbox from string: {}",
-                s
+                "cannot parse bbox from string: {s}"
             )))
         }
     };
@@ -190,8 +189,7 @@ where
             Some(SpatialReference::from_str(&crs.replace("::", ":")).map_err(D::Error::custom)?)
         } else {
             return Err(D::Error::custom(&format!(
-                "cannot parse crs from string: {}",
-                crs_str
+                "cannot parse crs from string: {crs_str}"
             )));
         }
     } else {
@@ -201,14 +199,12 @@ where
     let split: Vec<Result<f64, std::num::ParseFloatError>> =
         bbox_str.split(',').map(str::parse).collect();
 
-    let bbox = if let [Ok(a), Ok(b), Ok(c), Ok(d)] = *split.as_slice() {
-        [a, b, c, d]
-    } else {
+    let [Ok(x1), Ok(y1), Ok(x2), Ok(y2)] = *split.as_slice() else {
         return Err(D::Error::custom("Invalid bbox"));
     };
 
     Ok(WcsBoundingbox {
-        bbox,
+        bbox: [x1, y1, x2, y2],
         spatial_reference,
     })
 }

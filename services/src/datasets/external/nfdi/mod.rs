@@ -336,7 +336,7 @@ impl NFDIDataProvider {
             }
         }
 
-        let link = format!("/vsicurl/{}", URL_REPLACEMENT);
+        let link = format!("/vsicurl/{URL_REPLACEMENT}");
 
         let column_spec = OgrSourceColumnSpec {
             format_specifics: None,
@@ -403,7 +403,7 @@ impl NFDIDataProvider {
         let part = GdalLoadingInfoTemporalSlice {
             time: info.time_interval,
             params: Some(GdalDatasetParameters {
-                file_path: PathBuf::from(format!("/vsicurl/{}", URL_REPLACEMENT)),
+                file_path: PathBuf::from(format!("/vsicurl/{URL_REPLACEMENT}")),
                 rasterband_channel: info.rasterband_channel,
                 geo_transform: info.geo_transform,
                 width: info.width,
@@ -1466,10 +1466,7 @@ mod tests {
         let initialized_op = src.initialize(&context).await.unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
-        let proc = match proc {
-            TypedVectorQueryProcessor::MultiPoint(qp) => qp,
-            _ => panic!("Expected MultiPoint QueryProcessor"),
-        };
+        let TypedVectorQueryProcessor::MultiPoint(proc) = proc else { panic!("Expected MultiPoint QueryProcessor"); };
 
         let ctx = MockQueryContext::test_default();
 
