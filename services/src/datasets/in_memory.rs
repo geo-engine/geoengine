@@ -416,6 +416,7 @@ impl LayerCollectionProvider for HashMapDatasetDb {
                     },
                     name: d.name.clone(),
                     description: d.description.clone(),
+                    properties: vec![],
                 })
             })
             .collect();

@@ -269,9 +269,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockExecutionContext;
-    use geoengine_datatypes::primitives::Measurement;
-    use geoengine_datatypes::raster::{MaskedGrid, RasterDataType};
+    use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
+    use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D, SpatialResolution};
+    use geoengine_datatypes::raster::{Grid, MaskedGrid, RasterDataType, RasterProperties};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         primitives::TimeInterval,
@@ -380,5 +380,117 @@ mod tests {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}
             _ => panic!("wrong raster type"),
         }
+    }
+
+    #[tokio::test]
+    async fn zero_length_intervals() {
+        let raster_source = MockRasterSource {
+            params: MockRasterSourceParams::<u8> {
+                data: vec![
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(1, 1),
+                        tile_position: [-1, 0].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(1, 1),
+                        tile_position: [-1, 1].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(2, 2),
+                        tile_position: [-1, 0].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![13, 14, 15, 16, 17, 18])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(2, 2),
+                        tile_position: [-1, 1].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![19, 20, 21, 22, 23, 24])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                    },
+                ],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                },
+            },
+        }
+        .boxed();
+
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+        );
+
+        let query_processor = raster_source
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let query_ctx = MockQueryContext::test_default();
+
+        // QUERY 1
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(1, 3),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
+
+        let result = result_stream.map(Result::unwrap).collect::<Vec<_>>().await;
+
+        assert_eq!(
+            result.iter().map(|tile| tile.time).collect::<Vec<_>>(),
+            [
+                TimeInterval::new_unchecked(1, 1),
+                TimeInterval::new_unchecked(1, 1),
+                TimeInterval::new_unchecked(2, 2),
+                TimeInterval::new_unchecked(2, 2),
+            ]
+        );
+
+        // QUERY 2
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(2, 3),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
+
+        let result = result_stream.map(Result::unwrap).collect::<Vec<_>>().await;
+
+        assert_eq!(
+            result.iter().map(|tile| tile.time).collect::<Vec<_>>(),
+            [
+                TimeInterval::new_unchecked(2, 2),
+                TimeInterval::new_unchecked(2, 2),
+            ]
+        );
     }
 }

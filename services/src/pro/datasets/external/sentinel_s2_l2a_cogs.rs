@@ -269,6 +269,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                     id: d.listing.id.clone(),
                     name: d.listing.name.clone(),
                     description: d.listing.description.clone(),
+                    properties: vec![],
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;

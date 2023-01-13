@@ -33,11 +33,11 @@ impl OperatorName for MeanRasterPixelValuesOverTime {
 pub struct MeanRasterPixelValuesOverTimeParams {
     /// Where should the x-axis (time) tick be positioned?
     /// At either time start, time end or in the center.
-    time_position: MeanRasterPixelValuesOverTimePosition,
+    pub time_position: MeanRasterPixelValuesOverTimePosition,
 
     /// Whether to fill the area under the curve.
     #[serde(default = "default_true")]
-    area: bool,
+    pub area: bool,
 }
 
 const fn default_true() -> bool {
