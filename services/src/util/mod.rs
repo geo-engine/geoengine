@@ -12,6 +12,7 @@ pub mod config;
 pub mod identifiers;
 pub mod operators;
 pub mod parsing;
+pub mod postgres;
 pub mod retry;
 pub mod server;
 pub mod tests;

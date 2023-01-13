@@ -1,5 +1,6 @@
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use reqwest::Url;
+use serde_json::json;
 use snafu::{ensure, ResultExt};
 
 use geoengine_datatypes::primitives::{
@@ -10,11 +11,11 @@ use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
 use utoipa::ToSchema;
 
 use crate::api::model::datatypes::{SpatialReference, SpatialReferenceOption, TimeInterval};
-use crate::error;
 use crate::error::Result;
+use crate::error::{self, Error};
 use crate::handlers::Context;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
-use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap};
+use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat};
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::server::{connection_closed, not_implemented_handler};
@@ -99,8 +100,6 @@ where
             //     </Request>
             //     <Exception>
             //       <Format>XML</Format>
-            //       <Format>INIMAGE</Format>
-            //       <Format>BLANK</Format>
             //     </Exception>
             //     <Layer queryable="1">
             //       <Name>b709b27b-dea5-5a27-a074-ae3366c49498</Name>
@@ -187,8 +186,7 @@ where
         </Request>
         <Exception>
             <Format>XML</Format>
-            <Format>INIMAGE</Format>
-            <Format>BLANK</Format>
+            <Format>JSON</Format>
         </Exception>
         <Layer queryable="1">
             <Name>{workflow}</Name>
@@ -247,97 +245,135 @@ async fn wms_map_handler<C: Context>(
     ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    let endpoint = workflow.into_inner();
-    let layer = WorkflowId::from_str(&request.layers)?;
+    async fn compute_result<C: Context>(
+        req: HttpRequest,
+        workflow: web::Path<WorkflowId>,
+        request: &web::Query<GetMap>,
+        ctx: web::Data<C>,
+        session: C::Session,
+    ) -> Result<Vec<u8>> {
+        let endpoint = workflow.into_inner();
+        let layer = WorkflowId::from_str(&request.layers)?;
 
-    ensure!(
-        endpoint == layer,
-        error::WMSEndpointLayerMissmatch { endpoint, layer }
-    );
-
-    // TODO: validate request further
-
-    let conn_closed = connection_closed(
-        &req,
-        config::get_config_element::<config::Wms>()?
-            .request_timeout_seconds
-            .map(Duration::from_secs),
-    );
-
-    let workflow = ctx
-        .workflow_registry_ref()
-        .load(&WorkflowId::from_str(&request.layers)?)
-        .await?;
-
-    let operator = workflow.operator.get_raster().context(error::Operator)?;
-
-    let execution_context = ctx.execution_context(session.clone())?;
-
-    let initialized = operator
-        .clone()
-        .initialize(&execution_context)
-        .await
-        .context(error::Operator)?;
-
-    // handle request and workflow crs matching
-    let workflow_spatial_ref: SpatialReferenceOption =
-        initialized.result_descriptor().spatial_reference().into();
-    let workflow_spatial_ref: Option<SpatialReference> = workflow_spatial_ref.into();
-    let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
-
-    // TODO: use a default spatial reference if it is not set?
-    let request_spatial_ref: SpatialReference =
-        request.crs.ok_or(error::Error::MissingSpatialReference)?;
-
-    // perform reprojection if necessary
-    let initialized = if request_spatial_ref == workflow_spatial_ref {
-        initialized
-    } else {
-        log::debug!(
-            "WMS query srs: {}, workflow srs: {} --> injecting reprojection",
-            request_spatial_ref,
-            workflow_spatial_ref
+        ensure!(
+            endpoint == layer,
+            error::WMSEndpointLayerMissmatch { endpoint, layer }
         );
-        let irp = InitializedRasterReprojection::try_new_with_input(
-            ReprojectionParams {
-                target_spatial_reference: request_spatial_ref.into(),
-            },
-            initialized,
-            execution_context.tiling_specification(),
-        )
-        .context(error::Operator)?;
 
-        Box::new(irp)
-    };
+        // TODO: validate request further
 
-    let processor = initialized.query_processor().context(error::Operator)?;
+        let conn_closed = connection_closed(
+            &req,
+            config::get_config_element::<config::Wms>()?
+                .request_timeout_seconds
+                .map(Duration::from_secs),
+        );
 
-    let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
-    let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
-    let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
+        let workflow = ctx
+            .workflow_registry_ref()
+            .load(&WorkflowId::from_str(&request.layers)?)
+            .await?;
 
-    let query_rect = RasterQueryRectangle {
-        spatial_bounds: query_bbox,
-        time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
-        spatial_resolution: SpatialResolution::new_unchecked(
-            x_query_resolution,
-            y_query_resolution,
+        let operator = workflow.operator.get_raster().context(error::Operator)?;
+
+        let execution_context = ctx.execution_context(session.clone())?;
+
+        let initialized = operator
+            .clone()
+            .initialize(&execution_context)
+            .await
+            .context(error::Operator)?;
+
+        // handle request and workflow crs matching
+        let workflow_spatial_ref: SpatialReferenceOption =
+            initialized.result_descriptor().spatial_reference().into();
+        let workflow_spatial_ref: Option<SpatialReference> = workflow_spatial_ref.into();
+        let workflow_spatial_ref =
+            workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
+
+        // TODO: use a default spatial reference if it is not set?
+        let request_spatial_ref: SpatialReference =
+            request.crs.ok_or(error::Error::MissingSpatialReference)?;
+
+        // perform reprojection if necessary
+        let initialized = if request_spatial_ref == workflow_spatial_ref {
+            initialized
+        } else {
+            log::debug!(
+                "WMS query srs: {}, workflow srs: {} --> injecting reprojection",
+                request_spatial_ref,
+                workflow_spatial_ref
+            );
+            let irp = InitializedRasterReprojection::try_new_with_input(
+                ReprojectionParams {
+                    target_spatial_reference: request_spatial_ref.into(),
+                },
+                initialized,
+                execution_context.tiling_specification(),
+            )
+            .context(error::Operator)?;
+
+            Box::new(irp)
+        };
+
+        let processor = initialized.query_processor().context(error::Operator)?;
+
+        let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
+        let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
+        let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: query_bbox,
+            time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
+            spatial_resolution: SpatialResolution::new_unchecked(
+                x_query_resolution,
+                y_query_resolution,
+            ),
+        };
+
+        let query_ctx = ctx.query_context(session)?;
+
+        let colorizer = colorizer_from_style(&request.styles)?;
+
+        call_on_generic_raster_processor!(
+            processor,
+            p =>
+                raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), colorizer, conn_closed).await
+        ).map_err(error::Error::from)
+    }
+
+    match compute_result(req, workflow, &request, ctx, session).await {
+        Ok(image_bytes) => Ok(HttpResponse::Ok()
+            .content_type(mime::IMAGE_PNG)
+            .body(image_bytes)),
+        Err(error) => Ok(handle_wms_error(request.exceptions, &error)),
+    }
+}
+
+fn handle_wms_error(
+    exception_format: Option<GetMapExceptionFormat>,
+    error: &Error,
+) -> HttpResponse {
+    let exception_format = exception_format.unwrap_or(GetMapExceptionFormat::Xml);
+
+    match exception_format {
+        GetMapExceptionFormat::Xml => {
+            let body = format!(
+                r#"
+<?xml version="1.0" encoding="UTF-8"?>
+    <ServiceExceptionReport version="1.3.0" xmlns="http://www.opengis.net/ogc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/ogc https://cdc.dwd.de/geoserver/schemas/wms/1.3.0/exceptions_1_3_0.xsd">
+    <ServiceException>
+        {error}
+    </ServiceException>
+</ServiceExceptionReport>"#
+            );
+
+            HttpResponse::Ok().content_type(mime::TEXT_XML).body(body)
+        }
+        GetMapExceptionFormat::Json => HttpResponse::Ok().json(
+            json!({"error": Into::<&str>::into(error).to_string(), "message": error.to_string() }),
         ),
-    };
-
-    let query_ctx = ctx.query_context(session)?;
-
-    let colorizer = colorizer_from_style(&request.styles)?;
-
-    let image_bytes = call_on_generic_raster_processor!(
-        processor,
-        p =>
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), colorizer, conn_closed).await
-    ).map_err(error::Error::from)?;
-
-    Ok(HttpResponse::Ok()
-        .content_type(mime::IMAGE_PNG)
-        .body(image_bytes))
+    }
 }
 
 pub struct MapResponse {}
@@ -416,7 +452,8 @@ mod tests {
     };
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
-        check_allowed_http_methods, register_ndvi_workflow_helper, send_test_request,
+        check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
+        send_test_request,
     };
     use actix_web::dev::ServiceResponse;
     use actix_web::http::header;
@@ -781,5 +818,116 @@ mod tests {
         let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn default_error() {
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::white()).try_into().unwrap(),
+                (255.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::pink(),
+        )
+        .unwrap();
+
+        let params = &[
+            ("request", "GetMap"),
+            ("service", "WMS"),
+            ("version", "1.3.0"),
+            ("layers", &id.to_string()),
+            (
+                "bbox",
+                "1.95556640625,0.90087890625,1.9775390625,0.9228515625",
+            ),
+            ("width", "256"),
+            ("height", "256"),
+            ("crs", "EPSG:432"),
+            (
+                "styles",
+                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+            ),
+            ("format", "image/png"),
+            ("time", "2014-04-01T12:00:00.0Z"),
+        ];
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/wms/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
+
+        assert_eq!(res.status(), 200);
+        let body = read_body_string(res).await;
+
+        assert_eq!(
+            body,
+            r#"
+<?xml version="1.0" encoding="UTF-8"?>
+    <ServiceExceptionReport version="1.3.0" xmlns="http://www.opengis.net/ogc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/ogc https://cdc.dwd.de/geoserver/schemas/wms/1.3.0/exceptions_1_3_0.xsd">
+    <ServiceException>
+        Operator: DataTypeError: No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }
+    </ServiceException>
+</ServiceExceptionReport>"#
+        );
+    }
+
+    #[tokio::test]
+    async fn json_error() {
+        let ctx = InMemoryContext::test_default();
+        let session_id = ctx.default_session_ref().await.id();
+
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::white()).try_into().unwrap(),
+                (255.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::pink(),
+        )
+        .unwrap();
+
+        let params = &[
+            ("request", "GetMap"),
+            ("service", "WMS"),
+            ("version", "1.3.0"),
+            ("layers", &id.to_string()),
+            (
+                "bbox",
+                "1.95556640625,0.90087890625,1.9775390625,0.9228515625",
+            ),
+            ("width", "256"),
+            ("height", "256"),
+            ("crs", "EPSG:432"),
+            (
+                "styles",
+                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+            ),
+            ("format", "image/png"),
+            ("time", "2014-04-01T12:00:00.0Z"),
+            ("EXCEPTIONS", "application/json"),
+        ];
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/wms/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
+
+        ErrorResponse::assert(res, 200, "Operator", "Operator: DataTypeError: No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
     }
 }
