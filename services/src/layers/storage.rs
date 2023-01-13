@@ -518,6 +518,7 @@ impl LayerCollectionProvider for HashMapLayerDb {
                     },
                     name: layer.name.clone(),
                     description: layer.description.clone(),
+                    properties: vec![],
                 })
             });
 
@@ -724,6 +725,7 @@ mod tests {
                         },
                         name: "layer".to_string(),
                         description: "description".to_string(),
+                        properties: vec![],
                     })
                 ],
                 entry_label: None,
@@ -820,6 +822,7 @@ mod tests {
                         },
                         name: "layer".to_string(),
                         description: "description".to_string(),
+                        properties: vec![],
                     })
                 ],
                 entry_label: None,
@@ -859,6 +862,7 @@ mod tests {
                     },
                     name: "layer".to_string(),
                     description: "description".to_string(),
+                    properties: vec![],
                 })],
                 entry_label: None,
                 properties: vec![],

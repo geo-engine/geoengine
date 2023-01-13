@@ -2201,6 +2201,7 @@ mod tests {
                             },
                             name: "Layer1".to_string(),
                             description: "Layer 1".to_string(),
+                            properties: vec![],
                         })
                     ],
                     entry_label: None,
@@ -2246,6 +2247,7 @@ mod tests {
                             },
                             name: "Layer2".to_string(),
                             description: "Layer 2".to_string(),
+                            properties: vec![],
                         })
                     ],
                     entry_label: None,
@@ -2396,6 +2398,7 @@ mod tests {
                             },
                             name: "layer".to_string(),
                             description: "description".to_string(),
+                            properties: vec![],
                         })
                     ],
                     entry_label: None,
@@ -2435,6 +2438,7 @@ mod tests {
                         },
                         name: "layer".to_string(),
                         description: "description".to_string(),
+                        properties: vec![],
                     })],
                     entry_label: None,
                     properties: vec![],
