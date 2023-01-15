@@ -47,7 +47,7 @@ where
 
 impl QueryRectangle<SpatialGridQueryRectangle> {
     /// Creates a new `QueryRectangle` that describes the requested grid.
-    /// The spatial query is defined by a SpatialGridQueryRectangle, which is derived from a `SpatialPartition2D`, a `SpatialResolution` and a origin `Coordinate2D`.
+    /// The spatial query is defined by a `SpatialGridQueryRectangle`, which is derived from a `SpatialPartition2D`, a `SpatialResolution` and a origin `Coordinate2D`.
     /// The temporal query is defined by a `TimeInterval`.
     /// NOTE: If the distance between the upper left of the spatial partition and the origin coordinate is not at a multiple of the spatial resolution, the grid bounds will be shifted.
     pub fn with_partition_and_resolution_and_origin(
