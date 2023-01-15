@@ -11,7 +11,7 @@ use futures::{
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialPartitioned, SpatialQuery,
+    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialQuery,
 };
 use geoengine_datatypes::raster::{
     EmptyGrid2D, GridBoundingBox2D, GridBounds, GridStep, TilingStrategy,
@@ -530,18 +530,11 @@ where
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
     ) -> Result<Option<RasterQueryRectangle>> {
-        // FIXME: here we should use the pixel coordinates directly. For that we need a global grid bound the tile info?
-        Ok(Some(
-            RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                tile_info.spatial_partition(),
-                query_rect
-                    .spatial_query()
-                    .geo_transform
-                    .spatial_resolution(),
-                query_rect.spatial_query().geo_transform.origin_coordinate,
-                TimeInterval::new_instant(start_time)?,
-            ),
-        ))
+        Ok(Some(RasterQueryRectangle::with_grid_bounds_and_resolution(
+            tile_info.global_pixel_bounds(),
+            query_rect.spatial_query().geo_transform,
+            TimeInterval::new_instant(start_time)?,
+        )))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {

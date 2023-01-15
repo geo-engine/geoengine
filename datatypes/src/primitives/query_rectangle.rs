@@ -100,6 +100,17 @@ impl QueryRectangle<SpatialGridQueryRectangle> {
         )
     }
 
+    pub fn with_grid_bounds_and_resolution(
+        grid_bounds: GridBoundingBox2D,
+        geo_transform: GeoTransform,
+        time_interval: TimeInterval,
+    ) -> Self {
+        Self::new(
+            SpatialGridQueryRectangle::new(geo_transform, grid_bounds),
+            time_interval,
+        )
+    }
+
     /// Creates a new `QueryRectangle` with a spatial grid query defined by a `SpatialGridQueryRectangle` and a temporal query defined by a `TimeInterval`.
     pub fn new(spatial_bounds: SpatialGridQueryRectangle, time_interval: TimeInterval) -> Self {
         Self {
