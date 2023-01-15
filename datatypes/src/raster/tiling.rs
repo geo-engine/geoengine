@@ -111,6 +111,12 @@ impl TilingStrategy {
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
+    /// Returns the tile grid bounds for the given `raster_spatial_query`.
+    /// The query must match the tiling strategy's geo transform for now.
+    ///
+    /// # Panics
+    /// If the query's geo transform does not match the tiling strategy's geo transform.
+    ///
     pub fn raster_spatial_query_to_tling_grid_box(
         &self,
         raster_spatial_query: &RasterSpatialQueryRectangle,

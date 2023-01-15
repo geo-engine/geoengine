@@ -2272,19 +2272,19 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new(
+                PlotQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new(
                         (46.478_278_849, 40.584_655_660_000_1).into(),
                         (87.323_796_021_000_1, 55.434_550_273).into(),
                     )
                     .unwrap(),
-                    time_interval: TimeInterval::new(
+                    TimeInterval::new(
                         DateTime::new_utc(1900, 4, 1, 0, 0, 0),
                         DateTime::new_utc_with_millis(2055, 4, 1, 0, 0, 0, 1),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
-                },
+                    SpatialResolution::new_unchecked(0.1, 0.1),
+                ),
                 &query_context,
             )
             .await

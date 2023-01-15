@@ -192,6 +192,13 @@ where
         }
     }
 
+    /// Creates a new `SparseTilesFillAdapter` that fills the gaps of the input stream with empty tiles.
+    /// The input stream must be sorted by `GridIdx` and `TimeInterval`.
+    /// The adaper will fill the gaps within the `query_rect_to_answer` with empty tiles.
+    ///
+    /// # Panics
+    /// If the `query_rect_to_answer` has a different `origin_coordinate` than the `tiling_spec`.
+    ///
     pub fn new_like_subquery(
         stream: S,
         query_rect_to_answer: RasterQueryRectangle,
