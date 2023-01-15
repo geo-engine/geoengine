@@ -378,7 +378,9 @@ mod tests {
     };
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_operators::engine::{MetaData, MetaDataProvider, RasterOperator};
+    use geoengine_operators::engine::{
+        ExecutionContext, MetaData, MetaDataProvider, RasterOperator,
+    };
     use serial_test::serial;
     use std::io::Write;
     use std::io::{Cursor, Read};
@@ -489,12 +491,9 @@ mod tests {
 
         // test if the meta data is correct
         let dataset_id = dataset_response.dataset;
+        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
-            ctx.execution_context(session.clone())
-                .unwrap()
-                .meta_data(&dataset_id.into())
-                .await
-                .unwrap();
+            exe_ctx.meta_data(&dataset_id.into()).await.unwrap();
 
         let result_descriptor = meta.result_descriptor().await.unwrap();
         assert_eq!(
@@ -510,14 +509,12 @@ mod tests {
             }
         );
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (0.0, 0.0).into(),
-                (200.0, -200.0).into(),
-            ),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::new_unchecked(1., 1.),
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0.0, 0.0).into(), (200.0, -200.0).into()),
+            SpatialResolution::new_unchecked(1., 1.),
+            exe_ctx.tiling_specification().origin_coordinate,
+            TimeInterval::default(),
+        );
 
         let mut loading_info = meta.loading_info(query).await.unwrap();
 

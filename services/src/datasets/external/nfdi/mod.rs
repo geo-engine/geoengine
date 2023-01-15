@@ -1471,11 +1471,11 @@ mod tests {
 
         let ctx = MockQueryContext::test_default();
 
-        let qr = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let qr = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::zero_point_one(),
+        );
 
         let result: Vec<MultiPointCollection> = proc
             .query(qr, &ctx)

@@ -448,11 +448,11 @@ mod tests {
             panic!("Expected Data QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::zero_point_one(),
+        );
         let ctx = MockQueryContext::test_default();
 
         let result = proc.query(query_rectangle, &ctx).await;
@@ -504,11 +504,11 @@ mod tests {
             panic!("Expected MultiPoint QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::zero_point_one(),
+        );
         let ctx = MockQueryContext::test_default();
 
         let result: Vec<MultiPointCollection> = proc
@@ -571,11 +571,11 @@ mod tests {
             panic!("Expected MultiPolygon QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::zero_point_one(),
+        );
         let ctx = MockQueryContext::test_default();
 
         let result: Vec<MultiPolygonCollection> = proc
@@ -633,11 +633,11 @@ mod tests {
             panic!("Expected MultiPoint QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::zero_point_one(),
+        );
         let ctx = MockQueryContext::test_default();
 
         let result: Vec<MultiPointCollection> = proc

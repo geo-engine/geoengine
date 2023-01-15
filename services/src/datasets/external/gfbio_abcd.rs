@@ -672,14 +672,11 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new_unchecked(
-                        (-180., -90.).into(),
-                        (180., 90.).into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                })
+                .loading_info(VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                    TimeInterval::default(),
+                    SpatialResolution::zero_point_one(),
+                ))
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -809,11 +806,11 @@ mod tests {
 
             let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta, vec![]);
 
-            let query_rectangle = VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            };
+            let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+                BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
+                TimeInterval::default(),
+                SpatialResolution::zero_point_one(),
+            );
             let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor
