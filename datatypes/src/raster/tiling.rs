@@ -1,3 +1,6 @@
+use super::{
+    GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
+};
 use crate::{
     primitives::{
         AxisAlignedRectangle, Coordinate2D, RasterSpatialQueryRectangle, SpatialPartition2D,
@@ -6,11 +9,6 @@ use crate::{
     raster::GridBounds,
     util::test::TestDefault,
 };
-
-use super::{
-    GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
-};
-
 use serde::{Deserialize, Serialize};
 
 /// The static parameters of a `TilingStrategy`
@@ -91,14 +89,25 @@ impl TilingStrategy {
     pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
         let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
         let [y_tile_size, x_tile_size] = self.tile_size_in_pixels.into_inner();
-        let y_tile_idx = (y_pixel_idx as f64 / y_tile_size as f64).floor() as isize;
-        let x_tile_idx = (x_pixel_idx as f64 / x_tile_size as f64).floor() as isize;
+        //let y_tile_idx = (y_pixel_idx as f64 / y_tile_size as f64).floor() as isize;
+        //let x_tile_idx = (x_pixel_idx as f64 / x_tile_size as f64).floor() as isize;
+        let y_tile_idx = num::integer::div_floor(y_pixel_idx, y_tile_size as isize);
+        let x_tile_idx = num::integer::div_floor(x_pixel_idx, x_tile_size as isize);
         [y_tile_idx, x_tile_idx].into()
     }
 
     pub fn tile_grid_box(&self, partition: SpatialPartition2D) -> GridBoundingBox2D {
         let start = self.pixel_idx_to_tile_idx(self.geo_transform.upper_left_pixel_idx(&partition));
         let end = self.pixel_idx_to_tile_idx(self.geo_transform.lower_right_pixel_idx(&partition));
+        GridBoundingBox2D::new_unchecked(start, end)
+    }
+
+    pub fn global_pixel_grid_bounds_to_tile_grid_bounds(
+        &self,
+        global_pixel_grid_bounds: GridBoundingBox2D,
+    ) -> GridBoundingBox2D {
+        let start = self.pixel_idx_to_tile_idx(global_pixel_grid_bounds.min_index());
+        let end = self.pixel_idx_to_tile_idx(global_pixel_grid_bounds.max_index());
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
@@ -112,11 +121,38 @@ impl TilingStrategy {
             "The query geotransform must match the tiling strategy's geo transform for now."
         );
 
-        let start = self.pixel_idx_to_tile_idx(raster_spatial_query.grid_bounds.min_index());
-        let end = self.pixel_idx_to_tile_idx(raster_spatial_query.grid_bounds.max_index());
-        GridBoundingBox2D::new_unchecked(start, end)
+        self.global_pixel_grid_bounds_to_tile_grid_bounds(raster_spatial_query.grid_bounds)
     }
 
+    /// Returns an iterator over all tile indices that intersect with the given `grid_bounds`.
+    pub fn tile_idx_iterator_from_grid_bounds(
+        &self,
+        grid_bounds: GridBoundingBox2D,
+    ) -> impl Iterator<Item = GridIdx2D> {
+        let GridIdx([upper_left_tile_y, upper_left_tile_x]) =
+            self.pixel_idx_to_tile_idx(grid_bounds.min_index());
+        let GridIdx([lower_right_tile_y, lower_right_tile_x]) =
+            self.pixel_idx_to_tile_idx(grid_bounds.max_index());
+
+        let y_range = upper_left_tile_y..=lower_right_tile_y;
+        let x_range = upper_left_tile_x..=lower_right_tile_x;
+
+        y_range.flat_map(move |y| x_range.clone().map(move |x| [y, x].into()))
+    }
+
+    /// generates the tile information for the tiles intersecting the bounding box
+    /// the iterator moves once along the x-axis and then increases the y-axis
+    pub fn tile_information_iterator_from_grid_bounds(
+        &self,
+        grid_bounds: GridBoundingBox2D,
+    ) -> impl Iterator<Item = TileInformation> {
+        let tile_pixel_size = self.tile_size_in_pixels;
+        let geo_transform = self.geo_transform;
+        self.tile_idx_iterator_from_grid_bounds(grid_bounds)
+            .map(move |idx| TileInformation::new(idx, tile_pixel_size, geo_transform))
+    }
+
+    #[deprecated = "use tile_idx_iterator_from_grid_bounds instead"]
     /// generates the tile idx in \[z,y,x\] order for the tiles intersecting the bounding box
     /// the iterator moves once along the x-axis and then increases the y-axis
     pub fn tile_idx_iterator(
@@ -133,18 +169,6 @@ impl TilingStrategy {
         let x_range = upper_left_tile_x..=lower_right_tile_x;
 
         y_range.flat_map(move |y_tile| x_range.clone().map(move |x_tile| [y_tile, x_tile].into()))
-    }
-
-    /// generates the tile information for the tiles intersecting the bounding box
-    /// the iterator moves once along the x-axis and then increases the y-axis
-    pub fn tile_information_iterator(
-        &self,
-        partition: SpatialPartition2D,
-    ) -> impl Iterator<Item = TileInformation> {
-        let tile_pixel_size = self.tile_size_in_pixels;
-        let geo_transform = self.geo_transform;
-        self.tile_idx_iterator(partition)
-            .map(move |idx| TileInformation::new(idx, tile_pixel_size, geo_transform))
     }
 }
 
@@ -221,6 +245,13 @@ impl TileInformation {
         self.global_upper_left_pixel_idx() + self.local_lower_left_pixel_idx()
     }
 
+    pub fn global_pixel_bounds(&self) -> GridBoundingBox2D {
+        GridBoundingBox2D::new_unchecked(
+            self.global_upper_left_pixel_idx(),
+            self.global_lower_right_pixel_idx(),
+        )
+    }
+
     pub fn tile_size_in_pixels(&self) -> GridShape2D {
         self.tile_size_in_pixels
     }
@@ -257,33 +288,43 @@ impl SpatialPartitioned for TileInformation {
 #[cfg(test)]
 mod tests {
 
+    use crate::raster::GridIntersection;
+
     use super::*;
 
     #[test]
     fn it_generates_only_intersected_tiles() {
+        let origin_coordinate = (0., 0.).into();
+
+        let geo_transform = GeoTransform::new(
+            origin_coordinate,
+            2.095_475_792_884_826_7E-8,
+            -2.095_475_792_884_826_7E-8,
+        );
+
         let strat = TilingStrategy {
             tile_size_in_pixels: [600, 600].into(),
-            geo_transform: GeoTransform::new(
-                (0., 0.).into(),
-                2.095_475_792_884_826_7E-8,
-                -2.095_475_792_884_826_7E-8,
-            ),
+            geo_transform,
         };
 
-        let partition = SpatialPartition2D::new(
-            (12.477_738_261_222_84, 43.881_293_535_232_544).into(),
-            (12.477_743_625_640_87, 43.881_288_170_814_514).into(),
-        )
-        .unwrap();
+        let ul_idx = strat
+            .geo_transform
+            .coordinate_to_grid_idx_2d((12.477_738_261_222_84, 43.881_293_535_232_544).into());
+
+        let lr_idx = strat
+            .geo_transform
+            .coordinate_to_grid_idx_2d((12.477_743_625_640_87, 43.881_288_170_814_514).into());
+
+        let grid_bounds = GridBoundingBox2D::new_unchecked(ul_idx, lr_idx);
 
         let tiles = strat
-            .tile_information_iterator(partition)
+            .tile_information_iterator_from_grid_bounds(grid_bounds)
             .collect::<Vec<_>>();
 
         assert_eq!(tiles.len(), 2);
 
         for tile in tiles {
-            assert!(partition.intersects(&tile.spatial_partition()));
+            assert!(grid_bounds.intersects(&tile.global_pixel_bounds()));
         }
     }
 }

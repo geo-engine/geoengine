@@ -9,6 +9,7 @@ use super::{
 };
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
+/// A bounding box for a grid where the min and max values are inclusive
 pub struct GridBoundingBox<A>
 where
     A: AsRef<[isize]>,

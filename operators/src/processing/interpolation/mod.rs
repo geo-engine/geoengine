@@ -359,7 +359,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
 
         // TODO: use tile grid bounds not the spatial bounds
         let origin_coordinate = tiling
-            .tile_information_iterator(query_rect.spatial_query().spatial_partition())
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds)
             .next()
             .expect("a query contains at least one tile")
             .spatial_partition()

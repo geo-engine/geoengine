@@ -543,7 +543,8 @@ impl GdalRasterLoader {
         tiling_strategy: TilingStrategy,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> {
         stream::iter(
-            tiling_strategy.tile_information_iterator(query.spatial_bounds.spatial_partition()),
+            tiling_strategy
+                .tile_information_iterator_from_grid_bounds(query.spatial_bounds.grid_bounds),
         )
         .map(move |tile| GdalRasterLoader::load_tile_async(info.params.clone(), tile, info.time))
     }
@@ -603,7 +604,7 @@ where
 
         let tiling_strategy = TilingStrategy::new(
             self.tiling_specification.tile_size_in_pixels,
-            query.spatial_query().geo_transform,
+            query_geo_transform,
         );
 
         // A `GeoTransform` maps pixel space to world space.
@@ -1270,7 +1271,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+        let grid_bounds = GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size_in_pixels: tile_size_in_pixels.into(),
@@ -1278,7 +1279,7 @@ mod tests {
         };
 
         let vres: Vec<GridIdx2D> = origin_split_tileing_strategy
-            .tile_idx_iterator(partition)
+            .tile_idx_iterator_from_grid_bounds(grid_bounds)
             .collect();
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(vres[0], [-2, -3].into());
@@ -1300,7 +1301,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+        let grid_bounds = GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size_in_pixels: tile_size_in_pixels.into(),
@@ -1308,7 +1309,7 @@ mod tests {
         };
 
         let vres: Vec<TileInformation> = origin_split_tileing_strategy
-            .tile_information_iterator(partition)
+            .tile_information_iterator_from_grid_bounds(grid_bounds)
             .collect();
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(

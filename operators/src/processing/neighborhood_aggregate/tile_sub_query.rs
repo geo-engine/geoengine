@@ -344,7 +344,9 @@ mod tests {
         },
     };
     use geoengine_datatypes::{
-        primitives::SpatialResolution, raster::TilingStrategy, util::test::TestDefault,
+        primitives::SpatialResolution,
+        raster::{GridBoundingBox2D, TilingStrategy},
+        util::test::TestDefault,
     };
 
     #[test]
@@ -359,9 +361,9 @@ mod tests {
             -spatial_resolution.y,
         );
 
-        let spatial_partition = SpatialPartition2D::new((0., 1.).into(), (1., 0.).into()).unwrap();
+        let grid_bounds = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
         let tile_info = tiling_strategy
-            .tile_information_iterator(spatial_partition)
+            .tile_information_iterator_from_grid_bounds(grid_bounds)
             .next()
             .unwrap();
 

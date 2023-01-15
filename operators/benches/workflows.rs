@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use futures::TryStreamExt;
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::primitives::{
-    Coordinate2D, Measurement, RasterQueryRectangle, SpatialPartitioned, SpatialQuery,
+    Coordinate2D, Measurement, RasterQueryRectangle, SpatialQuery,
 };
 use geoengine_datatypes::raster::{Grid2D, RasterDataType, TilingStrategy};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -291,7 +291,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
             query_rect.spatial_query().geo_transform,
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator(query_rect.spatial_query().spatial_partition());
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
 
         let mock_data = tile_iter
             .enumerate()
@@ -371,7 +371,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
             query_rect.spatial_query().geo_transform,
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator(query_rect.spatial_query().spatial_partition());
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
 
         let mock_data = tile_iter
             .enumerate()
@@ -464,7 +464,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
             query_rect.spatial_query().geo_transform,
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator(query_rect.spatial_query().spatial_partition());
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
         let mock_data = tile_iter
             .enumerate()
             .map(|(id, tile_info)| {
@@ -551,7 +551,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
         );
 
         let tile_iter = tileing_strategy
-            .tile_information_iterator(query_rect.spatial_query().spatial_partition());
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
         let mock_data = tile_iter
             .enumerate()
             .map(|(id, tile_info)| {
