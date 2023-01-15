@@ -312,8 +312,8 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
                 x_pixel_size: query_rect.spatial_query().geo_transform.x_pixel_size(),
                 y_pixel_size: query_rect.spatial_query().geo_transform.y_pixel_size(),
             },
-            width: width as usize,
-            height: height as usize,
+            width,
+            height,
             file_not_found_handling: FileNotFoundHandling::Error,
             no_data_value: None, // `None` will let the GdalSource detect the correct no-data value.
             properties_mapping: None, // TODO: add properties

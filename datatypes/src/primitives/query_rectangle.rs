@@ -84,7 +84,7 @@ impl QueryRectangle<SpatialGridQueryRectangle> {
     }
 
     /// Creates a new `QueryRectangle` that describes the requested grid.
-    /// The spatial query is defined by a SpatialGridQueryRectangle, which is derived from a `SpatialPartition2D` and a `SpatialResolution`.
+    /// The spatial query is defined by a `SpatialGridQueryRectangle`, which is derived from a `SpatialPartition2D` and a `SpatialResolution`.
     /// The temporal query is defined by a `TimeInterval`.
     pub fn with_partition_and_resolution(
         spatial_partition: SpatialPartition2D,

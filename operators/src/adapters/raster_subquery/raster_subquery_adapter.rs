@@ -163,7 +163,7 @@ where
     where
         Self: Stream<Item = Result<Option<RasterTile2D<PixelType>>>> + 'a,
     {
-        let grid_bounds = self.grid_bounds.clone();
+        let grid_bounds = self.grid_bounds;
         let global_geo_transform = self.current_tile_spec.global_geo_transform;
         let tile_shape = self.current_tile_spec.tile_size_in_pixels;
 
