@@ -70,10 +70,12 @@ impl SpatialPartition2D {
     /// Create a partition from a bbox by snapping to the next pixel
     /// The resulting partition is not equivalent to the bbox but contains it
     pub fn with_bbox_and_resolution(bbox: BoundingBox2D, resolution: SpatialResolution) -> Self {
+        const EPSILON: f64 = 0.000_001;
+
         let lr = bbox.lower_right();
 
         // add an epsilon to the lower right coordinate to make sure that all pixels are included
-        const EPSILON: f64 = 0.000_001;
+
         let epsilon_x = resolution.x * EPSILON;
         let epsilon_y = resolution.y * EPSILON;
 
