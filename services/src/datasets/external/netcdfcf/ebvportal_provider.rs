@@ -174,13 +174,13 @@ impl TryFrom<EbvCollectionId> for LayerCollectionId {
     fn try_from(id: EbvCollectionId) -> Result<Self> {
         let s = match id {
             EbvCollectionId::Classes => "classes".to_string(),
-            EbvCollectionId::Class { class } => format!("classes/{}", class),
-            EbvCollectionId::Ebv { class, ebv } => format!("classes/{}/{}", class, ebv),
+            EbvCollectionId::Class { class } => format!("classes/{class}"),
+            EbvCollectionId::Ebv { class, ebv } => format!("classes/{class}/{ebv}"),
             EbvCollectionId::Dataset {
                 class,
                 ebv,
                 dataset,
-            } => format!("classes/{}/{}/{}", class, ebv, dataset),
+            } => format!("classes/{class}/{ebv}/{dataset}"),
             EbvCollectionId::Group {
                 class,
                 ebv,
@@ -481,6 +481,7 @@ impl EbvPortalDataProvider {
                         },
                         name: entity.name,
                         description: String::new(),
+                        properties: vec![],
                     }))
                 })
                 .collect::<Result<Vec<CollectionItem>>>()?
@@ -1551,6 +1552,7 @@ mod tests {
                         },
                         name: "entity01".to_string(),
                         description: String::new(),
+                        properties: vec![],
                     }), CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
@@ -1558,6 +1560,7 @@ mod tests {
                         },
                         name: "entity02".to_string(),
                         description: String::new(),
+                        properties: vec![],
                     }), CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
@@ -1565,6 +1568,7 @@ mod tests {
                         },
                         name: "entity03".to_string(),
                         description: String::new(),
+                        properties: vec![],
                     })],
                 entry_label: Some("Entity".to_string()),
                 properties: vec![],

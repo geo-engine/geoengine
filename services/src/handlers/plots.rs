@@ -172,14 +172,11 @@ async fn get_plot_handler<C: Context>(
             .context(error::Operator)?
     };
 
-    let query_rect = match query_rect {
-        Some(query_rect) => query_rect,
-        None => {
-            return Err(error::Error::UnresolvableQueryBoundingBox2DInSrs {
-                query_bbox: params.bbox.into(),
-                query_srs: workflow_spatial_ref.into(),
-            })
-        }
+    let Some(query_rect) = query_rect else {
+        return Err(error::Error::UnresolvableQueryBoundingBox2DInSrs {
+            query_bbox: params.bbox.into(),
+            query_srs: workflow_spatial_ref.into(),
+        });
     };
 
     let processor = initialized.query_processor().context(error::Operator)?;
@@ -202,7 +199,7 @@ async fn get_plot_handler<C: Context>(
             let chart = abortable_query_execution(chart, conn_closed, query_abort_trigger).await;
             let chart = chart.context(error::Operator)?;
 
-            serde_json::to_value(&chart).context(error::SerdeJson)?
+            serde_json::to_value(chart).context(error::SerdeJson)?
         }
         TypedPlotQueryProcessor::ImagePng(processor) => {
             let png_bytes = processor.plot_query(query_rect, &query_ctx);
@@ -212,7 +209,7 @@ async fn get_plot_handler<C: Context>(
 
             let data_uri = format!("data:image/png;base64,{}", base64::encode(png_bytes));
 
-            serde_json::to_value(&data_uri).context(error::SerdeJson)?
+            serde_json::to_value(data_uri).context(error::SerdeJson)?
         }
     };
 

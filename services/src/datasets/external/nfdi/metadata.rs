@@ -32,7 +32,7 @@ impl Display for DataType {
             Self::SingleVectorFile(_) => "SingleVectorFile",
             Self::SingleRasterFile(_) => "SingleRasterFile",
         };
-        write!(f, "{}", name)
+        write!(f, "{name}")
     }
 }
 

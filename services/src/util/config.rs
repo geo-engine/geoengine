@@ -1,9 +1,10 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
 use crate::contexts::SessionId;
+use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
 
@@ -376,6 +377,15 @@ impl ConfigElement for Session {
     const KEY: &'static str = "session";
 }
 
+#[derive(Debug, Deserialize)]
+pub struct MachineLearning {
+    pub model_defs_path: PathBuf,
+}
+
+impl ConfigElement for MachineLearning {
+    const KEY: &'static str = "machinelearning";
+}
+
 #[cfg(feature = "nfdi")]
 #[derive(Debug, Deserialize)]
 pub struct GFBio {
@@ -387,4 +397,13 @@ pub struct GFBio {
 #[cfg(feature = "nfdi")]
 impl ConfigElement for GFBio {
     const KEY: &'static str = "gfbio";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Data {
+    pub volumes: HashMap<VolumeName, PathBuf>,
+}
+
+impl ConfigElement for Data {
+    const KEY: &'static str = "data";
 }

@@ -285,11 +285,7 @@ impl Colorizer {
     /// Creates a color table of `number_of_colors` colors
     /// This must only be called for colorizers that use breakpoints
     fn color_table(&self, number_of_colors: usize, min: f64, max: f64) -> Vec<RgbaColor> {
-        let breakpoints = match self {
-            Self::LinearGradient { breakpoints, .. }
-            | Self::LogarithmicGradient { breakpoints, .. } => breakpoints,
-
-            _ => {
+        let (Self::LinearGradient {breakpoints, .. } | Self::LogarithmicGradient { breakpoints, .. }) = self else {
                 // return empty color table for potential wrong usage
 
                 debug_assert!(
@@ -298,7 +294,6 @@ impl Colorizer {
                 );
 
                 return Vec::new();
-            }
         };
 
         let smallest_breakpoint_value = *breakpoints[0].value;

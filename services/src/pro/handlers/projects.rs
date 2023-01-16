@@ -10,7 +10,6 @@ use actix_web::{web, HttpResponse, Responder};
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
-    C::ProjectDB: ProProjectDb,
 {
     cfg.service(
         web::resource("/projects")
@@ -96,13 +95,10 @@ pub(crate) async fn load_project_version_handler<C: ProContext>(
     project: web::Path<(ProjectId, ProjectVersionId)>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let project = project.into_inner();
     let id = ctx
-        .project_db_ref()
+        .pro_project_db_ref()
         .load_version(&session, project.0, LoadVersion::Version(project.1))
         .await?;
     Ok(web::Json(id))
@@ -112,12 +108,9 @@ pub(crate) async fn load_project_latest_handler<C: ProContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let id = ctx
-        .project_db_ref()
+        .pro_project_db_ref()
         .load_version(&session, project.into_inner(), LoadVersion::Latest)
         .await?;
     Ok(web::Json(id))
@@ -152,12 +145,9 @@ pub(crate) async fn project_versions_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     project: web::Json<ProjectId>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let versions = ctx
-        .project_db_ref()
+        .pro_project_db_ref()
         .versions(&session, project.into_inner())
         .await?;
     Ok(web::Json(versions))
@@ -182,11 +172,8 @@ pub(crate) async fn add_permission_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     permission: web::Json<UserProjectPermission>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
-    ctx.project_db_ref()
+) -> Result<impl Responder> {
+    ctx.pro_project_db_ref()
         .add_permission(&session, permission.into_inner())
         .await?;
     Ok(HttpResponse::Ok())
@@ -211,11 +198,8 @@ pub(crate) async fn remove_permission_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     permission: web::Json<UserProjectPermission>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
-    ctx.project_db_ref()
+) -> Result<impl Responder> {
+    ctx.pro_project_db_ref()
         .remove_permission(&session, permission.into_inner())
         .await?;
     Ok(HttpResponse::Ok())
@@ -243,12 +227,9 @@ pub(crate) async fn list_permissions_handler<C: ProContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let permissions = ctx
-        .project_db_ref()
+        .pro_project_db_ref()
         .list_permissions(&session, project.into_inner())
         .await?;
     Ok(web::Json(permissions))
@@ -294,7 +275,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/project/{}", project))
+            .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
         let res = send_pro_test_request(req, ctx.clone()).await;
@@ -313,7 +294,7 @@ mod tests {
         let version_id = versions.first().unwrap().id;
 
         let req = test::TestRequest::get()
-            .uri(&format!("/project/{}/{}", project, version_id))
+            .uri(&format!("/project/{project}/{version_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
         let res = send_pro_test_request(req, ctx).await;
@@ -332,8 +313,7 @@ mod tests {
 
         let req = test::TestRequest::get()
             .uri(&format!(
-                "/project/{}/00000000-0000-0000-0000-000000000000",
-                project
+                "/project/{project}/00000000-0000-0000-0000-000000000000"
             ))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
@@ -555,7 +535,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/project/{}/permissions", project))
+            .uri(&format!("/project/{project}/permissions"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())))
             .set_json(&permission);
@@ -599,7 +579,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!("/project/{}/permissions", project))
+            .uri(&format!("/project/{project}/permissions"))
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&permission);
         let res = send_pro_test_request(req, ctx).await;

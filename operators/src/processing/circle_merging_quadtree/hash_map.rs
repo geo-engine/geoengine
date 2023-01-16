@@ -324,7 +324,7 @@ mod tests {
         V: Clone + Debug,
     {
         match map.entry(key) {
-            ValueRef::Occupied(_) => panic!("key already exists: {:?}", key),
+            ValueRef::Occupied(_) => panic!("key already exists: {key:?}"),
             ValueRef::Vacant(entry_pos) => {
                 map.insert_unchecked(entry_pos, value);
             }
@@ -379,7 +379,7 @@ mod tests {
             insert(&mut map, i, i);
 
             match map.entry(i) {
-                ValueRef::Vacant(_) => panic!("key not found: {}", i),
+                ValueRef::Vacant(_) => panic!("key not found: {i}"),
                 ValueRef::Occupied(_) => (), // okay
             };
         }

@@ -215,10 +215,9 @@ pub fn register_gdal_drivers_from_list<S: BuildHasher>(mut drivers: HashSet<Stri
     let mut start_index = 0;
 
     for _ in 0..number_of_drivers {
-        let driver = match DriverManager::get_driver(start_index) {
-            Ok(driver) => driver,
+        let Ok(driver) = DriverManager::get_driver(start_index) else {
             // in the unlikely case that we cannot fetch a driver, we will just skip it
-            Err(_) => continue,
+            continue;
         };
 
         // do not unregister the drivers we want to keep

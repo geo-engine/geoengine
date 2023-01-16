@@ -29,20 +29,23 @@ impl VectorQueryProcessor for MockPointSourceProcessor {
     type VectorType = MultiPointCollection;
     async fn vector_query<'a>(
         &'a self,
-        _query: VectorQueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let chunk_size = usize::from(ctx.chunk_byte_size()) / std::mem::size_of::<Coordinate2D>();
-        Ok(
-            stream::iter(self.points.chunks(chunk_size).map(move |chunk| {
+        let bounding_box = query.spatial_bounds;
+
+        Ok(stream::iter(&self.points)
+            .filter(move |&coord| std::future::ready(bounding_box.contains_coordinate(coord)))
+            .chunks(chunk_size)
+            .map(move |chunk| {
                 Ok(MultiPointCollection::from_data(
-                    chunk.iter().map(Into::into).collect(),
+                    chunk.iter().copied().map(Into::into).collect(),
                     vec![TimeInterval::default(); chunk.len()],
                     HashMap::new(),
                 )?)
-            }))
-            .boxed(),
-        )
+            })
+            .boxed())
     }
 }
 
@@ -141,10 +144,7 @@ mod tests {
         let initialized = mps.initialize(&execution_context).await.unwrap();
 
         let typed_processor = initialized.query_processor();
-        let point_processor = match typed_processor {
-            Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
-            _ => panic!(),
-        };
+        let Ok(TypedVectorQueryProcessor::MultiPoint(point_processor)) = typed_processor else { panic!() };
 
         let query_rectangle = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),

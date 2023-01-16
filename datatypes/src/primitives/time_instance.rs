@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 #[cfg(feature = "postgres")]
 use snafu::Error;
+use std::ops::AddAssign;
 use std::{
     convert::TryFrom,
     fmt::Formatter,
@@ -95,7 +96,7 @@ impl std::fmt::Display for TimeInstance {
         let datetime = instance
             .as_date_time()
             .expect("time instance was clamped into valid range");
-        write!(f, "{}", datetime)
+        write!(f, "{datetime}")
     }
 }
 
@@ -158,6 +159,12 @@ impl Add<i64> for TimeInstance {
             return self;
         }
         TimeInstance::from_millis_unchecked(self.0 + rhs)
+    }
+}
+
+impl AddAssign<i64> for TimeInstance {
+    fn add_assign(&mut self, rhs: i64) {
+        *self = *self + rhs;
     }
 }
 

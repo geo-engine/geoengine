@@ -301,11 +301,7 @@ impl From<&SpatialPartition2D> for geo::Rect<f64> {
 pub fn partitions_extent<I: Iterator<Item = Option<SpatialPartition2D>>>(
     mut bboxes: I,
 ) -> Option<SpatialPartition2D> {
-    let mut extent = if let Some(Some(first)) = bboxes.next() {
-        first
-    } else {
-        return None;
-    };
+    let Some(Some(mut extent)) = bboxes.next() else { return None; };
 
     for bbox in bboxes {
         if let Some(bbox) = bbox {

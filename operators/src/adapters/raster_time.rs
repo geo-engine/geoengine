@@ -300,20 +300,26 @@ where
                                     // time step of the other one
 
                                     // advance current query rectangle
-                                    let new_start = min(tile_a.time.end(), tile_b.time.end());
+                                    let mut new_start = min(tile_a.time.end(), tile_b.time.end());
+
+                                    if new_start == query_rect.time_interval.start() {
+                                        // in the case that the time interval has no length, i.e. start=end,
+                                        // we have to advance `new_start` to prevent infinite loops.
+                                        // Otherwise, the new query rectangle would be equal to the previous one.
+                                        new_start += 1;
+                                    }
 
                                     if new_start >= query_rect.time_interval.end() {
                                         // the query window is exhausted, end the stream
                                         state.set(State::Finished);
-                                        continue;
+                                    } else {
+                                        query_rect.time_interval = TimeInterval::new_unchecked(
+                                            new_start,
+                                            query_rect.time_interval.end(),
+                                        );
+
+                                        state.set(State::Initial);
                                     }
-
-                                    query_rect.time_interval = TimeInterval::new_unchecked(
-                                        new_start,
-                                        query_rect.time_interval.end(),
-                                    );
-
-                                    state.set(State::Initial);
                                 }
                             } else {
                                 *current_spatial_tile += 1;
@@ -387,9 +393,7 @@ where
                     }
 
                     // all sources produced an output, set the stream to be consumed
-                    let streams = if let Ok(ok_queries) = ok_queries.try_into() {
-                        ok_queries
-                    } else {
+                    let Ok(streams) = ok_queries.try_into() else {
                         unreachable!("RasterArrayTimeAdapter: ok_queries.len() != N");
                     };
                     state.set(ArrayState::ConsumingStream {
@@ -454,24 +458,30 @@ where
                             // time step of the other one
 
                             // advance current query rectangle
-                            let new_start = tiles
+                            let mut new_start = tiles
                                 .iter()
                                 .map(|tile| tile.time.end())
                                 .min()
                                 .expect("N > 0");
 
+                            if new_start == query_rect.time_interval.start() {
+                                // in the case that the time interval has no length, i.e. start=end,
+                                // we have to advance `new_start` to prevent infinite loops.
+                                // Otherwise, the new query rectangle would be equal to the previous one.
+                                new_start += 1;
+                            }
+
                             if new_start >= query_rect.time_interval.end() {
                                 // the query window is exhausted, end the stream
                                 state.set(ArrayState::Finished);
-                                continue;
+                            } else {
+                                query_rect.time_interval = TimeInterval::new_unchecked(
+                                    new_start,
+                                    query_rect.time_interval.end(),
+                                );
+
+                                state.set(ArrayState::Initial);
                             }
-
-                            query_rect.time_interval = TimeInterval::new_unchecked(
-                                new_start,
-                                query_rect.time_interval.end(),
-                            );
-
-                            state.set(ArrayState::Initial);
                         }
                     } else {
                         *current_spatial_tile += 1;
@@ -1479,10 +1489,18 @@ mod tests {
         let times: Vec<_> = result.iter().map(|(a, b)| (a.time, b.time)).collect();
         assert_eq!(
             &times,
-            &[(
-                TimeInterval::new_unchecked(2, 4),
-                TimeInterval::new_unchecked(2, 4)
-            )]
+            &[
+                // first spatial tile
+                (
+                    TimeInterval::new_unchecked(2, 4),
+                    TimeInterval::new_unchecked(2, 4)
+                ),
+                // second spatial tile
+                (
+                    TimeInterval::new_unchecked(2, 4),
+                    TimeInterval::new_unchecked(2, 4)
+                ),
+            ]
         );
     }
 
@@ -1625,10 +1643,18 @@ mod tests {
         let times: Vec<_> = result.iter().map(|[a, b]| (a.time, b.time)).collect();
         assert_eq!(
             &times,
-            &[(
-                TimeInterval::new_unchecked(2, 4),
-                TimeInterval::new_unchecked(2, 4)
-            )]
+            &[
+                // first spatial tile
+                (
+                    TimeInterval::new_unchecked(2, 4),
+                    TimeInterval::new_unchecked(2, 4)
+                ),
+                // second spatial tile
+                (
+                    TimeInterval::new_unchecked(2, 4),
+                    TimeInterval::new_unchecked(2, 4)
+                ),
+            ]
         );
     }
 
@@ -1780,10 +1806,18 @@ mod tests {
         let times: Vec<_> = result.iter().map(|(a, b)| (a.time, b.time)).collect();
         assert_eq!(
             &times,
-            &[(
-                TimeInterval::new_unchecked(2, 9),
-                TimeInterval::new_unchecked(2, 9)
-            )]
+            &[
+                // first spatial tile
+                (
+                    TimeInterval::new_unchecked(2, 9),
+                    TimeInterval::new_unchecked(2, 9)
+                ),
+                // second spatial tile
+                (
+                    TimeInterval::new_unchecked(2, 9),
+                    TimeInterval::new_unchecked(2, 9)
+                ),
+            ]
         );
     }
 
@@ -1899,6 +1933,7 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
+
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(2, 8),
@@ -1944,10 +1979,177 @@ mod tests {
         let times: Vec<_> = result.iter().map(|[a, b]| (a.time, b.time)).collect();
         assert_eq!(
             &times,
-            &[(
-                TimeInterval::new_unchecked(2, 9),
-                TimeInterval::new_unchecked(2, 9)
-            )]
+            &[
+                // first spatial tile
+                (
+                    TimeInterval::new_unchecked(2, 9),
+                    TimeInterval::new_unchecked(2, 9)
+                ),
+                // second spatial tile
+                (
+                    TimeInterval::new_unchecked(2, 9),
+                    TimeInterval::new_unchecked(2, 9)
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn array_tiles_without_lengths() {
+        let raster_source_a = MockRasterSource {
+            params: MockRasterSourceParams::<u8> {
+                data: vec![
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(1, 1),
+                        tile_position: [-1, 0].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(1, 1),
+                        tile_position: [-1, 1].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(2, 2),
+                        tile_position: [-1, 0].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![13, 14, 15, 16, 17, 18])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(2, 2),
+                        tile_position: [-1, 1].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![19, 20, 21, 22, 23, 24])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                    },
+                ],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                },
+            },
+        }
+        .boxed();
+
+        let raster_source_b = MockRasterSource {
+            params: MockRasterSourceParams::<u8> {
+                data: vec![
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(0, 10),
+                        tile_position: [-1, 0].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(0, 10),
+                        tile_position: [-1, 1].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                    },
+                ],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                },
+            },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(1, 3),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let query_processor_a = raster_source_a
+            .initialize(&exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let query_processor_b = raster_source_b
+            .initialize(&exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let source_a = QueryWrapper {
+            p: &query_processor_a,
+            ctx: &query_ctx,
+        };
+
+        let source_b = QueryWrapper {
+            p: &query_processor_b,
+            ctx: &query_ctx,
+        };
+
+        let adapter = RasterArrayTimeAdapter::new([source_a, source_b], query_rect);
+
+        let result = adapter
+            .map(Result::unwrap)
+            .collect::<Vec<[RasterTile2D<u8>; 2]>>()
+            .await;
+
+        let times: Vec<_> = result.iter().map(|[a, b]| (a.time, b.time)).collect();
+        assert_eq!(
+            times,
+            [
+                (
+                    TimeInterval::new_unchecked(1, 1),
+                    TimeInterval::new_unchecked(1, 1),
+                ),
+                (
+                    TimeInterval::new_unchecked(1, 1),
+                    TimeInterval::new_unchecked(1, 1),
+                ),
+                (
+                    TimeInterval::new_unchecked(2, 2),
+                    TimeInterval::new_unchecked(2, 2),
+                ),
+                (
+                    TimeInterval::new_unchecked(2, 2),
+                    TimeInterval::new_unchecked(2, 2),
+                ),
+            ]
         );
     }
 }

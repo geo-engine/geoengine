@@ -1,5 +1,3 @@
-#![feature(int_log)]
-
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use geoengine_datatypes::raster::{
     GridIdx, GridIdx1D, GridIdx2D, GridShape, MapIndexedElements, MapIndexedElementsParallel,

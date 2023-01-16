@@ -4,7 +4,6 @@ use crate::{
     pro::{
         contexts::ProContext,
         datasets::Role,
-        projects::ProProjectDb,
         users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
@@ -94,7 +93,6 @@ pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, Proj
 pub async fn send_pro_test_request<C>(req: test::TestRequest, ctx: C) -> ServiceResponse
 where
     C: ProContext,
-    C::ProjectDB: ProProjectDb,
 {
     #[allow(unused_mut)]
     let mut app = App::new()
@@ -106,7 +104,7 @@ where
         )
         .wrap(middleware::NormalizePath::trim())
         .configure(configure_extractors)
-        .configure(handlers::datasets::init_dataset_routes::<C>)
+        .configure(pro::handlers::datasets::init_dataset_routes::<C>)
         .configure(handlers::plots::init_plot_routes::<C>)
         .configure(pro::handlers::projects::init_project_routes::<C>)
         .configure(pro::handlers::users::init_user_routes::<C>)
@@ -279,7 +277,7 @@ pub(in crate::pro) mod mock_oidc {
             .set_nonce(mock_token_config.nonce),
             &CoreRsaPrivateSigningKey::from_pem(TEST_PRIVATE_KEY, None)
                 .expect("Cannot create mock of RSA private key"),
-            CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
+            CoreJwsSigningAlgorithm::RsaSsaPssSha256,
             Some(&AccessToken::new(
                 mock_token_config.access_for_id.to_string(),
             )),

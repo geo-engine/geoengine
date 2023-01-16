@@ -335,9 +335,8 @@ mod tests {
             time_interval: TimeInterval::default(),
         };
 
-        let typed_processor = match query_processor {
-            TypedRasterQueryProcessor::U8(rqp) => rqp,
-            _ => panic!("expected TypedRasterQueryProcessor::U8"),
+        let TypedRasterQueryProcessor::U8(typed_processor) = query_processor else {
+            panic!("expected TypedRasterQueryProcessor::U8");
         };
 
         let stream = typed_processor
@@ -452,9 +451,8 @@ mod tests {
             time_interval: TimeInterval::default(),
         };
 
-        let typed_processor = match query_processor {
-            TypedRasterQueryProcessor::U8(rqp) => rqp,
-            _ => panic!("expected TypedRasterQueryProcessor::U8"),
+        let TypedRasterQueryProcessor::U8(typed_processor) = query_processor else {
+            panic!("expected TypedRasterQueryProcessor::U8");
         };
 
         let stream = typed_processor
