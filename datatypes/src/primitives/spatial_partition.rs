@@ -71,11 +71,18 @@ impl SpatialPartition2D {
     /// The resulting partition is not equivalent to the bbox but contains it
     pub fn with_bbox_and_resolution(bbox: BoundingBox2D, resolution: SpatialResolution) -> Self {
         let lr = bbox.lower_right();
+
+        // add an epsilon to the lower right coordinate to make sure that all pixels are included
+        const EPSILON: f64 = 0.000_001;
+        let epsilon_x = resolution.x * EPSILON;
+        let epsilon_y = resolution.y * EPSILON;
+
         Self {
             upper_left_coordinate: bbox.upper_left(),
+
             lower_right_coordinate: Coordinate2D {
-                x: (lr.x / resolution.x).ceil() * resolution.x,
-                y: (lr.y / resolution.y).ceil() * resolution.y,
+                x: ((lr.x + epsilon_x) / resolution.x).ceil() * resolution.x,
+                y: ((lr.y + epsilon_y) / resolution.y).ceil() * resolution.y,
             },
         }
     }
@@ -316,16 +323,36 @@ pub fn partitions_extent<I: Iterator<Item = Option<SpatialPartition2D>>>(
 
 #[cfg(test)]
 mod tests {
+    use float_cmp::approx_eq;
+
     use super::*;
 
     #[test]
     fn bbox_to_partition() {
-        let bbox = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
+        let bbox = BoundingBox2D::new_unchecked((-180., -89.95).into(), (179.95, 90.).into());
         let res = SpatialResolution { x: 0.1, y: -0.1 };
         assert_eq!(
             SpatialPartition2D::with_bbox_and_resolution(bbox, res),
             SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into())
         );
+    }
+
+    #[test]
+    fn bbox_to_partition_border_line() {
+        let bbox = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
+        let res = SpatialResolution { x: 0.1, y: -0.1 };
+        let partition = SpatialPartition2D::with_bbox_and_resolution(bbox, res);
+
+        assert!(approx_eq!(
+            Coordinate2D,
+            partition.upper_left(),
+            (-180., 90.).into()
+        ));
+        assert!(approx_eq!(
+            Coordinate2D,
+            partition.lower_right(),
+            (180.1, -90.1).into()
+        ));
     }
 
     #[test]

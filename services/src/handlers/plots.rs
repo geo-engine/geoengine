@@ -334,7 +334,7 @@ mod tests {
                 "plotType": "Statistics",
                 "data": {
                     "Raster-1": {
-                        "valueCount": 6,
+                        "valueCount": 12,
                         "validCount": 6,
                         "min": 1.0,
                         "max": 6.0,

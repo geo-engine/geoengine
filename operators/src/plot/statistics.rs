@@ -517,7 +517,7 @@ mod tests {
             result.to_string(),
             json!({
                 "Raster-1": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 65_160, // 361*180 Note: the 361 pixels on the x-axis are caused by the inclusive nature of the bounding box.
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -623,7 +623,7 @@ mod tests {
             result.to_string(),
             json!({
                 "Raster-1": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 65_160, // 361*180 Note: the 361 pixels on the x-axis are caused by the inclusive nature of the bounding box.
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -631,7 +631,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
                 "Raster-2": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 65_160, // 361*180
                     "validCount": 6,
                     "min": 7.0,
                     "max": 12.0,
@@ -737,7 +737,7 @@ mod tests {
             result.to_string(),
             json!({
                 "A": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 65_160, // 361*180  Note: the 361 pixels on the x-axis are caused by the inclusive nature of the bounding box.
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -745,7 +745,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
                 "B": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 65_160, // 361*180
                     "validCount": 6,
                     "min": 7.0,
                     "max": 12.0,
