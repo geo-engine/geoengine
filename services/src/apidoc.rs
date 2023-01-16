@@ -256,6 +256,7 @@ use utoipa::{Modify, OpenApi};
             UnixTimeStampType,
             Dataset,
             DatasetDefinition,
+            AddDataset,
             Volume,
             VolumeName,
             DataPath,

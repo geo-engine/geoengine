@@ -34,7 +34,7 @@ where
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GetPlot {
     #[serde(deserialize_with = "parse_bbox")]
-    #[param(example = "-180,-90,180,90", value_type = String)]
+    #[param(example = "0,-0.3,0.2,0", value_type = String)]
     pub bbox: BoundingBox2D,
     #[param(example = "EPSG:4326")]
     pub crs: Option<SpatialReference>,
@@ -61,39 +61,60 @@ pub(crate) struct GetPlot {
 ///   "operator": {
 ///     "type": "Statistics",
 ///     "params": {},
-///     "rasterSources": [
-///       {
-///         "type": "MockRasterSource",
-///         "params": {
-///           "data": [
-///             {
-///               "time": {
-///                 "start": -8334632851200000,
-///                 "end": 8210298412799999
-///               },
-///               "tilePosition": [0, 0],
-///               "globalGeoTransform": {
-///                 "originCoordinate": { "x": 0.0, "y": 0.0 },
-///                 "xPixelSize": 1.0,
-///                 "yPixelSize": -1.0
-///               },
-///               "gridArray": {
-///                 "shape": {
-///                   "shapeArray": [3, 2]
+///     "sources": {
+///       "source": [
+///         {
+///           "type": "MockRasterSourcei32",
+///           "params": {
+///             "data": [
+///               {
+///                 "time": {
+///                   "start": -8334632851200000,
+///                   "end": 8210298412799999
 ///                 },
-///                 "data": [1, 2, 3, 4, 5, 6]
+///                 "tilePosition": [0,0],
+///                 "globalGeoTransform": {
+///                   "originCoordinate": {"x": 0.0,"y": 0.0},
+///                   "xPixelSize": 1.0,
+///                   "yPixelSize": -1.0
+///                 },
+///                 "gridArray": {
+///                   "type": "grid",
+///                   "innerGrid": {
+///                     "shape": {
+///                       "shapeArray": [3, 2]
+///                     },
+///                     "data": [1, 2, 3, 4, 5, 6]
+///                   },
+///                   "validityMask": {
+///                     "shape": {
+///                       "shapeArray": [3,2]
+///                     },
+///                     "data": [true,true,true,true,true,true]
+///                   }
+///                 },
+///                 "properties": {
+///                   "scale": null,
+///                   "offset": null,
+///                   "band_name": null,
+///                   "properties_map": {}
+///                 }
 ///               }
+///             ],
+///             "resultDescriptor": {
+///               "dataType": "U8",
+///               "spatialReference": "EPSG:4326",
+///               "measurement": {
+///                 "type": "unitless"
+///               },
+///               "time": null,
+///               "bbox": null,
+///               "resolution": null
 ///             }
-///           ],
-///           "resultDescriptor": {
-///             "dataType": "U8",
-///             "spatialReference": "EPSG:4326",
-///             "measurement": "unitless"
 ///           }
 ///         }
-///       }
-///     ],
-///     "vectorSources": []
+///       ]
+///     }
 ///   }
 /// }
 /// ```
@@ -114,17 +135,17 @@ pub(crate) struct GetPlot {
             example = json!({
                 "outputFormat": "JsonPlain",
                 "plotType": "Statistics",
-                "data": [
-                    {
-                        "pixelCount": 6,
-                        "nanCount": 0,
-                        "min": 1.0,
+                "data": {
+                    "Raster-1": {
                         "max": 6.0,
                         "mean": 3.5,
-                        "stddev": 1.707825127659933
+                        "min": 1.0,
+                        "stddev": 1.707825127659933,
+                        "validCount": 6,
+                        "valueCount": 6
                     }
-                ]
-            })
+                }
+           })
         )
     ),
     params(

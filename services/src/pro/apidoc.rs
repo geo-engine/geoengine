@@ -2,10 +2,10 @@ use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
     Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId,
     FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
-    Palette, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
-    RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority,
-    SpatialReferenceOption, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
-    TimeStep, VectorDataType,
+    Palette, PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
+    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
+    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, TimeGranularity,
+    TimeInstance, TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
@@ -25,6 +25,7 @@ use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOu
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::handlers;
+use crate::handlers::plots::WrappedPlotOutput;
 use crate::handlers::tasks::TaskAbortOptions;
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
@@ -273,7 +274,10 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             AddDataset,
             Volume,
             VolumeName,
-            DataPath
+            DataPath,
+
+            PlotOutputFormat,
+            WrappedPlotOutput
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
