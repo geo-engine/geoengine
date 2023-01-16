@@ -887,6 +887,8 @@ impl From<GdalMetaDataRegular> for geoengine_operators::source::GdalMetaDataRegu
     }
 }
 
+pub type GdalConfigOption = StringPair;
+
 /// Parameters for loading data using Gdal
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -907,7 +909,7 @@ pub struct GdalDatasetParameters {
     // Configs as key, value pairs that will be set as thread local config options, e.g.
     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
     // TODO: validate the config options: only allow specific keys and specific values
-    pub gdal_config_options: Option<Vec<StringPair>>,
+    pub gdal_config_options: Option<Vec<GdalConfigOption>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
 }

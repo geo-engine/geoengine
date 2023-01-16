@@ -8,7 +8,7 @@ use crate::api::model::datatypes::{
     TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
-    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
+    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
     GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
     GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
     MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
@@ -25,7 +25,7 @@ use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOu
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::UploadId;
 use crate::handlers;
-use crate::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
+use crate::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::TaskAbortOptions;
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
@@ -255,6 +255,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             RasterPropertiesEntryType,
             OgrMetaData,
             StringPair,
+            GdalConfigOption,
+            AxisLabels,
             MockDatasetDataSourceLoadingInfo,
             OgrSourceDataset,
             OgrSourceColumnSpec,

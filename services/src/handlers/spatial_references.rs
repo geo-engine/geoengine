@@ -21,6 +21,8 @@ where
     );
 }
 
+pub type AxisLabels = StringPair;
+
 /// The specification of a spatial reference, where extent and axis labels are given
 /// in natural order (x, y) = (east, north)
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, ToSchema)]
@@ -30,7 +32,7 @@ pub struct SpatialReferenceSpecification {
     pub spatial_reference: SpatialReference,
     pub proj_string: String,
     pub extent: BoundingBox2D,
-    pub axis_labels: Option<StringPair>,
+    pub axis_labels: Option<AxisLabels>,
     pub axis_order: Option<AxisOrder>,
 }
 
