@@ -160,7 +160,7 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
 #[utoipa::path(
     tag = "Spatial References",
     get,
-    path = "/spatialReferenceSpecification/{srs_string}",
+    path = "/spatialReferenceSpecification/{srsString}",
     responses(
         (status = 200, description = "OK", body = SpatialReferenceSpecification,
             example = json!({
@@ -186,7 +186,7 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
         )
     ),
     params(
-        ("srs_string", example = "EPSG:4326")
+        ("srsString" = String, Path, example = "EPSG:4326")
     ),
     security(
         ("session_token" = [])
