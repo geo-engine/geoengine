@@ -140,7 +140,7 @@ pub(crate) struct GetPlot {
                         "max": 6.0,
                         "mean": 3.5,
                         "min": 1.0,
-                        "stddev": 1.707825127659933,
+                        "stddev": 1.707_825_127_659_933,
                         "validCount": 6,
                         "valueCount": 6
                     }
