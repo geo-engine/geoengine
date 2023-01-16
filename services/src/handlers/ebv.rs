@@ -581,6 +581,7 @@ mod tests {
     use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::{test_data, util::test::TestDefault};
+    use serde_json::json;
     use std::path::Path;
 
     async fn send_test_request<C: SimpleContext>(
@@ -690,15 +691,12 @@ mod tests {
         wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
 
         let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+        let status = serde_json::to_value(status).unwrap();
 
-        assert_eq!(
-            serde_json::to_value(status).unwrap(),
-            serde_json::json!({
-                "status": "completed",
-                "info": null,
-                "timeTotal": "00:00:00",
-            })
-        );
+        assert_eq!(status["status"], json!("completed"));
+        assert_eq!(status["info"], json!(null));
+        assert_eq!(status["timeTotal"], json!("00:00:00"));
+        assert!(status["timeStarted"].is_number());
 
         assert!(is_empty(overview_folder.path()));
     }
@@ -746,15 +744,12 @@ mod tests {
         wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
 
         let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+        let status = serde_json::to_value(status).unwrap();
 
-        assert_eq!(
-            serde_json::to_value(status).unwrap(),
-            serde_json::json!({
-                "status": "completed",
-                "info": null,
-                "timeTotal": "00:00:00",
-            })
-        );
+        assert_eq!(status["status"], json!("completed"));
+        assert_eq!(status["info"], json!(null));
+        assert_eq!(status["timeTotal"], json!("00:00:00"));
+        assert!(status["timeStarted"].is_number());
     }
 
     #[tokio::test]
