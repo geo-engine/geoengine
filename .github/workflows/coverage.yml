@@ -51,8 +51,8 @@ jobs:
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
-      - uses: taiki-e/install-action@cargo-llvm-cov
-      - uses: taiki-e/install-action@nextest
+      - name: Install `cargo-llvm-cov`
+        uses: taiki-e/install-action@cargo-llvm-cov
       - name: setup rust build cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -85,7 +85,7 @@ jobs:
           #cache-on-failure: ""
       - name: Generate code coverage
         run: |
-          cargo llvm-cov nextest \
+          cargo llvm-cov \
             ${{ matrix.features }} \
             --lcov \
             --output-path lcov.info
