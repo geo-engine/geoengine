@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use gdal::{Dataset, DatasetOptions, Driver};
+use gdal::{Dataset, DatasetOptions, DriverManager};
 use geoengine_datatypes::{
     dataset::{DataId, DatasetId},
     hashmap,
@@ -125,7 +125,7 @@ pub fn raster_descriptor_from_dataset(
     let spatial_ref: SpatialReference =
         dataset.spatial_ref()?.try_into().context(error::DataType)?;
 
-    let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
+    let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type().try_into()?)
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
 
     let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
@@ -211,38 +211,24 @@ pub fn gdal_parameters_from_dataset(
 ///
 pub fn register_gdal_drivers_from_list<S: BuildHasher>(mut drivers: HashSet<String, S>) {
     // this calls `GDALAllRegister` internally
-    let number_of_drivers = Driver::count();
+    let number_of_drivers = DriverManager::count();
+    let mut start_index = 0;
 
-    for i in 0..number_of_drivers {
-        let driver = match gdal::Driver::get(i) {
-            Ok(driver) => driver,
-            // it can happen that we cannot fetch a driver, we will skip it then
-            Err(_) => continue,
+    for _ in 0..number_of_drivers {
+        let Ok(driver) = DriverManager::get_driver(start_index) else {
+            // in the unlikely case that we cannot fetch a driver, we will just skip it
+            continue;
         };
 
         // do not unregister the drivers we want to keep
         if drivers.remove(&driver.short_name()) {
-            continue;
-        }
-
-        // TODO: add this method to the `gdal` crate
-        unsafe {
-            gdal_sys::GDALDeregisterDriver(driver.c_driver());
+            // driver was found in list --> keep it
+            start_index += 1;
+        } else {
+            // driver was not found in list --> unregister the driver
+            DriverManager::deregister_driver(&driver);
         }
     }
-
-    drivers.retain(|driver_name| {
-        let driver = match Driver::get_by_name(driver_name) {
-            Ok(driver) => driver,
-            // if driver is not found, do not try to register it
-            Err(_) => return true,
-        };
-
-        // register the driver
-        unsafe { gdal_sys::GDALRegisterDriver(driver.c_driver()) };
-
-        false
-    });
 
     if !drivers.is_empty() && log_enabled!(Debug) {
         let mut drivers: Vec<String> = drivers.into_iter().collect();
@@ -264,19 +250,19 @@ mod tests {
 
         assert!(Dataset::open(&dataset_path).is_err());
 
-        unsafe {
-            gdal_sys::GDALAllRegister();
-        }
+        DriverManager::register_all();
 
-        register_gdal_drivers_from_list(HashSet::from(["GTiff".to_string()]));
+        register_gdal_drivers_from_list(HashSet::from([
+            "GTiff".to_string(),
+            "CSV".to_string(),
+            "GPKG".to_string(),
+        ]));
 
         assert!(Dataset::open(&dataset_path).is_ok());
 
         // reset for other tests
 
-        unsafe {
-            gdal_sys::GDALAllRegister();
-        }
+        DriverManager::register_all();
 
         assert!(Dataset::open(&dataset_path).is_ok());
     }

@@ -94,6 +94,7 @@ pub enum Error {
     Authorization {
         source: Box<Error>,
     },
+    AccessDenied,
     #[snafu(display("Failed to create the project."))]
     ProjectCreateFailed,
     #[snafu(display("Failed to list projects."))]
@@ -154,13 +155,17 @@ pub enum Error {
 
     UnknownDatasetId,
 
+    UnknownVolume,
+    OnlyAdminsCanCreateDatasetFromVolume,
+    AdminsCannotCreateDatasetFromUpload,
+
     #[snafu(display("Permission denied for dataset with id {:?}", dataset))]
     DatasetPermissionDenied {
         dataset: DatasetId,
     },
 
     #[snafu(display("Updating permission ({}, {:?}, {}) denied", role, dataset, permission))]
-    UpateDatasetPermission {
+    UpdateDatasetPermission {
         role: String,
         dataset: DatasetId,
         permission: String,
@@ -326,17 +331,14 @@ pub enum Error {
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
-    #[cfg(feature = "nfdi")]
-    #[snafu(display("Could not parse GFBio basket: {}", message,))]
-    GFBioBasketParse {
-        message: String,
-    },
+
+    AbcdUnitIdColumnMissingInDatabase,
 
     BaseUrlMustEndWithSlash,
 
     #[snafu(context(false))]
     LayerDb {
-        source: crate::layers::storage::LayerDbError,
+        source: crate::layers::LayerDbError,
     },
 
     UnknownOperator {

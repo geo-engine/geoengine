@@ -59,7 +59,7 @@ impl PlotOperator for ScatterPlot {
             match source.result_descriptor().column_data_type(cn.as_str()) {
                 Some(column) if !column.is_numeric() => {
                     return Err(Error::InvalidOperatorSpec {
-                        reason: format!("Column '{}' is not numeric.", cn),
+                        reason: format!("Column '{cn}' is not numeric."),
                     });
                 }
                 Some(_) => {

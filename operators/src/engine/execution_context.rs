@@ -21,9 +21,11 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// A context that provides certain utility access during operator initialization
+#[async_trait::async_trait]
 pub trait ExecutionContext: Send
     + Sync
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
@@ -50,6 +52,10 @@ pub trait ExecutionContext: Send
         op: Box<dyn InitializedPlotOperator>,
         span: CreateSpan,
     ) -> Box<dyn InitializedPlotOperator>;
+
+    async fn read_ml_model(&self, path: PathBuf) -> Result<String>;
+
+    async fn write_ml_model(&mut self, path: PathBuf, ml_model_str: String) -> Result<()>;
 }
 
 #[async_trait]
@@ -84,6 +90,7 @@ pub struct MockExecutionContext {
     pub thread_pool: Arc<ThreadPool>,
     pub meta_data: HashMap<DataId, Box<dyn Any + Send + Sync>>,
     pub tiling_specification: TilingSpecification,
+    pub ml_models: HashMap<PathBuf, String>,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -92,6 +99,7 @@ impl TestDefault for MockExecutionContext {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
+            ml_models: HashMap::default(),
         }
     }
 }
@@ -102,6 +110,7 @@ impl MockExecutionContext {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
             tiling_specification,
+            ml_models: HashMap::default(),
         }
     }
 
@@ -113,6 +122,7 @@ impl MockExecutionContext {
             thread_pool: create_rayon_thread_pool(num_threads),
             meta_data: HashMap::default(),
             tiling_specification,
+            ml_models: HashMap::default(),
         }
     }
 
@@ -131,12 +141,22 @@ impl MockExecutionContext {
         MockQueryContext {
             chunk_byte_size,
             thread_pool: self.thread_pool.clone(),
+            extensions: Default::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
     }
+
+    pub fn initialize_ml_model(&mut self, model_path: PathBuf) -> Result<()> {
+        let model = std::fs::read_to_string(&model_path)?;
+
+        self.ml_models.insert(model_path, model);
+
+        Ok(())
+    }
 }
 
+#[async_trait::async_trait]
 impl ExecutionContext for MockExecutionContext {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
@@ -168,6 +188,22 @@ impl ExecutionContext for MockExecutionContext {
         _span: CreateSpan,
     ) -> Box<dyn InitializedPlotOperator> {
         op
+    }
+
+    async fn read_ml_model(&self, path: PathBuf) -> Result<String> {
+        let res = self
+            .ml_models
+            .get(&path)
+            .ok_or(Error::MachineLearningModelNotFound)?
+            .clone();
+
+        Ok(res)
+    }
+
+    async fn write_ml_model(&mut self, path: PathBuf, ml_model_str: String) -> Result<()> {
+        self.ml_models.insert(path, ml_model_str);
+
+        Ok(())
     }
 }
 

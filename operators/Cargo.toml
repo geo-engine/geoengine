@@ -11,17 +11,18 @@ edition = "2021"
 [features]
 # This compiles Geo Engine Pro
 pro = ["geoengine-datatypes/pro"]
+xgboost = ["dep:xgboost-rs", "pro"]
 
 [dependencies]
-arrow = { version = "25.0", features = ["simd"] }
+arrow = { version = "29.0", features = ["simd"] }
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
 csv = "1.1"
 float-cmp = "0.9"
 futures = "0.3"
-gdal =  "0.13"
-gdal-sys = "0.7"
+gdal =  "0.14"
+gdal-sys = "0.8"
 geo = "0.23"
 geoengine-datatypes = { path = "../datatypes" }
 itertools = "0.10"
@@ -50,11 +51,13 @@ tracing = "0.1"
 tracing-opentelemetry = "0.18"
 typetag = "0.2"
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
+xgboost-rs = {version = "0.1", optional = true}
 
 [dev-dependencies]
 async-stream = "0.3"
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 rand = "0.8"
+ndarray = "0.15"
 
 
 [[bench]]

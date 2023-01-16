@@ -276,8 +276,8 @@ impl TimeInterval {
     /// ```
     pub fn as_geo_json_event(&self) -> serde_json::Value {
         serde_json::json!({
-            "start": self.start.as_rfc3339(),
-            "end": self.end.as_rfc3339(),
+            "start": self.start.as_datetime_string(),
+            "end": self.end.as_datetime_string(),
             "type": "Interval"
         })
     }
@@ -504,11 +504,7 @@ impl ArrowTyped for TimeInterval {
 pub fn time_interval_extent<I: Iterator<Item = Option<TimeInterval>>>(
     mut times: I,
 ) -> Option<TimeInterval> {
-    let mut extent = if let Some(Some(first)) = times.next() {
-        first
-    } else {
-        return None;
-    };
+    let Some(Some(mut extent)) = times.next()  else { return None; };
 
     for time in times {
         if let Some(time) = time {

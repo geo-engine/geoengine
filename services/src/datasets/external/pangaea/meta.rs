@@ -27,7 +27,7 @@ use url::Url;
 /// Holds all relevant meta-data for a pangaea dataset
 #[derive(Deserialize, Debug, Clone)]
 #[serde(from = "MetaInternal")]
-pub struct PangeaMetaData {
+pub struct PangaeaMetaData {
     pub title: String,
     pub authors: Vec<Author>,
     pub license: Option<String>,
@@ -37,7 +37,7 @@ pub struct PangeaMetaData {
     pub distributions: Vec<Distribution>,
 }
 
-impl PangeaMetaData {
+impl PangaeaMetaData {
     /// Retrieves the link to the TSV file for the dataset
     fn get_tsv_file(&self) -> Option<&Distribution> {
         self.distributions
@@ -188,8 +188,8 @@ impl PangeaMetaData {
     ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>, Error>
     {
         let url = self.get_tsv_file().ok_or(Error::PangaeaNoTsv)?.url.as_str();
-        let offset = PangeaMetaData::begin_of_data(client, url).await?;
-        let url = format!("CSV:/vsisubfile/{},/vsicurl_streaming/{}", offset, url);
+        let offset = PangaeaMetaData::begin_of_data(client, url).await?;
+        let url = format!("CSV:/vsisubfile/{offset},/vsicurl_streaming/{url}");
 
         let omd = self.get_ogr_source_ds(url.as_str());
         Ok(StaticMetaData {
@@ -302,12 +302,12 @@ impl PangeaParam {
                 description,
                 unit,
             } => PangeaParam::Numeric {
-                name: format!("{} {}", name, suffix),
+                name: format!("{name} {suffix}"),
                 description,
                 unit,
             },
             PangeaParam::String { name, description } => PangeaParam::String {
-                name: format!("{} {}", name, suffix),
+                name: format!("{name} {suffix}"),
                 description,
             },
         }
@@ -487,7 +487,7 @@ struct MetaInternal {
     distributions: ObjectOrArray<Distribution>,
 }
 
-impl From<MetaInternal> for PangeaMetaData {
+impl From<MetaInternal> for PangaeaMetaData {
     fn from(meta: MetaInternal) -> Self {
         // Detect coordinate columns
         let lat = meta
@@ -528,7 +528,7 @@ impl From<MetaInternal> for PangeaMetaData {
             *count += 1;
         }
 
-        PangeaMetaData {
+        PangaeaMetaData {
             title: meta.title,
             authors: meta.authors.into(),
             license: meta.license,
@@ -542,16 +542,16 @@ impl From<MetaInternal> for PangeaMetaData {
 
 #[cfg(test)]
 mod tests {
-    use crate::datasets::external::pangaea::meta::{FeatureInfo, PangeaMetaData};
+    use crate::datasets::external::pangaea::meta::{FeatureInfo, PangaeaMetaData};
     use crate::datasets::external::pangaea::tests::test_data_path;
     use std::fs::OpenOptions;
 
-    fn load_meta(file_name: &str) -> serde_json::error::Result<PangeaMetaData> {
+    fn load_meta(file_name: &str) -> serde_json::error::Result<PangaeaMetaData> {
         let f = OpenOptions::new()
             .read(true)
             .open(test_data_path(file_name).as_path())
             .unwrap();
-        serde_json::from_reader::<_, PangeaMetaData>(f)
+        serde_json::from_reader::<_, PangaeaMetaData>(f)
     }
 
     #[test]

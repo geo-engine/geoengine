@@ -164,7 +164,7 @@ impl ArrowTyped for MultiLineString {
                     let coordinates_ref = lines.value(line_index);
                     let coordinates = downcast_array::<FixedSizeListArray>(&coordinates_ref);
 
-                    for coordinate_index in 0..(coordinates.len() as usize) {
+                    for coordinate_index in 0..coordinates.len() {
                         let floats_ref = coordinates.value(coordinate_index);
                         let floats: &Float64Array = downcast_array(&floats_ref);
 
@@ -207,7 +207,7 @@ impl ArrowTyped for MultiLineString {
                 let coordinates_ref = lines.value(line_index);
                 let coordinates = downcast_array::<FixedSizeListArray>(&coordinates_ref);
 
-                for coordinate_index in 0..(coordinates.len() as usize) {
+                for coordinate_index in 0..coordinates.len() {
                     let floats_ref = coordinates.value(coordinate_index);
                     let floats: &Float64Array = downcast_array(&floats_ref);
 

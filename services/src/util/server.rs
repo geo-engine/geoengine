@@ -4,7 +4,7 @@ use crate::util::config::get_config_element;
 
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::uri::PathAndQuery;
-use actix_http::{Extensions, HttpMessage};
+use actix_http::{Extensions, HttpMessage, StatusCode};
 
 use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
@@ -95,7 +95,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
                 err,
                 HttpResponse::PayloadTooLarge().json(ErrorResponse {
                     error: "Overflow".to_string(),
-                    message: format!("JSON payload has exceeded limit ({} bytes).", limit),
+                    message: format!("JSON payload has exceeded limit ({limit} bytes)."),
                 }),
             )
             .into(),
@@ -105,8 +105,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
                     HttpResponse::PayloadTooLarge().json(ErrorResponse {
                         error: "Overflow".to_string(),
                         message: format!(
-                            "JSON payload ({} bytes) is larger than allowed (limit: {} bytes).",
-                            length, limit
+                            "JSON payload ({length} bytes) is larger than allowed (limit: {limit} bytes)."
                         ),
                     }),
                 )
@@ -141,7 +140,7 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
         match err {
             QueryPayloadError::Deserialize(err) => ErrorResponse {
                 error: "UnableToParseQueryString".to_string(),
-                message: format!("Unable to parse query string: {}", err),
+                message: format!("Unable to parse query string: {err}"),
             }
             .into(),
             _ => {
@@ -192,6 +191,19 @@ pub(crate) fn server_info() -> ServerInfo {
         version: env!("CARGO_PKG_VERSION"),
         features: env!("VERGEN_CARGO_FEATURES"),
     }
+}
+/// Server availablity check.
+#[utoipa::path(
+    tag = "General",
+    get,
+    path = "/available",
+    responses(
+        (status = 204, description = "Server availablity check")
+    )
+)]
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+pub(crate) async fn available_handler() -> impl actix_web::Responder {
+    HttpResponse::Ok().status(StatusCode::NO_CONTENT).finish()
 }
 
 #[allow(clippy::unnecessary_wraps)]

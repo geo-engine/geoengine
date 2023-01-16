@@ -1,4 +1,6 @@
 use crate::api::model::datatypes::{DataProviderId, DatasetId};
+use crate::api::model::operators::TypedResultDescriptor;
+use crate::api::model::services::AddDataset;
 use crate::contexts::Session;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
@@ -13,11 +15,8 @@ use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::MetaData;
 use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
-use geoengine_operators::{
-    engine::TypedResultDescriptor, mock::MockDatasetDataSourceLoadingInfo,
-    source::GdalMetaDataStatic,
-};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
+use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::fmt::Debug;
@@ -58,71 +57,11 @@ impl Dataset {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AddDataset {
-    pub id: Option<DatasetId>,
-    pub name: String,
-    pub description: String,
-    pub source_operator: String,
-    pub symbology: Option<Symbology>,
-    pub provenance: Option<Provenance>,
-}
-
-impl UserInput for AddDataset {
-    fn validate(&self) -> Result<()> {
-        // TODO
-        Ok(())
-    }
-}
-
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetDefinition {
     pub properties: AddDataset,
     pub meta_data: MetaDataDefinition,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
-#[schema(example = json!({
-  "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
-  "definition": {
-    "properties": {
-      "name": "Germany Border",
-      "description": "The Outline of Germany",
-      "sourceOperator": "OgrSource"
-    },
-    "metaData": {
-      "OgrMetaData": {
-        "loadingInfo": {
-          "fileName": "germany_polygon.gpkg",
-          "layerName": "test_germany",
-          "dataType": "MultiPolygon",
-          "time": "none",
-          "columns": {
-            "x": "",
-            "y": null,
-            "text": [],
-            "float": [],
-            "int": [],
-            "bool": [],
-            "datetime": [],
-          },
-          "forceOgrTimeFilter": false,
-          "onError": "ignore"
-        },
-        "resultDescriptor": {
-          "dataType": "MultiPolygon",
-          "spatialReference": "EPSG:4326",
-          "columns": {}
-        }
-      }
-    }
-  }
-}))]
-pub struct CreateDataset {
-    pub upload: UploadId,
-    pub definition: DatasetDefinition,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]

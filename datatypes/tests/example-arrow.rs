@@ -161,7 +161,7 @@ fn strings2() {
     assert_eq!(array.value(3), "other");
     assert_eq!(array.value(4), "side");
 
-    assert_eq!(array.value_data().as_slice(), b"hellofromtheotherside");
+    assert_eq!(array.value_data(), b"hellofromtheotherside");
     assert_eq!(array.value_offsets(), &[0, 5, 9, 12, 17, 21]);
 }
 

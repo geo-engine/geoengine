@@ -83,7 +83,7 @@ mod tests {
 
             match (value_a, value_b) {
                 (Ok(a), Ok(b)) => assert_eq!(a, b),
-                (Err(e1), Err(e2)) => assert_eq!(format!("{:?}", e1), format!("{:?}", e2)),
+                (Err(e1), Err(e2)) => assert_eq!(format!("{e1:?}"), format!("{e2:?}")),
                 (Err(e), _) | (_, Err(e)) => panic!("{}", e.to_string()),
             };
         }

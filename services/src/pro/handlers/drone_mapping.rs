@@ -2,12 +2,12 @@ use std::convert::TryInto;
 use std::path::Path;
 
 use crate::api::model::datatypes::DatasetId;
-use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
+use crate::api::model::services::AddDataset;
+use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::ProContext;
-use crate::pro::projects::ProProjectDb;
 use crate::pro::util::config::Odm;
 use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
@@ -35,7 +35,6 @@ use uuid::Uuid;
 pub(crate) fn init_drone_mapping_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
-    C::ProjectDB: ProProjectDb,
 {
     cfg.service(web::resource("/droneMapping/task").route(web::post().to(start_task_handler::<C>)))
         .service(
@@ -93,10 +92,7 @@ async fn start_task_handler<C: ProContext>(
     _session: C::Session,
     _ctx: web::Data<C>,
     task_start: web::Json<TaskStart>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let base_url = get_config_element::<Odm>()?.endpoint;
 
     // TODO: auth
@@ -143,7 +139,7 @@ where
         let response: OdmTaskNewUploadResponse = client
             .post(
                 base_url
-                    .join(&format!("task/new/upload/{}", task_id))
+                    .join(&format!("task/new/upload/{task_id}"))
                     .context(error::Url)?,
             )
             .multipart(form)
@@ -165,7 +161,7 @@ where
     client
         .post(
             base_url
-                .join(&format!("task/new/commit/{}", task_id))
+                .join(&format!("task/new/commit/{task_id}"))
                 .context(error::Url)?,
         )
         .send()
@@ -199,10 +195,7 @@ async fn dataset_from_drone_mapping_handler<C: ProContext>(
     task_id: web::Path<Uuid>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-    C::ProjectDB: ProProjectDb,
-{
+) -> Result<impl Responder> {
     let base_url = get_config_element::<Odm>()?.endpoint;
 
     // TODO: auth
@@ -212,7 +205,7 @@ where
     let response = client
         .get(
             base_url
-                .join(&format!("task/{}/download/all.zip", task_id))
+                .join(&format!("task/{task_id}/download/all.zip"))
                 .context(error::Url)?,
         )
         .send()
@@ -386,12 +379,14 @@ mod tests {
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_operators::engine::{MetaData, MetaDataProvider, RasterOperator};
+    use serial_test::serial;
     use std::io::Write;
     use std::io::{Cursor, Read};
     use std::path::PathBuf;
 
     #[allow(clippy::too_many_lines)]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[tokio::test]
+    #[serial]
     async fn it_works() -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
@@ -472,7 +467,7 @@ mod tests {
         mock_nodeodm.expect(
             Expectation::matching(request::method_path(
                 "GET",
-                format!("/task/{}/download/all.zip", task_uuid),
+                format!("/task/{task_uuid}/download/all.zip"),
             ))
             .respond_with(
                 status_code(200)
@@ -483,7 +478,7 @@ mod tests {
 
         // download odm result through geo engine and create dataset
         let req = test::TestRequest::post()
-            .uri(&format!("/droneMapping/dataset/{}", task_uuid))
+            .uri(&format!("/droneMapping/dataset/{task_uuid}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(task);
@@ -573,12 +568,12 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = ctx.execution_context(session).unwrap();
+        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
         let initialized = op.initialize(&exe_ctx).await.unwrap();
 
         let processor = initialized.query_processor().unwrap().get_u8().unwrap();
 
-        let query_ctx = ctx.query_context().unwrap();
+        let query_ctx = ctx.query_context(session).unwrap();
         let result = processor.raster_query(query, &query_ctx).await.unwrap();
 
         let result = result

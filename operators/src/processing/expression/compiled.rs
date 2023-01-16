@@ -43,7 +43,7 @@ impl LinkedExpression {
                 }
             })?;
 
-        let library = unsafe { Library::new(&library_filename) }.map_err(|error| {
+        let library = unsafe { Library::new(library_filename) }.map_err(|error| {
             ExpressionError::CompileError {
                 error: error.to_string(),
             }

@@ -2,12 +2,13 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use crate::api::model::datatypes::{DataId, DatasetId, LayerId};
+use crate::api::model::services::AddDataset;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::listing::SessionMetaDataProvider;
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
 use crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID;
 use crate::datasets::storage::{
-    AddDataset, Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
+    Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
 };
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
@@ -369,37 +370,37 @@ where
         match self {
             MetaDataDefinition::MockMetaData(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
             MetaDataDefinition::OgrMetaData(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
             MetaDataDefinition::GdalMetaDataRegular(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
             MetaDataDefinition::GdalStatic(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
             MetaDataDefinition::GdalMetadataNetCdfCf(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
             MetaDataDefinition::GdalMetaDataList(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(&TypedResultDescriptor::from(
+                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
                     d.result_descriptor.clone(),
                 ))?,
             }),
@@ -535,7 +536,7 @@ where
 
         ensure!(
             auth.is_ok(),
-            error::UpateDatasetPermission {
+            error::UpdateDatasetPermission {
                 role: session.user.id.to_string(),
                 dataset: permission.dataset,
                 permission: format!("{:?}", permission.permission),
@@ -697,6 +698,7 @@ where
                     },
                     name: row.get(1),
                     description: row.get(2),
+                    properties: vec![],
                 }))
             })
             .filter_map(Result::ok)

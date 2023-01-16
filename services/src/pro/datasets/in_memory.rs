@@ -1,12 +1,12 @@
-use crate::api::model::datatypes::LayerId;
-use crate::api::model::datatypes::{DataId, DatasetId};
+use crate::api::model::datatypes::{DataId, DatasetId, LayerId};
+use crate::api::model::services::AddDataset;
 use crate::contexts::Db;
 use crate::datasets::listing::SessionMetaDataProvider;
 use crate::datasets::listing::{
     DatasetListOptions, DatasetListing, DatasetProvider, OrderBy, ProvenanceOutput,
 };
 use crate::datasets::storage::{
-    AddDataset, Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
+    Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
     DATASET_DB_LAYER_PROVIDER_ID, DATASET_DB_ROOT_COLLECTION_ID,
 };
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
@@ -193,7 +193,7 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
             id,
             name: dataset.name,
             description: dataset.description,
-            result_descriptor,
+            result_descriptor: result_descriptor.into(),
             source_operator: dataset.source_operator,
             symbology: dataset.symbology,
             provenance: dataset.provenance,
@@ -324,7 +324,7 @@ impl UpdateDatasetPermissions for ProHashMapDatasetDb {
                 .dataset_permissions
                 .iter()
                 .any(|p| session.roles.contains(&p.role) && p.permission == Permission::Owner),
-            error::UpateDatasetPermission {
+            error::UpdateDatasetPermission {
                 role: session.user.id.to_string(),
                 dataset: permission.dataset,
                 permission: format!("{:?}", permission.permission),
@@ -514,6 +514,7 @@ impl LayerCollectionProvider for ProHashMapDatasetDb {
                     },
                     name: d.name.clone(),
                     description: d.description.clone(),
+                    properties: vec![],
                 })
             })
             .collect();

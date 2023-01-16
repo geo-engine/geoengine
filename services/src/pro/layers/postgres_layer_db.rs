@@ -1,6 +1,22 @@
-use std::{collections::HashMap, str::FromStr};
-
 use crate::api::model::datatypes::{DataProviderId, LayerId};
+use crate::{
+    error::Result,
+    layers::{
+        external::{DataProvider, DataProviderDefinition},
+        layer::{
+            AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection,
+            LayerCollectionListOptions, LayerCollectionListing, LayerListing,
+            ProviderLayerCollectionId, ProviderLayerId,
+        },
+        listing::{LayerCollectionId, LayerCollectionProvider},
+        storage::{
+            LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
+            INTERNAL_LAYER_DB_ROOT_COLLECTION_ID, INTERNAL_PROVIDER_ID,
+        },
+        LayerDbError,
+    },
+    util::user_input::Validated,
+};
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -11,26 +27,8 @@ use bb8_postgres::{
     PostgresConnectionManager,
 };
 use snafu::ResultExt;
+use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
-
-use crate::{
-    error::{self, Result},
-    layers::{
-        external::{DataProvider, DataProviderDefinition},
-        layer::{
-            AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection,
-            LayerCollectionListOptions, LayerCollectionListing, LayerListing,
-            ProviderLayerCollectionId, ProviderLayerId,
-        },
-        listing::{LayerCollectionId, LayerCollectionProvider},
-        storage::{
-            LayerDb, LayerDbError, LayerProviderDb, LayerProviderListing,
-            LayerProviderListingOptions, INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
-            INTERNAL_PROVIDER_ID,
-        },
-    },
-    util::user_input::Validated,
-};
 
 pub struct PostgresLayerDb<Tls>
 where
@@ -52,6 +50,55 @@ where
     pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
         Self { conn_pool }
     }
+
+    /// delete all collections without parent collection
+    async fn _remove_collections_without_parent_collection(
+        transaction: &tokio_postgres::Transaction<'_>,
+    ) -> Result<()> {
+        // HINT: a recursive delete statement seems reasonable, but hard to implement in postgres
+        //       because you have a graph with potential loops
+
+        let remove_layer_collections_without_parents_stmt = transaction
+            .prepare(
+                "DELETE FROM layer_collections
+                 WHERE  id <> $1 -- do not delete root collection
+                 AND    id NOT IN (
+                    SELECT child FROM collection_children
+                 );",
+            )
+            .await?;
+        while 0 < transaction
+            .execute(
+                &remove_layer_collections_without_parents_stmt,
+                &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID],
+            )
+            .await?
+        {
+            // whenever one collection is deleted, we have to check again if there are more
+            // collections without parents
+        }
+
+        Ok(())
+    }
+
+    /// delete all layers without parent collection
+    async fn _remove_layers_without_parent_collection(
+        transaction: &tokio_postgres::Transaction<'_>,
+    ) -> Result<()> {
+        let remove_layers_without_parents_stmt = transaction
+            .prepare(
+                "DELETE FROM layers
+                 WHERE id NOT IN (
+                    SELECT layer FROM collection_layers
+                 );",
+            )
+            .await?;
+        transaction
+            .execute(&remove_layers_without_parents_stmt, &[])
+            .await?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -68,7 +115,7 @@ where
         collection: &LayerCollectionId,
     ) -> Result<LayerId> {
         let collection_id =
-            Uuid::from_str(&collection.0).map_err(|_| error::Error::IdStringMustBeUuid {
+            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
             })?;
 
@@ -77,7 +124,7 @@ where
         let layer = layer.user_input;
 
         let layer_id = Uuid::new_v4();
-        let symbology = serde_json::to_value(&layer.symbology).context(error::SerdeJson)?;
+        let symbology = serde_json::to_value(&layer.symbology).context(crate::error::SerdeJson)?;
 
         let trans = conn.build_transaction().start().await?;
 
@@ -96,7 +143,7 @@ where
                     &layer_id,
                     &layer.name,
                     &layer.description,
-                    &serde_json::to_value(&layer.workflow).context(error::SerdeJson)?,
+                    &serde_json::to_value(&layer.workflow).context(crate::error::SerdeJson)?,
                     &symbology,
                 ],
             )
@@ -123,12 +170,13 @@ where
         layer: Validated<AddLayer>,
         collection: &LayerCollectionId,
     ) -> Result<()> {
-        let layer_id = Uuid::from_str(&id.0).map_err(|_| error::Error::IdStringMustBeUuid {
-            found: collection.0.clone(),
-        })?;
+        let layer_id =
+            Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: collection.0.clone(),
+            })?;
 
         let collection_id =
-            Uuid::from_str(&collection.0).map_err(|_| error::Error::IdStringMustBeUuid {
+            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
             })?;
 
@@ -136,7 +184,7 @@ where
 
         let layer = layer.user_input;
 
-        let symbology = serde_json::to_value(&layer.symbology).context(error::SerdeJson)?;
+        let symbology = serde_json::to_value(&layer.symbology).context(crate::error::SerdeJson)?;
 
         let trans = conn.build_transaction().start().await?;
 
@@ -155,7 +203,7 @@ where
                     &layer_id,
                     &layer.name,
                     &layer.description,
-                    &serde_json::to_value(&layer.workflow).context(error::SerdeJson)?,
+                    &serde_json::to_value(&layer.workflow).context(crate::error::SerdeJson)?,
                     &symbology,
                 ],
             )
@@ -181,12 +229,13 @@ where
         layer: &LayerId,
         collection: &LayerCollectionId,
     ) -> Result<()> {
-        let layer_id = Uuid::from_str(&layer.0).map_err(|_| error::Error::IdStringMustBeUuid {
-            found: layer.0.clone(),
-        })?;
+        let layer_id =
+            Uuid::from_str(&layer.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: layer.0.clone(),
+            })?;
 
         let collection_id =
-            Uuid::from_str(&collection.0).map_err(|_| error::Error::IdStringMustBeUuid {
+            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
             })?;
 
@@ -210,9 +259,10 @@ where
         collection: Validated<AddLayerCollection>,
         parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId> {
-        let parent = Uuid::from_str(&parent.0).map_err(|_| error::Error::IdStringMustBeUuid {
-            found: parent.0.clone(),
-        })?;
+        let parent =
+            Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: parent.0.clone(),
+            })?;
 
         let mut conn = self.conn_pool.get().await?;
 
@@ -259,13 +309,14 @@ where
         parent: &LayerCollectionId,
     ) -> Result<()> {
         let collection_id =
-            Uuid::from_str(&id.0).map_err(|_| error::Error::IdStringMustBeUuid {
+            Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: id.0.clone(),
             })?;
 
-        let parent = Uuid::from_str(&parent.0).map_err(|_| error::Error::IdStringMustBeUuid {
-            found: parent.0.clone(),
-        })?;
+        let parent =
+            Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: parent.0.clone(),
+            })?;
 
         let mut conn = self.conn_pool.get().await?;
 
@@ -309,13 +360,14 @@ where
         parent: &LayerCollectionId,
     ) -> Result<()> {
         let collection =
-            Uuid::from_str(&collection.0).map_err(|_| error::Error::IdStringMustBeUuid {
+            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
             })?;
 
-        let parent = Uuid::from_str(&parent.0).map_err(|_| error::Error::IdStringMustBeUuid {
-            found: parent.0.clone(),
-        })?;
+        let parent =
+            Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: parent.0.clone(),
+            })?;
 
         let conn = self.conn_pool.get().await?;
 
@@ -330,6 +382,131 @@ where
         conn.execute(&stmt, &[&parent, &collection]).await?;
 
         Ok(())
+    }
+
+    async fn remove_collection(&self, collection: &LayerCollectionId) -> Result<()> {
+        let collection =
+            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: collection.0.clone(),
+            })?;
+
+        if collection == INTERNAL_LAYER_DB_ROOT_COLLECTION_ID {
+            return Err(LayerDbError::CannotRemoveRootCollection.into());
+        }
+
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.transaction().await?;
+
+        // delete the collection!
+        // on delete cascade removes all entries from `collection_children` and `collection_layers`
+
+        let remove_layer_collection_stmt = transaction
+            .prepare(
+                "DELETE FROM layer_collections
+                 WHERE id = $1;",
+            )
+            .await?;
+        transaction
+            .execute(&remove_layer_collection_stmt, &[&collection])
+            .await?;
+
+        Self::_remove_collections_without_parent_collection(&transaction).await?;
+
+        Self::_remove_layers_without_parent_collection(&transaction).await?;
+
+        transaction.commit().await.map_err(Into::into)
+    }
+
+    async fn remove_layer_from_collection(
+        &self,
+        layer: &LayerId,
+        collection: &LayerCollectionId,
+    ) -> Result<()> {
+        let collection_uuid =
+            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: collection.0.clone(),
+            })?;
+
+        let layer_uuid =
+            Uuid::from_str(&layer.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: layer.0.clone(),
+            })?;
+
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.transaction().await?;
+
+        let remove_layer_collection_stmt = transaction
+            .prepare(
+                "DELETE FROM collection_layers
+                 WHERE collection = $1
+                 AND layer = $2;",
+            )
+            .await?;
+        let num_results = transaction
+            .execute(
+                &remove_layer_collection_stmt,
+                &[&collection_uuid, &layer_uuid],
+            )
+            .await?;
+
+        if num_results == 0 {
+            return Err(LayerDbError::NoLayerForGivenIdInCollection {
+                layer: layer.clone(),
+                collection: collection.clone(),
+            }
+            .into());
+        }
+
+        Self::_remove_layers_without_parent_collection(&transaction).await?;
+
+        transaction.commit().await.map_err(Into::into)
+    }
+
+    async fn remove_collection_from_parent(
+        &self,
+        collection: &LayerCollectionId,
+        parent: &LayerCollectionId,
+    ) -> Result<()> {
+        let collection_uuid =
+            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: collection.0.clone(),
+            })?;
+
+        let parent_collection_uuid =
+            Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: parent.0.clone(),
+            })?;
+
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.transaction().await?;
+
+        let remove_layer_collection_stmt = transaction
+            .prepare(
+                "DELETE FROM collection_children
+                 WHERE child = $1
+                 AND parent = $2;",
+            )
+            .await?;
+        let num_results = transaction
+            .execute(
+                &remove_layer_collection_stmt,
+                &[&collection_uuid, &parent_collection_uuid],
+            )
+            .await?;
+
+        if num_results == 0 {
+            return Err(LayerDbError::NoCollectionForGivenIdInCollection {
+                collection: collection.clone(),
+                parent: parent.clone(),
+            }
+            .into());
+        }
+
+        Self::_remove_collections_without_parent_collection(&transaction).await?;
+
+        Self::_remove_layers_without_parent_collection(&transaction).await?;
+
+        transaction.commit().await.map_err(Into::into)
     }
 }
 
@@ -346,10 +523,11 @@ where
         collection_id: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
-        let collection =
-            Uuid::from_str(&collection_id.0).map_err(|_| error::Error::IdStringMustBeUuid {
+        let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
+            crate::error::Error::IdStringMustBeUuid {
                 found: collection_id.0.clone(),
-            })?;
+            }
+        })?;
 
         let conn = self.conn_pool.get().await?;
 
@@ -420,6 +598,7 @@ where
                         },
                         name: row.get(1),
                         description: row.get(2),
+                        properties: vec![],
                     })
                 } else {
                     CollectionItem::Collection(LayerCollectionListing {
@@ -454,9 +633,10 @@ where
     }
 
     async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
-        let layer_id = Uuid::from_str(&id.0).map_err(|_| error::Error::IdStringMustBeUuid {
-            found: id.0.clone(),
-        })?;
+        let layer_id =
+            Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: id.0.clone(),
+            })?;
 
         let conn = self.conn_pool.get().await?;
 
@@ -485,8 +665,8 @@ where
             },
             name: row.get(0),
             description: row.get(1),
-            workflow: serde_json::from_value(row.get(2)).context(error::SerdeJson)?,
-            symbology: serde_json::from_value(row.get(3)).context(error::SerdeJson)?,
+            workflow: serde_json::from_value(row.get(2)).context(crate::error::SerdeJson)?,
+            symbology: serde_json::from_value(row.get(3)).context(crate::error::SerdeJson)?,
             properties: vec![],
             metadata: HashMap::new(),
         })

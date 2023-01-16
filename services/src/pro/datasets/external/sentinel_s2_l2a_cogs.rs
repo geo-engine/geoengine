@@ -269,6 +269,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                     id: d.listing.id.clone(),
                     name: d.listing.name.clone(),
                     description: d.listing.description.clone(),
+                    properties: vec![],
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -435,9 +436,9 @@ impl SentinelS2L2aCogsMetaData {
                     let new_u_start = prev_u_start + 1;
                     log::debug!(
                         "duplicate start time: {} insert as {} following {}",
-                        t_start.as_rfc3339(),
-                        new_u_start.as_rfc3339(),
-                        prev_u_start.as_rfc3339()
+                        t_start.as_datetime_string(),
+                        new_u_start.as_datetime_string(),
+                        prev_u_start.as_datetime_string()
                     );
                     new_u_start
                 } else {
@@ -536,7 +537,11 @@ impl SentinelS2L2aCogsMetaData {
                 ), // TODO: order coordinates depending on projection
                 (
                     "datetime".to_owned(),
-                    format!("{}/{}", t_start.to_rfc3339(), t_end.to_rfc3339()),
+                    format!(
+                        "{}/{}",
+                        t_start.to_datetime_string(),
+                        t_end.to_datetime_string()
+                    ),
                 ),
                 ("limit".to_owned(), "500".to_owned()),
             ]

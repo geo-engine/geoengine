@@ -1,17 +1,29 @@
 use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, ExternalDataId, FeatureDataType,
-    LayerId, Measurement, Palette, RasterDataType, RasterQueryRectangle, RgbaColor,
-    SpatialPartition2D, SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption,
-    SpatialResolution, TimeInstance, TimeInterval, VectorDataType,
+    Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId,
+    FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+    Palette, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
+    RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority,
+    SpatialReferenceOption, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
+    TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
-    PlotResultDescriptor, RasterResultDescriptor, TypedOperator, TypedResultDescriptor,
-    VectorColumnInfo, VectorResultDescriptor,
+    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
+    GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
+    GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
+    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
+    OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
+    OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor, TimeReference,
+    TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
+    VectorResultDescriptor,
+};
+use crate::api::model::services::{
+    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
 };
 use crate::contexts::SessionId;
-use crate::datasets::listing::{Provenance, ProvenanceOutput};
-use crate::datasets::upload::UploadId;
+use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
+use crate::datasets::storage::{AutoCreateDataset, Dataset};
+use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::handlers;
 use crate::handlers::tasks::TaskAbortOptions;
 use crate::handlers::wcs::CoverageResponse;
@@ -19,14 +31,14 @@ use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, Ge
 use crate::handlers::wms::MapResponse;
 use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListing, LayerListing, Property,
-    ProviderLayerCollectionId, ProviderLayerId,
+    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
+    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::LayerCollectionId;
 use crate::ogc::util::OgcBoundingBox;
-
 use crate::ogc::{wcs, wfs, wms};
 use crate::pro;
+use crate::pro::handlers::users::QuotaUsed;
 use crate::projects::{
     ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
     PolygonSymbology, ProjectId, RasterSymbology, STRectangle, StrokeParam, Symbology,
@@ -45,10 +57,19 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        crate::util::server::available_handler,
         crate::util::server::server_info_handler,
         handlers::layers::layer_handler,
+        handlers::layers::layer_to_workflow_id_handler,
         handlers::layers::list_collection_handler,
         handlers::layers::list_root_collections_handler,
+        handlers::layers::add_layer,
+        handlers::layers::add_collection,
+        handlers::layers::remove_collection,
+        handlers::layers::remove_layer_from_collection,
+        handlers::layers::add_existing_layer_to_collection,
+        handlers::layers::add_existing_collection_to_collection,
+        handlers::layers::remove_collection_from_collection,
         handlers::tasks::abort_handler,
         handlers::tasks::list_handler,
         handlers::tasks::status_handler,
@@ -69,8 +90,16 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::anonymous_handler,
         pro::handlers::users::login_handler,
         pro::handlers::users::logout_handler,
+        pro::handlers::users::quota_handler,
+        pro::handlers::users::user_quota_handler,
         pro::handlers::users::register_user_handler,
         pro::handlers::users::session_handler,
+        handlers::datasets::list_datasets_handler,
+        handlers::datasets::list_volumes_handler,
+        handlers::datasets::get_dataset_handler,
+        handlers::datasets::create_dataset_handler,
+        handlers::datasets::auto_create_dataset_handler,
+        handlers::datasets::suggest_meta_data_handler,
     ),
     components(
         schemas(
@@ -79,6 +108,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             UserRegistration,
             DateTime,
             UserInfo,
+            QuotaUsed,
 
             DataId,
             DataProviderId,
@@ -145,6 +175,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             LayerCollectionListing,
             Property,
             CollectionItem,
+            AddLayer,
+            AddLayerCollection,
 
             Breakpoint,
             ColorParam,
@@ -195,6 +227,53 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             Feature,
             FeatureType,
             Coordinates,
+
+            CreateDataset,
+            AutoCreateDataset,
+            OrderBy,
+            DatasetListing,
+            MetaDataSuggestion,
+            MetaDataDefinition,
+            MockMetaData,
+            GdalMetaDataRegular,
+            GdalMetaDataStatic,
+            GdalMetadataNetCdfCf,
+            GdalMetaDataList,
+            GdalDatasetParameters,
+            TimeStep,
+            GdalSourceTimePlaceholder,
+            GdalLoadingInfoTemporalSlice,
+            FileNotFoundHandling,
+            GdalDatasetGeoTransform,
+            GdalMetadataMapping,
+            TimeGranularity,
+            DateTimeParseFormat,
+            TimeReference,
+            RasterPropertiesKey,
+            RasterPropertiesEntryType,
+            OgrMetaData,
+            GdalConfigOption,
+            MockDatasetDataSourceLoadingInfo,
+            OgrSourceDataset,
+            OgrSourceColumnSpec,
+            TypedGeometry,
+            OgrSourceErrorSpec,
+            OgrSourceDatasetTimeType,
+            OgrSourceDurationSpec,
+            OgrSourceTimeFormat,
+            NoGeometry,
+            MultiPoint,
+            MultiLineString,
+            MultiPolygon,
+            FormatSpecifics,
+            CsvHeader,
+            UnixTimeStampType,
+            Dataset,
+            DatasetDefinition,
+            AddDataset,
+            Volume,
+            VolumeName,
+            DataPath
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

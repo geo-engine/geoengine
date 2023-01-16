@@ -4,7 +4,7 @@ use std::time::Duration;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::util::raster_stream_to_geotiff::{
-    raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+    single_timestep_raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
 };
 use log::info;
 use snafu::{ensure, ResultExt};
@@ -14,7 +14,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
-use utoipa::openapi::{ObjectBuilder, SchemaFormat, SchemaType};
+use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
 use utoipa::ToSchema;
 
 use crate::api::model::datatypes::TimeInterval;
@@ -155,9 +155,7 @@ async fn wcs_capabilities_handler<C: Context>(
                     <wcs:Identifier>{workflow}</wcs:Identifier>
                 </wcs:CoverageSummary>
             </wcs:Contents>
-    </wcs:Capabilities>"#,
-        wcs_url = wcs_url,
-        workflow = workflow
+    </wcs:Capabilities>"#
     );
 
     Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
@@ -361,7 +359,7 @@ async fn wcs_get_coverage_handler<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context(session.clone())?;
 
     let initialized = operator
         .clone()
@@ -417,10 +415,10 @@ async fn wcs_get_coverage_handler<C: Context>(
         spatial_resolution,
     };
 
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(session)?;
 
     let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
-        raster_stream_to_geotiff_bytes(
+        single_timestep_raster_stream_to_geotiff_bytes(
             p,
             query_rect,
             query_ctx,
@@ -434,8 +432,8 @@ async fn wcs_get_coverage_handler<C: Context>(
                 force_big_tiff: false,
             },
             Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            conn_closed
-            
+            conn_closed,
+            execution_context.tiling_specification(),
         )
         .await)?
     .map_err(error::Error::from)?;
@@ -449,7 +447,7 @@ impl ToSchema for CoverageResponse {
     fn schema() -> utoipa::openapi::schema::Schema {
         ObjectBuilder::new()
             .schema_type(SchemaType::String)
-            .format(Some(SchemaFormat::Binary))
+            .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
             .into()
     }
 }
@@ -493,7 +491,7 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let (_, workflow_id) = register_ndvi_workflow_helper(&ctx).await;
 
         let params = &[
             ("service", "WCS"),
@@ -504,7 +502,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wcs/{}?{}",
-                &id.to_string(),
+                &workflow_id.to_string(),
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -565,8 +563,7 @@ mod tests {
                     <wcs:Identifier>{workflow_id}</wcs:Identifier>
                 </wcs:CoverageSummary>
             </wcs:Contents>
-    </wcs:Capabilities>"#,
-                workflow_id = id
+    </wcs:Capabilities>"#
             ),
             body
         );
@@ -577,19 +574,19 @@ mod tests {
         let ctx = InMemoryContext::test_default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let (_, workflow_id) = register_ndvi_workflow_helper(&ctx).await;
 
         let params = &[
             ("service", "WCS"),
             ("request", "DescribeCoverage"),
             ("version", "1.1.1"),
-            ("identifiers", &id.to_string()),
+            ("identifiers", &workflow_id.to_string()),
         ];
 
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wcs/{}?{}",
-                &id.to_string(),
+                &workflow_id.to_string(),
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -627,8 +624,7 @@ mod tests {
             <wcs:SupportedCRS>EPSG:4326</wcs:SupportedCRS>
             <wcs:SupportedFormat>image/tiff</wcs:SupportedFormat>
         </wcs:CoverageDescription>
-    </wcs:CoverageDescriptions>"#,
-                workflow_id = id
+    </wcs:CoverageDescriptions>"#
             ),
             body
         );

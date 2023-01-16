@@ -11,11 +11,12 @@ use crate::layers::layer::{
     ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::util::postgres::DatabaseConnectionConfig;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::bb8::{Pool, PooledConnection};
-use bb8_postgres::tokio_postgres::{Config, NoTls};
+use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
@@ -41,50 +42,21 @@ pub const GFBIO_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x907f_9f5b_0304_4a0e_a5ef_28de_62d1_c0f9);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct DatabaseConnectionConfig {
-    host: String,
-    port: u16,
-    database: String,
-    schema: String,
-    user: String,
-    password: String,
-}
-
-impl DatabaseConnectionConfig {
-    fn pg_config(&self) -> Config {
-        let mut config = Config::new();
-        config
-            .user(&self.user)
-            .password(&self.password)
-            .host(&self.host)
-            .dbname(&self.database);
-        config
-    }
-
-    fn ogr_pg_config(&self) -> String {
-        format!(
-            "PG:host={} port={} dbname={} user={} password={}",
-            self.host, self.port, self.database, self.user, self.password
-        )
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GfbioDataProviderDefinition {
+pub struct GfbioAbcdDataProviderDefinition {
     name: String,
     db_config: DatabaseConnectionConfig,
 }
 
 #[typetag::serde]
 #[async_trait]
-impl DataProviderDefinition for GfbioDataProviderDefinition {
+impl DataProviderDefinition for GfbioAbcdDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
-        Ok(Box::new(GfbioDataProvider::new(self.db_config).await?))
+        Ok(Box::new(GfbioAbcdDataProvider::new(self.db_config).await?))
     }
 
     fn type_name(&self) -> &'static str {
-        "GFBio"
+        "GFBioABCD"
     }
 
     fn name(&self) -> String {
@@ -98,14 +70,14 @@ impl DataProviderDefinition for GfbioDataProviderDefinition {
 
 // TODO: make schema, table names and column names configurable like in crawler
 #[derive(Debug)]
-pub struct GfbioDataProvider {
+pub struct GfbioAbcdDataProvider {
     db_config: DatabaseConnectionConfig,
     pool: Pool<PostgresConnectionManager<NoTls>>,
     column_hash_to_name: HashMap<String, String>,
     column_name_to_hash: HashMap<String, String>,
 }
 
-impl GfbioDataProvider {
+impl GfbioAbcdDataProvider {
     const COLUMN_NAME_LONGITUDE: &'static str = "e9eefbe81d4343c6a114b7d522017bf493b89cef";
     const COLUMN_NAME_LATITUDE: &'static str = "506e190d0ad979d1c7a816223d1ded3604907d91";
 
@@ -114,7 +86,7 @@ impl GfbioDataProvider {
         let pool = Pool::builder().build(pg_mgr).await?;
 
         let (column_hash_to_name, column_name_to_hash) =
-            Self::resolve_columns(pool.get().await?, &db_config.schema).await?;
+            Self::resolve_columns(&pool.get().await?, &db_config.schema).await?;
 
         Ok(Self {
             db_config,
@@ -124,17 +96,16 @@ impl GfbioDataProvider {
         })
     }
 
-    async fn resolve_columns(
-        conn: PooledConnection<'_, PostgresConnectionManager<NoTls>>,
+    pub async fn resolve_columns(
+        conn: &PooledConnection<'_, PostgresConnectionManager<NoTls>>,
         schema: &str,
     ) -> Result<(HashMap<String, String>, HashMap<String, String>)> {
         let stmt = conn
             .prepare(&format!(
                 r#"
             SELECT hash, name
-            FROM {}.abcd_datasets_translation
-            WHERE hash <> $1 AND hash <> $2;"#,
-                schema
+            FROM {schema}.abcd_datasets_translation
+            WHERE hash <> $1 AND hash <> $2;"#
             ))
             .await?;
 
@@ -151,8 +122,8 @@ impl GfbioDataProvider {
         ))
     }
 
-    fn build_attribute_query(surrogate_key: i32) -> String {
-        format!("surrogate_key = {surrogate}", surrogate = surrogate_key)
+    pub fn build_attribute_query(surrogate_key: i32) -> String {
+        format!("surrogate_key = {surrogate_key}")
     }
 
     pub async fn resolve_surrogate_key(&self, dataset_id: &str) -> Result<Option<i32>> {
@@ -171,10 +142,47 @@ impl GfbioDataProvider {
 
         Ok(row.map(|r| r.get::<usize, i32>(0)))
     }
+
+    pub async fn get_provenance(
+        id: &DataId,
+        surrogate_key: i32,
+        column_name_to_hash: &HashMap<String, String>,
+        conn: &PooledConnection<'_, PostgresConnectionManager<NoTls>>,
+        schema: &str,
+    ) -> Result<ProvenanceOutput> {
+        let stmt = conn
+            .prepare(&format!(
+                r#"
+        SELECT "{citation}", "{license}", "{uri}"
+        FROM {schema}.abcd_datasets WHERE surrogate_key = $1;"#,
+                citation = column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/IPRStatements/Citations/Citation/Text")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                uri = column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/Description/Representation/URI")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                license = column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/IPRStatements/Licenses/License/Text")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                schema = schema
+            ))
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&surrogate_key]).await?;
+
+        Ok(ProvenanceOutput {
+            data: id.clone(),
+            provenance: Some(Provenance {
+                citation: row.try_get(0).unwrap_or_else(|_| String::new()),
+                license: row.try_get(1).unwrap_or_else(|_| String::new()),
+                uri: row.try_get(2).unwrap_or_else(|_| String::new()),
+            }),
+        })
+    }
 }
 
 #[async_trait]
-impl LayerCollectionProvider for GfbioDataProvider {
+impl LayerCollectionProvider for GfbioAbcdDataProvider {
     async fn collection(
         &self,
         collection: &LayerCollectionId,
@@ -228,6 +236,7 @@ impl LayerCollectionProvider for GfbioDataProvider {
                     },
                     name: row.get(1),
                     description: row.try_get(2).unwrap_or_else(|_| String::new()),
+                    properties: vec![],
                 })
             })
             .collect();
@@ -305,60 +314,30 @@ impl LayerCollectionProvider for GfbioDataProvider {
 }
 
 #[async_trait]
-impl DataProvider for GfbioDataProvider {
+impl DataProvider for GfbioAbcdDataProvider {
     async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
         let surrogate_key: i32 = id
             .external()
-            .ok_or(Error::InvalidDataId)
-            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            })?
+            .ok_or(Error::InvalidDataId)?
             .layer_id
             .0
             .parse()
-            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            })?;
+            .map_err(|_| Error::InvalidDataId)?;
 
-        let conn = self.pool.get().await?;
-
-        let stmt = conn
-            .prepare(&format!(
-                r#"
-            SELECT "{citation}", "{license}", "{uri}"
-            FROM {schema}.abcd_datasets WHERE surrogate_key = $1;"#,
-                citation = self
-                    .column_name_to_hash
-                    .get("/DataSets/DataSet/Metadata/IPRStatements/Citations/Citation/Text")
-                    .ok_or(Error::GfbioMissingAbcdField)?,
-                uri = self
-                    .column_name_to_hash
-                    .get("/DataSets/DataSet/Metadata/Description/Representation/URI")
-                    .ok_or(Error::GfbioMissingAbcdField)?,
-                license = self
-                    .column_name_to_hash
-                    .get("/DataSets/DataSet/Metadata/IPRStatements/Licenses/License/Text")
-                    .ok_or(Error::GfbioMissingAbcdField)?,
-                schema = self.db_config.schema
-            ))
-            .await?;
-
-        let row = conn.query_one(&stmt, &[&surrogate_key]).await?;
-
-        Ok(ProvenanceOutput {
-            data: id.clone(),
-            provenance: Some(Provenance {
-                citation: row.try_get(0).unwrap_or_else(|_| String::new()),
-                license: row.try_get(1).unwrap_or_else(|_| String::new()),
-                uri: row.try_get(2).unwrap_or_else(|_| String::new()),
-            }),
-        })
+        Self::get_provenance(
+            id,
+            surrogate_key,
+            &self.column_name_to_hash,
+            &self.pool.get().await?,
+            &self.db_config.schema,
+        )
+        .await
     }
 }
 
 #[async_trait]
 impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for GfbioDataProvider
+    for GfbioAbcdDataProvider
 {
     async fn meta_data(
         &self,
@@ -417,7 +396,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 force_ogr_spatial_filter: true,
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
-                attribute_query: Some(GfbioDataProvider::build_attribute_query(surrogate_key)),
+                attribute_query: Some(GfbioAbcdDataProvider::build_attribute_query(surrogate_key)),
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -446,7 +425,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
 #[async_trait]
 impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for GfbioDataProvider
+    for GfbioAbcdDataProvider
 {
     async fn meta_data(
         &self,
@@ -462,7 +441,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 #[async_trait]
 impl
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for GfbioDataProvider
+    for GfbioAbcdDataProvider
 {
     async fn meta_data(
         &self,
@@ -494,6 +473,7 @@ mod tests {
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
     use rand::RngCore;
+    use tokio_postgres::Config;
 
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
@@ -524,9 +504,7 @@ mod tests {
         conn.batch_execute(&format!(
             "CREATE SCHEMA {schema}; 
             SET SEARCH_PATH TO {schema}, public;
-            {sql}",
-            schema = schema,
-            sql = sql
+            {sql}"
         ))
         .await
         .unwrap();
@@ -545,7 +523,7 @@ mod tests {
         let pg_mgr = PostgresConnectionManager::new(pg_config, NoTls);
         let conn = pg_mgr.connect().await.unwrap();
 
-        conn.batch_execute(&format!("DROP SCHEMA {} CASCADE;", schema))
+        conn.batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
             .await
             .unwrap();
     }
@@ -556,7 +534,7 @@ mod tests {
 
         let test_schema = create_test_data(&db_config).await;
 
-        let provider = Box::new(GfbioDataProviderDefinition {
+        let provider = Box::new(GfbioAbcdDataProviderDefinition {
             name: "GFBio".to_string(),
             db_config: DatabaseConnectionConfig {
                 host: db_config.host.clone(),
@@ -605,6 +583,7 @@ mod tests {
                     },
                     name: "Example Title".to_string(),
                     description: String::new(),
+                    properties: vec![],
                 })],
                 entry_label: None,
                 properties: vec![],
@@ -627,7 +606,7 @@ mod tests {
 
             let ogr_pg_string = provider_db_config.ogr_pg_config();
 
-            let provider = Box::new(GfbioDataProviderDefinition {
+            let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
                 db_config: provider_db_config,
             })
@@ -689,7 +668,7 @@ mod tests {
             let result_descriptor = meta.result_descriptor().await.map_err(|e| e.to_string())?;
 
             if result_descriptor != expected {
-                return Err(format!("{:?} != {:?}", result_descriptor, expected));
+                return Err(format!("{result_descriptor:?} != {expected:?}"));
             }
 
             let mut loading_info = meta
@@ -713,7 +692,7 @@ mod tests {
 
             let expected = OgrSourceDataset {
                 file_name: PathBuf::from(ogr_pg_string),
-                layer_name: format!("{}.abcd_units", test_schema),
+                layer_name: format!("{test_schema}.abcd_units"),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::None,
                 default_geometry: None,
@@ -780,7 +759,7 @@ mod tests {
             };
 
             if loading_info != expected {
-                return Err(format!("{:?} != {:?}", loading_info, expected));
+                return Err(format!("{loading_info:?} != {expected:?}"));
             }
 
             Ok(())
@@ -800,7 +779,7 @@ mod tests {
     #[tokio::test]
     async fn it_loads() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
-            let provider = Box::new(GfbioDataProviderDefinition {
+            let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
@@ -886,7 +865,7 @@ mod tests {
             .unwrap();
 
             if result != &expected {
-                return Err(format!("{:?} != {:?}", result, expected));
+                return Err(format!("{result:?} != {expected:?}"));
             }
 
             Ok(())
@@ -906,7 +885,7 @@ mod tests {
     #[tokio::test]
     async fn it_cites() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
-            let provider = Box::new(GfbioDataProviderDefinition {
+            let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
@@ -944,7 +923,7 @@ mod tests {
             };
 
             if result != expected {
-                return Err(format!("{:?} != {:?}", result, expected));
+                return Err(format!("{result:?} != {expected:?}"));
             }
 
             Ok(())

@@ -314,6 +314,41 @@ pub enum Error {
     QueryCanceled,
 
     AbortTriggerAlreadyUsed,
+
+    SubPathMustNotEscapeBasePath {
+        base: PathBuf,
+        sub_path: PathBuf,
+    },
+
+    InvalidDataProviderConfig,
+
+    InvalidMachineLearningConfig,
+
+    MachineLearningModelNotFound,
+
+    InvalidMlModelPath,
+    CouldNotGetMlModelDirectory,
+
+    #[cfg(feature = "xgboost")]
+    #[snafu(context(false))]
+    XGBoost {
+        source: crate::pro::ml::xgboost::XGBoostModuleError,
+    },
+
+    #[snafu(context(false))]
+    PieChart {
+        source: crate::plot::PieChartError,
+    },
+
+    #[snafu(display(
+        "InvalidNumberOfTimeStepsError: expected \"{}\" found \"{}\"",
+        expected,
+        found
+    ))]
+    InvalidNumberOfTimeSteps {
+        expected: usize,
+        found: usize,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

@@ -1,7 +1,8 @@
 use crate::api::model::datatypes::{DataId, DatasetId, LayerId};
+use crate::api::model::services::AddDataset;
 use crate::contexts::{Db, SimpleSession};
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
-use crate::datasets::storage::{AddDataset, Dataset, DatasetDb, DatasetStore, DatasetStorer};
+use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, DatasetStorer};
 use crate::error;
 use crate::error::Result;
 use crate::layers::layer::{
@@ -183,7 +184,7 @@ impl DatasetStore<SimpleSession> for HashMapDatasetDb {
             id,
             name: dataset.name,
             description: dataset.description,
-            result_descriptor,
+            result_descriptor: result_descriptor.into(),
             source_operator: dataset.source_operator,
             symbology: dataset.symbology,
             provenance: dataset.provenance,
@@ -415,6 +416,7 @@ impl LayerCollectionProvider for HashMapDatasetDb {
                     },
                     name: d.name.clone(),
                     description: d.description.clone(),
+                    properties: vec![],
                 })
             })
             .collect();

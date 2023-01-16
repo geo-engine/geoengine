@@ -220,7 +220,7 @@ impl TimeStep {
                         time_instance: time_to_snap,
                     })?;
 
-                let diff = (time_to_snap_date_time.year() - ref_date_time.year()) as i32;
+                let diff: i32 = time_to_snap_date_time.year() - ref_date_time.year();
                 let snapped_year = ref_date_time.year()
                     + ((f64::from(diff) / f64::from(self.step)).floor() as i32 * self.step as i32);
 
@@ -587,8 +587,8 @@ mod tests {
             t_result,
             t_expect,
             "left: {} right: {}",
-            t_1.as_rfc3339(),
-            t_result.as_rfc3339()
+            t_1.as_datetime_string(),
+            t_result.as_datetime_string()
         );
     }
 

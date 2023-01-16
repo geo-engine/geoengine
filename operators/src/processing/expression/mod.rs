@@ -1078,17 +1078,7 @@ mod tests {
 
         let real_raster = if let Some(no_data_value) = no_data_value {
             MaskedGrid2D::from(raster)
-                .map_elements(|e| {
-                    if let Some(v) = e {
-                        if v == no_data_value {
-                            None
-                        } else {
-                            Some(v)
-                        }
-                    } else {
-                        None
-                    }
-                })
+                .map_elements(|e: Option<i8>| e.filter(|v| *v != no_data_value))
                 .into()
         } else {
             GridOrEmpty::from(raster)

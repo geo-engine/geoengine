@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a GFBio Collection Data Provider that replaces the custom GFBio API for accessing search results.
+
+  - https://github.com/geo-engine/geoengine/pull/697
+
+- Added a handler (`/layers/{provider}/{layer}/workflowId`) to register a layer by id and return the resulting workflow id.
+
+  - https://github.com/geo-engine/geoengine/pull/692
+
+- Added a new operator `XGBoost`. This operator allows to use a pretrained model in order to make predictions based on some set of raster tile data.
+
+  - https://github.com/geo-engine/geoengine/pull/639
+
+- Added a handler (`/available`) to the API to check if the service is available.
+
+  - https://github.com/geo-engine/geoengine/pull/681
+
 - Added spatial resolution to the `RasterResultDescriptor` that tracks the native resolution of the raster data through raster operations.
 
   - https://github.com/geo-engine/geoengine/pull/618
@@ -50,6 +66,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a `RasterScale` operator
 
   - https://github.com/geo-engine/geoengine/pull/610
+
+- Added a `Rasterization` operator
+  
+  - https://github.com/geo-engine/geoengine/pull/683
+
+- Added method to create dataset from the result of the workflow via a task
+
+  - https://github.com/geo-engine/geoengine/pull/675
+
+- Added a `PieChart` operator
+
+  - https://github.com/geo-engine/geoengine/pull/694
+
 
 ### Changed
 

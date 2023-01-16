@@ -226,7 +226,7 @@ where
             .chain(left_line)
             .collect();
 
-        let proj_outline_coordinates = projector.project_coordinates(&outline_coordinates)?;
+        let proj_outline_coordinates = projector.project_coordinates(outline_coordinates)?;
 
         let bbox = MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds();
 
@@ -266,17 +266,11 @@ where
             .map(|use_area| use_area.reproject(&area_of_use_projector))
             .transpose()?;
 
-        let area_of_use_proj = match area_of_use_proj {
-            Some(area_of_use_proj) => area_of_use_proj,
-            None => return Ok(None),
-        };
+        let Some(area_of_use_proj) = area_of_use_proj else { return Ok(None); };
 
         let clipped_bbox = self.intersection(&area_of_use_proj);
 
-        let clipped_bbox = match clipped_bbox {
-            Some(bbox) => bbox,
-            None => return Ok(None),
-        };
+        let Some(clipped_bbox) = clipped_bbox else { return Ok(None); };
 
         // project points on the bbox
         let upper_line = Line::new(clipped_bbox.upper_left(), clipped_bbox.upper_right())
@@ -462,10 +456,7 @@ pub fn reproject_query<S: AxisAlignedRectangle>(
     source: SpatialReference,
     target: SpatialReference,
 ) -> Result<Option<QueryRectangle<S>>> {
-    let (s_bbox, p_bbox) = match reproject_and_unify_bbox(query.spatial_bounds, target, source)? {
-        (Some(s_bbox), Some(p_bbox)) => (s_bbox, p_bbox),
-        _ => return Ok(None),
-    };
+    let (Some(s_bbox), Some(p_bbox)) = reproject_and_unify_bbox(query.spatial_bounds, target, source)? else { return Ok(None); };
 
     let p_spatial_resolution =
         suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
@@ -500,7 +491,6 @@ pub fn reproject_and_unify_bbox<T: AxisAlignedRectangle>(
 #[cfg(test)]
 mod tests {
 
-    use crate::assert_approx_eq;
     use crate::primitives::{BoundingBox2D, SpatialPartition2D};
     use crate::spatial_reference::SpatialReferenceAuthority;
     use crate::util::well_known_data::{
@@ -824,14 +814,13 @@ mod tests {
             input.unwrap(),
             SpatialPartition2D::new_unchecked((-180., 85.06).into(), (180., -85.06).into())
         );
-        let output = output.unwrap();
-        assert_approx_eq!(
-            &[output.upper_left().x, output.upper_left().y],
-            &[-20_037_508.342_789_244, 20_048_966.104_014_594]
-        );
-        assert_approx_eq!(
-            &[output.lower_right().x, output.lower_right().y],
-            &[20_037_508.342_789_244, -20_048_966.104_014_594]
+
+        assert_eq!(
+            output.unwrap(),
+            SpatialPartition2D::new_unchecked(
+                (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+                (20_037_508.342_789_244, -20_048_966.104_014_594).into()
+            )
         );
     }
 }

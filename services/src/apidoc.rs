@@ -8,25 +8,22 @@ use crate::api::model::datatypes::{
     TimeInstance, TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
-    CsvHeader, FormatSpecifics, OgrMetaData, OgrSourceDurationSpec, OgrSourceTimeFormat,
-    UnixTimeStampType,
-};
-use crate::api::model::operators::{
-    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-    GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic,
-    GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
-    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrSourceColumnSpec, OgrSourceDataset,
-    OgrSourceDatasetTimeType, OgrSourceErrorSpec, PlotResultDescriptor, RasterResultDescriptor,
-    TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor, VectorColumnInfo,
+    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
+    GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
+    GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
+    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
+    OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
+    OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor, TimeReference,
+    TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
     VectorResultDescriptor,
 };
-use crate::api::model::services::{MetaDataDefinition, MetaDataSuggestion};
+use crate::api::model::services::{
+    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
+};
 use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
-use crate::datasets::storage::{
-    AddDataset, AutoCreateDataset, CreateDataset, Dataset, DatasetDefinition,
-};
-use crate::datasets::upload::UploadId;
+use crate::datasets::storage::{AutoCreateDataset, Dataset};
+use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::handlers;
 use crate::handlers::plots::WrappedPlotOutput;
 use crate::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
@@ -36,8 +33,8 @@ use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, Ge
 use crate::handlers::wms::MapResponse;
 use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListing, LayerListing, Property,
-    ProviderLayerCollectionId, ProviderLayerId,
+    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
+    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::LayerCollectionId;
 use crate::ogc::util::OgcBoundingBox;
@@ -56,10 +53,19 @@ use utoipa::{Modify, OpenApi};
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        crate::util::server::available_handler,
         crate::util::server::server_info_handler,
         handlers::layers::layer_handler,
+        handlers::layers::layer_to_workflow_id_handler,
         handlers::layers::list_collection_handler,
         handlers::layers::list_root_collections_handler,
+        handlers::layers::add_layer,
+        handlers::layers::add_collection,
+        handlers::layers::remove_collection,
+        handlers::layers::remove_layer_from_collection,
+        handlers::layers::add_existing_layer_to_collection,
+        handlers::layers::add_existing_collection_to_collection,
+        handlers::layers::remove_collection_from_collection,
         handlers::session::anonymous_handler,
         handlers::session::session_handler,
         handlers::session::session_project_handler,
@@ -81,6 +87,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::load_workflow_handler,
         handlers::workflows::register_workflow_handler,
         handlers::datasets::list_datasets_handler,
+        handlers::datasets::list_volumes_handler,
         handlers::datasets::get_dataset_handler,
         handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
@@ -157,6 +164,8 @@ use utoipa::{Modify, OpenApi};
             LayerCollectionListing,
             Property,
             CollectionItem,
+            AddLayer,
+            AddLayerCollection,
 
             Breakpoint,
             ColorParam,
@@ -233,6 +242,7 @@ use utoipa::{Modify, OpenApi};
             RasterPropertiesKey,
             RasterPropertiesEntryType,
             OgrMetaData,
+            GdalConfigOption,
             MockDatasetDataSourceLoadingInfo,
             OgrSourceDataset,
             OgrSourceColumnSpec,
@@ -251,6 +261,9 @@ use utoipa::{Modify, OpenApi};
             Dataset,
             DatasetDefinition,
             AddDataset,
+            Volume,
+            VolumeName,
+            DataPath,
 
             PlotOutputFormat,
             WrappedPlotOutput
