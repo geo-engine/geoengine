@@ -73,21 +73,17 @@ impl SpatialPartition2D {
         // TODO: replace with pixel snapping once raster bounds use pixels
         const EPSILON: f64 = 0.000_001;
 
-        let lr = bbox.lower_right();
+        let upper_left = bbox.upper_left();
 
-        // add an epsilon to the lower right coordinate to make sure that all pixels are included
+        let x_pixels = ((bbox.size_x() + EPSILON * resolution.x) / resolution.x).ceil();
+        let y_pixels = ((bbox.size_y() + EPSILON * resolution.y) / resolution.y).ceil();
 
-        let epsilon_x = resolution.x * EPSILON;
-        let epsilon_y = resolution.y * EPSILON;
+        let snapped_lower_right = Coordinate2D::new(
+            upper_left.x + x_pixels * resolution.x,
+            upper_left.y - y_pixels * resolution.y,
+        );
 
-        Self {
-            upper_left_coordinate: bbox.upper_left(),
-
-            lower_right_coordinate: Coordinate2D {
-                x: ((lr.x + epsilon_x) / resolution.x).ceil() * resolution.x,
-                y: ((lr.y + epsilon_y) / resolution.y).ceil() * resolution.y,
-            },
-        }
+        SpatialPartition2D::new_unchecked(upper_left, snapped_lower_right)
     }
 
     /// Checks if a coordinate is located inside spatial partition
@@ -333,7 +329,7 @@ mod tests {
     #[test]
     fn bbox_to_partition() {
         let bbox = BoundingBox2D::new_unchecked((-180., -89.95).into(), (179.95, 90.).into());
-        let res = SpatialResolution { x: 0.1, y: -0.1 };
+        let res = SpatialResolution::new(0.1, 0.1).unwrap();
         assert_eq!(
             SpatialPartition2D::with_bbox_and_resolution(bbox, res),
             SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into())
@@ -343,7 +339,7 @@ mod tests {
     #[test]
     fn bbox_to_partition_border_line() {
         let bbox = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
-        let res = SpatialResolution { x: 0.1, y: -0.1 };
+        let res = SpatialResolution::new(0.1, 0.1).unwrap();
         let partition = SpatialPartition2D::with_bbox_and_resolution(bbox, res);
 
         assert!(approx_eq!(

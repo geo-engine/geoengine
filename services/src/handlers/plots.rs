@@ -334,7 +334,7 @@ mod tests {
                 "plotType": "Statistics",
                 "data": {
                     "Raster-1": {
-                        "valueCount": 12,
+                        "valueCount": 24, // Note: this is caused by the query being a BoundingBox where the right and lower bounds are inclusive. This requires that the tiles that inculde the right and lower bounds are also produced.
                         "validCount": 6,
                         "min": 1.0,
                         "max": 6.0,
