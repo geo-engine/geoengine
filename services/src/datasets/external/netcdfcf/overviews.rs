@@ -772,7 +772,7 @@ mod tests {
     };
     use geoengine_datatypes::{
         hashmap,
-        operations::image::{ColorFields, Colorizer, RgbaColor},
+        operations::image::{Colorizer, DefaultColors, RgbaColor},
         primitives::{DateTime, Measurement, SpatialResolution, TimeGranularity, TimeStep},
         raster::RasterDataType,
         spatial_reference::SpatialReference,
@@ -1088,7 +1088,7 @@ mod tests {
                             .into(),
                     ],
                     no_data_color: RgbaColor::new(0, 0, 0, 0),
-                    color_fields: ColorFields::OverUnder {
+                    default_colors: DefaultColors::OverUnder {
                         over_color: RgbaColor::new(255, 255, 255, 255),
                         under_color: RgbaColor::new(0, 0, 0, 255)
                     }

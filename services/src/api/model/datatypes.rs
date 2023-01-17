@@ -1,6 +1,6 @@
 use crate::error::{self, Result};
 use crate::identifier;
-use geoengine_datatypes::operations::image::ColorFields;
+use geoengine_datatypes::operations::image::DefaultColors;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
@@ -1191,13 +1191,13 @@ pub enum Colorizer {
     LinearGradient {
         breakpoints: Vec<Breakpoint>,
         no_data_color: RgbaColor,
-        color_fields: ColorFields,
+        color_fields: DefaultColors,
     },
     #[serde(rename_all = "camelCase")]
     LogarithmicGradient {
         breakpoints: Vec<Breakpoint>,
         no_data_color: RgbaColor,
-        color_fields: ColorFields,
+        color_fields: DefaultColors,
     },
     #[serde(rename_all = "camelCase")]
     Palette {
@@ -1214,7 +1214,7 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
             geoengine_datatypes::operations::image::Colorizer::LinearGradient {
                 breakpoints,
                 no_data_color,
-                color_fields,
+                default_colors: color_fields,
             } => Self::LinearGradient {
                 breakpoints: breakpoints
                     .into_iter()
@@ -1226,7 +1226,7 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
             geoengine_datatypes::operations::image::Colorizer::LogarithmicGradient {
                 breakpoints,
                 no_data_color,
-                color_fields,
+                default_colors: color_fields,
             } => Self::LogarithmicGradient {
                 breakpoints: breakpoints
                     .into_iter()

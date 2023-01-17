@@ -14,7 +14,7 @@ use crate::util::retry::retry;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-use geoengine_datatypes::operations::image::{ColorFields, RgbaColor};
+use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
@@ -213,7 +213,7 @@ impl SentinelS2L2aCogsDataProvider {
                                             .expect("valid breakpoint"),
                                     ],
                                     RgbaColor::transparent(),
-                                    ColorFields::OverUnder {
+                                    DefaultColors::OverUnder {
                                         over_color: RgbaColor::white(),
                                         under_color: RgbaColor::black(),
                                     },

@@ -1,6 +1,6 @@
 use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
-    operations::image::{ColorFields, Colorizer, RgbaColor, ToPng},
+    operations::image::{Colorizer, DefaultColors, RgbaColor, ToPng},
     primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
     raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
@@ -89,7 +89,7 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Result<Colorizer> {
                 .unwrap(),
         ],
         RgbaColor::transparent(),
-        ColorFields::OverUnder {
+        DefaultColors::OverUnder {
             over_color: RgbaColor::white(),
             under_color: RgbaColor::black(),
         },
