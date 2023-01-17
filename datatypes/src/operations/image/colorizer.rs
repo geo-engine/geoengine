@@ -533,8 +533,9 @@ impl<'c> ColorMapper<'c> {
                     let table_entry = f64::round(
                         color_table_factor * ((value - *min_value) / (*max_value - *min_value)),
                     ) as usize;
-                    // TODO:                                    vvv ----this was default color, what should it be now?
-                    *color_table.get(table_entry).unwrap_or(no_data_color)
+                    *color_table
+                        .get(table_entry)
+                        .expect("Should have been caught by previous conditional branches!")
                 }
             }
 
