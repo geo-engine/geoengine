@@ -38,6 +38,7 @@ pub struct LayerListing {
     pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
+    pub properties: Vec<Property>, // properties to be rendered in the UI
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]

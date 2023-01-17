@@ -1,6 +1,6 @@
 {
-  "type": "GfbioDataProviderDefinition",
-  "name": "GFBio",
+  "type": "GfbioAbcdDataProviderDefinition",
+  "name": "GFBio ABCD Datasets",
   "dbConfig": {
     "user": "geoengine",
     "password": "geoengine",

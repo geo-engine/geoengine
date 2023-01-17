@@ -100,10 +100,12 @@ pub enum GetMapRequest {
     GetMap,
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GetMapExceptionFormat {
-    #[serde(rename = "application/json")]
-    ApplicationJson, // TODO: remaining formats
+    #[serde(rename = "XML", alias = "application/vnd.ogc.se_xml")]
+    Xml,
+    #[serde(rename = "JSON", alias = "application/json")]
+    Json, // UNSUPPORTED: INIMAGE, BLANK
 }
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
@@ -182,7 +184,7 @@ mod tests {
             bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,
             format: GetMapFormat::ImagePng,
-            exceptions: Some(GetMapExceptionFormat::ApplicationJson),
+            exceptions: Some(GetMapExceptionFormat::Json),
         };
 
         assert_eq!(parsed, request);
@@ -215,4 +217,6 @@ mod tests {
 
         assert_eq!(parsed, request);
     }
+
+    // TODO: add a test with xml error
 }

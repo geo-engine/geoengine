@@ -331,11 +331,8 @@ pub enum Error {
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
-    #[cfg(feature = "nfdi")]
-    #[snafu(display("Could not parse GFBio basket: {}", message,))]
-    GFBioBasketParse {
-        message: String,
-    },
+
+    AbcdUnitIdColumnMissingInDatabase,
 
     BaseUrlMustEndWithSlash,
 
