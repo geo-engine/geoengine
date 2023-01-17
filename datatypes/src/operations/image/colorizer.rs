@@ -657,6 +657,14 @@ impl RgbaColor {
         RgbaColor::new(255, 255, 255, 255)
     }
 
+    pub fn blue() -> Self {
+        RgbaColor::new(0, 0, 255, 255)
+    }
+
+    pub fn red() -> Self {
+        RgbaColor::new(255, 0, 0, 255)
+    }
+
     pub fn pink() -> Self {
         RgbaColor::new(255, 0, 255, 255)
     }
