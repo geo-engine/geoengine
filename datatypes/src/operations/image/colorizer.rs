@@ -22,6 +22,21 @@ pub enum DefaultColors {
     },
 }
 
+impl DefaultColors {
+    pub fn over_color(&self) -> RgbaColor {
+        match self {
+            DefaultColors::DefaultColor { default_color } => *default_color,
+            DefaultColors::OverUnder { over_color, .. } => *over_color,
+        }
+    }
+    pub fn under_color(&self) -> RgbaColor {
+        match self {
+            DefaultColors::DefaultColor { default_color } => *default_color,
+            DefaultColors::OverUnder { under_color, .. } => *under_color,
+        }
+    }
+}
+
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -238,10 +253,7 @@ impl Colorizer {
     pub fn over_color(&self) -> RgbaColor {
         match self {
             Colorizer::LinearGradient { default_colors, .. }
-            | Colorizer::LogarithmicGradient { default_colors, .. } => match default_colors {
-                DefaultColors::DefaultColor { default_color } => *default_color,
-                DefaultColors::OverUnder { over_color, .. } => *over_color,
-            },
+            | Colorizer::LogarithmicGradient { default_colors, .. } => default_colors.over_color(),
             Colorizer::Palette { default_color, .. } => *default_color,
             Colorizer::Rgba => RgbaColor::transparent(),
         }
@@ -250,10 +262,7 @@ impl Colorizer {
     pub fn under_color(&self) -> RgbaColor {
         match self {
             Colorizer::LinearGradient { default_colors, .. }
-            | Colorizer::LogarithmicGradient { default_colors, .. } => match default_colors {
-                DefaultColors::DefaultColor { default_color } => *default_color,
-                DefaultColors::OverUnder { under_color, .. } => *under_color,
-            },
+            | Colorizer::LogarithmicGradient { default_colors, .. } => default_colors.under_color(),
             Colorizer::Palette { default_color, .. } => *default_color,
             Colorizer::Rgba => RgbaColor::transparent(),
         }
