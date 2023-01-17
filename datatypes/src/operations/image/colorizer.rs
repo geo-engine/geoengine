@@ -746,8 +746,8 @@ mod tests {
             ],
             RgbaColor::transparent(),
             ColorFields::OverUnder {
-                over_color: RgbaColor::pink(),
-                under_color: RgbaColor::pink(),
+                over_color: RgbaColor::red(),
+                under_color: RgbaColor::blue(),
             },
         )
         .unwrap();
@@ -756,15 +756,11 @@ mod tests {
 
         assert_eq!(color_table.len(), 5);
 
-        // TODO: should it be like this here?
-        // or should the colorizer take the boundary points (5 & 15) and use the
-        // remaining slots to generate the table? In this case 5: black, 10: grey 15: white
-        // instead of evenly spacing it over the values including extrema?
-        assert_eq!(color_table[0], RgbaColor::pink()); // undercolor
+        assert_eq!(color_table[0], RgbaColor::blue()); // undercolor, value is below threshold
         assert_eq!(color_table[1], RgbaColor::new(78, 78, 78, 255)); // at 7
         assert_eq!(color_table[2], RgbaColor::new(161, 161, 161, 255)); // at 10
         assert_eq!(color_table[3], RgbaColor::new(222, 222, 222, 255)); // at 13
-        assert_eq!(color_table[4], RgbaColor::pink()); // overcolor
+        assert_eq!(color_table[4], RgbaColor::red()); // overcolor, value is above threshold
     }
 
     #[test]
