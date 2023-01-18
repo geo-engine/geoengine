@@ -25,7 +25,7 @@ use crate::{
 use actix_web::{dev::ServiceResponse, FromRequest};
 use actix_web::{http, middleware, test, web, App};
 use geoengine_datatypes::{
-    primitives::DateTime, spatial_reference::SpatialReferenceOption, util::Identifier,
+    primitives::DateTime, spatial_reference::SpatialReferenceOption, test_data, util::Identifier,
 };
 use geoengine_operators::{
     engine::{RasterOperator, TypedOperator},
@@ -470,4 +470,13 @@ where
     })
     .await
     .unwrap()
+}
+
+/// Loads a pretrained mock model from disk
+pub async fn load_mock_model_from_disk() -> Result<String, std::io::Error> {
+    let path = test_data!("pro/ml/")
+        .join("b764bf81-e21d-4eb8-bf01-fac9af13faee")
+        .join("mock_model.json");
+
+    tokio::fs::read_to_string(path).await
 }

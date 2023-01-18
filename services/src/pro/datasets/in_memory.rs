@@ -18,6 +18,7 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
+use crate::machine_learning::ml_model::{MlModel, MlModelDb};
 use crate::pro::contexts::ProInMemoryDb;
 use crate::pro::permissions::{Permission, PermissionDb};
 use crate::pro::users::UserId;
@@ -26,6 +27,7 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use futures::{stream, StreamExt};
 use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
@@ -574,6 +576,43 @@ impl DatasetLayerCollectionProvider for ProInMemoryDb {
     }
 }
 
+// --------------------------------------------------------------------------------
+// ML Model
+// --------------------------------------------------------------------------------
+
+#[async_trait]
+impl MlModelDb for ProInMemoryDb {
+    async fn load_ml_model(&self, model_id: MlModelId) -> Result<MlModel> {
+        let backend = self.backend.ml_model_db.read().await;
+
+        let m = backend
+            .ml_models
+            .get(&model_id)
+            .map(Clone::clone)
+            .ok_or(error::Error::UnknownModelId)?;
+
+        Ok(MlModel {
+            model_id,
+            model_content: m,
+        })
+    }
+
+    async fn store_ml_model(&self, model: MlModel) -> Result<()> {
+        let mut backend = self.backend.ml_model_db.write().await;
+
+        backend
+            .ml_models
+            // TODO: update/overwrite handling?
+            .insert(model.model_id, model.model_content);
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct ProHashMapMlModelDbBackend {
+    ml_models: HashMap<MlModelId, String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -583,6 +622,7 @@ mod tests {
     use crate::pro::contexts::ProInMemoryContext;
     use crate::pro::permissions::Role;
     use crate::pro::users::UserSession;
+    use crate::pro::util::tests::load_mock_model_from_disk;
 
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::primitives::CacheTtlSeconds;
@@ -1105,6 +1145,60 @@ mod tests {
         assert!(db1.load_upload(upload_id).await.is_ok());
 
         assert!(db2.load_upload(upload_id).await.is_err());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_store_and_load_ml_model() -> Result<()> {
+        let app_ctx = ProInMemoryContext::test_default();
+
+        let session = UserSession::mock();
+
+        let model_content = load_mock_model_from_disk().await.unwrap();
+
+        let model_id = MlModelId::from_str("b764bf81-e21d-4eb8-bf01-fac9af13faee")
+            .expect("Model ID should be valid.");
+
+        let expected_model = MlModel {
+            model_id,
+            model_content,
+        };
+
+        let db = app_ctx.session_context(session.clone()).db();
+
+        // Store the model
+        db.store_ml_model(expected_model.clone()).await?;
+
+        // Load the model from the in-memory database
+        let model_from_db_result = db.load_ml_model(model_id).await;
+
+        // Assert that loading the model succeeded and returns the correct model
+        assert!(model_from_db_result.is_ok());
+        let model_from_db = model_from_db_result.expect("Model should be loaded from database.");
+        assert_eq!(model_from_db.model_id, expected_model.model_id);
+        assert_eq!(model_from_db.model_content, expected_model.model_content);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_load_nonexistent_ml_model_is_error() -> Result<()> {
+        let app_ctx = ProInMemoryContext::test_default();
+        let session = UserSession::mock();
+
+        let model_id = MlModelId::new(); // Creating a new model id
+
+        let db = app_ctx.session_context(session.clone()).db();
+
+        // Try loading a model without storing it first
+        let result = db.load_ml_model(model_id).await;
+
+        // Assert that loading the model failed with UnknownModelId error
+        match result {
+            Err(error::Error::UnknownModelId) => (),
+            _ => panic!("Expected UnknownModelId error"),
+        }
 
         Ok(())
     }

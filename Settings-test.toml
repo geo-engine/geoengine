@@ -1,3 +1,6 @@
+[machinelearning]
+model_defs_path = "/tmp/pro/ml"
+
 [postgres]
 host = "localhost"
 port = 5432

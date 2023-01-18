@@ -7,10 +7,10 @@ use crate::pro::meta::wrapper::InitializedOperatorWrapper;
 use crate::util::Result;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
+use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use rayon::ThreadPool;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 /// A mock execution context that wraps all operators with a statistics operator.
@@ -63,12 +63,18 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
         op
     }
 
-    async fn read_ml_model(&self, path: PathBuf) -> Result<String> {
-        self.inner.read_ml_model(path).await
+    async fn load_ml_model(&self, model_id: MlModelId) -> Result<String> {
+        self.inner.load_ml_model(model_id).await
     }
 
-    async fn write_ml_model(&mut self, path: PathBuf, ml_model_str: String) -> Result<()> {
-        self.inner.write_ml_model(path, ml_model_str).await
+    async fn store_ml_model_in_db(
+        &mut self,
+        model_id: MlModelId,
+        ml_model_str: String,
+    ) -> Result<()> {
+        self.inner
+            .store_ml_model_in_db(model_id, ml_model_str)
+            .await
     }
 
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId> {

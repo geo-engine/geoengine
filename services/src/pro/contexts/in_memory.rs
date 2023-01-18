@@ -5,7 +5,9 @@ use crate::error::{self, Error};
 
 use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDbBackend};
 use crate::pro::contexts::SessionContext;
-use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDbBackend};
+use crate::pro::datasets::{
+    add_datasets_from_directory, ProHashMapDatasetDbBackend, ProHashMapMlModelDbBackend,
+};
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
 };
@@ -285,6 +287,7 @@ pub struct ProInMemoryDbBackend {
     pub project_db: RwLock<ProHashMapProjectDbBackend>,
     pub workflow_registry: RwLock<HashMapRegistryBackend>,
     pub dataset_db: RwLock<ProHashMapDatasetDbBackend>,
+    pub ml_model_db: RwLock<ProHashMapMlModelDbBackend>,
     pub layer_db: HashMapLayerDb,
     pub layer_provider_db: RwLock<HashMapLayerProviderDbBackend>,
 }
