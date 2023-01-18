@@ -38,11 +38,40 @@ impl RasterProperties {
         key: RasterPropertiesKey,
         value: RasterPropertiesEntry,
     ) -> Option<RasterPropertiesEntry> {
+        if let RasterPropertiesEntry::Number(number_val) = value {
+            if key.domain.is_none() && key.key == "offset" {
+                let old = self.offset.replace(number_val);
+                return old.map(RasterPropertiesEntry::Number);
+            }
+            if key.domain.is_none() && key.key == "scale" {
+                let old = self.scale.replace(number_val);
+                return old.map(RasterPropertiesEntry::Number);
+            }
+        }
+        if key.domain.is_none() && key.key == "band_name" {
+            let old = self.band_name.replace(value.to_string());
+            return old.map(RasterPropertiesEntry::String);
+        }
         self.properties_map.insert(key, value)
     }
 
-    pub fn get_property(&self, key: &RasterPropertiesKey) -> Option<&RasterPropertiesEntry> {
-        self.properties_map.get(key)
+    /// Returns the value of the property with the given key.
+    /// If the key is `scale` or `offset`, the value is returned from the corresponding field.
+    /// Otherwise, the value is looked up in the `properties_map`.
+    /// If the key is not found, `None` is returned.
+    /// TODO: return a ref to stored strings...
+    pub fn get_property(&self, key: &RasterPropertiesKey) -> Option<RasterPropertiesEntry> {
+        if key.domain.is_none() && key.key == "scale" {
+            return self.scale.map(RasterPropertiesEntry::Number);
+        }
+        if key.domain.is_none() && key.key == "offset" {
+            return self.offset.map(RasterPropertiesEntry::Number);
+        }
+        if key.domain.is_none() && key.key == "band_name" {
+            return self.band_name.clone().map(RasterPropertiesEntry::String);
+        }
+
+        self.properties_map.get(key).cloned()
     }
 
     pub fn number_property<T: Copy + FromPrimitive>(&self, key: &RasterPropertiesKey) -> Result<T> {
