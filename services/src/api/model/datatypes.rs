@@ -539,8 +539,8 @@ impl From<Coordinate2D> for geoengine_datatypes::primitives::Coordinate2D {
 /// A bounding box that includes all border points.
 /// Note: may degenerate to a point!
 pub struct BoundingBox2D {
-    lower_left_coordinate: Coordinate2D,
-    upper_right_coordinate: Coordinate2D,
+    pub lower_left_coordinate: Coordinate2D,
+    pub upper_right_coordinate: Coordinate2D,
 }
 
 impl From<geoengine_datatypes::primitives::BoundingBox2D> for BoundingBox2D {
@@ -1483,5 +1483,31 @@ impl From<MultiPolygon> for geoengine_datatypes::primitives::MultiPolygon {
                 .collect(),
         )
         .unwrap()
+    }
+}
+
+#[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
+pub struct StringPair((String, String));
+
+impl ToSchema for StringPair {
+    fn schema() -> utoipa::openapi::Schema {
+        use utoipa::openapi::*;
+        ArrayBuilder::new()
+            .items(Object::with_type(SchemaType::String))
+            .min_items(Some(2))
+            .max_items(Some(2))
+            .into()
+    }
+}
+
+impl From<(String, String)> for StringPair {
+    fn from(value: (String, String)) -> Self {
+        Self(value)
+    }
+}
+
+impl From<StringPair> for (String, String) {
+    fn from(value: StringPair) -> Self {
+        value.0
     }
 }
