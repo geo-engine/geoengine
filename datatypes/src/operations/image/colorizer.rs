@@ -533,9 +533,13 @@ impl<'c> ColorMapper<'c> {
                     let table_entry = f64::round(
                         color_table_factor * ((value - *min_value) / (*max_value - *min_value)),
                     ) as usize;
+
                     *color_table
                         .get(table_entry)
-                        .expect("Should have been caught by previous conditional branches!")
+                        .unwrap_or(match default_colors {
+                            DefaultColors::DefaultColor { default_color } => default_color,
+                            DefaultColors::OverUnder { over_color, .. } => over_color,
+                        })
                 }
             }
 
