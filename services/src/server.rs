@@ -177,7 +177,11 @@ mod tests {
 
     async fn queries() {
         let web_config: config::Web = get_config_element().unwrap();
-        let base_url = Url::parse(&format!("http://{}", web_config.bind_address)).unwrap();
+        let base_url = Url::parse(&format!(
+            "http://{}{}/",
+            web_config.bind_address, web_config.api_prefix
+        ))
+        .unwrap();
 
         assert!(wait_for_server(&base_url).await);
         issue_queries(&base_url).await;
