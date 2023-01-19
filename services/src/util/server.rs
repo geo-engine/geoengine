@@ -251,13 +251,13 @@ pub(crate) fn render_405(
 pub fn serve_openapi_json<
     T: ServiceFactory<ServiceRequest, Config = (), Error = actix_web::Error, InitError = ()>,
 >(
-    app: actix_web::App<T>,
+    app: actix_web::Scope<T>,
     api_urls: &mut Vec<(utoipa_swagger_ui::Url, OpenApi)>,
     name: &'static str,
     ui_url: &'static str,
     serve_url: &str,
     openapi: OpenApi,
-) -> actix_web::App<T> {
+) -> actix_web::Scope<T> {
     api_urls.push((utoipa_swagger_ui::Url::new(name, ui_url), openapi.clone()));
     app.route(
         serve_url,
@@ -284,7 +284,10 @@ pub(crate) fn log_server_info() -> Result<()> {
 
     info!(
         "Local Address: {} ",
-        Url::parse(&format!("http://{}/", web_config.bind_address))?,
+        Url::parse(&format!(
+            "http://{}{}",
+            web_config.bind_address, web_config.api_prefix
+        ))?,
     );
 
     info!("External Address: {} ", external_address);
