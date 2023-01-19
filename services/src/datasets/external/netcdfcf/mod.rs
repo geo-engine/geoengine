@@ -31,7 +31,7 @@ use async_trait::async_trait;
 use gdal::raster::{Dimension, GdalDataType, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::error::BoxedResultExt;
-use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
     TimeInstance, TimeInterval, TimeStep, TimeStepIter, VectorQueryRectangle,
@@ -702,7 +702,10 @@ fn fallback_colorizer() -> Result<Colorizer> {
                 .into(),
         ],
         RgbaColor::transparent(),
-        RgbaColor::transparent(),
+        DefaultColors::OverUnder {
+            over_color: RgbaColor::white(),
+            under_color: RgbaColor::black(),
+        },
     )
     .context(error::CannotCreateFallbackColorizer)
 }
