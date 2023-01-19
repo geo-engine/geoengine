@@ -81,7 +81,6 @@ where
     let openapi = ApiDoc::openapi();
 
     HttpServer::new(move || {
-        #[allow(unused_mut)]
         let mut api = web::scope(&api_prefix)
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
@@ -95,12 +94,11 @@ where
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>);
-
-        api = api.route(
-            "/available",
-            web::get().to(crate::util::server::available_handler),
-        );
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .route(
+                "/available",
+                web::get().to(crate::util::server::available_handler),
+            );
 
         let mut api_urls = vec![];
 
