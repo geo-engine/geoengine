@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added a new option to the colorizer, allowing to use over- and underflow colors.
+
+  - https://github.com/geo-engine/geoengine/pull/684
 
 - Added a GFBio Collection Data Provider that replaces the custom GFBio API for accessing search results.
 

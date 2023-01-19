@@ -290,10 +290,11 @@ impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let mut queries = Vec::with_capacity(self.rasters.len());
+        let q = query.into();
         for (i, raster_processor) in self.rasters.iter().enumerate() {
             queries.push(
                 call_on_generic_raster_processor!(raster_processor, processor => {
-                    processor.query(query.into(), ctx).await?
+                    processor.query(q, ctx).await?
                              .and_then(move |tile| crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || (i, tile.convert_data_type_parallel()) ).map_err(Into::into))
                              .boxed()
                 }),
@@ -517,7 +518,7 @@ mod tests {
             result.to_string(),
             json!({
                 "Raster-1": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -623,7 +624,7 @@ mod tests {
             result.to_string(),
             json!({
                 "Raster-1": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -631,7 +632,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
                 "Raster-2": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
                     "validCount": 6,
                     "min": 7.0,
                     "max": 12.0,
@@ -737,7 +738,7 @@ mod tests {
             result.to_string(),
             json!({
                 "A": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -745,7 +746,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
                 "B": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
                     "validCount": 6,
                     "min": 7.0,
                     "max": 12.0,
