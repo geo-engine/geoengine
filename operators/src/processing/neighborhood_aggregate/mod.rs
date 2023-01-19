@@ -271,7 +271,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         dataset::DatasetId,
-        operations::image::{Colorizer, RgbaColor},
+        operations::image::{Colorizer, DefaultColors, RgbaColor},
         primitives::{
             DateTime, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
             TimeInstance, TimeInterval,
@@ -661,7 +661,10 @@ mod tests {
                 (255.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
+            DefaultColors::OverUnder {
+                over_color: RgbaColor::white(),
+                under_color: RgbaColor::black(),
+            },
         )
         .unwrap();
 
@@ -729,7 +732,10 @@ mod tests {
                 (255.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
+            DefaultColors::OverUnder {
+                over_color: RgbaColor::white(),
+                under_color: RgbaColor::black(),
+            },
         )
         .unwrap();
 
