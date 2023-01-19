@@ -93,13 +93,9 @@ impl RasterProperties {
                 });
         }
 
-        let val = f64::try_from(
-            self.get_property(key)
-                .ok_or(Error::MissingRasterProperty {
-                    property: key.to_string(),
-                })?
-                .clone(),
-        )?;
+        let val = f64::try_from(self.get_property(key).ok_or(Error::MissingRasterProperty {
+            property: key.to_string(),
+        })?)?;
         T::from_f64(val).ok_or(Error::WrongMetadataType)
     }
 
