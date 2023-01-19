@@ -125,11 +125,6 @@ where
             );
         }
 
-        #[cfg(feature = "nfdi")]
-        {
-            api = api.configure(handlers::gfbio::init_gfbio_routes::<C>);
-        }
-
         api = api.service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls));
 
         if version_api {
