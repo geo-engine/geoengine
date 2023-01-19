@@ -6,10 +6,9 @@ use crate::pro::apidoc::ApiDoc;
 use crate::pro::contexts::PostgresContext;
 use crate::pro::contexts::{ProContext, ProInMemoryContext};
 use crate::util::config::{self, get_config_element, Backend};
-
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
-    log_server_info, render_404, render_405, serve_openapi_json,
+    log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
 };
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, HttpServer};
@@ -21,12 +20,14 @@ use geoengine_operators::util::gdal::register_gdal_drivers_from_list;
 use log::{info, warn};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use tracing_actix_web::TracingLogger;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
+    api_prefix: String,
     version_api: bool,
     ctx: C,
 ) -> Result<(), Error>
@@ -38,14 +39,7 @@ where
     let openapi = ApiDoc::openapi();
 
     HttpServer::new(move || {
-        let mut app = App::new()
-            .app_data(wrapped_ctx.clone())
-            .wrap(
-                middleware::ErrorHandlers::default()
-                    .handler(http::StatusCode::NOT_FOUND, render_404)
-                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
-            )
-            .wrap(middleware::Logger::default())
+        let mut api = web::scope(&api_prefix)
             .configure(configure_extractors)
             .configure(pro::handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
@@ -58,17 +52,16 @@ where
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>);
-
-        app = app.route(
-            "/available",
-            web::get().to(crate::util::server::available_handler),
-        );
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .route(
+                "/available",
+                web::get().to(crate::util::server::available_handler),
+            );
 
         let mut api_urls = vec![];
 
-        app = serve_openapi_json(
-            app,
+        api = serve_openapi_json(
+            api,
             &mut api_urls,
             "Geo Engine Pro",
             "../api-docs/openapi.json",
@@ -78,15 +71,15 @@ where
 
         #[cfg(feature = "odm")]
         {
-            app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
+            api = api.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
         }
 
         #[cfg(feature = "ebv")]
         {
-            app = app.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
+            api = api.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
 
-            app = serve_openapi_json(
-                app,
+            api = serve_openapi_json(
+                api,
                 &mut api_urls,
                 "EBV",
                 "../api-docs/ebv/openapi.json",
@@ -95,18 +88,33 @@ where
             );
         }
 
-        app = app.service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls));
+        #[cfg(feature = "nfdi")]
+        {
+            api = api.configure(handlers::gfbio::init_gfbio_routes::<C>);
+        }
+
+        api = api.service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls));
 
         if version_api {
-            app = app.route(
+            api = api.route(
                 "/info",
                 web::get().to(crate::util::server::server_info_handler),
             );
         }
+
         if let Some(static_files_dir) = static_files_dir.clone() {
-            app = app.service(Files::new("/static", static_files_dir));
+            api = api.service(Files::new("/static", static_files_dir));
         }
-        app
+
+        App::new()
+            .app_data(wrapped_ctx.clone())
+            .wrap(
+                middleware::ErrorHandlers::default()
+                    .handler(http::StatusCode::NOT_FOUND, render_404)
+                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+            )
+            .wrap(TracingLogger::<CustomRootSpanBuilder>::new())
+            .service(api)
     })
     .worker_max_blocking_threads(calculate_max_blocking_threads_per_worker())
     .on_connect(connection_init)
@@ -226,6 +234,7 @@ async fn start_in_memory(
     start(
         static_files_dir,
         web_config.bind_address,
+        web_config.api_prefix,
         web_config.version_api,
         ctx,
     )
@@ -270,6 +279,7 @@ async fn start_postgres(
         start(
             static_files_dir,
             web_config.bind_address,
+            web_config.api_prefix,
             web_config.version_api,
             ctx,
         )
