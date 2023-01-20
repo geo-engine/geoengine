@@ -421,6 +421,12 @@ pub enum Error {
     },
 
     QuotaExhausted,
+
+    #[snafu(display("Result Descriptor field '{}' {}", field, cause))]
+    LayerResultDescriptorMissingFields {
+        field: String,
+        cause: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
