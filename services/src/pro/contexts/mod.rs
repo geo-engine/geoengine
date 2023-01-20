@@ -99,7 +99,19 @@ async fn check_quota<U: UserDb>(
     user_db: &U,
     session: &UserSession,
 ) -> geoengine_operators::util::Result<()> {
-    // TODO: make quota check optional in config?
+    let quota_check_enabled =
+        crate::util::config::get_config_element::<crate::pro::util::config::User>()
+            .map_err(
+                |e| geoengine_operators::error::Error::CreatingProcessorFailed {
+                    source: Box::new(e),
+                },
+            )?
+            .quota_check;
+
+    if !quota_check_enabled {
+        return Ok(());
+    }
+
     let quota_available = user_db.quota_available(session).await.map_err(|e| {
         geoengine_operators::error::Error::CreatingProcessorFailed {
             source: Box::new(e),

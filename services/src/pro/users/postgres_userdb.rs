@@ -66,9 +66,14 @@ where
 
         let stmt = tx
             .prepare(
-                "INSERT INTO users (id, email, password_hash, real_name, active) VALUES ($1, $2, $3, $4, $5);",
+                "INSERT INTO users (id, email, password_hash, real_name, quota_available, active) VALUES ($1, $2, $3, $4, $5, $6);",
             )
             .await?;
+
+        let quota_available =
+            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                .default_available_quota
+                .unwrap_or(0);
 
         tx.execute(
             &stmt,
@@ -77,6 +82,7 @@ where
                 &user.email,
                 &user.password_hash,
                 &user.real_name,
+                &quota_available,
                 &user.active,
             ],
         )
@@ -110,11 +116,16 @@ where
             .await?;
         tx.execute(&stmt, &[&user_id, &"anonymous_user"]).await?;
 
+        let quota_available =
+            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                .default_available_quota
+                .unwrap_or(0);
+
         let stmt = tx
-            .prepare("INSERT INTO users (id, active) VALUES ($1, TRUE);")
+            .prepare("INSERT INTO users (id, quota_available, active) VALUES ($1, $2, TRUE);")
             .await?;
 
-        tx.execute(&stmt, &[&user_id]).await?;
+        tx.execute(&stmt, &[&user_id, &quota_available]).await?;
 
         let stmt = tx
             .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
@@ -263,12 +274,19 @@ where
                     .await?;
                 tx.execute(&stmt, &[&user_id, &user.email]).await?;
 
+                let quota_available =
+                    crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                        .default_available_quota
+                        .unwrap_or(0);
+
                 //TODO: Inconsistent to hashmap implementation, where an external user is not part of the user database.
                 //TODO: A user might be able to login without external login using this (internal) id. Would be a problem with anonymous users as well.
                 let stmt = tx
-                    .prepare("INSERT INTO users (id, active) VALUES ($1, TRUE);")
+                    .prepare(
+                        "INSERT INTO users (id, quota_available, active) VALUES ($1, $2, TRUE);",
+                    )
                     .await?;
-                tx.execute(&stmt, &[&user_id]).await?;
+                tx.execute(&stmt, &[&user_id, &quota_available]).await?;
 
                 let stmt = tx
                     .prepare(

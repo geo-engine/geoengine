@@ -42,6 +42,7 @@ impl UserDb for HashMapUserDb {
         let user = User::from(user_registration.clone());
         let id = user.id;
         users.insert(user_registration.email, user);
+
         Ok(id)
     }
 
@@ -56,6 +57,14 @@ impl UserDb for HashMapUserDb {
         };
 
         self.users.write().await.insert(id.to_string(), user);
+
+        let mut quota_available = self.quota_available.write().await;
+        quota_available.insert(
+            id,
+            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                .default_available_quota
+                .unwrap_or(0),
+        );
 
         let session = UserSession {
             id: SessionId::new(),
@@ -126,6 +135,14 @@ impl UserDb for HashMapUserDb {
                     active: true,
                 };
                 db.insert(external_id, result);
+
+                let mut quota_available = self.quota_available.write().await;
+                quota_available.insert(
+                    id,
+                    crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                        .default_available_quota
+                        .unwrap_or(0),
+                );
                 id
             }
         };
@@ -239,11 +256,13 @@ impl UserDb for HashMapUserDb {
         user: &UserId,
         new_available_quota: i64,
     ) -> Result<()> {
-        self.quota_available
+        *self
+            .quota_available
             .write()
             .await
             .entry(*user)
-            .or_insert(new_available_quota);
+            .or_insert(new_available_quota) = new_available_quota;
+
         Ok(())
     }
 }
