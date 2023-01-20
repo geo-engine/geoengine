@@ -29,7 +29,7 @@ use geoengine_datatypes::{
     primitives::{FeatureData, Geometry, MultiPoint},
     spatial_reference::SpatialReference,
 };
-use geoengine_operators::engine::QueryProcessor;
+use geoengine_operators::engine::{ExecutionContext, QueryProcessor};
 use geoengine_operators::engine::{
     QueryContext, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
@@ -492,7 +492,10 @@ async fn wfs_feature_handler<C: Context>(
         Box::new(ivp)
     };
 
-    let processor = initialized.query_processor().context(error::Operator)?;
+    let processor = execution_context
+        .create_vector_query_processor(initialized)
+        .await
+        .context(error::Operator)?;
 
     let query_rect = VectorQueryRectangle {
         spatial_bounds: request.bbox.bounds_naive()?,

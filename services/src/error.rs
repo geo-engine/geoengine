@@ -159,6 +159,8 @@ pub enum Error {
     OnlyAdminsCanCreateDatasetFromVolume,
     AdminsCannotCreateDatasetFromUpload,
 
+    OperationRequiresAdminPrivilige,
+
     #[snafu(display("Permission denied for dataset with id {:?}", dataset))]
     DatasetPermissionDenied {
         dataset: DatasetId,
@@ -417,6 +419,8 @@ pub enum Error {
         query_srs: SpatialReference,
         query_bbox: crate::api::model::datatypes::BoundingBox2D,
     },
+
+    QuotaExhausted,
 }
 
 impl actix_web::error::ResponseError for Error {

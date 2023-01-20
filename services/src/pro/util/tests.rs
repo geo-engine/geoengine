@@ -1,19 +1,33 @@
 use crate::{
-    contexts::SessionId,
+    api::model::{datatypes::DatasetId, services::AddDataset},
+    contexts::{Context, SessionId},
+    datasets::{
+        listing::Provenance,
+        storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
+    },
     handlers, pro,
     pro::{
-        contexts::ProContext,
-        datasets::Role,
+        contexts::{ProContext, ProInMemoryContext},
+        datasets::{DatasetPermission, Permission, Role, UpdateDatasetPermissions},
         users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
     util::server::{configure_extractors, render_404, render_405},
     util::user_input::UserInput,
+    workflows::{
+        registry::WorkflowRegistry,
+        workflow::{Workflow, WorkflowId},
+    },
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{http, middleware, test, web, App};
 use geoengine_datatypes::{
     primitives::DateTime, spatial_reference::SpatialReferenceOption, util::Identifier,
+};
+use geoengine_operators::{
+    engine::{RasterOperator, TypedOperator},
+    source::{GdalSource, GdalSourceParameters},
+    util::gdal::create_ndvi_meta_data,
 };
 
 #[allow(clippy::missing_panics_doc)]
@@ -295,4 +309,88 @@ pub(in crate::pro) mod mock_oidc {
 
         result
     }
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn register_ndvi_workflow_helper(ctx: &ProInMemoryContext) -> (Workflow, WorkflowId) {
+    let dataset = add_ndvi_to_datasets(ctx).await;
+
+    let workflow = Workflow {
+        operator: TypedOperator::Raster(
+            GdalSource {
+                params: GdalSourceParameters {
+                    data: dataset.into(),
+                },
+            }
+            .boxed(),
+        ),
+    };
+
+    let id = ctx
+        .workflow_registry_ref()
+        .register(workflow.clone())
+        .await
+        .unwrap();
+
+    (workflow, id)
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
+    let ndvi = DatasetDefinition {
+        properties: AddDataset {
+            id: None,
+            name: "NDVI".to_string(),
+            description: "NDVI data from MODIS".to_string(),
+            source_operator: "GdalSource".to_string(),
+            symbology: None,
+            provenance: Some(Provenance {
+                citation: "Sample Citation".to_owned(),
+                license: "Sample License".to_owned(),
+                uri: "http://example.org/".to_owned(),
+            }),
+        },
+        meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
+    };
+
+    let system_session = UserSession::system_session();
+
+    let dataset_db = ctx.dataset_db_ref();
+
+    let dataset_id = dataset_db
+        .add_dataset(
+            &system_session,
+            ndvi.properties
+                .validated()
+                .expect("valid dataset description"),
+            Box::new(ndvi.meta_data),
+        )
+        .await
+        .expect("dataset db access");
+
+    dataset_db
+        .add_dataset_permission(
+            &system_session,
+            DatasetPermission {
+                role: Role::user_role_id(),
+                dataset: dataset_id,
+                permission: Permission::Read,
+            },
+        )
+        .await
+        .unwrap();
+
+    dataset_db
+        .add_dataset_permission(
+            &system_session,
+            DatasetPermission {
+                role: Role::anonymous_role_id(),
+                dataset: dataset_id,
+                permission: Permission::Read,
+            },
+        )
+        .await
+        .unwrap();
+
+    dataset_id
 }

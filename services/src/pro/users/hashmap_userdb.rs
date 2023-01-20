@@ -23,6 +23,7 @@ pub struct HashMapUserDb {
     external_users: Db<HashMap<SubjectIdentifier, ExternalUser>>, //TODO: Key only works if a single identity provider is used
     sessions: Db<HashMap<SessionId, UserSession>>,
     quota_used: Db<HashMap<UserId, u64>>,
+    quota_available: Db<HashMap<UserId, i64>>,
 }
 
 #[async_trait]
@@ -211,6 +212,39 @@ impl UserDb for HashMapUserDb {
             .get(user)
             .copied()
             .unwrap_or_default())
+    }
+
+    async fn quota_available(&self, session: &UserSession) -> Result<i64> {
+        Ok(self
+            .quota_available
+            .read()
+            .await
+            .get(&session.user.id)
+            .copied()
+            .unwrap_or_default())
+    }
+
+    async fn quota_available_by_user(&self, user: &UserId) -> Result<i64> {
+        Ok(self
+            .quota_available
+            .read()
+            .await
+            .get(user)
+            .copied()
+            .unwrap_or_default())
+    }
+
+    async fn update_quota_available_by_user(
+        &self,
+        user: &UserId,
+        new_available_quota: i64,
+    ) -> Result<()> {
+        self.quota_available
+            .write()
+            .await
+            .entry(*user)
+            .or_insert(new_available_quota);
+        Ok(())
     }
 }
 

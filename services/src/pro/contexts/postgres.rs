@@ -208,7 +208,8 @@ where
                             password_hash character varying (256),
                             real_name character varying (256),
                             active boolean NOT NULL,
-                            quota_used bigint NOT NULL DEFAULT 0,
+                            quota_available bigint NOT NULL DEFAULT 0,
+                            quota_used bigint NOT NULL DEFAULT 0, -- TODO: rename to total_quota_used?
                             CONSTRAINT users_anonymous_ck CHECK (
                                (email IS NULL AND password_hash IS NULL AND real_name IS NULL) OR 
                                (email IS NOT NULL AND password_hash IS NOT NULL AND 
@@ -585,8 +586,11 @@ where
     type TaskContext = SimpleTaskManagerContext;
     type TaskManager = SimpleTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
-    type ExecutionContext =
-        ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>, PostgresLayerProviderDb<Tls>>;
+    type ExecutionContext = ExecutionContextImpl<
+        PostgresDatasetDb<Tls>,
+        PostgresUserDb<Tls>,
+        PostgresLayerProviderDb<Tls>,
+    >;
 
     fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
@@ -648,12 +652,13 @@ where
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<
-            UserSession,
             PostgresDatasetDb<Tls>,
+            PostgresUserDb<Tls>,
             PostgresLayerProviderDb<Tls>,
         >::new(
             self.dataset_db.clone(),
             self.layer_provider_db.clone(),
+            self.user_db.clone(),
             self.thread_pool.clone(),
             session,
             self.exe_ctx_tiling_spec,
@@ -2304,6 +2309,66 @@ mod tests {
             }
 
             assert!(success);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_updates_quota_in_postgres() {
+        with_temp_context(|ctx, _| async move {
+            let user = ctx
+                .user_db_ref()
+                .register(
+                    UserRegistration {
+                        email: "foo@example.com".to_string(),
+                        password: "secret1234".to_string(),
+                        real_name: "Foo Bar".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let session = ctx
+                .user_db_ref()
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(
+                ctx.user_db_ref().quota_available(&session).await.unwrap(),
+                0
+            );
+
+            assert_eq!(
+                ctx.user_db_ref()
+                    .quota_available_by_user(&user)
+                    .await
+                    .unwrap(),
+                0
+            );
+
+            ctx.user_db_ref()
+                .update_quota_available_by_user(&user, 123)
+                .await
+                .unwrap();
+
+            assert_eq!(
+                ctx.user_db_ref().quota_available(&session).await.unwrap(),
+                123
+            );
+
+            assert_eq!(
+                ctx.user_db_ref()
+                    .quota_available_by_user(&user)
+                    .await
+                    .unwrap(),
+                123
+            );
         })
         .await;
     }

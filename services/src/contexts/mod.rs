@@ -24,9 +24,10 @@ use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
     ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
-    InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
-    QueryAbortTrigger, QueryContext, QueryContextExtensions, RasterResultDescriptor,
-    VectorResultDescriptor,
+    InitializedRasterOperator, InitializedVectorOperator, MetaData, MetaDataProvider,
+    QueryAbortRegistration, QueryAbortTrigger, QueryContext, QueryContextExtensions,
+    RasterResultDescriptor, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -218,6 +219,27 @@ where
         _span: CreateSpan,
     ) -> Box<dyn InitializedPlotOperator> {
         op
+    }
+
+    async fn create_raster_query_processor(
+        &self,
+        operator: Box<dyn InitializedRasterOperator>,
+    ) -> geoengine_operators::util::Result<TypedRasterQueryProcessor> {
+        operator.query_processor()
+    }
+
+    async fn create_vector_query_processor(
+        &self,
+        operator: Box<dyn InitializedVectorOperator>,
+    ) -> geoengine_operators::util::Result<TypedVectorQueryProcessor> {
+        operator.query_processor()
+    }
+
+    async fn create_plot_query_processor(
+        &self,
+        operator: Box<dyn InitializedPlotOperator>,
+    ) -> geoengine_operators::util::Result<TypedPlotQueryProcessor> {
+        operator.query_processor()
     }
 
     /// This method is meant to read a ml model from disk, specified by the config key `machinelearning.model_defs_path`.

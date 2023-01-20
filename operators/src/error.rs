@@ -222,6 +222,10 @@ pub enum Error {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    CreatingProcessorFailed {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
     NotImplemented,
 
     TileLimitExceeded {

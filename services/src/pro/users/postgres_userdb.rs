@@ -436,7 +436,13 @@ where
     async fn increment_quota_used(&self, user: &UserId, quota_used: u64) -> Result<()> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
-            .prepare("UPDATE users SET quota_used = quota_used + $1 WHERE id = $2;")
+            .prepare(
+                "
+            UPDATE users SET 
+                quota_available = quota_available - $1, 
+                quota_used = quota_used + $1
+            WHERE id = $2;",
+            )
             .await?;
 
         conn.execute(&stmt, &[&(quota_used as i64), &user]).await?;
@@ -470,5 +476,54 @@ where
             .map_err(|_error| error::Error::InvalidSession)?;
 
         Ok(row.get::<usize, i64>(0) as u64)
+    }
+
+    async fn quota_available(&self, session: &UserSession) -> Result<i64> {
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare("SELECT quota_available FROM users WHERE id = $1;")
+            .await?;
+
+        let row = conn
+            .query_one(&stmt, &[&session.user.id])
+            .await
+            .map_err(|_error| error::Error::InvalidSession)?;
+
+        Ok(row.get::<usize, i64>(0))
+    }
+
+    async fn quota_available_by_user(&self, user: &UserId) -> Result<i64> {
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare("SELECT quota_available FROM users WHERE id = $1;")
+            .await?;
+
+        let row = conn
+            .query_one(&stmt, &[&user])
+            .await
+            .map_err(|_error| error::Error::InvalidSession)?;
+
+        Ok(row.get::<usize, i64>(0))
+    }
+
+    async fn update_quota_available_by_user(
+        &self,
+        user: &UserId,
+        new_available_quota: i64,
+    ) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare(
+                "
+            UPDATE users SET 
+                quota_available = $1
+            WHERE id = $2;",
+            )
+            .await?;
+
+        conn.execute(&stmt, &[&(new_available_quota), &user])
+            .await?;
+
+        Ok(())
     }
 }
