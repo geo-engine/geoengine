@@ -1,5 +1,6 @@
 use crate::error::{self, Result};
 use crate::identifier;
+use geoengine_datatypes::operations::image::DefaultColors;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
@@ -1190,13 +1191,13 @@ pub enum Colorizer {
     LinearGradient {
         breakpoints: Vec<Breakpoint>,
         no_data_color: RgbaColor,
-        default_color: RgbaColor,
+        color_fields: DefaultColors,
     },
     #[serde(rename_all = "camelCase")]
     LogarithmicGradient {
         breakpoints: Vec<Breakpoint>,
         no_data_color: RgbaColor,
-        default_color: RgbaColor,
+        color_fields: DefaultColors,
     },
     #[serde(rename_all = "camelCase")]
     Palette {
@@ -1213,26 +1214,26 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
             geoengine_datatypes::operations::image::Colorizer::LinearGradient {
                 breakpoints,
                 no_data_color,
-                default_color,
+                default_colors: color_fields,
             } => Self::LinearGradient {
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
                     .collect::<Vec<Breakpoint>>(),
                 no_data_color: no_data_color.into(),
-                default_color: default_color.into(),
+                color_fields,
             },
             geoengine_datatypes::operations::image::Colorizer::LogarithmicGradient {
                 breakpoints,
                 no_data_color,
-                default_color,
+                default_colors: color_fields,
             } => Self::LogarithmicGradient {
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
                     .collect::<Vec<Breakpoint>>(),
                 no_data_color: no_data_color.into(),
-                default_color: default_color.into(),
+                color_fields,
             },
             geoengine_datatypes::operations::image::Colorizer::Palette {
                 colors,
