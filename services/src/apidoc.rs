@@ -3,7 +3,7 @@ use crate::api::model::datatypes::{
     Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, ExternalDataId,
     FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
     Palette, PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterQueryRectangle, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
+    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
     SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
     TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType,
 };
@@ -93,6 +93,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
+        handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::plots::get_plot_handler,
     ),
     components(
@@ -124,6 +125,8 @@ use utoipa::{Modify, OpenApi};
             SpatialReference,
             SpatialReferenceOption,
             SpatialReferenceAuthority,
+            SpatialReferenceSpecification,
+            AxisOrder,
             Measurement,
             ContinuousMeasurement,
             ClassificationMeasurement,
