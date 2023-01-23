@@ -129,7 +129,7 @@ pub struct Web {
 impl Web {
     pub fn external_address(&self) -> Result<Url> {
         Ok(self.external_address.clone().unwrap_or(Url::parse(&format!(
-            "http://{}{}",
+            "http://{}{}/",
             self.bind_address, self.api_prefix
         ))?))
     }
