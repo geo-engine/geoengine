@@ -4,8 +4,8 @@ use crate::api::model::datatypes::{
     FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
     Palette, PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
     RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
-    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, TimeGranularity,
-    TimeInstance, TimeInterval, TimeStep, VectorDataType,
+    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
+    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
@@ -24,13 +24,14 @@ use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::{UploadId, Volume, VolumeName};
+use crate::datasets::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::handlers;
 use crate::handlers::plots::WrappedPlotOutput;
-use crate::handlers::tasks::TaskAbortOptions;
+use crate::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
+use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
-use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
@@ -71,6 +72,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::layers::add_existing_layer_to_collection,
         handlers::layers::add_existing_collection_to_collection,
         handlers::layers::remove_collection_from_collection,
+        handlers::layers::layer_to_dataset,
         handlers::tasks::abort_handler,
         handlers::tasks::list_handler,
         handlers::tasks::status_handler,
@@ -101,6 +103,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
+        handlers::spatial_references::get_spatial_reference_specification_handler,
     ),
     components(
         schemas(
@@ -138,6 +141,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             SpatialReference,
             SpatialReferenceOption,
             SpatialReferenceAuthority,
+            SpatialReferenceSpecification,
+            AxisOrder,
             Measurement,
             ContinuousMeasurement,
             ClassificationMeasurement,
@@ -169,6 +174,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             TaskFilter,
             TaskListOptions,
             TaskStatus,
+            TaskResponse,
 
             Layer,
             LayerListing,
@@ -253,7 +259,9 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             RasterPropertiesKey,
             RasterPropertiesEntryType,
             OgrMetaData,
+            StringPair,
             GdalConfigOption,
+            AxisLabels,
             MockDatasetDataSourceLoadingInfo,
             OgrSourceDataset,
             OgrSourceColumnSpec,

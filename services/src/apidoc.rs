@@ -3,9 +3,9 @@ use crate::api::model::datatypes::{
     Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, ExternalDataId,
     FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
     Palette, PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
-    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, TimeGranularity,
-    TimeInstance, TimeInterval, TimeStep, VectorDataType,
+    RasterQueryRectangle, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
+    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
+    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
@@ -24,13 +24,14 @@ use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::{UploadId, Volume, VolumeName};
+use crate::datasets::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::handlers;
 use crate::handlers::plots::WrappedPlotOutput;
-use crate::handlers::tasks::TaskAbortOptions;
+use crate::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
+use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
-use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
@@ -65,6 +66,7 @@ use utoipa::{Modify, OpenApi};
         handlers::layers::add_existing_layer_to_collection,
         handlers::layers::add_existing_collection_to_collection,
         handlers::layers::remove_collection_from_collection,
+        handlers::layers::layer_to_dataset,
         handlers::session::anonymous_handler,
         handlers::session::session_handler,
         handlers::session::session_project_handler,
@@ -153,6 +155,7 @@ use utoipa::{Modify, OpenApi};
             TaskFilter,
             TaskListOptions,
             TaskStatus,
+            TaskResponse,
 
             Layer,
             LayerListing,
@@ -238,7 +241,9 @@ use utoipa::{Modify, OpenApi};
             RasterPropertiesKey,
             RasterPropertiesEntryType,
             OgrMetaData,
+            StringPair,
             GdalConfigOption,
+            AxisLabels,
             MockDatasetDataSourceLoadingInfo,
             OgrSourceDataset,
             OgrSourceColumnSpec,

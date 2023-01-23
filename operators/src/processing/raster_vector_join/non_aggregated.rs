@@ -879,6 +879,17 @@ mod tests {
                 .unwrap()
                 .into(),
         );
+        let raster_tile_a_2 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 2].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![600, 500, 400, 300, 200, 100])
+                .unwrap()
+                .into(),
+        );
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
@@ -902,16 +913,30 @@ mod tests {
                 .into(),
         );
 
+        let raster_tile_b_2 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 2].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![100, 200, 300, 400, 500, 600])
+                .unwrap()
+                .into(),
+        );
+
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![
                     raster_tile_a_0,
                     raster_tile_a_1,
+                    raster_tile_a_2,
                     raster_tile_b_0,
                     raster_tile_b_1,
+                    raster_tile_b_2,
                 ],
                 result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
+                    data_type: RasterDataType::U16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
@@ -1010,8 +1035,8 @@ mod tests {
                 &[(
                     "foo",
                     FeatureData::Float(vec![
-                        (3. + 1. + 40. + 30.) / 4.,
-                        (4. + 6. + 30. + 40.) / 4.
+                        (3. + 1. + 40. + 30. + 400.) / 5.,
+                        (4. + 6. + 30. + 40. + 300.) / 5.
                     ])
                 )],
             )

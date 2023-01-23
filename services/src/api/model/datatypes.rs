@@ -1,5 +1,6 @@
 use crate::error::{self, Result};
 use crate::identifier;
+use geoengine_datatypes::operations::image::DefaultColors;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
@@ -539,8 +540,8 @@ impl From<Coordinate2D> for geoengine_datatypes::primitives::Coordinate2D {
 /// A bounding box that includes all border points.
 /// Note: may degenerate to a point!
 pub struct BoundingBox2D {
-    lower_left_coordinate: Coordinate2D,
-    upper_right_coordinate: Coordinate2D,
+    pub lower_left_coordinate: Coordinate2D,
+    pub upper_right_coordinate: Coordinate2D,
 }
 
 impl From<geoengine_datatypes::primitives::BoundingBox2D> for BoundingBox2D {
@@ -1187,13 +1188,13 @@ pub enum Colorizer {
     LinearGradient {
         breakpoints: Vec<Breakpoint>,
         no_data_color: RgbaColor,
-        default_color: RgbaColor,
+        color_fields: DefaultColors,
     },
     #[serde(rename_all = "camelCase")]
     LogarithmicGradient {
         breakpoints: Vec<Breakpoint>,
         no_data_color: RgbaColor,
-        default_color: RgbaColor,
+        color_fields: DefaultColors,
     },
     #[serde(rename_all = "camelCase")]
     Palette {
@@ -1210,26 +1211,26 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
             geoengine_datatypes::operations::image::Colorizer::LinearGradient {
                 breakpoints,
                 no_data_color,
-                default_color,
+                default_colors: color_fields,
             } => Self::LinearGradient {
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
                     .collect::<Vec<Breakpoint>>(),
                 no_data_color: no_data_color.into(),
-                default_color: default_color.into(),
+                color_fields,
             },
             geoengine_datatypes::operations::image::Colorizer::LogarithmicGradient {
                 breakpoints,
                 no_data_color,
-                default_color,
+                default_colors: color_fields,
             } => Self::LogarithmicGradient {
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
                     .collect::<Vec<Breakpoint>>(),
                 no_data_color: no_data_color.into(),
-                default_color: default_color.into(),
+                color_fields,
             },
             geoengine_datatypes::operations::image::Colorizer::Palette {
                 colors,
@@ -1480,6 +1481,32 @@ impl From<MultiPolygon> for geoengine_datatypes::primitives::MultiPolygon {
                 .collect(),
         )
         .unwrap()
+    }
+}
+
+#[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
+pub struct StringPair((String, String));
+
+impl ToSchema for StringPair {
+    fn schema() -> utoipa::openapi::Schema {
+        use utoipa::openapi::*;
+        ArrayBuilder::new()
+            .items(Object::with_type(SchemaType::String))
+            .min_items(Some(2))
+            .max_items(Some(2))
+            .into()
+    }
+}
+
+impl From<(String, String)> for StringPair {
+    fn from(value: (String, String)) -> Self {
+        Self(value)
+    }
+}
+
+impl From<StringPair> for (String, String) {
+    fn from(value: StringPair) -> Self {
+        value.0
     }
 }
 

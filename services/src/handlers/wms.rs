@@ -459,7 +459,7 @@ mod tests {
     use actix_web::http::header;
     use actix_web::http::Method;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::operations::image::RgbaColor;
+    use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
@@ -729,7 +729,10 @@ mod tests {
                 (1.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
+            DefaultColors::OverUnder {
+                over_color: RgbaColor::white(),
+                under_color: RgbaColor::black(),
+            },
         )
         .unwrap();
 
@@ -784,7 +787,10 @@ mod tests {
                 (255.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
+            DefaultColors::OverUnder {
+                over_color: RgbaColor::white(),
+                under_color: RgbaColor::black(),
+            },
         )
         .unwrap();
 
@@ -833,7 +839,10 @@ mod tests {
                 (255.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
+            DefaultColors::OverUnder {
+                over_color: RgbaColor::white(),
+                under_color: RgbaColor::black(),
+            },
         )
         .unwrap();
 
@@ -894,7 +903,10 @@ mod tests {
                 (255.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            RgbaColor::pink(),
+            DefaultColors::OverUnder {
+                over_color: RgbaColor::white(),
+                under_color: RgbaColor::black(),
+            },
         )
         .unwrap();
 

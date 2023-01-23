@@ -417,6 +417,12 @@ pub enum Error {
         query_srs: SpatialReference,
         query_bbox: crate::api::model::datatypes::BoundingBox2D,
     },
+
+    #[snafu(display("Result Descriptor field '{}' {}", field, cause))]
+    LayerResultDescriptorMissingFields {
+        field: String,
+        cause: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
