@@ -50,7 +50,91 @@ pub(crate) struct GetPlot {
 ///
 /// # Example
 ///
-/// 1. Create a statistics workflow.
+/// 1. Upload the file `plain_data.csv` with the following content:
+///
+/// ```csv
+/// a,b,c
+/// 1,5.4,foo
+/// 2,,bar
+/// ```
+/// Response:
+/// ```json
+/// {
+/// 	"id": "f3bd61ef-d9ce-471c-89a1-46b5f7295886"
+/// }
+/// ```
+///
+/// 2. Create a dataset from it.
+///
+/// ```text
+/// POST /dataset
+/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
+///
+/// {
+///   "dataPath": {
+///     "upload": "f3bd61ef-d9ce-471c-89a1-46b5f7295886"
+///   },
+///   "definition": {
+///     "properties": {
+///       "name": "Plain Data",
+///       "description": "Demo Dataset",
+///       "sourceOperator": "OgrSource"
+///     },
+///     "metaData": {
+///       "type": "OgrMetaData",
+///       "loadingInfo": {
+///         "fileName": "plain_data.csv",
+///         "layerName": "plain_data",
+///         "dataType": "Data",
+///         "time": {
+///           "type": "none"
+///         },
+///         "columns": {
+///           "x": "",
+///           "y": null,
+///           "text": [],
+///           "float": [],
+///           "int": ["a", "b", "c"]
+///         },
+///         "forceOgrTimeFilter": false,
+///         "onError": "abort"
+///       },
+///       "resultDescriptor": {
+///         "dataType": "Data",
+///         "spatialReference": "EPSG:4326",
+///         "columns": {
+///           "a": {
+///             "dataType": "int",
+///             "measurement": {
+///               "type": "unitless"
+///             }
+///           },
+///           "b": {
+///             "dataType": "int",
+///             "measurement": {
+///               "type": "unitless"
+///             }
+///           },
+///           "c": {
+///             "dataType": "int",
+///             "measurement": {
+///               "type": "unitless"
+///             }
+///           }
+///         }
+///       }
+///     }
+///   }
+/// }
+/// ```
+/// Response:
+/// ```json
+/// {
+///   "id": "c36f5ce7-d0df-4982-babb-cc9e67d2a196"
+/// }
+/// ```
+///
+/// 3. Create a histogram workflow.
 ///
 /// ```text
 /// POST /workflow
@@ -59,73 +143,37 @@ pub(crate) struct GetPlot {
 /// {
 ///   "type": "Plot",
 ///   "operator": {
-///     "type": "Statistics",
-///     "params": {},
+///     "type": "Histogram",
+///     "params": {
+///       "columnName": "a",
+///       "bounds": "data",
+///       "buckets": null,
+///       "interactive": false
+///     },
 ///     "sources": {
-///       "source": [
-///         {
-///           "type": "MockRasterSourcei32",
-///           "params": {
-///             "data": [
-///               {
-///                 "time": {
-///                   "start": -8334632851200000,
-///                   "end": 8210298412799999
-///                 },
-///                 "tilePosition": [0,0],
-///                 "globalGeoTransform": {
-///                   "originCoordinate": {"x": 0.0,"y": 0.0},
-///                   "xPixelSize": 1.0,
-///                   "yPixelSize": -1.0
-///                 },
-///                 "gridArray": {
-///                   "type": "grid",
-///                   "innerGrid": {
-///                     "shape": {
-///                       "shapeArray": [3, 2]
-///                     },
-///                     "data": [1, 2, 3, 4, 5, 6]
-///                   },
-///                   "validityMask": {
-///                     "shape": {
-///                       "shapeArray": [3,2]
-///                     },
-///                     "data": [true,true,true,true,true,true]
-///                   }
-///                 },
-///                 "properties": {
-///                   "scale": null,
-///                   "offset": null,
-///                   "band_name": null,
-///                   "properties_map": {}
-///                 }
-///               }
-///             ],
-///             "resultDescriptor": {
-///               "dataType": "U8",
-///               "spatialReference": "EPSG:4326",
-///               "measurement": {
-///                 "type": "unitless"
-///               },
-///               "time": null,
-///               "bbox": null,
-///               "resolution": null
-///             }
-///           }
+///       "source": {
+///         "type": "OgrSource",
+///         "params": {
+///           "data": {
+///             "type": "internal",
+///             "datasetId": "c36f5ce7-d0df-4982-babb-cc9e67d2a196"
+///           },
+///           "attributeProjection": null,
+///           "attributeFilters": null
 ///         }
-///       ]
+///       }
 ///     }
 ///   }
 /// }
 /// ```
 /// Response:
-/// ```text
+/// ```json
 /// {
-///   "id": "504ed8a4-e0a4-5cef-9f91-b2ffd4a2b56b"
+///   "id": "2851667e-52c6-5bf1-b87a-d9a954834898"
 /// }
 /// ```
 ///
-/// 2. Generate the plot with this handler.
+/// 4. Generate the plot with this handler.
 #[utoipa::path(
     tag = "Plots",
     get,
@@ -133,17 +181,11 @@ pub(crate) struct GetPlot {
     responses(
         (status = 200, description = "OK", body = WrappedPlotOutput,
             example = json!({
-                "outputFormat": "JsonPlain",
-                "plotType": "Statistics",
+                "outputFormat": "JsonVega",
+                "plotType": "Histogram",
                 "data": {
-                    "Raster-1": {
-                        "max": 6.0,
-                        "mean": 3.5,
-                        "min": 1.0,
-                        "stddev": 1.707_825_127_659_933,
-                        "validCount": 6,
-                        "valueCount": 6
-                    }
+                    "metadata": null,
+                    "vegaString": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.json\",\"data\":{\"values\":[{\"Frequency\":2,\"binEnd\":2.0,\"binStart\":1.0}]},\"encoding\":{\"x\":{\"axis\":{\"title\":\"\"},\"bin\":{\"binned\":true,\"step\":1.0},\"field\":\"binStart\"},\"x2\":{\"field\":\"binEnd\"},\"y\":{\"field\":\"Frequency\",\"type\":\"quantitative\"}},\"mark\":\"bar\"}"
                 }
            })
         )
