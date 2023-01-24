@@ -1188,16 +1188,31 @@ impl From<geoengine_datatypes::operations::image::Breakpoint> for Breakpoint {
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[serde(untagged)]
+#[serde(untagged, rename_all = "camelCase", into = "OverUnderColors")]
 pub enum DefaultColors {
     #[serde(rename_all = "camelCase")]
     DefaultColor { default_color: RgbaColor },
     #[serde(rename_all = "camelCase")]
-    OverUnder {
-        over_color: RgbaColor,
-        under_color: RgbaColor,
-    },
+    OverUnder(OverUnderColors),
+}
+
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OverUnderColors {
+    over_color: RgbaColor,
+    under_color: RgbaColor,
+}
+
+impl From<DefaultColors> for OverUnderColors {
+    fn from(value: DefaultColors) -> Self {
+        match value {
+            DefaultColors::DefaultColor { default_color } => Self {
+                over_color: default_color,
+                under_color: default_color,
+            },
+            DefaultColors::OverUnder(over_under) => over_under,
+        }
+    }
 }
 
 impl From<DefaultColors> for geoengine_datatypes::operations::image::DefaultColors {
@@ -1206,10 +1221,10 @@ impl From<DefaultColors> for geoengine_datatypes::operations::image::DefaultColo
             DefaultColors::DefaultColor { default_color } => Self::DefaultColor {
                 default_color: default_color.into(),
             },
-            DefaultColors::OverUnder {
+            DefaultColors::OverUnder(OverUnderColors {
                 over_color,
                 under_color,
-            } => Self::OverUnder {
+            }) => Self::OverUnder {
                 over_color: over_color.into(),
                 under_color: under_color.into(),
             },
@@ -1228,16 +1243,16 @@ impl From<geoengine_datatypes::operations::image::DefaultColors> for DefaultColo
             geoengine_datatypes::operations::image::DefaultColors::OverUnder {
                 over_color,
                 under_color,
-            } => Self::OverUnder {
+            } => Self::OverUnder(OverUnderColors {
                 over_color: over_color.into(),
                 under_color: under_color.into(),
-            },
+            }),
         }
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase")]
 pub struct LinearGradient {
     pub breakpoints: Vec<Breakpoint>,
     pub no_data_color: RgbaColor,
@@ -1246,7 +1261,7 @@ pub struct LinearGradient {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase")]
 pub struct LogarithmicGradient {
     pub breakpoints: Vec<Breakpoint>,
     pub no_data_color: RgbaColor,
