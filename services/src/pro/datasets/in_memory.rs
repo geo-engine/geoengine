@@ -10,8 +10,8 @@ use crate::datasets::storage::{
     DATASET_DB_LAYER_PROVIDER_ID, DATASET_DB_ROOT_COLLECTION_ID,
 };
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
-use crate::error;
 use crate::error::Result;
+use crate::error::{self, Error};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
@@ -27,11 +27,14 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
-    MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
+    MetaData, OperatorName, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
+    VectorResultDescriptor,
 };
 
+use geoengine_operators::mock::MockDatasetDataSource;
 use geoengine_operators::source::{
-    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
+    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, GdalSource,
+    OgrSource, OgrSourceDataset,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use log::{info, warn};
@@ -211,6 +214,51 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
             });
 
         Ok(id)
+    }
+
+    async fn delete_dataset(&self, session: &UserSession, dataset_id: DatasetId) -> Result<()> {
+        let backend = self.backend.read().await;
+
+        let is_owner = backend.dataset_permissions.iter().any(|p| {
+            p.dataset == dataset_id
+                && p.permission == Permission::Owner
+                && session.roles.iter().any(|r| *r == p.role)
+        });
+
+        if !is_owner {
+            return Err(Error::OperationRequiresOwnerPermission);
+        }
+
+        drop(backend);
+        let mut backend = self.backend.write().await;
+
+        let dataset = backend
+            .datasets
+            .remove(&dataset_id)
+            .ok_or(Error::UnknownDatasetId)?;
+
+        match dataset.source_operator.as_str() {
+            GdalSource::TYPE_NAME => {
+                backend.gdal_datasets.remove(&dataset_id);
+            }
+            OgrSource::TYPE_NAME => {
+                backend.ogr_datasets.remove(&dataset_id);
+            }
+            MockDatasetDataSource::TYPE_NAME => {
+                backend.mock_datasets.remove(&dataset_id);
+            }
+            _ => {
+                return Err(Error::UnknownOperator {
+                    operator: dataset.source_operator.clone(),
+                })
+            }
+        }
+
+        backend
+            .dataset_permissions
+            .retain(|p| p.dataset != dataset_id);
+
+        Ok(())
     }
 
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
