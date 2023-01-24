@@ -3,13 +3,15 @@ use crate::engine::{
     RasterResultDescriptor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     VectorResultDescriptor,
 };
+use crate::error;
 use crate::pro::adapters::stream_statistics_adapter::StreamStatisticsAdapter;
-use crate::pro::meta::quota::QuotaTracking;
+use crate::pro::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle};
+use snafu::ensure;
 
 pub struct InitializedProcessorStatistics<S> {
     source: S,
@@ -139,7 +141,14 @@ where
         query: QueryRectangle<Self::SpatialBounds>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let quota = ctx
+        let quota_checker = ctx
+            .extensions()
+            .get::<QuotaChecker>()
+            .expect("`QuotaChecker` extension should be set during `ProContext` creation");
+
+        ensure!(quota_checker.check_quota().await?, error::QuotaExhausted);
+
+        let quota_tracker = ctx
             .extensions()
             .get::<QuotaTracking>()
             .expect("`QuotaTracking` extension should be set during `ProContext` creation")
@@ -155,7 +164,7 @@ where
         match stream_result {
             Ok(stream) => {
                 tracing::debug!(event = "query ok");
-                Ok(StreamStatisticsAdapter::new(stream, span.clone(), quota).boxed())
+                Ok(StreamStatisticsAdapter::new(stream, span.clone(), quota_tracker).boxed())
             }
             Err(err) => {
                 tracing::debug!(event = "query error");

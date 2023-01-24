@@ -1449,13 +1449,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
         let res = send_pro_test_request(req, ctx.clone()).await;
 
-        ErrorResponse::assert(
-            res,
-            200,
-            "Operator",
-            "Operator: CreatingProcessorFailed: QuotaExhausted",
-        )
-        .await;
+        ErrorResponse::assert(res, 200, "Operator", "Operator: QuotaExhausted").await;
 
         ctx.user_db_ref()
             .update_quota_available_by_user(&session.user.id, 9999)

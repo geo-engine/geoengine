@@ -1,3 +1,5 @@
+use crate::util::Result;
+use async_trait::async_trait;
 use geoengine_datatypes::identifier;
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
@@ -34,3 +36,10 @@ impl QuotaTracking {
         let _ = self.quota_sender.send(self.computation); // ignore the Result because the quota receiver should never close the receiving end of the channel
     }
 }
+
+#[async_trait]
+pub trait QuotaCheck {
+    async fn check_quota(&self) -> Result<bool>;
+}
+
+pub type QuotaChecker = Box<dyn QuotaCheck + Send + Sync>;

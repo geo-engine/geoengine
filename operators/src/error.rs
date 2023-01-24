@@ -353,6 +353,13 @@ pub enum Error {
         expected: usize,
         found: usize,
     },
+
+    #[cfg(feature = "pro")]
+    QuotaExhausted,
+
+    QueryingProcessorFailed {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

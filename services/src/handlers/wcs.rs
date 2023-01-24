@@ -396,10 +396,7 @@ async fn wcs_get_coverage_handler<C: Context>(
         Box::new(irp)
     };
 
-    let processor = execution_context
-        .create_raster_query_processor(initialized)
-        .await
-        .context(error::Operator)?;
+    let processor = initialized.query_processor().context(error::Operator)?;
 
     let spatial_resolution: SpatialResolution =
         if let Some(spatial_resolution) = request.spatial_resolution() {

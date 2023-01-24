@@ -316,10 +316,7 @@ async fn wms_map_handler<C: Context>(
             Box::new(irp)
         };
 
-        let processor = execution_context
-            .create_raster_query_processor(initialized)
-            .await
-            .context(error::Operator)?;
+        let processor = initialized.query_processor().context(error::Operator)?;
 
         let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
         let x_query_resolution = query_bbox.size_x() / f64::from(request.width);

@@ -16,6 +16,7 @@ use geoengine_operators::engine::{
     VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
+use geoengine_operators::pro::meta::quota::QuotaCheck;
 use geoengine_operators::pro::meta::statistics::InitializedProcessorStatistics;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 pub use in_memory::ProInMemoryContext;
@@ -389,6 +390,28 @@ where
                     .await
             }
         }
+    }
+}
+
+pub struct QuotaCheckerImpl<U: UserDb> {
+    user_db: Arc<U>,
+    session: UserSession,
+}
+
+#[async_trait]
+impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
+    async fn check_quota(&self) -> geoengine_operators::util::Result<bool> {
+        // TODO: cache the result, s.th. other operators in the same workflow can re-use it
+        Ok(self
+            .user_db
+            .quota_available(&self.session)
+            .await
+            .map_err(
+                |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                    source: Box::new(e),
+                },
+            )?
+            > 0)
     }
 }
 
