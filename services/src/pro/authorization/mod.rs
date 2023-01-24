@@ -182,12 +182,24 @@ mod tests {
 
     use super::*;
 
+    async fn keycloak_admin() -> Result<KeycloakAdmin> {
+        // TODO: load from config(?)
+        let keycloak_url = "http://localhost:8080";
+        let user = "admin";
+        let password = "admin";
+
+        let client = reqwest::Client::new();
+        let admin_token =
+            KeycloakAdminToken::acquire(keycloak_url, user, password, &client).await?;
+
+        Ok(KeycloakAdmin::new(keycloak_url, admin_token, client))
+    }
+
     // set up a keycloak realm using the keycloak admin api
     #[allow(clippy::too_many_lines)]
     async fn setup_keycloak_test_realm() -> Result<KeycloakAdmin> {
         // TODO: use groups?
 
-        // TODO: load from config(?)
         let keycloak_url = "http://localhost:8080";
         let user = "admin";
         let password = "admin";
@@ -215,6 +227,7 @@ mod tests {
         admin
             .post(RealmRepresentation {
                 realm: Some(realm_name.into()),
+                user_managed_access_allowed: Some(true),
                 enabled: Some(true),
                 ..Default::default()
             })
@@ -234,6 +247,7 @@ mod tests {
                     authorization_services_enabled: Some(true),
                     authorization_settings: Some(ResourceServerRepresentation {
                         allow_remote_resource_management: Some(true),
+                        policies: Some(vec![]),
                         scopes: Some(vec![
                             ScopeRepresentation {
                                 name: Some("read".into()),
@@ -387,7 +401,47 @@ mod tests {
                 .await?;
         }
 
+        // delete the default permission that grants access to everything(?)
+        let client = uma_client().await?;
+
+        let client_token = client
+            .request_token_using_client_credentials()
+            .await?
+            .access_token;
+
+        let default_permissions = client
+            .search_for_uma2_resource_permission(
+                client_token.clone(),
+                None,
+                None,
+                None,
+                Some(0),
+                Some(100),
+            )
+            .await?;
+
+        dbg!(&default_permissions);
+
+        for permission in default_permissions {
+            dbg!(
+                client
+                    .delete_uma2_resource_permission(permission.id.unwrap(), client_token.clone())
+                    .await
+            );
+        }
+
         Ok(admin)
+    }
+
+    #[ignore]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn test_setup() -> Result<()> {
+        // make sure keycloak runs with:
+        // `podman run --name keycloak -dt -p 8080:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0 start-dev`
+        let admin = setup_keycloak_test_realm().await?;
+
+        Ok(())
     }
 
     // ignore test for now because it requires a running keycloak instance
@@ -683,7 +737,10 @@ mod tests {
     async fn test_order() -> Result<()> {
         // make sure keycloak runs with:
         // `podman run --name keycloak -dt -p 8080:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0 start-dev`
-        let admin = setup_keycloak_test_realm().await?;
+
+        // let admin = setup_keycloak_test_realm().await?;
+
+        let admin = keycloak_admin().await?;
 
         let client = uma_client().await?;
 
@@ -701,38 +758,6 @@ mod tests {
             .request_token_using_password_credentials("test-user2", "test", None)
             .await?
             .access_token;
-
-        // Create a new resource, owned by the client
-        let resource_id = register_resource(
-            client_token.clone(),
-            "AResource1".to_string(),
-            ResourceType::Dataset,
-            None,
-        )
-        .await
-        .unwrap();
-
-        // create another resource
-        let resource2_id = register_resource(
-            client_token.clone(),
-            "AResource2".to_string(),
-            ResourceType::RasterDataset,
-            None,
-        )
-        .await?;
-
-        // create another resource
-        let resource2_id = register_resource(
-            user2_access_token.clone(),
-            "BRescource (shared)".to_string(),
-            ResourceType::Dataset,
-            None,
-            // Some(Uma2Owner {
-            //     id: None,
-            //     name: Some("test-user2".to_string()),
-            // }),
-        )
-        .await?;
 
         let users = admin
             .realm_users_get(
@@ -754,13 +779,58 @@ mod tests {
             )
             .await?;
 
-        let test_user_id = users
+        let user_id = users
             .iter()
             .find(|user| user.username == Some("test-user".to_string()))
             .unwrap()
             .id
             .clone()
             .unwrap();
+
+        let user2_id = users
+            .iter()
+            .find(|user| user.username == Some("test-user2".to_string()))
+            .unwrap()
+            .id
+            .clone()
+            .unwrap();
+
+        // // Create a new resource, owned by the client
+        // let resource_id = register_resource(
+        //     user_access_token.clone(),
+        //     "AResource1".to_string(),
+        //     ResourceType::Dataset,
+        //     Some(Uma2Owner {
+        //         id: Some(user_id.clone()),
+        //         name: None,
+        //     }),
+        // )
+        // .await
+        // .unwrap();
+
+        // // create another resource
+        // let resource2_id = register_resource(
+        //     user_access_token.clone(),
+        //     "AResource2".to_string(),
+        //     ResourceType::RasterDataset,
+        //     Some(Uma2Owner {
+        //         id: Some(user_id.clone()),
+        //         name: None,
+        //     }),
+        // )
+        // .await?;
+
+        // // create another resource
+        // let resource2_id = register_resource(
+        //     user2_access_token.clone(),
+        //     "BRescource (shared)".to_string(),
+        //     ResourceType::Dataset,
+        //     Some(Uma2Owner {
+        //         id: Some(user2_id.clone()),
+        //         name: None,
+        //     }),
+        // )
+        // .await?;
 
         // grant_permission(
         //     user2_access_token.clone(),
@@ -775,16 +845,64 @@ mod tests {
         // note: there is no pagination here... maybe we have to use another endpoint?
         let mut search = client
             .search_for_uma2_resources(
-                user2_access_token.clone(),
+                user_access_token.clone(),
                 None,
                 None,
                 None,
                 None,
-                // Some(
-                //     ResourceType::RasterDataset
-                //         .uma_resource_type_name()
-                //         .to_string(),
-                // ),
+ 
+ 	
+                Guten Tag,
+                Ihre Sendung stellen wir am nächsten Werktag zu.
+                 
+                     
+                 
+                     
+                 
+                Versender & Paketnummer:
+                AMAZON GRAVIS Computervertriebs. mb
+                09446188621166
+                Empfänger:
+                Michael Mattig
+                 
+                     
+                     
+                Weitere Informationen zu Ihrem Paket erhalten Sie von uns am Tag der Zustellung.
+                     
+                 
+                     
+                 
+                         
+                Wählen Sie Abstell-Okay und helfen Sie uns den CO2-Ausstoß zu senken.
+                     
+                Sie können Ihr Paket nicht entgegennehmen?
+                 
+                    
+                Abstell-Okay geben	
+                    
+                Paketshop wählen	
+                    
+                Nachbar wählen
+                    
+                Tag ändern
+                 
+                Jetzt Änderungs-Option wählen
+                 
+                 
+                     
+                 
+                DPD Deutschland GmbH, Wailandtstraße 1, 63741 Aschaffenburg
+                Sitz der Gesellschaft: Aschaffenburg | Registergericht: Amtsgericht Aschaffenburg, HRB 8887
+                
+                Geschäftsführung: Björn Scheel (CEO),
+                Anke Förster, Dirk Müller, Andreas Thams
+                Vorsitzender des Aufsichtsrates: Eric Dietz
+                 
+                Auf diese E-Mail können Sie leider nicht antworten. In unserem Support-Bereich finden Sie rund um die Uhr Antworten auf die häufigsten Fragen. Wir haben Ihre personenbezogenen Daten (Name, Adresse, E-Mail Adresse) vom Versender einer an Sie adressierten Lieferung erhalten. Diese E-Mail dient lediglich zu Ihrer Information. Wir verwenden Ihre E-Mail Adresse ausschließlich, um Ihr Paket anzukündigen. Sie wird nicht für werbliche Zwecke genutzt, es sei denn, es liegt uns Ihre Einwilligung dazu vor. Die Datenschutzhinweise und Ihre Datenschutzrechte finden Sie unter dpd.de/datenschutz.
+                
+                Sie möchten unsere Paketankündigung abbestellen? Klicken Sie hier.
+                dpdgroup	dpd.de
+                     
                 Some(ResourceScope::Read.uma_scope_name().to_string()),
                 Some(0),
                 Some(10),
