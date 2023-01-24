@@ -1,6 +1,6 @@
 use openid::{
     uma2::{
-        DiscoveredUma2, Uma2AuthenticationMethod, Uma2PermissionDecisionStrategy,
+        DiscoveredUma2, Uma2AuthenticationMethod, Uma2Owner, Uma2PermissionDecisionStrategy,
         Uma2PermissionLogic, Uma2PermissionTicketRequest,
     },
     Client, StandardClaims,
@@ -15,12 +15,14 @@ type UmaClient = Client<DiscoveredUma2, StandardClaims>;
 
 pub enum ResourceType {
     Dataset,
+    RasterDataset,
 }
 
 impl ResourceType {
     fn uma_resource_type_name(&self) -> &'static str {
         match self {
             ResourceType::Dataset => "dataset", // TODO: name space?
+            ResourceType::RasterDataset => "raster_dataset", // TODO: name space?
         }
     }
 }
@@ -61,6 +63,7 @@ pub async fn register_resource(
     user_access_token: String,
     resource_name: String,
     resource_type: ResourceType,
+    owner: Option<Uma2Owner>,
 ) -> Result<String> {
     // TODO: reuse client
     let client = uma_client().await?;
@@ -76,7 +79,7 @@ pub async fn register_resource(
                 ResourceScope::Write.uma_scope_name().into(),
             ]),
             None, // TODO: dataset name? has to be kept in sync though when dataset name is updated in Geo Engine
-            None,
+            owner,
             Some(true),
         )
         .await?;
@@ -164,6 +167,7 @@ pub async fn has_permission(
 
 #[cfg(test)]
 mod tests {
+    use actix_http::header::{AUTHORIZATION, CONTENT_TYPE};
     use futures::{stream, StreamExt};
     use keycloak::{
         types::{
@@ -173,6 +177,8 @@ mod tests {
         },
         KeycloakAdmin, KeycloakAdminToken, KeycloakError,
     };
+    use openid::uma2::{Uma2Owner, Uma2Provider};
+    use serde_json::Value;
 
     use super::*;
 
@@ -415,6 +421,7 @@ mod tests {
             client_token.clone(),
             "new_resource".to_string(),
             ResourceType::Dataset,
+            None,
         )
         .await
         .unwrap();
@@ -475,6 +482,7 @@ mod tests {
             client_token.clone(),
             "new-resource2".to_string(),
             ResourceType::Dataset,
+            None,
         )
         .await?;
 
@@ -546,14 +554,250 @@ mod tests {
                 None,
                 None,
                 Some(ResourceScope::Read.uma_scope_name().to_string()),
+                Some(0),
+                Some(1),
             )
             .await?;
         search.sort();
+
+        dbg!(&search);
 
         let mut expected = vec![resource_id.clone(), resource2_id.clone()];
         expected.sort();
 
         assert_eq!(search, expected);
+
+        Ok(())
+    }
+
+    // ignore test for now because it requires a running keycloak instance
+    #[ignore]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn test2() -> Result<()> {
+        // make sure keycloak runs with:
+        // `podman run --name keycloak -dt -p 8080:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0 start-dev`
+        let admin = setup_keycloak_test_realm().await?;
+
+        let client = uma_client().await?;
+
+        let client_token = client
+            .request_token_using_client_credentials()
+            .await?
+            .access_token;
+
+        let user_access_token = client
+            .request_token_using_password_credentials("test-user", "test", None)
+            .await?
+            .access_token;
+
+        let user2_access_token = client
+            .request_token_using_password_credentials("test-user2", "test", None)
+            .await?
+            .access_token;
+
+        let resource_name = "new_resource".to_string();
+
+        let resource_type = ResourceType::Dataset;
+
+        let resource = client
+            .create_uma2_resource(
+                user_access_token.clone(),
+                resource_name,
+                Some(resource_type.uma_resource_type_name().into()),
+                None,
+                Some(vec![
+                    ResourceScope::Read.uma_scope_name().into(),
+                    ResourceScope::Write.uma_scope_name().into(),
+                ]),
+                None, // TODO: dataset name? has to be kept in sync though when dataset name is updated in Geo Engine
+                Some(Uma2Owner {
+                    id: None,
+                    name: Some("test-user".to_string()),
+                }),
+                Some(true),
+            )
+            .await?;
+
+        let resource_id = resource
+            .id
+            .ok_or(crate::error::Error::Uma2MissingResourceId)?;
+
+        let users = admin
+            .realm_users_get(
+                "TestRealm",
+                Some(true),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await?;
+
+        let test_user_id = users
+            .iter()
+            .find(|user| user.username == Some("test-user".to_string()))
+            .unwrap()
+            .id
+            .clone()
+            .unwrap();
+
+        grant_permission(
+            user_access_token.clone(),
+            resource_id.clone(),
+            vec![ResourceScope::Read],
+            Some(vec![format!("user_{}", test_user_id)]),
+            None,
+        )
+        .await?;
+
+        let permission_search = client
+            .search_for_uma2_resource_permission(
+                user_access_token.clone(),
+                None,                                                   // resource
+                None,                                                   // name
+                Some(ResourceScope::Read.uma_scope_name().to_string()), // scope
+                Some(0),
+                Some(10),
+            )
+            .await?;
+
+        dbg!(permission_search);
+
+        Ok(())
+    }
+
+    // ignore test for now because it requires a running keycloak instance
+    #[ignore]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn test_order() -> Result<()> {
+        // make sure keycloak runs with:
+        // `podman run --name keycloak -dt -p 8080:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin quay.io/keycloak/keycloak:20.0 start-dev`
+        let admin = setup_keycloak_test_realm().await?;
+
+        let client = uma_client().await?;
+
+        let client_token = client
+            .request_token_using_client_credentials()
+            .await?
+            .access_token;
+
+        let user_access_token = client
+            .request_token_using_password_credentials("test-user", "test", None)
+            .await?
+            .access_token;
+
+        let user2_access_token = client
+            .request_token_using_password_credentials("test-user2", "test", None)
+            .await?
+            .access_token;
+
+        // Create a new resource, owned by the client
+        let resource_id = register_resource(
+            client_token.clone(),
+            "AResource1".to_string(),
+            ResourceType::Dataset,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // create another resource
+        let resource2_id = register_resource(
+            client_token.clone(),
+            "AResource2".to_string(),
+            ResourceType::RasterDataset,
+            None,
+        )
+        .await?;
+
+        // create another resource
+        let resource2_id = register_resource(
+            user2_access_token.clone(),
+            "BRescource (shared)".to_string(),
+            ResourceType::Dataset,
+            None,
+            // Some(Uma2Owner {
+            //     id: None,
+            //     name: Some("test-user2".to_string()),
+            // }),
+        )
+        .await?;
+
+        let users = admin
+            .realm_users_get(
+                "TestRealm",
+                Some(true),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await?;
+
+        let test_user_id = users
+            .iter()
+            .find(|user| user.username == Some("test-user".to_string()))
+            .unwrap()
+            .id
+            .clone()
+            .unwrap();
+
+        // grant_permission(
+        //     user2_access_token.clone(),
+        //     resource2_id.clone(),
+        //     vec![ResourceScope::Read],
+        //     Some(vec![format!("user_{}", test_user_id)]),
+        //     None,
+        // )
+        // .await?;
+
+        // check that test-user can read all the resources
+        // note: there is no pagination here... maybe we have to use another endpoint?
+        let mut search = client
+            .search_for_uma2_resources(
+                user2_access_token.clone(),
+                None,
+                None,
+                None,
+                None,
+                // Some(
+                //     ResourceType::RasterDataset
+                //         .uma_resource_type_name()
+                //         .to_string(),
+                // ),
+                Some(ResourceScope::Read.uma_scope_name().to_string()),
+                Some(0),
+                Some(10),
+            )
+            .await?;
+
+        for resource_id in search {
+            let resource = client
+                .get_uma2_resource_by_id(user_access_token.clone(), resource_id)
+                .await?;
+
+            dbg!(&resource.name);
+        }
 
         Ok(())
     }
