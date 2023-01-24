@@ -72,8 +72,7 @@ where
 
         let quota_available =
             crate::util::config::get_config_element::<crate::pro::util::config::User>()?
-                .default_available_quota
-                .unwrap_or(0);
+                .default_available_quota;
 
         tx.execute(
             &stmt,
@@ -118,8 +117,7 @@ where
 
         let quota_available =
             crate::util::config::get_config_element::<crate::pro::util::config::User>()?
-                .default_available_quota
-                .unwrap_or(0);
+                .default_available_quota;
 
         let stmt = tx
             .prepare("INSERT INTO users (id, quota_available, active) VALUES ($1, $2, TRUE);")
@@ -276,8 +274,7 @@ where
 
                 let quota_available =
                     crate::util::config::get_config_element::<crate::pro::util::config::User>()?
-                        .default_available_quota
-                        .unwrap_or(0);
+                        .default_available_quota;
 
                 //TODO: Inconsistent to hashmap implementation, where an external user is not part of the user database.
                 //TODO: A user might be able to login without external login using this (internal) id. Would be a problem with anonymous users as well.

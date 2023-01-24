@@ -62,8 +62,7 @@ impl UserDb for HashMapUserDb {
         quota_available.insert(
             id,
             crate::util::config::get_config_element::<crate::pro::util::config::User>()?
-                .default_available_quota
-                .unwrap_or(0),
+                .default_available_quota,
         );
 
         let session = UserSession {
@@ -140,8 +139,7 @@ impl UserDb for HashMapUserDb {
                 quota_available.insert(
                     id,
                     crate::util::config::get_config_element::<crate::pro::util::config::User>()?
-                        .default_available_quota
-                        .unwrap_or(0),
+                        .default_available_quota,
                 );
                 id
             }
