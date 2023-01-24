@@ -34,7 +34,7 @@ pub struct SimpleSession {
     pub project: Option<ProjectId>,
     pub view: Option<STRectangle>,
     #[serde(skip)]
-    is_admin: bool,
+    is_admin: bool, // TODO: remove this flag; we should only distinguish between admin and non-admin in Pro version
 }
 
 impl SimpleSession {

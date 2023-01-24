@@ -28,7 +28,7 @@ use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
-use actix_web::{web, FromRequest, HttpRequest, Responder};
+use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::{future::LocalBoxFuture, FutureExt};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use gdal::{
@@ -889,7 +889,7 @@ pub async fn delete_dataset_handler<C: Context>(
     dataset: web::Path<DatasetId>,
     session: AdminOrSession<C>,
     ctx: web::Data<C>,
-) -> Result<impl Responder>
+) -> Result<HttpResponse>
 where
     C::Session: MockableSession,
 {
@@ -902,7 +902,7 @@ where
         .delete_dataset(&session, dataset.into_inner())
         .await?;
 
-    Ok(actix_web::HttpResponse::Ok())
+    Ok(actix_web::HttpResponse::Ok().finish())
 }
 
 #[cfg(test)]
