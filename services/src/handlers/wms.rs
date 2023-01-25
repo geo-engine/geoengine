@@ -73,7 +73,7 @@ where
             //   <Name>WMS</Name>
             //   <Title>Geo Engine WMS</Title>
             //   <OnlineResource 
-            //     xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://127.0.0.1:3030/wms/b709b27b-dea5-5a27-a074-ae3366c49498"/>
+            //     xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://127.0.0.1:3030/api/wms/b709b27b-dea5-5a27-a074-ae3366c49498"/>
             //   </Service>
             //   <Capability>
             //     <Request>
@@ -82,7 +82,7 @@ where
             //         <DCPType>
             //           <HTTP>
             //             <Get>
-            //               <OnlineResource xlink:href="http://127.0.0.1:3030/wms/b709b27b-dea5-5a27-a074-ae3366c49498"/>
+            //               <OnlineResource xlink:href="http://127.0.0.1:3030/api/wms/b709b27b-dea5-5a27-a074-ae3366c49498"/>
             //             </Get>
             //           </HTTP>
             //         </DCPType>
@@ -92,7 +92,7 @@ where
             //         <DCPType>
             //           <HTTP>
             //             <Get>
-            //               <OnlineResource xlink:href="http://127.0.0.1:3030/wms/b709b27b-dea5-5a27-a074-ae3366c49498"/>
+            //               <OnlineResource xlink:href="http://127.0.0.1:3030/api/wms/b709b27b-dea5-5a27-a074-ae3366c49498"/>
             //             </Get>
             //           </HTTP>
             //         </DCPType>
@@ -215,9 +215,7 @@ where
 
 fn wms_url(workflow: WorkflowId) -> Result<Url> {
     let web_config = crate::util::config::get_config_element::<crate::util::config::Web>()?;
-    let base = web_config
-        .external_address
-        .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?);
+    let base = web_config.external_address()?;
 
     ogc_endpoint_url(&base, OgcProtocol::Wms, workflow)
 }
