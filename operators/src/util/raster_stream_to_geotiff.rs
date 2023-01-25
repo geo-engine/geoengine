@@ -1378,25 +1378,20 @@ mod tests {
 
         for time_step in time_steps {
             let time_intervals =
-                generate_time_intervals(base_start_time, time_step, num_time_steps)
-                    .expect("Time interval generation should succeed");
+                generate_time_intervals(base_start_time, time_step, num_time_steps).unwrap();
             let data = vec![
                 RasterTile2D {
-                    time: *time_intervals.get(0).expect("Vector should have size 2"),
+                    time: *time_intervals.get(0).unwrap(),
                     tile_position: [-1, 0].into(),
                     global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4])
-                        .expect("Grid dimension should match capacity")
-                        .into(),
+                    grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                     properties: Default::default(),
                 },
                 RasterTile2D {
-                    time: *time_intervals.get(1).expect("Vector should have size 2"),
+                    time: *time_intervals.get(1).unwrap(),
                     tile_position: [-1, 0].into(),
                     global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10])
-                        .expect("Grid dimension should match capacity")
-                        .into(),
+                    grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                     properties: Default::default(),
                 },
             ];
@@ -1411,8 +1406,7 @@ mod tests {
             .boxed();
             let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
             let query_rectangle = RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((0., 2.).into(), (2., 0.).into())
-                    .expect("Spatial bounds should be valid"),
+                spatial_bounds: SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
                 time_interval: TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
                 spatial_resolution: GeoTransform::test_default().spatial_resolution(),
             };
@@ -1436,18 +1430,12 @@ mod tests {
                 tiling_specification,
             )
             .await
-            .expect("");
+            .unwrap();
             assert_eq!(result.len(), num_time_steps);
 
             let hash_set = result
                 .iter()
-                .map(|x| {
-                    x.params
-                        .as_ref()
-                        .expect("GdalDatasetParameters should be set")
-                        .file_path
-                        .clone()
-                })
+                .map(|x| x.params.as_ref().unwrap().file_path.clone())
                 .collect::<HashSet<_>>();
             assert_eq!(hash_set.len(), num_time_steps);
 
