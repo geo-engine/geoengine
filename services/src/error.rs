@@ -159,6 +159,8 @@ pub enum Error {
     OnlyAdminsCanCreateDatasetFromVolume,
     AdminsCannotCreateDatasetFromUpload,
 
+    OperationRequiresOwnerPermission,
+
     #[snafu(display("Permission denied for dataset with id {:?}", dataset))]
     DatasetPermissionDenied {
         dataset: DatasetId,
