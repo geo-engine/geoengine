@@ -2268,7 +2268,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_tracks_quota_in_postgres() {
+    async fn it_tracks_used_quota_in_postgres() {
         with_temp_context(|ctx, _| async move {
             let _user = ctx
                 .user_db_ref()
@@ -2307,6 +2307,61 @@ mod tests {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
                 if used == 2 {
+                    success = true;
+                    break;
+                }
+            }
+
+            assert!(success);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_tracks_available_quota() {
+        with_temp_context(|ctx, _| async move {
+            let user = ctx
+                .user_db_ref()
+                .register(
+                    UserRegistration {
+                        email: "foo@example.com".to_string(),
+                        password: "secret1234".to_string(),
+                        real_name: "Foo Bar".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let session = ctx
+                .user_db_ref()
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
+
+            ctx.user_db_ref()
+                .update_quota_available_by_user(&user, 1)
+                .await
+                .unwrap();
+
+            let quota = initialize_quota_tracking(ctx.user_db());
+
+            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+
+            tracking.work_unit_done();
+            tracking.work_unit_done();
+
+            // wait for quota to be recorded
+            let mut success = false;
+            for _ in 0..10 {
+                let available = ctx.user_db_ref().quota_available(&session).await.unwrap();
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+                if available == -1 {
                     success = true;
                     break;
                 }
