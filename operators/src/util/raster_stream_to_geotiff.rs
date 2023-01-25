@@ -823,7 +823,6 @@ fn geotiff_to_cog(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
     use std::marker::PhantomData;
     use std::ops::Add;
 
@@ -1361,9 +1360,85 @@ mod tests {
         Ok(result)
     }
 
+    async fn test_output_for_time_interval(
+        num_time_steps: usize,
+        base_start_time: DateTime,
+        time_step: Duration,
+        file_suffixes: Vec<&str>,
+    ) {
+        let time_intervals =
+            generate_time_intervals(base_start_time, time_step, num_time_steps).unwrap();
+        let data = vec![
+            RasterTile2D {
+                time: *time_intervals.get(0).unwrap(),
+                tile_position: [-1, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: *time_intervals.get(1).unwrap(),
+                tile_position: [-1, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                properties: Default::default(),
+            },
+        ];
+
+        let ctx = MockQueryContext::test_default();
+        let tiling_specification =
+            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+        let processor = MockRasterSourceProcessor {
+            data,
+            tiling_specification,
+        }
+        .boxed();
+        let query_rectangle = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
+            time_interval: TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
+            spatial_resolution: GeoTransform::test_default().spatial_resolution(),
+        };
+
+        let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+        let expected_paths = file_suffixes
+            .iter()
+            .map(|x| file_path.join(x))
+            .collect::<Vec<_>>();
+        let result = raster_stream_to_geotiff(
+            &file_path,
+            processor,
+            query_rectangle,
+            ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: true,
+                compression_num_threads: GdalCompressionNumThreads::AllCpus,
+                force_big_tiff: false,
+            },
+            None,
+            Box::pin(futures::future::pending()),
+            tiling_specification,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.len(), num_time_steps);
+
+        for x in result.iter().zip(expected_paths) {
+            assert_eq!(x.0.params.as_ref().unwrap().file_path, x.1);
+        }
+
+        for x in result.iter().zip(time_intervals) {
+            assert_eq!(x.0.time, x.1);
+        }
+    }
+
     #[tokio::test]
     async fn output_time_intervals_for_varying_time_step_granularity() {
         let num_time_steps = 2;
+
         let base_start_time = DateTime::new_utc(2020, 7, 30, 11, 50, 1);
 
         let time_steps = vec![
@@ -1376,72 +1451,45 @@ mod tests {
             Duration::milliseconds(1),
         ];
 
-        for time_step in time_steps {
-            let time_intervals =
-                generate_time_intervals(base_start_time, time_step, num_time_steps).unwrap();
-            let data = vec![
-                RasterTile2D {
-                    time: *time_intervals.get(0).unwrap(),
-                    tile_position: [-1, 0].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
-                    properties: Default::default(),
-                },
-                RasterTile2D {
-                    time: *time_intervals.get(1).unwrap(),
-                    tile_position: [-1, 0].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
-                    properties: Default::default(),
-                },
-            ];
+        let all_expected_file_suffixes = vec![
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2021-07-30T11-50-01-000.tiff",
+            ], //year
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-08-30T11-50-01-000.tiff",
+            ], //month
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-07-31T11-50-01-000.tiff",
+            ], //day
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-07-30T12-50-01-000.tiff",
+            ], //hour
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-07-30T11-51-01-000.tiff",
+            ], //minute
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-07-30T11-50-02-000.tiff",
+            ], //second
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-07-30T11-50-01-001.tiff",
+            ], //millisecond
+        ];
 
-            let ctx = MockQueryContext::test_default();
-            let tiling_specification =
-                TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
-            let processor = MockRasterSourceProcessor {
-                data,
-                tiling_specification,
-            }
-            .boxed();
-            let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
-            let query_rectangle = RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
-                time_interval: TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
-                spatial_resolution: GeoTransform::test_default().spatial_resolution(),
-            };
-
-            let result = raster_stream_to_geotiff(
-                &file_path,
-                processor,
-                query_rectangle,
-                ctx,
-                GdalGeoTiffDatasetMetadata {
-                    no_data_value: Some(0.),
-                    spatial_reference: SpatialReference::epsg_4326(),
-                },
-                GdalGeoTiffOptions {
-                    as_cog: true,
-                    compression_num_threads: GdalCompressionNumThreads::AllCpus,
-                    force_big_tiff: false,
-                },
-                None,
-                Box::pin(futures::future::pending()),
-                tiling_specification,
+        for (time_step, file_suffixes) in time_steps.iter().zip(all_expected_file_suffixes) {
+            test_output_for_time_interval(
+                num_time_steps,
+                base_start_time,
+                *time_step,
+                file_suffixes,
             )
-            .await
-            .unwrap();
-            assert_eq!(result.len(), num_time_steps);
-
-            let hash_set = result
-                .iter()
-                .map(|x| x.params.as_ref().unwrap().file_path.clone())
-                .collect::<HashSet<_>>();
-            assert_eq!(hash_set.len(), num_time_steps);
-
-            for x in result.iter().zip(time_intervals) {
-                assert_eq!(x.0.time, x.1);
-            }
+            .await;
         }
     }
 }
