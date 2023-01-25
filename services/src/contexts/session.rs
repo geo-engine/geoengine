@@ -33,6 +33,14 @@ pub struct SimpleSession {
     id: SessionId,
     pub project: Option<ProjectId>,
     pub view: Option<STRectangle>,
+    #[serde(skip)]
+    is_admin: bool, // TODO: remove this flag; we should only distinguish between admin and non-admin in Pro version
+}
+
+impl SimpleSession {
+    pub fn is_admin(&self) -> bool {
+        self.is_admin
+    }
 }
 
 impl Default for SimpleSession {
@@ -46,6 +54,7 @@ impl Default for SimpleSession {
             id,
             project: None,
             view: None,
+            is_admin: false,
         }
     }
 }
@@ -171,6 +180,7 @@ impl From<AdminSession> for SimpleSession {
             id: admin_session.id(),
             project: admin_session.project(),
             view: admin_session.view().cloned(),
+            is_admin: true,
         }
     }
 }
@@ -199,6 +209,7 @@ mod tests {
                 )
                 .unwrap(),
             ),
+            is_admin: false,
         };
 
         assert_eq!(

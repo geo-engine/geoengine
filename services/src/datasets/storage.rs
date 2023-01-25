@@ -199,6 +199,8 @@ pub trait DatasetStore<S: Session>: DatasetStorer {
         meta_data: Self::StorageType,
     ) -> Result<DatasetId>;
 
+    async fn delete_dataset(&self, session: &S, dataset: DatasetId) -> Result<()>;
+
     /// turn given `meta` data definition into the corresponding `StorageType` for the `DatasetStore`
     /// for use in the `add_dataset` method
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType;

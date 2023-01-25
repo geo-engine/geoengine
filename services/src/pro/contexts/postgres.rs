@@ -686,6 +686,7 @@ mod tests {
     use super::*;
     use crate::api::model::datatypes::{DataProviderId, DatasetId};
     use crate::api::model::services::AddDataset;
+    use crate::contexts::AdminSession;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -2828,6 +2829,194 @@ mod tests {
             );
 
             db.get_layer(&layer_in_two_collections).await.unwrap();
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_deletes_dataset() {
+        with_temp_context(|ctx, _| async move {
+            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+                },
+                phantom: Default::default(),
+            });
+
+            let session = ctx.user_db_ref().anonymous().await.unwrap();
+
+            let db = ctx.dataset_db_ref();
+            let wrap = db.wrap_meta_data(meta_data);
+            db.add_dataset(
+                &session,
+                AddDataset {
+                    id: Some(dataset_id),
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    provenance: Some(Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }),
+                }
+                .validated()
+                .unwrap(),
+                wrap,
+            )
+            .await
+            .unwrap();
+
+            assert!(db.load(&session, &dataset_id).await.is_ok());
+
+            db.delete_dataset(&session, dataset_id).await.unwrap();
+
+            assert!(db.load(&session, &dataset_id).await.is_err());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_deletes_admin_dataset() {
+        with_temp_context(|ctx, _| async move {
+            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+                },
+                phantom: Default::default(),
+            });
+
+            let session: UserSession = AdminSession::default().into();
+
+            let db = ctx.dataset_db_ref();
+            let wrap = db.wrap_meta_data(meta_data);
+            db.add_dataset(
+                &session,
+                AddDataset {
+                    id: Some(dataset_id),
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    provenance: Some(Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }),
+                }
+                .validated()
+                .unwrap(),
+                wrap,
+            )
+            .await
+            .unwrap();
+
+            assert!(db.load(&session, &dataset_id).await.is_ok());
+
+            db.delete_dataset(&session, dataset_id).await.unwrap();
+
+            assert!(db.load(&session, &dataset_id).await.is_err());
         })
         .await;
     }
