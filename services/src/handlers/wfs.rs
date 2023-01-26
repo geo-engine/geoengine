@@ -98,8 +98,8 @@ where
             //   <ows:Operation name="GetCapabilities">
             //     <ows:DCP>
             //       <ows:HTTP>
-            //         <ows:Get xlink:href="http://localhost/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988"/>
-            //         <ows:Post xlink:href="http://localhost/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988"/>
+            //         <ows:Get xlink:href="http://127.0.0.1:3030/api/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988"/>
+            //         <ows:Post xlink:href="http://127.0.0.1:3030/api/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988"/>
             //       </ows:HTTP>
             //     </ows:DCP>
             //     <ows:Parameter name="AcceptVersions">
@@ -116,8 +116,8 @@ where
             //   <ows:Operation name="GetFeature">
             //     <ows:DCP>
             //       <ows:HTTP>
-            //         <ows:Get xlink:href="http://localhost/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988"/>
-            //         <ows:Post xlink:href="http://localhost/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988"/>
+            //         <ows:Get xlink:href="http://127.0.0.1:3030/api/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988"/>
+            //         <ows:Post xlink:href="http://127.0.0.1:3030/api/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988"/>
             //       </ows:HTTP>
             //     </ows:DCP>
             //     <ows:Parameter name="resultType">
@@ -293,9 +293,7 @@ where
 
 fn wfs_url(workflow: WorkflowId) -> Result<Url> {
     let web_config = crate::util::config::get_config_element::<crate::util::config::Web>()?;
-    let base = web_config
-        .external_address
-        .unwrap_or(Url::parse(&format!("http://{}/", web_config.bind_address))?);
+    let base = web_config.external_address()?;
 
     ogc_endpoint_url(&base, OgcProtocol::Wfs, workflow)
 }
