@@ -2298,4 +2298,125 @@ mod tests {
             metadata: PlotMetaData::None,
         });
     }
+
+    #[tokio::test]
+    async fn test_get_layer_metadata_for_dataset_sm() {
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            path: test_data!("netcdf4d").into(),
+            overviews: overview_folder.path().to_path_buf(),
+        })
+        .initialize()
+        .await
+        .unwrap();
+
+        let layer_id = NetCdfLayerCollectionId::Entity {
+            path: "dataset_sm.nc".into(),
+            groups: vec!["scenario_5".into(), "metric_2".into()],
+            entity: 1,
+        };
+        let layer_id: LayerId = layer_id.try_into().unwrap();
+
+        let layer = provider.get_layer(&layer_id).await.unwrap();
+
+        assert_eq!(
+            layer.metadata,
+            [
+                (
+                    "timeSteps".into(),
+                    "[946684800000,1262304000000,1577836800000]".into()
+                ),
+                ("dataRange".into(), "[0.0,100.0]".into()),
+            ]
+            .into()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_get_layer_metadata_for_dataset_sm_with_overviews() {
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            path: test_data!("netcdf4d").into(),
+            overviews: overview_folder.path().to_path_buf(),
+        })
+        .initialize()
+        .await
+        .unwrap();
+
+        let dataset_path: PathBuf = "dataset_sm.nc".into();
+
+        let provider_ref = provider
+            .as_any()
+            .downcast_ref::<NetCdfCfDataProvider>()
+            .unwrap();
+
+        provider_ref
+            .create_overviews(&dataset_path, None, &NopTaskContext)
+            .unwrap();
+
+        let layer_id = NetCdfLayerCollectionId::Entity {
+            path: dataset_path,
+            groups: vec!["scenario_5".into(), "metric_2".into()],
+            entity: 1,
+        };
+        let layer_id: LayerId = layer_id.try_into().unwrap();
+
+        let layer = provider.get_layer(&layer_id).await.unwrap();
+
+        assert_eq!(
+            layer.metadata,
+            [
+                (
+                    "timeSteps".into(),
+                    "[946684800000,1262304000000,1577836800000]".into()
+                ),
+                ("dataRange".into(), "[1.0,98.0]".into()),
+            ]
+            .into()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_layer_metadata_for_dataset_m() {
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            path: test_data!("netcdf4d").into(),
+            overviews: overview_folder.path().to_path_buf(),
+        })
+        .initialize()
+        .await
+        .unwrap();
+
+        let layer_id = NetCdfLayerCollectionId::Entity {
+            path: "dataset_m.nc".into(),
+            groups: vec!["metric_1".into()],
+            entity: 1,
+        };
+        let layer_id: LayerId = layer_id.try_into().unwrap();
+
+        let layer = provider.get_layer(&layer_id).await.unwrap();
+
+        assert_eq!(
+            layer.metadata,
+            [
+                (
+                    "timeSteps".into(),
+                    "[946684800000,978307200000,1009843200000]".into()
+                ),
+                ("dataRange".into(), "[0.0,255.0]".into()),
+            ]
+            .into()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_layer_for_dataset_irr() {
+        todo!("implement")
+    }
 }
