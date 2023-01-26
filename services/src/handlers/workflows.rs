@@ -885,11 +885,13 @@ mod tests {
                     "type": "internal",
                     "datasetId": dataset.to_string()
                 },
-                "provenance": {
-                    "citation": "Sample Citation",
-                    "license": "Sample License",
-                    "uri": "http://example.org/"
-                }
+                "provenance": [
+                    {
+                        "citation": "Sample Citation",
+                        "license": "Sample License",
+                        "uri": "http://example.org/"
+                    }
+                ]
             }])
         );
     }
@@ -1045,11 +1047,13 @@ mod tests {
                     "type": "internal",
                     "datasetId": dataset
                 },
-                "provenance": {
-                    "citation": "Sample Citation",
-                    "license": "Sample License",
-                    "uri": "http://example.org/"
-                }
+                "provenance": [
+                    {
+                        "citation": "Sample Citation",
+                        "license": "Sample License",
+                        "uri": "http://example.org/"
+                    }
+                ]
             }])
         );
     }

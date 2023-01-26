@@ -128,11 +128,13 @@ mod tests {
                     "temporalExtend":null
                 }
             },
-            "provenance":{
-                "citation":"Test",
-                "license":"MIT",
-                "uri":"http://geoengine.io"
-            }
+            "provenance": [
+                {
+                    "citation":"Test",
+                    "license":"MIT",
+                    "uri":"http://geoengine.io"
+                }
+            ]
         });
 
         let des = serde_json::from_value::<GEMetadata>(serde_json::to_value(&md).unwrap()).unwrap();
@@ -185,11 +187,13 @@ mod tests {
                     }
                 }
             },
-            "provenance":{
-                "citation":"Test",
-                "license":"MIT",
-                "uri":"http://geoengine.io"
-            }
+            "provenance": [
+                {
+                    "citation":"Test",
+                    "license":"MIT",
+                    "uri":"http://geoengine.io"
+                }
+            ]
         });
 
         let des = serde_json::from_value::<GEMetadata>(serde_json::to_value(&md).unwrap()).unwrap();
