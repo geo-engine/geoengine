@@ -677,6 +677,8 @@ mod tests {
         assert!(result.provenance.is_some());
 
         let provenance = result.provenance.unwrap();
+        assert_eq!(1, provenance.len());
+        let provenance = &provenance[0];
 
         assert_ne!("", provenance.license);
         assert_ne!("", provenance.citation);

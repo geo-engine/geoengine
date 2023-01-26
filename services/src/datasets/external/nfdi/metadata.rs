@@ -108,11 +108,11 @@ mod tests {
                 }],
                 temporal_extend: None,
             }),
-            provenance: Some(Provenance {
+            provenance: Some(vec![Provenance {
                 citation: "Test".to_string(),
                 license: "MIT".to_string(),
                 uri: "http://geoengine.io".to_string(),
-            }),
+            }]),
         };
 
         let json = serde_json::json!({
@@ -159,11 +159,11 @@ mod tests {
                     y_pixel_size: -0.1,
                 },
             }),
-            provenance: Some(Provenance {
+            provenance: Some(vec![Provenance {
                 citation: "Test".to_string(),
                 license: "MIT".to_string(),
                 uri: "http://geoengine.io".to_string(),
-            }),
+            }]),
         };
 
         let json = serde_json::json!({

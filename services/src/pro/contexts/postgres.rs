@@ -1382,11 +1382,11 @@ mod tests {
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
                     symbology: None,
-                    provenance: Some(Provenance {
+                    provenance: Some(vec![Provenance {
                         citation: "citation".to_owned(),
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
-                    }),
+                    }]),
                 }
                 .validated()
                 .unwrap(),
@@ -1446,11 +1446,11 @@ mod tests {
                 provenance,
                 ProvenanceOutput {
                     data: dataset_id.into(),
-                    provenance: Some(Provenance {
+                    provenance: Some(vec![Provenance {
                         citation: "citation".to_owned(),
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
-                    })
+                    }])
                 }
             );
 
@@ -2781,11 +2781,11 @@ mod tests {
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
                     symbology: None,
-                    provenance: Some(Provenance {
+                    provenance: Some(vec![Provenance {
                         citation: "citation".to_owned(),
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
-                    }),
+                    }]),
                 }
                 .validated()
                 .unwrap(),
@@ -2875,11 +2875,11 @@ mod tests {
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
                     symbology: None,
-                    provenance: Some(Provenance {
+                    provenance: Some(vec![Provenance {
                         citation: "citation".to_owned(),
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
-                    }),
+                    }]),
                 }
                 .validated()
                 .unwrap(),
