@@ -91,11 +91,11 @@ impl PangaeaDataProvider {
 
         Ok(ProvenanceOutput {
             data: id.clone(),
-            provenance: Some(Provenance {
+            provenance: Some(vec![Provenance {
                 citation: citation_text,
                 license: pmd.license.unwrap_or_default(),
                 uri: pmd.url.to_string(),
-            }),
+            }]),
         })
     }
 }

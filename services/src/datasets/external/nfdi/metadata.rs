@@ -16,7 +16,7 @@ pub const METADATA_KEY: &str = "geoengine";
 pub struct GEMetadata {
     pub crs: Option<SpatialReference>,
     pub data_type: DataType,
-    pub provenance: Option<Provenance>,
+    pub provenance: Option<Vec<Provenance>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
