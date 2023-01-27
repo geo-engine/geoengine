@@ -1,8 +1,8 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io::{Cursor, Write};
 
 use crate::api::model::datatypes::DataId;
-use crate::datasets::listing::{DatasetProvider, ProvenanceOutput};
+use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::layers::storage::LayerProviderDb;
@@ -14,6 +14,7 @@ use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor};
+use serde::Serialize;
 
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::handlers::tasks::TaskResponse;
@@ -205,11 +206,17 @@ async fn get_workflow_provenance_handler<C: Context>(
     Ok(web::Json(provenance))
 }
 
+#[derive(Serialize)]
+struct ProvenanceEntry {
+    provenance: Provenance,
+    data: Vec<DataId>,
+}
+
 async fn workflow_provenance<C: Context>(
     workflow: &Workflow,
     ctx: &C,
     session: C::Session,
-) -> Result<Vec<ProvenanceOutput>> {
+) -> Result<Vec<ProvenanceEntry>> {
     let datasets: Vec<DataId> = workflow
         .operator
         .data_ids()
@@ -226,11 +233,31 @@ async fn workflow_provenance<C: Context>(
         .collect();
     let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
 
-    // filter duplicates
-    let provenance: HashSet<_> = provenance?.into_iter().collect();
-    let provenance: Vec<_> = provenance.into_iter().collect();
+    // Filter duplicate DataIds and missing Provenance
+    let provenance: HashMap<DataId, Vec<Provenance>> = provenance?
+        .into_iter()
+        .filter_map(|p| {
+            if let Some(provenance) = p.provenance {
+                Some((p.data, provenance))
+            } else {
+                None
+            }
+        })
+        .collect();
 
-    Ok(provenance)
+    // Group DataIds by Provenance
+    let mut result: HashMap<Provenance, Vec<DataId>> = HashMap::new();
+    for (data, provenances) in provenance {
+        for item in provenances {
+            result.entry(item).or_default().push(data.clone());
+        }
+    }
+    let result = result
+        .into_iter()
+        .map(|(provenance, data)| ProvenanceEntry { provenance, data })
+        .collect();
+
+    Ok(result)
 }
 
 /// Gets a ZIP archive of the worklow, its provenance and the output metadata.
@@ -880,19 +907,21 @@ mod tests {
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
-            serde_json::json!([{
-                "data": {
-                    "type": "internal",
-                    "datasetId": dataset.to_string()
-                },
-                "provenance": [
-                    {
+            serde_json::json!([
+                {
+                    "provenance": {
                         "citation": "Sample Citation",
                         "license": "Sample License",
                         "uri": "http://example.org/"
-                    }
-                ]
-            }])
+                    },
+                    "data": [
+                        {
+                            "type": "internal",
+                            "datasetId": dataset.to_string()
+                        }
+                    ]
+                }
+            ])
         );
     }
 
@@ -1042,19 +1071,21 @@ mod tests {
 
         assert_eq!(
             zip_file_to_json(zip.by_name("citation.json").unwrap()),
-            serde_json::json!([{
-                "data": {
-                    "type": "internal",
-                    "datasetId": dataset
-                },
-                "provenance": [
-                    {
+            serde_json::json!([
+                {
+                    "provenance": {
                         "citation": "Sample Citation",
                         "license": "Sample License",
                         "uri": "http://example.org/"
-                    }
-                ]
-            }])
+                    },
+                    "data": [
+                        {
+                            "type": "internal",
+                            "datasetId": dataset
+                        }
+                    ]
+                }
+            ])
         );
     }
 
