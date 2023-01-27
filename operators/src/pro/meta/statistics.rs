@@ -3,7 +3,6 @@ use crate::engine::{
     RasterResultDescriptor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     VectorResultDescriptor,
 };
-use crate::error;
 use crate::pro::adapters::stream_statistics_adapter::StreamStatisticsAdapter;
 use crate::pro::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::util::Result;
@@ -11,7 +10,6 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle};
-use snafu::ensure;
 
 pub struct InitializedProcessorStatistics<S> {
     source: S,
@@ -146,7 +144,8 @@ where
             .get::<QuotaChecker>()
             .expect("`QuotaChecker` extension should be set during `ProContext` creation");
 
-        ensure!(quota_checker.check_quota().await?, error::QuotaExhausted);
+        // TODO: check the quota only once per query and not for every operator
+        quota_checker.ensure_quota_available().await?;
 
         let quota_tracker = ctx
             .extensions()

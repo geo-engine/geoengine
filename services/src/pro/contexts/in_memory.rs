@@ -192,8 +192,7 @@ impl Context for ProInMemoryContext {
     type LayerDB = HashMapLayerDb;
     type LayerProviderDB = HashMapLayerProviderDb;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext =
-        ExecutionContextImpl<ProHashMapDatasetDb, HashMapUserDb, HashMapLayerProviderDb>;
+    type ExecutionContext = ExecutionContextImpl<ProHashMapDatasetDb, HashMapLayerProviderDb>;
     type TaskContext = SimpleTaskManagerContext;
     type TaskManager = SimpleTaskManager;
 
@@ -260,12 +259,10 @@ impl Context for ProInMemoryContext {
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<
             ProHashMapDatasetDb,
-            HashMapUserDb,
             HashMapLayerProviderDb,
         >::new(
             self.dataset_db.clone(),
             self.layer_provider_db.clone(),
-            self.user_db.clone(),
             self.thread_pool.clone(),
             session,
             self.exe_ctx_tiling_spec,

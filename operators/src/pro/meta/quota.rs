@@ -39,7 +39,8 @@ impl QuotaTracking {
 
 #[async_trait]
 pub trait QuotaCheck {
-    async fn check_quota(&self) -> Result<bool>;
+    /// checks if the quota is available and if not, returns an error
+    async fn ensure_quota_available(&self) -> Result<()>;
 }
 
 pub type QuotaChecker = Box<dyn QuotaCheck + Send + Sync>;

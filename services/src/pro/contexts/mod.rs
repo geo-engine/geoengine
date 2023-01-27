@@ -10,10 +10,8 @@ use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_operators::engine::{
-    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, MetaData, MetaDataProvider, RasterResultDescriptor,
-    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorResultDescriptor,
+    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, MetaData,
+    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::pro::meta::quota::QuotaCheck;
@@ -57,30 +55,26 @@ pub trait ProContext: Context<Session = UserSession> {
     fn pro_project_db_ref(&self) -> &Self::ProProjectDB;
 }
 
-pub struct ExecutionContextImpl<D, U, L>
+pub struct ExecutionContextImpl<D, L>
 where
     D: DatasetDb<UserSession>,
     L: LayerProviderDb,
-    U: UserDb,
 {
     dataset_db: Arc<D>,
     layer_provider_db: Arc<L>,
-    user_db: Arc<U>,
     thread_pool: Arc<ThreadPool>,
     session: UserSession,
     tiling_specification: TilingSpecification,
 }
 
-impl<D, U, L> ExecutionContextImpl<D, U, L>
+impl<D, L> ExecutionContextImpl<D, L>
 where
     D: DatasetDb<UserSession>,
     L: LayerProviderDb,
-    U: UserDb,
 {
     pub fn new(
         dataset_db: Arc<D>,
         layer_provider_db: Arc<L>,
-        user_db: Arc<U>,
         thread_pool: Arc<ThreadPool>,
         session: UserSession,
         tiling_specification: TilingSpecification,
@@ -88,7 +82,6 @@ where
         Self {
             dataset_db,
             layer_provider_db,
-            user_db,
             thread_pool,
             session,
             tiling_specification,
@@ -96,40 +89,8 @@ where
     }
 }
 
-async fn check_quota<U: UserDb>(
-    user_db: &U,
-    session: &UserSession,
-) -> geoengine_operators::util::Result<()> {
-    let quota_check_enabled =
-        crate::util::config::get_config_element::<crate::pro::util::config::User>()
-            .map_err(
-                |e| geoengine_operators::error::Error::CreatingProcessorFailed {
-                    source: Box::new(e),
-                },
-            )?
-            .quota_check;
-
-    if !quota_check_enabled {
-        return Ok(());
-    }
-
-    let quota_available = user_db.quota_available(session).await.map_err(|e| {
-        geoengine_operators::error::Error::CreatingProcessorFailed {
-            source: Box::new(e),
-        }
-    })?;
-
-    if quota_available <= 0 {
-        return Err(geoengine_operators::error::Error::CreatingProcessorFailed {
-            source: Box::new(crate::error::Error::QuotaExhausted),
-        });
-    }
-
-    Ok(())
-}
-
 #[async_trait::async_trait]
-impl<D, U, L> ExecutionContext for ExecutionContextImpl<D, U, L>
+impl<D, L> ExecutionContext for ExecutionContextImpl<D, L>
 where
     D: DatasetDb<UserSession>
         + SessionMetaDataProvider<
@@ -149,7 +110,6 @@ where
             RasterQueryRectangle,
         >,
     L: LayerProviderDb,
-    U: UserDb,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
@@ -182,30 +142,6 @@ where
     ) -> Box<dyn InitializedPlotOperator> {
         // as plots do not produce a stream of results, we have nothing to count for now
         op
-    }
-
-    async fn create_raster_query_processor(
-        &self,
-        operator: Box<dyn InitializedRasterOperator>,
-    ) -> geoengine_operators::util::Result<TypedRasterQueryProcessor> {
-        check_quota(&*self.user_db, &self.session).await?;
-        operator.query_processor()
-    }
-
-    async fn create_vector_query_processor(
-        &self,
-        operator: Box<dyn InitializedVectorOperator>,
-    ) -> geoengine_operators::util::Result<TypedVectorQueryProcessor> {
-        check_quota(&*self.user_db, &self.session).await?;
-        operator.query_processor()
-    }
-
-    async fn create_plot_query_processor(
-        &self,
-        operator: Box<dyn InitializedPlotOperator>,
-    ) -> geoengine_operators::util::Result<TypedPlotQueryProcessor> {
-        check_quota(&*self.user_db, &self.session).await?;
-        operator.query_processor()
     }
 
     /// This method is meant to read a ml model from disk, specified by the config key `machinelearning.model_defs_path`.
@@ -256,9 +192,9 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<D, U, L>
+impl<D, L>
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for ExecutionContextImpl<D, U, L>
+    for ExecutionContextImpl<D, L>
 where
     D: DatasetDb<UserSession>
         + SessionMetaDataProvider<
@@ -267,7 +203,6 @@ where
             VectorResultDescriptor,
             VectorQueryRectangle,
         >,
-    U: UserDb,
     L: LayerProviderDb,
 {
     async fn meta_data(
@@ -307,8 +242,8 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<D, U, L> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for ExecutionContextImpl<D, U, L>
+impl<D, L> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for ExecutionContextImpl<D, L>
 where
     D: DatasetDb<UserSession>
         + SessionMetaDataProvider<
@@ -318,7 +253,6 @@ where
             VectorQueryRectangle,
         >,
     L: LayerProviderDb,
-    U: UserDb,
 {
     async fn meta_data(
         &self,
@@ -351,8 +285,8 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<D, U, L> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for ExecutionContextImpl<D, U, L>
+impl<D, L> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for ExecutionContextImpl<D, L>
 where
     D: DatasetDb<UserSession>
         + SessionMetaDataProvider<
@@ -362,7 +296,6 @@ where
             RasterQueryRectangle,
         >,
     L: LayerProviderDb,
-    U: UserDb,
 {
     async fn meta_data(
         &self,
@@ -400,18 +333,38 @@ pub struct QuotaCheckerImpl<U: UserDb> {
 
 #[async_trait]
 impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
-    async fn check_quota(&self) -> geoengine_operators::util::Result<bool> {
+    async fn ensure_quota_available(&self) -> geoengine_operators::util::Result<()> {
         // TODO: cache the result, s.th. other operators in the same workflow can re-use it
-        Ok(self
+        let quota_check_enabled =
+            crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                .map_err(
+                    |e| geoengine_operators::error::Error::CreatingProcessorFailed {
+                        source: Box::new(e),
+                    },
+                )?
+                .quota_check;
+
+        if !quota_check_enabled {
+            return Ok(());
+        }
+
+        let quota_available = self
             .user_db
             .quota_available(&self.session)
             .await
             .map_err(
-                |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                |e| geoengine_operators::error::Error::CreatingProcessorFailed {
                     source: Box::new(e),
                 },
-            )?
-            > 0)
+            )?;
+
+        if quota_available <= 0 {
+            return Err(geoengine_operators::error::Error::CreatingProcessorFailed {
+                source: Box::new(crate::error::Error::QuotaExhausted),
+            });
+        }
+
+        Ok(())
     }
 }
 

@@ -1,8 +1,7 @@
 use super::query::QueryAbortRegistration;
 use super::{
     CreateSpan, InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator,
-    MockQueryContext, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor,
+    MockQueryContext,
 };
 use crate::engine::{
     ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
@@ -53,21 +52,6 @@ pub trait ExecutionContext: Send
         op: Box<dyn InitializedPlotOperator>,
         span: CreateSpan,
     ) -> Box<dyn InitializedPlotOperator>;
-
-    async fn create_raster_query_processor(
-        &self,
-        operator: Box<dyn InitializedRasterOperator>,
-    ) -> Result<TypedRasterQueryProcessor>;
-
-    async fn create_vector_query_processor(
-        &self,
-        operator: Box<dyn InitializedVectorOperator>,
-    ) -> Result<TypedVectorQueryProcessor>;
-
-    async fn create_plot_query_processor(
-        &self,
-        operator: Box<dyn InitializedPlotOperator>,
-    ) -> Result<TypedPlotQueryProcessor>;
 
     async fn read_ml_model(&self, path: PathBuf) -> Result<String>;
 
@@ -214,27 +198,6 @@ impl ExecutionContext for MockExecutionContext {
             .clone();
 
         Ok(res)
-    }
-
-    async fn create_raster_query_processor(
-        &self,
-        operator: Box<dyn InitializedRasterOperator>,
-    ) -> Result<TypedRasterQueryProcessor> {
-        operator.query_processor()
-    }
-
-    async fn create_vector_query_processor(
-        &self,
-        operator: Box<dyn InitializedVectorOperator>,
-    ) -> Result<TypedVectorQueryProcessor> {
-        operator.query_processor()
-    }
-
-    async fn create_plot_query_processor(
-        &self,
-        operator: Box<dyn InitializedPlotOperator>,
-    ) -> Result<TypedPlotQueryProcessor> {
-        operator.query_processor()
     }
 
     async fn write_ml_model(&mut self, path: PathBuf, ml_model_str: String) -> Result<()> {

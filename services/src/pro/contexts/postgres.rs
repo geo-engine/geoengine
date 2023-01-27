@@ -586,11 +586,8 @@ where
     type TaskContext = SimpleTaskManagerContext;
     type TaskManager = SimpleTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<
-        PostgresDatasetDb<Tls>,
-        PostgresUserDb<Tls>,
-        PostgresLayerProviderDb<Tls>,
-    >;
+    type ExecutionContext =
+        ExecutionContextImpl<PostgresDatasetDb<Tls>, PostgresLayerProviderDb<Tls>>;
 
     fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
@@ -657,12 +654,10 @@ where
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<
             PostgresDatasetDb<Tls>,
-            PostgresUserDb<Tls>,
             PostgresLayerProviderDb<Tls>,
         >::new(
             self.dataset_db.clone(),
             self.layer_provider_db.clone(),
-            self.user_db.clone(),
             self.thread_pool.clone(),
             session,
             self.exe_ctx_tiling_spec,
