@@ -1,12 +1,15 @@
-use crate::api::model::datatypes::{DataProviderId, LayerId};
+use crate::api::model::datatypes::{DataProviderId, LayerId, RasterQueryRectangle};
 use crate::contexts::AdminSession;
-use crate::error::Result;
+use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
+use crate::error::{Error, Result};
+use crate::handlers::tasks::TaskResponse;
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
     ProviderLayerCollectionId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
+use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
@@ -33,7 +36,7 @@ where
                 web::scope("/collections")
                     .route("", web::get().to(list_root_collections_handler::<C>))
                     .route(
-                        r#"/{provider}/{collection:.+}"#,
+                        r#"/{provider}/{collection}"#,
                         web::get().to(list_collection_handler::<C>),
                     ),
             )
@@ -41,7 +44,11 @@ where
                 "/{provider}/{layer:.*}/workflowId",
                 web::post().to(layer_to_workflow_id_handler::<C>),
             )
-            .route("/{provider}/{layer:.+}", web::get().to(layer_handler::<C>)),
+            .route(
+                "/{provider}/{layer:.*}/dataset",
+                web::post().to(layer_to_dataset::<C>),
+            )
+            .route("/{provider}/{layer}", web::get().to(layer_handler::<C>)),
     )
     .service(
         web::scope("/layerDb").service(
@@ -535,6 +542,107 @@ async fn layer_to_workflow_id_handler<C: Context>(
     Ok(web::Json(workflow_id))
 }
 
+/// Persist a raster layer from a provider as a dataset.
+#[utoipa::path(
+    tag = "Layers",
+    post,
+    path = "/layers/{provider}/{layer}/dataset",
+    responses(
+        (status = 200, description = "Id of created task", body = TaskResponse,
+            example = json!({
+                "task_id": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"
+            })
+        )
+    ),
+    params(
+        ("provider" = DataProviderId, description = "Data provider id"),
+        ("layer" = LayerCollectionId, description = "Layer id"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn layer_to_dataset<C: Context>(
+    session: AdminSession,
+    ctx: web::Data<C>,
+    path: web::Path<(DataProviderId, LayerId)>,
+) -> Result<impl Responder> {
+    let (provider, item) = path.into_inner();
+
+    let layer = match provider {
+        crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID => {
+            ctx.dataset_db_ref().get_layer(&item).await?
+        }
+        crate::layers::storage::INTERNAL_PROVIDER_ID => ctx.layer_db_ref().get_layer(&item).await?,
+        _ => {
+            ctx.layer_provider_db_ref()
+                .layer_provider(provider)
+                .await?
+                .get_layer(&item)
+                .await?
+        }
+    };
+
+    let session = C::Session::from(session.clone());
+
+    let execution_context = ctx.execution_context(session.clone())?;
+
+    let raster_operator = layer
+        .workflow
+        .operator
+        .clone()
+        .get_raster()?
+        .initialize(&execution_context)
+        .await?;
+
+    let result_descriptor = raster_operator.result_descriptor();
+
+    let qr = RasterQueryRectangle {
+        spatial_bounds: result_descriptor
+            .bbox
+            .ok_or(Error::LayerResultDescriptorMissingFields {
+                field: "bbox".to_string(),
+                cause: "is None".to_string(),
+            })?
+            .into(),
+        time_interval: result_descriptor
+            .time
+            .ok_or(Error::LayerResultDescriptorMissingFields {
+                field: "time".to_string(),
+                cause: "is None".to_string(),
+            })?
+            .into(),
+        spatial_resolution: result_descriptor
+            .resolution
+            .ok_or(Error::LayerResultDescriptorMissingFields {
+                field: "spatial_resolution".to_string(),
+                cause: "is None".to_string(),
+            })?
+            .into(),
+    };
+
+    let from_workflow = RasterDatasetFromWorkflow {
+        name: layer.name,
+        description: Some(layer.description),
+        query: qr,
+        as_cog: true,
+    };
+
+    let compression_num_threads =
+        get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
+
+    let task_id = schedule_raster_dataset_from_workflow_task(
+        layer.workflow,
+        session,
+        ctx.into_inner(),
+        from_workflow,
+        compression_num_threads,
+    )
+    .await?;
+
+    Ok(web::Json(TaskResponse::new(task_id)))
+}
+
 /// Add a new layer to a collection
 #[utoipa::path(
     tag = "Layers",
@@ -765,14 +873,40 @@ async fn remove_collection_from_collection<C: Context>(
 #[cfg(test)]
 mod tests {
 
+    use crate::contexts::{SessionId, SimpleContext};
+    use crate::datasets::RasterDatasetFromWorkflowResult;
+    use crate::handlers::ErrorResponse;
+    use crate::layers::layer::Layer;
+    use crate::tasks::util::test::wait_for_task_to_finish;
+    use crate::tasks::{TaskManager, TaskStatus};
+    use crate::util::config::get_config_element;
+    use crate::util::tests::{read_body_string, TestDataUploads};
     use crate::{
         contexts::{InMemoryContext, Session},
         util::tests::send_test_request,
         workflows::workflow::Workflow,
     };
+    use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::primitives::{
+        Measurement, RasterQueryRectangle, SpatialPartition2D, TimeGranularity, TimeInterval,
+    };
+    use geoengine_datatypes::raster::{
+        GeoTransform, Grid, GridShape, RasterDataType, RasterTile2D, TilingSpecification,
+    };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::engine::{
+        ExecutionContext, InitializedRasterOperator, RasterOperator, RasterResultDescriptor,
+        SingleRasterOrVectorSource, TypedOperator,
+    };
+    use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
+    use geoengine_operators::processing::{TimeShift, TimeShiftParams};
+    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
+    use geoengine_operators::util::raster_stream_to_geotiff::{
+        raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+    };
     use geoengine_operators::{
         engine::VectorOperator,
         mock::{MockPointSource, MockPointSourceParams},
@@ -1166,5 +1300,382 @@ mod tests {
                 .any(|item| item.name() == "Foo"),
             "{root_collection:#?}"
         );
+    }
+
+    struct MockRasterWorkflowLayerDescription {
+        workflow: Workflow,
+        tiling_specification: TilingSpecification,
+        query_rectangle: RasterQueryRectangle,
+        collection_name: String,
+        collection_description: String,
+        layer_name: String,
+        layer_description: String,
+    }
+
+    impl MockRasterWorkflowLayerDescription {
+        fn new(
+            has_time: bool,
+            has_bbox: bool,
+            has_resolution: bool,
+            time_shift_millis: i32,
+        ) -> Self {
+            let data: Vec<RasterTile2D<u8>> = vec![
+                RasterTile2D {
+                    time: TimeInterval::new_unchecked(1_671_868_800_000, 1_671_955_200_000),
+                    tile_position: [-1, 0].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+                    properties: Default::default(),
+                },
+                RasterTile2D {
+                    time: TimeInterval::new_unchecked(1_671_955_200_000, 1_672_041_600_000),
+                    tile_position: [-1, 0].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                    properties: Default::default(),
+                },
+            ];
+
+            let raster_source = MockRasterSource {
+                params: MockRasterSourceParams {
+                    data,
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Unitless,
+                        time: if has_time {
+                            Some(TimeInterval::new_unchecked(
+                                1_671_868_800_000,
+                                1_672_041_600_000,
+                            ))
+                        } else {
+                            None
+                        },
+                        bbox: if has_bbox {
+                            Some(SpatialPartition2D::new_unchecked(
+                                (0., 2.).into(),
+                                (2., 0.).into(),
+                            ))
+                        } else {
+                            None
+                        },
+                        resolution: if has_resolution {
+                            Some(GeoTransform::test_default().spatial_resolution())
+                        } else {
+                            None
+                        },
+                    },
+                },
+            }
+            .boxed();
+
+            let workflow = if time_shift_millis == 0 {
+                Workflow {
+                    operator: raster_source.into(),
+                }
+            } else {
+                Workflow {
+                    operator: TypedOperator::Raster(Box::new(TimeShift {
+                        params: TimeShiftParams::Relative {
+                            granularity: TimeGranularity::Millis,
+                            value: time_shift_millis,
+                        },
+                        sources: SingleRasterOrVectorSource {
+                            source: raster_source.into(),
+                        },
+                    })),
+                }
+            };
+
+            let tiling_specification = TilingSpecification {
+                origin_coordinate: (0., 0.).into(),
+                tile_size_in_pixels: GridShape::new([2, 2]),
+            };
+
+            let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
+                GeoTransform::test_default().spatial_resolution(),
+                GeoTransform::test_default().origin_coordinate,
+                TimeInterval::new_unchecked(
+                    1_671_868_800_000 + i64::from(time_shift_millis),
+                    1_672_041_600_000 + i64::from(time_shift_millis),
+                ),
+            );
+
+            MockRasterWorkflowLayerDescription {
+                workflow,
+                tiling_specification,
+                query_rectangle,
+                collection_name: "Test Collection Name".to_string(),
+                collection_description: "Test Collection Description".to_string(),
+                layer_name: "Test Layer Name".to_string(),
+                layer_description: "Test Layer Description".to_string(),
+            }
+        }
+
+        async fn create_layer_in_context<C: Context>(&self, ctx: &C) -> Layer {
+            let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+
+            let collection_id = ctx
+                .layer_db_ref()
+                .add_collection(
+                    AddLayerCollection {
+                        name: self.collection_name.clone(),
+                        description: self.collection_description.clone(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &root_collection_id,
+                )
+                .await
+                .unwrap();
+
+            let layer_id = ctx
+                .layer_db_ref()
+                .add_layer(
+                    AddLayer {
+                        name: self.layer_name.clone(),
+                        description: self.layer_description.clone(),
+                        workflow: self.workflow.clone(),
+                        symbology: None,
+                    }
+                    .validated()
+                    .unwrap(),
+                    &collection_id,
+                )
+                .await
+                .unwrap();
+
+            ctx.layer_db_ref().get_layer(&layer_id).await.unwrap()
+        }
+    }
+
+    async fn send_dataset_creation_test_request<C: SimpleContext>(
+        ctx: &C,
+        layer: Layer,
+        session_id: SessionId,
+    ) -> ServiceResponse {
+        let layer_id = layer.id.layer_id;
+        let provider_id = layer.id.provider_id;
+
+        // create dataset from workflow
+        let req = test::TestRequest::post()
+            .uri(&format!("/layers/{provider_id}/{layer_id}/dataset"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON));
+        send_test_request(req, ctx.clone()).await
+    }
+
+    async fn create_dataset_request_with_result_success<C: SimpleContext>(
+        ctx: &C,
+        layer: Layer,
+        admin_session_id: SessionId,
+    ) -> RasterDatasetFromWorkflowResult {
+        let res = send_dataset_creation_test_request(ctx, layer, admin_session_id).await;
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+
+        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+
+        let response = if let TaskStatus::Completed { info, .. } = status {
+            info.as_any_arc()
+                .downcast::<RasterDatasetFromWorkflowResult>()
+                .unwrap()
+                .as_ref()
+                .clone()
+        } else {
+            panic!("Task must be completed");
+        };
+
+        response
+    }
+
+    async fn raster_operator_to_geotiff_bytes<C: Context>(
+        ctx: &C,
+        session: C::Session,
+        operator: Box<dyn RasterOperator>,
+        query_rectangle: RasterQueryRectangle,
+    ) -> geoengine_operators::util::Result<Vec<Vec<u8>>> {
+        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
+        let query_ctx = ctx.query_context(session.clone()).unwrap();
+
+        let initialized_operator = operator.initialize(&exe_ctx).await.unwrap();
+        let query_processor = initialized_operator
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        raster_stream_to_geotiff_bytes(
+            query_processor,
+            query_rectangle,
+            query_ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
+                    .unwrap()
+                    .compression_num_threads,
+                as_cog: true,
+                force_big_tiff: false,
+            },
+            None,
+            Box::pin(futures::future::pending()),
+            exe_ctx.tiling_specification(),
+        )
+        .await
+    }
+
+    async fn raster_layer_to_dataset_success(mock_source: MockRasterWorkflowLayerDescription) {
+        let ctx = InMemoryContext::new_with_context_spec(
+            mock_source.tiling_specification,
+            TestDefault::test_default(),
+        );
+
+        let admin_session_id = AdminSession::default().id();
+        let layer = mock_source.create_layer_in_context(&ctx).await;
+        let response =
+            create_dataset_request_with_result_success(&ctx, layer, admin_session_id).await;
+
+        // automatically deletes uploads on drop
+        let _test_uploads = TestDataUploads {
+            uploads: vec![response.upload],
+        };
+
+        let session = ctx.default_session_ref().await.clone();
+
+        // query the layer
+        let workflow_operator = mock_source.workflow.operator.get_raster().unwrap();
+        let workflow_result = raster_operator_to_geotiff_bytes(
+            &ctx,
+            session.clone(),
+            workflow_operator,
+            mock_source.query_rectangle,
+        )
+        .await
+        .unwrap();
+
+        // query the newly created dataset
+        let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
+        let dataset_operator = GdalSource {
+            params: GdalSourceParameters {
+                data: dataset_id.into(),
+            },
+        }
+        .boxed();
+        let dataset_result = raster_operator_to_geotiff_bytes(
+            &ctx,
+            session,
+            dataset_operator,
+            mock_source.query_rectangle,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(workflow_result.as_slice(), dataset_result.as_slice());
+    }
+
+    #[tokio::test]
+    async fn test_raster_layer_to_dataset_success() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 0);
+        raster_layer_to_dataset_success(mock_source).await;
+    }
+
+    #[tokio::test]
+    async fn test_raster_layer_with_timeshift_to_dataset_success() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 1_000);
+        raster_layer_to_dataset_success(mock_source).await;
+    }
+
+    #[tokio::test]
+    async fn test_raster_layer_to_dataset_invalid_admin_token() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 0);
+        let ctx = InMemoryContext::new_with_context_spec(
+            mock_source.tiling_specification,
+            TestDefault::test_default(),
+        );
+
+        let session_id = ctx.default_session_ref().await.id();
+
+        let layer = mock_source.create_layer_in_context(&ctx).await;
+
+        let res = send_dataset_creation_test_request(&ctx, layer, session_id).await;
+
+        ErrorResponse::assert(res, 401, "InvalidAdminToken", "Invalid admin token").await;
+    }
+
+    #[tokio::test]
+    async fn test_raster_layer_to_dataset_no_time_interval() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
+        let ctx = InMemoryContext::new_with_context_spec(
+            mock_source.tiling_specification,
+            TestDefault::test_default(),
+        );
+
+        let admin_session_id = AdminSession::default().id();
+
+        let layer = mock_source.create_layer_in_context(&ctx).await;
+
+        let res = send_dataset_creation_test_request(&ctx, layer, admin_session_id).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "LayerResultDescriptorMissingFields",
+            "Result Descriptor field 'time' is None",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_raster_layer_to_dataset_no_bounding_box() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, false, true, 0);
+        let ctx = InMemoryContext::new_with_context_spec(
+            mock_source.tiling_specification,
+            TestDefault::test_default(),
+        );
+
+        let admin_session_id = AdminSession::default().id();
+
+        let layer = mock_source.create_layer_in_context(&ctx).await;
+
+        let res = send_dataset_creation_test_request(&ctx, layer, admin_session_id).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "LayerResultDescriptorMissingFields",
+            "Result Descriptor field 'bbox' is None",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_raster_layer_to_dataset_no_spatial_resolution() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
+        let ctx = InMemoryContext::new_with_context_spec(
+            mock_source.tiling_specification,
+            TestDefault::test_default(),
+        );
+
+        let admin_session_id = AdminSession::default().id();
+
+        let layer = mock_source.create_layer_in_context(&ctx).await;
+
+        let res = send_dataset_creation_test_request(&ctx, layer, admin_session_id).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "LayerResultDescriptorMissingFields",
+            "Result Descriptor field 'spatial_resolution' is None",
+        )
+        .await;
     }
 }

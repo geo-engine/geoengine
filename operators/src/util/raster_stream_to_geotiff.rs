@@ -285,7 +285,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             full_path: placeholder_path,
             placeholder: placeholder.to_string(),
             time_placeholder: GdalSourceTimePlaceholder {
-                format: DateTimeParseFormat::custom("%Y-%m-%dT%H-%M-%S".to_string()),
+                format: DateTimeParseFormat::custom("%Y-%m-%dT%H-%M-%S-%3f".to_string()),
                 reference: TimeReference::Start,
             },
         };
@@ -819,13 +819,17 @@ fn geotiff_to_cog(
 #[cfg(test)]
 mod tests {
     use std::marker::PhantomData;
+    use std::ops::Add;
 
+    use geoengine_datatypes::primitives::{DateTime, Duration};
+    use geoengine_datatypes::raster::Grid;
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilingSpecification,
         util::test::TestDefault,
     };
 
+    use crate::mock::MockRasterSourceProcessor;
     use crate::{
         engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
     };
@@ -1325,5 +1329,157 @@ mod tests {
         .await;
 
         assert!(bytes.is_ok());
+    }
+
+    fn generate_time_intervals(
+        start_time: DateTime,
+        time_step: Duration,
+        num_time_step: usize,
+    ) -> Result<Vec<TimeInterval>> {
+        let mut result = Vec::new();
+        let mut counter = num_time_step;
+        let mut tmp_start_time = start_time;
+        while counter > 0 {
+            let end_time = tmp_start_time.add(time_step);
+            let start_interval = TimeInterval::new(tmp_start_time, end_time)?;
+            result.push(start_interval);
+            counter -= 1;
+            tmp_start_time = end_time;
+        }
+        Ok(result)
+    }
+
+    async fn test_output_for_time_interval(
+        num_time_steps: usize,
+        base_start_time: DateTime,
+        time_step: Duration,
+        file_suffixes: Vec<&str>,
+    ) {
+        let time_intervals =
+            generate_time_intervals(base_start_time, time_step, num_time_steps).unwrap();
+        let data = vec![
+            RasterTile2D {
+                time: *time_intervals.get(0).unwrap(),
+                tile_position: [-1, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+                properties: Default::default(),
+            },
+            RasterTile2D {
+                time: *time_intervals.get(1).unwrap(),
+                tile_position: [-1, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                properties: Default::default(),
+            },
+        ];
+
+        let ctx = MockQueryContext::test_default();
+        let tiling_specification =
+            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+        let processor = MockRasterSourceProcessor {
+            data,
+            tiling_specification,
+        }
+        .boxed();
+        let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
+            GeoTransform::test_default().spatial_resolution(),
+            GeoTransform::test_default().origin_coordinate(),
+            TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
+        );
+
+        let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+        let expected_paths = file_suffixes
+            .iter()
+            .map(|x| file_path.join(x))
+            .collect::<Vec<_>>();
+        let result = raster_stream_to_geotiff(
+            &file_path,
+            processor,
+            query_rectangle,
+            ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: true,
+                compression_num_threads: GdalCompressionNumThreads::AllCpus,
+                force_big_tiff: false,
+            },
+            None,
+            Box::pin(futures::future::pending()),
+            tiling_specification,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.len(), num_time_steps);
+
+        for x in result.iter().zip(expected_paths) {
+            assert_eq!(x.0.params.as_ref().unwrap().file_path, x.1);
+        }
+
+        for x in result.iter().zip(time_intervals) {
+            assert_eq!(x.0.time, x.1);
+        }
+    }
+
+    #[tokio::test]
+    async fn output_time_intervals_for_varying_time_step_granularity() {
+        let num_time_steps = 2;
+
+        let base_start_time = DateTime::new_utc(2020, 7, 30, 11, 50, 1);
+
+        let time_steps = vec![
+            Duration::days(365),
+            Duration::days(31),
+            Duration::days(1),
+            Duration::hours(1),
+            Duration::minutes(1),
+            Duration::seconds(1),
+            Duration::milliseconds(1),
+        ];
+
+        let all_expected_file_suffixes = vec![
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2021-07-30T11-50-01-000.tiff",
+            ], //year
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-08-30T11-50-01-000.tiff",
+            ], //month
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-07-31T11-50-01-000.tiff",
+            ], //day
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-07-30T12-50-01-000.tiff",
+            ], //hour
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-07-30T11-51-01-000.tiff",
+            ], //minute
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-07-30T11-50-02-000.tiff",
+            ], //second
+            vec![
+                "raster_2020-07-30T11-50-01-000.tiff",
+                "raster_2020-07-30T11-50-01-001.tiff",
+            ], //millisecond
+        ];
+
+        for (time_step, file_suffixes) in time_steps.iter().zip(all_expected_file_suffixes) {
+            test_output_for_time_interval(
+                num_time_steps,
+                base_start_time,
+                *time_step,
+                file_suffixes,
+            )
+            .await;
+        }
     }
 }

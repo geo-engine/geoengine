@@ -236,6 +236,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
     /// All points within the spatial bounds of the grid are queried and counted in the
     /// grid cells.
     /// Finally, the grid resolution is upsampled (if necessary) to the tile resolution.
+    #[allow(clippy::too_many_lines)]
     async fn raster_query<'a>(
         &'a self,
         query: RasterQueryRectangle,

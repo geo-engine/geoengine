@@ -529,6 +529,17 @@ mod tests {
                 .unwrap()
                 .into(),
         );
+        let raster_tile_a_2 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 2].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![160, 150, 140, 130, 120, 110])
+                .unwrap()
+                .into(),
+        );
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
@@ -551,14 +562,27 @@ mod tests {
                 .unwrap()
                 .into(),
         );
+        let raster_tile_b_2 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 2].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![110, 120, 130, 140, 150, 160])
+                .unwrap()
+                .into(),
+        );
 
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![
                     raster_tile_a_0,
                     raster_tile_a_1,
+                    raster_tile_a_2,
                     raster_tile_b_0,
                     raster_tile_b_1,
+                    raster_tile_b_2,
                 ],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
@@ -610,7 +634,7 @@ mod tests {
         if let FeatureDataRef::Float(extracted_data) = result.data("foo").unwrap() {
             assert_eq!(
                 extracted_data.as_ref(),
-                &[(3. + 1. + 40. + 30. + 4. + 6. + 30. + 40.) / 8.]
+                &[(3. + 1. + 40. + 30. + 140. + 4. + 6. + 30. + 40. + 130.) / 10.]
             );
         } else {
             unreachable!();

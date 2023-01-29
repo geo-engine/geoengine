@@ -28,7 +28,7 @@ use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
-use actix_web::{web, FromRequest, HttpRequest, Responder};
+use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::{future::LocalBoxFuture, FutureExt};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use gdal::{
@@ -62,7 +62,11 @@ where
             .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler)))
-            .service(web::resource("/{dataset}").route(web::get().to(get_dataset_handler::<C>)))
+            .service(
+                web::resource("/{dataset}")
+                    .route(web::get().to(get_dataset_handler::<C>))
+                    .route(web::delete().to(delete_dataset_handler::<C>)),
+            )
             .service(web::resource("").route(web::post().to(create_dataset_handler::<C>))), // must come last to not match other routes
     )
     .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)));
@@ -315,7 +319,7 @@ where
 
     let id = db
         .add_dataset(
-            &C::Session::mock(),
+            &AdminSession::default().into(),
             definition.properties.validated()?,
             meta_data,
         )
@@ -867,6 +871,41 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
         text,
         date,
     }
+}
+
+/// Delete a dataset
+#[utoipa::path(
+    tag = "Datasets",
+    delete,
+    path = "/dataset/{dataset}",
+    responses(
+        (status = 200, description = "OK"),
+    ),
+    params(
+        ("dataset" = DatasetId, description = "Dataset id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn delete_dataset_handler<C: Context>(
+    dataset: web::Path<DatasetId>,
+    session: AdminOrSession<C>,
+    ctx: web::Data<C>,
+) -> Result<HttpResponse>
+where
+    C::Session: MockableSession,
+{
+    let session = match session {
+        AdminOrSession::Admin => AdminSession::default().into(),
+        AdminOrSession::Session(s) => s,
+    };
+
+    ctx.dataset_db_ref()
+        .delete_dataset(&session, dataset.into_inner())
+        .await?;
+
+    Ok(actix_web::HttpResponse::Ok().finish())
 }
 
 #[cfg(test)]
@@ -2002,6 +2041,94 @@ mod tests {
               }
             })
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_deletes_dataset() -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let ctx = InMemoryContext::test_default();
+
+        let session = ctx.default_session_ref().await;
+
+        let session_id = session.id();
+
+        let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
+
+        let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
+
+        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_ok());
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_id}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_err());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_deletes_admin_dataset() -> Result<()> {
+        let ctx = InMemoryContext::test_default();
+
+        let volume = VolumeName("test_data".to_string());
+
+        let mut meta_data = create_ndvi_meta_data();
+
+        // make path relative to volume
+        meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    id: None,
+                    name: "ndvi".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                },
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
+
+        let session: SimpleSession = AdminSession::default().into();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, ctx.clone()).await;
+
+        let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
+        let dataset_id = dataset_id.id;
+
+        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_ok());
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_id}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
+
+        let res = send_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_err());
 
         Ok(())
     }

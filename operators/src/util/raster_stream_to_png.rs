@@ -1,6 +1,6 @@
 use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
-    operations::image::{Colorizer, RgbaColor, ToPng},
+    operations::image::{Colorizer, DefaultColors, RgbaColor, ToPng},
     primitives::{
         AxisAlignedRectangle, RasterQueryRectangle, SpatialPartitioned, SpatialQuery, TimeInterval,
     },
@@ -90,7 +90,10 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Result<Colorizer> {
                 .unwrap(),
         ],
         RgbaColor::transparent(),
-        RgbaColor::pink(),
+        DefaultColors::OverUnder {
+            over_color: RgbaColor::white(),
+            under_color: RgbaColor::black(),
+        },
     )
     .map_err(error::Error::from)
 }

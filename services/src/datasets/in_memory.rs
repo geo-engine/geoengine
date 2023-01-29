@@ -3,8 +3,8 @@ use crate::api::model::services::AddDataset;
 use crate::contexts::{Db, SimpleSession};
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
 use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, DatasetStorer};
-use crate::error;
 use crate::error::Result;
+use crate::error::{self, Error};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
@@ -17,11 +17,14 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
-    MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
+    MetaData, OperatorName, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
+    VectorResultDescriptor,
 };
 
+use geoengine_operators::mock::MockDatasetDataSource;
 use geoengine_operators::source::{
-    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, OgrSourceDataset,
+    GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular, GdalMetadataNetCdfCf, GdalSource,
+    OgrSource, OgrSourceDataset,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use snafu::ensure;
@@ -56,6 +59,7 @@ struct HashMapDatasetDbBackend {
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     >,
     uploads: HashMap<UploadId, Upload>,
+    admin_datasets: Vec<DatasetId>,
 }
 
 #[derive(Default)]
@@ -172,7 +176,7 @@ impl HashMapStorable for GdalMetaDataList {
 impl DatasetStore<SimpleSession> for HashMapDatasetDb {
     async fn add_dataset(
         &self,
-        _session: &SimpleSession,
+        session: &SimpleSession,
         dataset: Validated<AddDataset>,
         meta_data: Box<dyn HashMapStorable>,
     ) -> Result<DatasetId> {
@@ -189,9 +193,59 @@ impl DatasetStore<SimpleSession> for HashMapDatasetDb {
             symbology: dataset.symbology,
             provenance: dataset.provenance,
         };
-        self.backend.write().await.datasets.push(d);
+
+        let mut backend = self.backend.write().await;
+
+        backend.datasets.push(d);
+
+        if session.is_admin() {
+            backend.admin_datasets.push(id);
+        }
 
         Ok(id)
+    }
+
+    async fn delete_dataset(&self, session: &SimpleSession, dataset_id: DatasetId) -> Result<()> {
+        let backend = self.backend.read().await;
+        let is_admin_dataset = backend.admin_datasets.iter().any(|d| *d == dataset_id);
+
+        if is_admin_dataset && !session.is_admin() || !is_admin_dataset && session.is_admin() {
+            return Err(Error::OperationRequiresOwnerPermission);
+        }
+
+        drop(backend);
+        let mut backend = self.backend.write().await;
+
+        let dataset = backend
+            .datasets
+            .iter()
+            .position(|d| d.id == dataset_id)
+            .ok_or(Error::UnknownDatasetId)?;
+
+        let dataset = backend.datasets.remove(dataset);
+
+        match dataset.source_operator.as_str() {
+            GdalSource::TYPE_NAME => {
+                backend.gdal_datasets.remove(&dataset_id);
+            }
+            OgrSource::TYPE_NAME => {
+                backend.ogr_datasets.remove(&dataset_id);
+            }
+            MockDatasetDataSource::TYPE_NAME => {
+                backend.mock_datasets.remove(&dataset_id);
+            }
+            _ => {
+                return Err(Error::UnknownOperator {
+                    operator: dataset.source_operator.clone(),
+                })
+            }
+        }
+
+        if is_admin_dataset {
+            backend.admin_datasets.retain(|id| *id != dataset_id);
+        }
+
+        Ok(())
     }
 
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {

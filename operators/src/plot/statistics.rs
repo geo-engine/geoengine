@@ -520,7 +520,7 @@ mod tests {
             result.to_string(),
             json!({
                 "Raster-1": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -625,7 +625,7 @@ mod tests {
             result.to_string(),
             json!({
                 "Raster-1": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -633,7 +633,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
                 "Raster-2": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
                     "validCount": 6,
                     "min": 7.0,
                     "max": 12.0,
@@ -738,7 +738,7 @@ mod tests {
             result.to_string(),
             json!({
                 "A": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -746,7 +746,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
                 "B": {
-                    "valueCount": 64_800, // 360*180
+                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
                     "validCount": 6,
                     "min": 7.0,
                     "max": 12.0,
