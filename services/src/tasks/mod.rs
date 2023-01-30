@@ -205,7 +205,9 @@ impl TaskStatus {
         Self::Completed {
             info,
             time_total: self.time_total(),
-            time_started: self.time_started(),
+            time_started: self
+                .time_started()
+                .expect("completed() is only called on completed tasks"),
         }
     }
 
@@ -259,10 +261,10 @@ impl TaskStatus {
         }
     }
 
-    fn time_started(&self) -> TimeInstance {
+    fn time_started(&self) -> Option<TimeInstance> {
         match self {
-            TaskStatus::Running(info) => info.time_estimate.time_started(),
-            _ => TimeInstance::MIN,
+            TaskStatus::Running(info) => Some(info.time_estimate.time_started()),
+            _ => None,
         }
     }
 }
