@@ -271,11 +271,13 @@
       },
       "opacity": 1.0
     },
-    "provenance": {
-      "citation": "Nasa Earth Observations, MODIS Vegetation Index Products",
-      "license": "https://earthdata.nasa.gov/collaborate/open-data-services-and-software/data-information-policy",
-      "uri": "https://modis.gsfc.nasa.gov/data/dataprod/mod13.php"
-    }
+    "provenance": [
+      {
+        "citation": "Nasa Earth Observations, MODIS Vegetation Index Products",
+        "license": "https://earthdata.nasa.gov/collaborate/open-data-services-and-software/data-information-policy",
+        "uri": "https://modis.gsfc.nasa.gov/data/dataprod/mod13.php"
+      }
+    ]
   },
   "metaData": {
     "type": "GdalMetaDataList",

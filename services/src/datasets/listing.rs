@@ -117,7 +117,7 @@ pub trait DatasetProvider<S: Session>:
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
 pub struct ProvenanceOutput {
     pub data: DataId,
-    pub provenance: Option<Provenance>,
+    pub provenance: Option<Vec<Provenance>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema)]

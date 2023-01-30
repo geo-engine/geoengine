@@ -91,11 +91,11 @@ impl PangaeaDataProvider {
 
         Ok(ProvenanceOutput {
             data: id.clone(),
-            provenance: Some(Provenance {
+            provenance: Some(vec![Provenance {
                 citation: citation_text,
                 license: pmd.license.unwrap_or_default(),
                 uri: pmd.url.to_string(),
-            }),
+            }]),
         })
     }
 }
@@ -677,6 +677,8 @@ mod tests {
         assert!(result.provenance.is_some());
 
         let provenance = result.provenance.unwrap();
+        assert_eq!(1, provenance.len());
+        let provenance = &provenance[0];
 
         assert_ne!("", provenance.license);
         assert_ne!("", provenance.citation);
