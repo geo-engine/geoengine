@@ -50,7 +50,7 @@ pub(crate) struct GetPlot {
 ///
 /// # Example
 ///
-/// 1. Create a histogram workflow.
+/// 1. Create a statistics workflow.
 ///
 /// Note: The used MockFeatureCollection has a column "a" of type int
 /// which contains the numbers [1, 2, 3, 4, 5, 6].
