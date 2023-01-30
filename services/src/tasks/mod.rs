@@ -130,9 +130,9 @@ impl utoipa::ToSchema for TaskStatus {
                             .enum_values::<[&str; 1], &str>(Some(["running"])),
                     )
                     .property("info", Object::new())
-                    .property("pct_complete", Object::with_type(SchemaType::String))
-                    .property("time_estimate", Object::with_type(SchemaType::String))
-                    .property("time_started", Object::with_type(SchemaType::Integer)),
+                    .property("pctComplete", Object::with_type(SchemaType::String))
+                    .property("timeEstimate", Object::with_type(SchemaType::String))
+                    .property("timeStarted", Object::with_type(SchemaType::Integer)),
             )
             .item(
                 ObjectBuilder::new()
@@ -268,6 +268,7 @@ impl TaskStatus {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RunningTaskStatusInfo {
     #[serde(serialize_with = "serialize_as_pct")]
     pct_complete: f64,
