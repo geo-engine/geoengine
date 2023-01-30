@@ -44,7 +44,9 @@ impl TaskResponse {
         (status = 200, description = "Status of the task (running)", body = TaskStatus,
             example = json!({
                 "status": "running",
-                "pct_complete": 0,
+                "pctComplete": 0,
+                "timeStarted": 1_675_088_001_004i64,
+                "timeEstimate": "? (± ?)",
                 "info": (),
             })
         )
@@ -80,6 +82,8 @@ async fn status_handler<C: Context>(
                     "task_id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
                     "status": "completed",
                     "info": "completed",
+                    "timeTotal": "00:00:30",
+                    "timeStarted": 1_675_088_001_004i64
                 }
             ])
         )
@@ -337,10 +341,10 @@ mod tests {
         assert_eq!(res_status, 200, "{res_body:?}");
 
         assert_eq!(res_body["status"], json!("running"));
-        assert_eq!(res_body["pct_complete"], json!("0.00%"));
+        assert_eq!(res_body["pctComplete"], json!("0.00%"));
         assert!(res_body["info"].is_null());
-        assert_eq!(res_body["time_estimate"], json!("? (± ?)"));
-        assert!(res_body["time_started"].is_number());
+        assert_eq!(res_body["timeEstimate"], json!("? (± ?)"));
+        assert!(res_body["timeStarted"].is_number());
 
         // 2. wait for task to finish
 
@@ -399,10 +403,10 @@ mod tests {
         assert_eq!(res_status, 200, "{res_body:?}");
 
         assert_eq!(res_body["status"], json!("running"));
-        assert_eq!(res_body["pct_complete"], json!("0.00%"));
+        assert_eq!(res_body["pctComplete"], json!("0.00%"));
         assert!(res_body["info"].is_null());
-        assert_eq!(res_body["time_estimate"], json!("? (± ?)"));
-        assert!(res_body["time_started"].is_number());
+        assert_eq!(res_body["timeEstimate"], json!("? (± ?)"));
+        assert!(res_body["timeStarted"].is_number());
     }
 
     #[tokio::test]

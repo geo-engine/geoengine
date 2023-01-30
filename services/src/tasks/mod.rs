@@ -207,7 +207,7 @@ impl TaskStatus {
             time_total: self.time_total(),
             time_started: self
                 .time_started()
-                .expect("completed() is only called on completed tasks"),
+                .expect("completed() is only called on tasks in the running state"),
         }
     }
 
@@ -256,7 +256,7 @@ impl TaskStatus {
 
     fn time_total(&self) -> String {
         match self {
-            TaskStatus::Completed { time_total, .. } => time_total.to_owned(),
+            TaskStatus::Completed { time_total, .. } => time_total.clone(),
             TaskStatus::Running(info) => info.time_estimate.time_total(),
             _ => String::new(),
         }
@@ -264,7 +264,7 @@ impl TaskStatus {
 
     fn time_started(&self) -> Option<TimeInstance> {
         match self {
-            TaskStatus::Completed { time_started, .. } => Some(time_started.clone()),
+            TaskStatus::Completed { time_started, .. } => Some(*time_started),
             TaskStatus::Running(info) => Some(info.time_estimate.time_started()),
             _ => None,
         }
