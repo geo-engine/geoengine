@@ -52,6 +52,9 @@ pub(crate) struct GetPlot {
 ///
 /// 1. Create a histogram workflow.
 ///
+/// Note: The used MockFeatureCollection has a column "a" of type int
+/// which contains the numbers [1, 2, 3, 4, 5, 6].
+///
 /// ```text
 /// POST /workflow
 /// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
@@ -59,13 +62,8 @@ pub(crate) struct GetPlot {
 /// {
 ///   "type": "Plot",
 ///   "operator": {
-///     "type": "Histogram",
-///     "params": {
-///       "columnName": "a",
-///       "bounds": "data",
-///       "buckets": null,
-///       "interactive": false
-///     },
+///     "type": "Statistics",
+///     "params": {},
 ///     "sources": {
 ///       "source": {
 ///         "type": "MockFeatureCollectionSourceNoGeometry",
@@ -87,7 +85,7 @@ pub(crate) struct GetPlot {
 /// Response:
 /// ```json
 /// {
-///   "id": "2851667e-52c6-5bf1-b87a-d9a954834898"
+///   "id": "504ed8a4-e0a4-5cef-9f91-b2ffd4a2b56b"
 /// }
 /// ```
 ///
@@ -100,10 +98,16 @@ pub(crate) struct GetPlot {
         (status = 200, description = "OK", body = WrappedPlotOutput,
             example = json!({
                 "outputFormat": "JsonVega",
-                "plotType": "Histogram",
+                "plotType": "Statistics",
                 "data": {
-                    "metadata": null,
-                    "vegaString": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.json\",\"data\":{\"values\":[{\"Frequency\":3,\"binEnd\":3.5,\"binStart\":1.0},{\"Frequency\":3,\"binEnd\":6.0,\"binStart\":3.5}]},\"encoding\":{\"x\":{\"axis\":{\"title\":\"\"},\"bin\":{\"binned\":true,\"step\":2.5},\"field\":\"binStart\"},\"x2\":{\"field\":\"binEnd\"},\"y\":{\"field\":\"Frequency\",\"type\":\"quantitative\"}},\"mark\":\"bar\"}"
+                    "a": {
+                        "max": 6.0,
+                        "mean": 3.5,
+                        "min": 1.0,
+                        "stddev": 1.707_825_127_659_933,
+                        "validCount": 6,
+                        "valueCount": 6
+                    }
                 }
            })
         )
