@@ -172,11 +172,11 @@ impl GfbioAbcdDataProvider {
 
         Ok(ProvenanceOutput {
             data: id.clone(),
-            provenance: Some(Provenance {
+            provenance: Some(vec![Provenance {
                 citation: row.try_get(0).unwrap_or_else(|_| String::new()),
                 license: row.try_get(1).unwrap_or_else(|_| String::new()),
                 uri: row.try_get(2).unwrap_or_else(|_| String::new()),
-            }),
+            }]),
         })
     }
 }
@@ -915,11 +915,11 @@ mod tests {
                     provider_id: GFBIO_PROVIDER_ID,
                     layer_id: LayerId("1".to_owned()),
                 }),
-                provenance: Some(Provenance {
+                provenance: Some(vec![Provenance {
                     citation: "Example Description".to_owned(),
                     license: "CC-BY-SA".to_owned(),
                     uri: "http://example.org".to_owned(),
-                }),
+                }]),
             };
 
             if result != expected {
