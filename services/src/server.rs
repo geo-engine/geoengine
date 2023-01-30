@@ -59,6 +59,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     start(
         static_files_dir,
         web_config.bind_address,
+        web_config.api_prefix,
         web_config.version_api,
         ctx,
     )
@@ -68,6 +69,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
+    api_prefix: String,
     version_api: bool,
     ctx: C,
 ) -> Result<(), Error>
@@ -79,15 +81,7 @@ where
     let openapi = ApiDoc::openapi();
 
     HttpServer::new(move || {
-        #[allow(unused_mut)]
-        let mut app = App::new()
-            .app_data(wrapped_ctx.clone())
-            .wrap(
-                middleware::ErrorHandlers::default()
-                    .handler(http::StatusCode::NOT_FOUND, render_404)
-                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
-            )
-            .wrap(TracingLogger::<CustomRootSpanBuilder>::new())
+        let mut api = web::scope(&api_prefix)
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
@@ -100,17 +94,16 @@ where
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>);
-
-        app = app.route(
-            "/available",
-            web::get().to(crate::util::server::available_handler),
-        );
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .route(
+                "/available",
+                web::get().to(crate::util::server::available_handler),
+            );
 
         let mut api_urls = vec![];
 
-        app = serve_openapi_json(
-            app,
+        api = serve_openapi_json(
+            api,
             &mut api_urls,
             "Geo Engine",
             "../api-docs/openapi.json",
@@ -120,10 +113,10 @@ where
 
         #[cfg(feature = "ebv")]
         {
-            app = app.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
+            api = api.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
 
-            app = serve_openapi_json(
-                app,
+            api = serve_openapi_json(
+                api,
                 &mut api_urls,
                 "EBV",
                 "../api-docs/ebv/openapi.json",
@@ -132,24 +125,28 @@ where
             );
         }
 
-        #[cfg(feature = "nfdi")]
-        {
-            app = app.configure(handlers::gfbio::init_gfbio_routes::<C>);
-        }
-
-        app = app.service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls));
+        api = api.service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls));
 
         if version_api {
-            app = app.route(
+            api = api.route(
                 "/info",
                 web::get().to(crate::util::server::server_info_handler),
             );
         }
+
         if let Some(static_files_dir) = static_files_dir.clone() {
-            app.service(Files::new("/static", static_files_dir))
-        } else {
-            app
+            api = api.service(Files::new("/static", static_files_dir));
         }
+
+        App::new()
+            .app_data(wrapped_ctx.clone())
+            .wrap(
+                middleware::ErrorHandlers::default()
+                    .handler(http::StatusCode::NOT_FOUND, render_404)
+                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+            )
+            .wrap(TracingLogger::<CustomRootSpanBuilder>::new())
+            .service(api)
     })
     .worker_max_blocking_threads(calculate_max_blocking_threads_per_worker())
     .on_connect(connection_init)
@@ -180,7 +177,11 @@ mod tests {
 
     async fn queries() {
         let web_config: config::Web = get_config_element().unwrap();
-        let base_url = Url::parse(&format!("http://{}", web_config.bind_address)).unwrap();
+        let base_url = Url::parse(&format!(
+            "http://{}{}/",
+            web_config.bind_address, web_config.api_prefix
+        ))
+        .unwrap();
 
         assert!(wait_for_server(&base_url).await);
         issue_queries(&base_url).await;

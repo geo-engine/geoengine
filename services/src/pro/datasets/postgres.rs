@@ -486,6 +486,39 @@ where
         Ok(id)
     }
 
+    async fn delete_dataset(&self, session: &UserSession, dataset_id: DatasetId) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
+            .prepare(
+                "
+        SELECT 
+            TRUE
+        FROM 
+            user_permitted_datasets p JOIN datasets d 
+                ON (p.dataset_id = d.id)
+        WHERE 
+            d.id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
+            )
+            .await?;
+
+        let rows = tx.query(&stmt, &[&dataset_id, &session.user.id]).await?;
+
+        if rows.is_empty() {
+            return Err(Error::OperationRequiresOwnerPermission);
+        }
+
+        let stmt = tx.prepare("DELETE FROM datasets WHERE id = $1;").await?;
+
+        tx.execute(&stmt, &[&dataset_id]).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
         Box::new(meta)
     }

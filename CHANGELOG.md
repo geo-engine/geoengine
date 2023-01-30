@@ -144,3 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `Settings-default.toml` now contains an entry `gdal.allowed_drivers` that specifies all allowed drivers for GDAL.
 
   - https://github.com/geo-engine/geoengine/pull/659
+
+- The `ProvenanceOutput` now contains a list of `Provenance` instead of a single entry
+
+  - https://github.com/geo-engine/geoengine/pull/729

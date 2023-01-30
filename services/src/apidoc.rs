@@ -1,8 +1,9 @@
 use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, ExternalDataId,
-    FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
-    Palette, PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
+    Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, DefaultColors,
+    ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
+    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, OverUnderColors, Palette,
+    PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
     RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
     SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
     TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType,
@@ -87,6 +88,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::get_workflow_provenance_handler,
         handlers::workflows::load_workflow_handler,
         handlers::workflows::register_workflow_handler,
+        handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
         handlers::datasets::get_dataset_handler,
@@ -184,6 +186,11 @@ use utoipa::{Modify, OpenApi};
             StrokeParam,
             Symbology,
             TextSymbology,
+            LinearGradient,
+            LogarithmicGradient,
+            DefaultColors,
+            OverUnderColors,
+
 
             OgcBoundingBox,
             MapResponse,
