@@ -333,8 +333,7 @@ mod tests {
             SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
             SpatialResolution::one(),
             ctx.tiling_specification().origin_coordinate,
-            TimeInterval::default(),
-            
+            TimeInterval::default()
         );
 
         let TypedRasterQueryProcessor::U8(typed_processor) = query_processor else {
