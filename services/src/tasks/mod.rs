@@ -256,6 +256,7 @@ impl TaskStatus {
 
     fn time_total(&self) -> String {
         match self {
+            TaskStatus::Completed { time_total, .. } => time_total.to_owned(),
             TaskStatus::Running(info) => info.time_estimate.time_total(),
             _ => String::new(),
         }
@@ -263,6 +264,7 @@ impl TaskStatus {
 
     fn time_started(&self) -> Option<TimeInstance> {
         match self {
+            TaskStatus::Completed { time_started, .. } => Some(time_started.clone()),
             TaskStatus::Running(info) => Some(info.time_estimate.time_started()),
             _ => None,
         }
