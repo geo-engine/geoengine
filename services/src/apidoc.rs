@@ -1,11 +1,12 @@
 use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, ExternalDataId,
-    FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
-    Palette, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
+    Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, DefaultColors,
+    ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
+    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, OverUnderColors, Palette,
+    RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
     RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority,
-    SpatialReferenceOption, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
-    TimeStep, VectorDataType,
+    SpatialReferenceOption, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
+    TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
@@ -24,12 +25,13 @@ use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::{UploadId, Volume, VolumeName};
+use crate::datasets::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::handlers;
-use crate::handlers::tasks::TaskAbortOptions;
+use crate::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
+use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
-use crate::handlers::workflows::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
@@ -64,6 +66,7 @@ use utoipa::{Modify, OpenApi};
         handlers::layers::add_existing_layer_to_collection,
         handlers::layers::add_existing_collection_to_collection,
         handlers::layers::remove_collection_from_collection,
+        handlers::layers::layer_to_dataset,
         handlers::session::anonymous_handler,
         handlers::session::session_handler,
         handlers::session::session_project_handler,
@@ -84,12 +87,14 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::get_workflow_provenance_handler,
         handlers::workflows::load_workflow_handler,
         handlers::workflows::register_workflow_handler,
+        handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
         handlers::datasets::get_dataset_handler,
         handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
+        handlers::spatial_references::get_spatial_reference_specification_handler,
     ),
     components(
         schemas(
@@ -120,6 +125,8 @@ use utoipa::{Modify, OpenApi};
             SpatialReference,
             SpatialReferenceOption,
             SpatialReferenceAuthority,
+            SpatialReferenceSpecification,
+            AxisOrder,
             Measurement,
             ContinuousMeasurement,
             ClassificationMeasurement,
@@ -151,6 +158,7 @@ use utoipa::{Modify, OpenApi};
             TaskFilter,
             TaskListOptions,
             TaskStatus,
+            TaskResponse,
 
             Layer,
             LayerListing,
@@ -176,6 +184,11 @@ use utoipa::{Modify, OpenApi};
             StrokeParam,
             Symbology,
             TextSymbology,
+            LinearGradient,
+            LogarithmicGradient,
+            DefaultColors,
+            OverUnderColors,
+
 
             OgcBoundingBox,
             MapResponse,
@@ -236,7 +249,9 @@ use utoipa::{Modify, OpenApi};
             RasterPropertiesKey,
             RasterPropertiesEntryType,
             OgrMetaData,
+            StringPair,
             GdalConfigOption,
+            AxisLabels,
             MockDatasetDataSourceLoadingInfo,
             OgrSourceDataset,
             OgrSourceColumnSpec,

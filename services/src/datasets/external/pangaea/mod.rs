@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
-use crate::datasets::external::pangaea::meta::PangeaMetaData;
+pub use crate::datasets::external::pangaea::meta::PangaeaMetaData;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{Layer, LayerCollection, LayerCollectionListOptions};
@@ -11,6 +11,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use reqwest::Client;
+use url::Url;
 
 use crate::error::{Error, Result};
 use crate::util::user_input::Validated;
@@ -28,7 +29,7 @@ pub const PANGAEA_PROVIDER_ID: DataProviderId =
 #[serde(rename_all = "camelCase")]
 pub struct PangaeaDataProviderDefinition {
     name: String,
-    base_url: String,
+    base_url: Url,
 }
 
 #[typetag::serde]
@@ -54,32 +55,25 @@ impl DataProviderDefinition for PangaeaDataProviderDefinition {
 #[derive(Debug)]
 pub struct PangaeaDataProvider {
     client: Client,
-    base_url: String,
+    base_url: Url,
 }
 
 impl PangaeaDataProvider {
-    pub fn new(base_url: String) -> PangaeaDataProvider {
+    pub fn new(base_url: Url) -> PangaeaDataProvider {
         PangaeaDataProvider {
             client: Client::new(),
             base_url,
         }
     }
-}
 
-#[async_trait]
-impl DataProvider for PangaeaDataProvider {
-    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
-        let doi = id
-            .external()
-            .ok_or(Error::InvalidDataId)
-            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            })?
-            .layer_id;
-
-        let pmd: PangeaMetaData = self
-            .client
-            .get(format!("{}/{}?format=metadata_jsonld", self.base_url, doi))
+    pub async fn get_provenance(
+        client: &reqwest::Client,
+        base_url: &Url,
+        id: &DataId,
+        doi: &str,
+    ) -> Result<ProvenanceOutput> {
+        let pmd: PangaeaMetaData = client
+            .get(format!("{base_url}{doi}?format=metadata_jsonld"))
             .send()
             .await?
             .json()
@@ -88,9 +82,8 @@ impl DataProvider for PangaeaDataProvider {
                 source: Box::new(e),
             })?;
 
-        let citation_text = self
-            .client
-            .get(format!("{}/{}?format=citation_text", self.base_url, doi))
+        let citation_text = client
+            .get(format!("{base_url}{doi}?format=citation_text"))
             .send()
             .await?
             .text()
@@ -98,12 +91,20 @@ impl DataProvider for PangaeaDataProvider {
 
         Ok(ProvenanceOutput {
             data: id.clone(),
-            provenance: Some(Provenance {
+            provenance: Some(vec![Provenance {
                 citation: citation_text,
                 license: pmd.license.unwrap_or_default(),
                 uri: pmd.url.to_string(),
-            }),
+            }]),
         })
+    }
+}
+
+#[async_trait]
+impl DataProvider for PangaeaDataProvider {
+    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
+        let doi = id.external().ok_or(Error::InvalidDataId)?.layer_id.0;
+        Self::get_provenance(&self.client, &self.base_url, id, &doi).await
     }
 }
 
@@ -147,9 +148,9 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
             })?
             .layer_id;
 
-        let pmd: PangeaMetaData = self
+        let pmd: PangaeaMetaData = self
             .client
-            .get(format!("{}/{}?format=metadata_jsonld", self.base_url, doi))
+            .get(format!("{}{}?format=metadata_jsonld", self.base_url, doi))
             .send()
             .await
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
@@ -239,6 +240,7 @@ mod tests {
     use std::path::PathBuf;
     use tokio::fs::OpenOptions;
     use tokio::io::AsyncReadExt;
+    use url::Url;
 
     pub fn test_data_path(file_name: &str) -> PathBuf {
         crate::test_data!(String::from("pangaea/") + file_name).into()
@@ -247,7 +249,7 @@ mod tests {
     async fn create_provider(server: &Server) -> Result<Box<dyn DataProvider>, Error> {
         Box::new(PangaeaDataProviderDefinition {
             name: "Pangaea".to_string(),
-            base_url: server.url_str("").strip_suffix('/').unwrap().to_owned(),
+            base_url: Url::parse(server.url_str("").strip_suffix('/').unwrap()).unwrap(),
         })
         .initialize()
         .await
@@ -675,6 +677,8 @@ mod tests {
         assert!(result.provenance.is_some());
 
         let provenance = result.provenance.unwrap();
+        assert_eq!(1, provenance.len());
+        let provenance = &provenance[0];
 
         assert_ne!("", provenance.license);
         assert_ne!("", provenance.citation);

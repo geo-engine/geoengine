@@ -2,6 +2,7 @@
 bind_address = "127.0.0.1:3030"
 # set the public address of the server, if it is different from the bind address
 # external_address = "http://localhost:3030"
+api_prefix = "/api"
 backend = "in_memory" # TODO: remove option
 version_api = true
 

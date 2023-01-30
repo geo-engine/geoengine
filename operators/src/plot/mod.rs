@@ -25,5 +25,6 @@ pub use self::statistics::{
 };
 pub use self::temporal_raster_mean_plot::{
     InitializedMeanRasterPixelValuesOverTime, MeanRasterPixelValuesOverTime,
-    MeanRasterPixelValuesOverTimeParams, MeanRasterPixelValuesOverTimeQueryProcessor,
+    MeanRasterPixelValuesOverTimeParams, MeanRasterPixelValuesOverTimePosition,
+    MeanRasterPixelValuesOverTimeQueryProcessor,
 };

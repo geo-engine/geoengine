@@ -14,7 +14,7 @@ use crate::util::retry::retry;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-use geoengine_datatypes::operations::image::RgbaColor;
+use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
@@ -213,7 +213,10 @@ impl SentinelS2L2aCogsDataProvider {
                                             .expect("valid breakpoint"),
                                     ],
                                     RgbaColor::transparent(),
-                                    RgbaColor::transparent(),
+                                    DefaultColors::OverUnder {
+                                        over_color: RgbaColor::white(),
+                                        under_color: RgbaColor::black(),
+                                    },
                                 )
                                 .expect("valid colorizer")
                                 .into(),
@@ -269,6 +272,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                     id: d.listing.id.clone(),
                     name: d.listing.name.clone(),
                     description: d.listing.description.clone(),
+                    properties: vec![],
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;

@@ -261,6 +261,7 @@ where
         // TODO: add routine or error, if a given modelpath would overwrite an existing model
         let mut file = File::create(model_path).await?;
         file.write_all(ml_model_str.as_bytes()).await?;
+        file.flush().await?;
 
         Ok(())
     }

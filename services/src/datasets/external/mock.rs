@@ -172,6 +172,7 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                         },
                         name: l.name.clone(),
                         description: l.description.clone(),
+                        properties: vec![],
                     })
                 }))
                 .skip(options.offset as usize)

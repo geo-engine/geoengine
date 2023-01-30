@@ -159,6 +159,8 @@ pub enum Error {
     OnlyAdminsCanCreateDatasetFromVolume,
     AdminsCannotCreateDatasetFromUpload,
 
+    OperationRequiresOwnerPermission,
+
     #[snafu(display("Permission denied for dataset with id {:?}", dataset))]
     DatasetPermissionDenied {
         dataset: DatasetId,
@@ -331,11 +333,8 @@ pub enum Error {
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
-    #[cfg(feature = "nfdi")]
-    #[snafu(display("Could not parse GFBio basket: {}", message,))]
-    GFBioBasketParse {
-        message: String,
-    },
+
+    AbcdUnitIdColumnMissingInDatabase,
 
     BaseUrlMustEndWithSlash,
 
@@ -419,6 +418,12 @@ pub enum Error {
     UnresolvableQueryBoundingBox2DInSrs {
         query_srs: SpatialReference,
         query_bbox: crate::api::model::datatypes::BoundingBox2D,
+    },
+
+    #[snafu(display("Result Descriptor field '{}' {}", field, cause))]
+    LayerResultDescriptorMissingFields {
+        field: String,
+        cause: String,
     },
 }
 
