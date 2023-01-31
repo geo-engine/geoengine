@@ -44,7 +44,9 @@ impl TaskResponse {
         (status = 200, description = "Status of the task (running)", body = TaskStatus,
             example = json!({
                 "status": "running",
-                "pct_complete": 0,
+                "pctComplete": 0,
+                "timeStarted": 1_675_088_001_004i64,
+                "timeEstimate": "? (± ?)",
                 "info": (),
             })
         )
@@ -80,6 +82,8 @@ async fn status_handler<C: Context>(
                     "task_id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
                     "status": "completed",
                     "info": "completed",
+                    "timeTotal": "00:00:30",
+                    "timeStarted": 1_675_088_001_004i64
                 }
             ])
         )
@@ -148,6 +152,7 @@ mod tests {
 
     use super::*;
 
+    use crate::util::tests::read_body_json;
     use crate::{
         contexts::{InMemoryContext, Session, SimpleContext},
         tasks::{
@@ -159,6 +164,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::{channel::oneshot, lock::Mutex};
     use geoengine_datatypes::{error::ErrorSource, util::test::TestDefault};
+    use serde_json::json;
     use std::{pin::Pin, sync::Arc};
 
     struct NopTask {
@@ -330,18 +336,15 @@ mod tests {
 
         let res = send_test_request(req, ctx.clone()).await;
 
-        assert_eq!(res.status(), 200);
+        let res_status = res.status();
+        let res_body = read_body_json(res).await;
+        assert_eq!(res_status, 200, "{res_body:?}");
 
-        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
-        assert_eq!(
-            status,
-            serde_json::json!({
-                "status": "running",
-                "pct_complete": "0.00%",
-                "info": (),
-                "time_estimate": "? (± ?)",
-            })
-        );
+        assert_eq!(res_body["status"], json!("running"));
+        assert_eq!(res_body["pctComplete"], json!("0.00%"));
+        assert!(res_body["info"].is_null());
+        assert_eq!(res_body["timeEstimate"], json!("? (± ?)"));
+        assert!(res_body["timeStarted"].is_number());
 
         // 2. wait for task to finish
 
@@ -360,18 +363,14 @@ mod tests {
 
         let res = send_test_request(req, ctx_clone).await;
 
-        assert_eq!(res.status(), 200);
+        let res_status = res.status();
+        let res_body = read_body_json(res).await;
+        assert_eq!(res_status, 200, "{res_body:?}");
 
-        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
-
-        assert_eq!(
-            status,
-            serde_json::json!({
-                "status": "completed",
-                "info": "completed",
-                "timeTotal": "00:00:00",
-            })
-        );
+        assert_eq!(res_body["status"], json!("completed"));
+        assert_eq!(res_body["info"], json!("completed"));
+        assert_eq!(res_body["timeTotal"], json!("00:00:00"));
+        assert!(res_body["timeStarted"].is_number());
     }
 
     #[tokio::test]
@@ -399,18 +398,15 @@ mod tests {
 
         let res = send_test_request(req, ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response());
+        let res_status = res.status();
+        let res_body = read_body_json(res).await;
+        assert_eq!(res_status, 200, "{res_body:?}");
 
-        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
-        assert_eq!(
-            status,
-            serde_json::json!({
-                "status": "running",
-                "pct_complete": "0.00%",
-                "info": (),
-                "time_estimate": "? (± ?)",
-            })
-        );
+        assert_eq!(res_body["status"], json!("running"));
+        assert_eq!(res_body["pctComplete"], json!("0.00%"));
+        assert!(res_body["info"].is_null());
+        assert_eq!(res_body["timeEstimate"], json!("? (± ?)"));
+        assert!(res_body["timeStarted"].is_number());
     }
 
     #[tokio::test]
@@ -432,20 +428,16 @@ mod tests {
 
         let res = send_test_request(req, ctx.clone()).await;
 
-        assert_eq!(res.status(), 200);
+        let res_status = res.status();
+        let res_body = read_body_json(res).await;
+        assert_eq!(res_status, 200, "{res_body:?}");
 
-        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
-        assert_eq!(
-            status,
-            serde_json::json!([
-                {
-                    "task_id": task_id,
-                    "status": "completed",
-                    "info": "completed",
-                    "timeTotal": "00:00:00",
-                }
-            ])
-        );
+        let res_body = res_body.get(0).unwrap();
+        assert_eq!(res_body["task_id"], json!(task_id));
+        assert_eq!(res_body["status"], json!("completed"));
+        assert_eq!(res_body["info"], json!("completed"));
+        assert_eq!(res_body["timeTotal"], json!("00:00:00"));
+        assert!(res_body["timeStarted"].is_number());
     }
 
     #[tokio::test]
@@ -486,11 +478,11 @@ mod tests {
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
-        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
+        let status = read_body_json(res).await;
 
         assert_eq!(
             status,
-            serde_json::json!({
+            json!({
                 "status": "aborted",
                 "cleanUp": {
                     "status": "completed",
@@ -536,11 +528,11 @@ mod tests {
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
-        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
+        let status = read_body_json(res).await;
 
         assert_eq!(
             status,
-            serde_json::json!({
+            json!({
                 "status": "aborted",
                 "cleanUp": {
                     "status": "noCleanUp"
@@ -583,11 +575,11 @@ mod tests {
 
         assert_eq!(res.status(), 400, "{:?}", res.response().error());
 
-        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
+        let status = read_body_json(res).await;
 
         assert_eq!(
             status,
-            serde_json::json!({
+            json!({
                 "error": "TaskError",
                 "message": format!("TaskError: Task was already aborted by the user: {task_id}"),
             })
@@ -615,11 +607,11 @@ mod tests {
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
-        let status: serde_json::Value = actix_web::test::read_body_json(res).await;
+        let status = read_body_json(res).await;
 
         assert_eq!(
             status,
-            serde_json::json!({
+            json!({
                 "status": "aborted",
                 "cleanUp": {
                     "status": "noCleanUp"
@@ -766,21 +758,21 @@ mod tests {
         assert_eq!(list.len(), 3);
         assert_eq!(
             serde_json::to_value(&list[0].status).unwrap(),
-            serde_json::json!({
+            json!({
                 "status": "aborted",
                 "cleanUp": {"status": "completed", "info": null}
             })
         );
         assert_eq!(
             serde_json::to_value(&list[1].status).unwrap(),
-            serde_json::json!({
+            json!({
                 "status": "aborted",
                 "cleanUp": {"status": "completed", "info": null}
             })
         );
         assert_eq!(
             serde_json::to_value(&list[2].status).unwrap(),
-            serde_json::json!({
+            json!({
                 "status": "aborted",
                 "cleanUp": {"status": "completed", "info": null}
             })
@@ -807,7 +799,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(ctx.tasks_ref().status(task_id).await.unwrap()).unwrap(),
-            serde_json::json!({
+            json!({
                 "status": "failed",
                 "error": "FailingTaskWithFailingCleanupError",
                 "cleanUp": {"status": "failed", "error": "FailingTaskWithFailingCleanupError"}

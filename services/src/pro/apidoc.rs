@@ -3,10 +3,10 @@ use crate::api::model::datatypes::{
     Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, DateTimeParseFormat, DefaultColors,
     ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
     MultiLineString, MultiPoint, MultiPolygon, NoGeometry, OverUnderColors, Palette,
-    RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
-    RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority,
-    SpatialReferenceOption, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
-    TimeInterval, TimeStep, VectorDataType,
+    PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
+    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
+    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
+    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
@@ -27,6 +27,7 @@ use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::datasets::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::handlers;
+use crate::handlers::plots::WrappedPlotOutput;
 use crate::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
@@ -287,7 +288,10 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             AddDataset,
             Volume,
             VolumeName,
-            DataPath
+            DataPath,
+
+            PlotOutputFormat,
+            WrappedPlotOutput
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

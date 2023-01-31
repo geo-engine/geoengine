@@ -21,6 +21,7 @@ use geoengine_operators::engine::{QueryContext, ResultDescriptor, TypedPlotQuery
 use geoengine_operators::util::abortable_query_execution;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 pub(crate) fn init_plot_routes<C>(cfg: &mut web::ServiceConfig)
@@ -31,23 +32,99 @@ where
     cfg.service(web::resource("/plot/{id}").route(web::get().to(get_plot_handler::<C>)));
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GetPlot {
     #[serde(deserialize_with = "parse_bbox")]
+    #[param(example = "0,-0.3,0.2,0", value_type = String)]
     pub bbox: BoundingBox2D,
+    #[param(example = "EPSG:4326")]
     pub crs: Option<SpatialReference>,
     #[serde(deserialize_with = "parse_time")]
+    #[param(example = "2020-01-01T00:00:00.0Z")]
     pub time: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
+    #[param(example = "0.1,0.1", value_type = String)]
     pub spatial_resolution: SpatialResolution,
 }
 
-/// Generates a [plot](WrappedPlotOutput).
+/// Generates a plot.
 ///
 /// # Example
 ///
-/// 1. Create a statistics workflow.
+/// 1. Upload the file `plain_data.csv` with the following content:
+///
+/// ```csv
+/// a
+/// 1
+/// 2
+/// ```
+/// Response:
+/// ```json
+/// {
+/// 	"id": "f3bd61ef-d9ce-471c-89a1-46b5f7295886"
+/// }
+/// ```
+///
+/// 2. Create a dataset from it.
+///
+/// ```text
+/// POST /dataset
+/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
+///
+/// {
+///   "dataPath": {
+///     "upload": "f3bd61ef-d9ce-471c-89a1-46b5f7295886"
+///   },
+///   "definition": {
+///     "properties": {
+///       "name": "Plain Data",
+///       "description": "Demo Dataset",
+///       "sourceOperator": "OgrSource"
+///     },
+///     "metaData": {
+///       "type": "OgrMetaData",
+///       "loadingInfo": {
+///         "fileName": "plain_data.csv",
+///         "layerName": "plain_data",
+///         "dataType": "Data",
+///         "time": {
+///           "type": "none"
+///         },
+///         "columns": {
+///           "x": "",
+///           "y": null,
+///           "text": [],
+///           "float": [],
+///           "int": ["a"]
+///         },
+///         "forceOgrTimeFilter": false,
+///         "onError": "abort"
+///       },
+///       "resultDescriptor": {
+///         "dataType": "Data",
+///         "spatialReference": "EPSG:4326",
+///         "columns": {
+///           "a": {
+///             "dataType": "int",
+///             "measurement": {
+///               "type": "unitless"
+///             }
+///           }
+///         }
+///       }
+///     }
+///   }
+/// }
+/// ```
+/// Response:
+/// ```json
+/// {
+///   "id": "c36f5ce7-d0df-4982-babb-cc9e67d2a196"
+/// }
+/// ```
+///
+/// 3. Create a statistics workflow.
 ///
 /// ```text
 /// POST /workflow
@@ -58,71 +135,60 @@ pub(crate) struct GetPlot {
 ///   "operator": {
 ///     "type": "Statistics",
 ///     "params": {},
-///     "rasterSources": [
-///       {
-///         "type": "MockRasterSource",
+///     "sources": {
+///       "source": {
+///         "type": "OgrSource",
 ///         "params": {
-///           "data": [
-///             {
-///               "time": {
-///                 "start": -8334632851200000,
-///                 "end": 8210298412799999
-///               },
-///               "tilePosition": [0, 0],
-///               "globalGeoTransform": {
-///                 "originCoordinate": { "x": 0.0, "y": 0.0 },
-///                 "xPixelSize": 1.0,
-///                 "yPixelSize": -1.0
-///               },
-///               "gridArray": {
-///                 "shape": {
-///                   "shapeArray": [3, 2]
-///                 },
-///                 "data": [1, 2, 3, 4, 5, 6]
-///               }
-///             }
-///           ],
-///           "resultDescriptor": {
-///             "dataType": "U8",
-///             "spatialReference": "EPSG:4326",
-///             "measurement": "unitless"
-///           }
+///           "data": {
+///             "type": "internal",
+///             "datasetId": "c36f5ce7-d0df-4982-babb-cc9e67d2a196"
+///           },
+///           "attributeProjection": null,
+///           "attributeFilters": null
 ///         }
 ///       }
-///     ],
-///     "vectorSources": []
+///     }
 ///   }
 /// }
 /// ```
 /// Response:
-/// ```text
+/// ```json
 /// {
 ///   "id": "504ed8a4-e0a4-5cef-9f91-b2ffd4a2b56b"
 /// }
 /// ```
 ///
-/// 2. Generate the plot.
-/// ```text
-/// GET /plot/504ed8a4-e0a4-5cef-9f91-b2ffd4a2b56b?bbox=-180,-90,180,90&crs=EPSG:4326&time=2020-01-01T00%3A00%3A00.0Z&spatialResolution=0.1,0.1
-/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "outputFormat": "JsonPlain",
-///   "plotType": "Statistics",
-///   "data": [
-///     {
-///       "pixelCount": 6,
-///       "nanCount": 0,
-///       "min": 1.0,
-///       "max": 6.0,
-///       "mean": 3.5,
-///       "stddev": 1.707825127659933
-///     }
-///   ]
-/// }
-/// ```
+/// 4. Generate the plot with this handler.
+#[utoipa::path(
+    tag = "Plots",
+    get,
+    path = "/plot/{id}",
+    responses(
+        (status = 200, description = "OK", body = WrappedPlotOutput,
+            example = json!({
+                "outputFormat": "JsonPlain",
+                "plotType": "Statistics",
+                "data": {
+                    "a": {
+                        "max": 2.0,
+                        "mean": 1.5,
+                        "min": 1.0,
+                        "stddev": 0.5,
+                        "validCount": 2,
+                        "valueCount": 2
+                    }
+                }
+           })
+        )
+    ),
+    params(
+        GetPlot,
+        ("id", description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn get_plot_handler<C: Context>(
     req: HttpRequest,
     id: web::Path<Uuid>,
@@ -229,11 +295,12 @@ async fn get_plot_handler<C: Context>(
     Ok(web::Json(output))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-struct WrappedPlotOutput {
+pub struct WrappedPlotOutput {
     output_format: PlotOutputFormat,
     plot_type: &'static str,
+    #[schema(value_type = Object)]
     data: serde_json::Value,
 }
 
