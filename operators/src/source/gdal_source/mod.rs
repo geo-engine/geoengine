@@ -19,8 +19,10 @@ use futures::{
     Stream,
 };
 use futures::{Future, TryStreamExt};
+use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
+use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
     SpatialPartition2D, SpatialPartitioned,
@@ -31,6 +33,7 @@ use geoengine_datatypes::raster::{
     RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
     TilingStrategy,
 };
+use geoengine_datatypes::util::retry::retry;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DataId, raster::TileInformation};
 use geoengine_datatypes::{
@@ -47,6 +50,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -54,6 +58,9 @@ use tracing::{span, Level};
 
 mod error;
 mod loading_info;
+
+static GDAL_RETRY_INITIAL_BACKOFF_MS: u64 = 1;
+static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 
 /// Parameters for the GDAL Source Operator
 ///
@@ -135,6 +142,13 @@ pub struct GdalDatasetParameters {
     pub gdal_config_options: Option<Vec<(String, String)>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
+    pub retry: Option<GdalRetryOptions>,
+}
+
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalRetryOptions {
+    pub max_retries: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -420,11 +434,48 @@ impl GdalRasterLoader {
         tile_information: TileInformation,
         tile_time: TimeInterval,
     ) -> Result<RasterTile2D<T>> {
-        crate::util::spawn_blocking(move || {
-            Self::load_tile_data(&dataset_params, tile_information, tile_time)
-        })
+        let is_vsi_curl = dataset_params.file_path.starts_with("/vsicurl/");
+
+        retry(
+            dataset_params
+                .retry
+                .map(|r| r.max_retries)
+                .unwrap_or_default(),
+            GDAL_RETRY_INITIAL_BACKOFF_MS,
+            GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
+            move || {
+                let ds = dataset_params.clone();
+                let file_path = ds.file_path.clone();
+
+                async move {
+                    let load_tile_result = crate::util::spawn_blocking(move || {
+                        Self::load_tile_data(&ds, tile_information, tile_time)
+                    })
+                    .await
+                    .context(crate::error::TokioJoin);
+
+                    match load_tile_result {
+                        Ok(Ok(r)) => Ok(r),
+                        Ok(Err(e)) | Err(e) => {
+                            if is_vsi_curl {
+                                // clear the VSICurl cache, to force GDAL to try to re-download the file
+                                // otherwise it will assume any observed error will happen again
+                                unsafe {
+                                    if let Some(Some(c_string)) =
+                                        file_path.to_str().map(|s| CString::new(s).ok())
+                                    {
+                                        VSICurlPartialClearCache(c_string.as_ptr());
+                                    }
+                                }
+                            }
+
+                            Err(e)
+                        }
+                    }
+                }
+            },
+        )
         .await
-        .context(crate::error::TokioJoin)?
     }
 
     async fn load_tile_async<T: Pixel + GdalType + FromPrimitive>(
@@ -498,14 +549,22 @@ impl GdalRasterLoader {
             },
         );
 
-        if dataset_result.is_err() {
-            // TODO: check if Gdal error is actually file not found
+        if let Err(error) = &dataset_result {
+            let is_file_not_found = matches!(
+                error,
+                Error::Gdal {
+                    source: GdalError::NullPointer {
+                        method_name,
+                        msg
+                    },
+                } if *method_name == "GDALOpenEx" && (*msg == "HTTP response code: 404" || msg.ends_with("No such file or directory"))
+            );
 
             let err_result = match dataset_params.file_not_found_handling {
-                FileNotFoundHandling::NoData => {
+                FileNotFoundHandling::NoData if is_file_not_found => {
                     Ok(create_no_data_tile(tile_information, tile_time))
                 }
-                FileNotFoundHandling::Error => Err(crate::error::Error::CouldNotOpenGdalDataset {
+                _ => Err(crate::error::Error::CouldNotOpenGdalDataset {
                     file_path: dataset_params.file_path.to_string_lossy().to_string(),
                 }),
             };
@@ -1168,6 +1227,7 @@ mod tests {
                 gdal_open_options: None,
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
+                retry: None,
             },
             TileInformation::with_partition_and_shape(output_bounds, output_shape),
             TimeInterval::default(),
@@ -1351,6 +1411,7 @@ mod tests {
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
+            retry: None,
         };
         let replaced = params
             .replace_time_placeholders(
@@ -1754,6 +1815,7 @@ mod tests {
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
+            retry: None,
         };
 
         let dataset_parameters_json = serde_json::to_value(&dataset_parameters).unwrap();
@@ -1801,6 +1863,7 @@ mod tests {
                 "gdalOpenOptions": null,
                 "gdalConfigOptions": null,
                 "allowAlphabandAsMask": true,
+                "retry": null,
             })
         );
 
@@ -2003,6 +2066,7 @@ mod tests {
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
+            retry: None,
         };
 
         let tile_information =

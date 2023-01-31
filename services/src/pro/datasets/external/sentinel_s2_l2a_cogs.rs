@@ -10,7 +10,6 @@ use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
 use crate::util::operators::source_operator_from_dataset;
-use crate::util::retry::retry;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -24,6 +23,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+use geoengine_datatypes::util::retry::retry;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, OperatorName, RasterOperator, RasterResultDescriptor,
     TypedOperator, VectorResultDescriptor,
@@ -31,7 +31,8 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice,
-    GdalLoadingInfoTemporalSliceIterator, GdalSource, GdalSourceParameters, OgrSourceDataset,
+    GdalLoadingInfoTemporalSliceIterator, GdalRetryOptions, GdalSource, GdalSourceParameters,
+    OgrSourceDataset,
 };
 use log::debug;
 use reqwest::Client;
@@ -80,16 +81,12 @@ impl Default for StacApiRetries {
 pub struct GdalRetries {
     /// retry at most `number_of_retries` times with exponential backoff
     number_of_retries: usize,
-
-    /// start with an `number_of_retries` second retry delay
-    delay_s: u64,
 }
 
 impl Default for GdalRetries {
     fn default() -> Self {
         Self {
             number_of_retries: 10,
-            delay_s: 5,
         }
     }
 }
@@ -490,18 +487,13 @@ impl SentinelS2L2aCogsMetaData {
                     ),
                     // do not try to read credentials from home directory
                     ("GDAL_HTTP_NETRC".to_string(), "NO".to_string()),
-                    // start with an X second retry delay
-                    (
-                        "GDAL_HTTP_RETRY_DELAY".to_string(),
-                        self.gdal_retries.delay_s.to_string(),
-                    ),
-                    // retry at most X times with exponential backoff
-                    (
-                        "GDAL_HTTP_MAX_RETRY".to_string(),
-                        self.gdal_retries.number_of_retries.to_string(),
-                    ),
+                    // disable Gdal's retry because geo engine does its own retry
+                    ("GDAL_HTTP_MAX_RETRY".to_string(), "0".to_string()),
                 ]),
                 allow_alphaband_as_mask: true,
+                retry: Some(GdalRetryOptions {
+                    max_retries: self.gdal_retries.number_of_retries,
+                }),
             }),
         })
     }
@@ -822,10 +814,10 @@ mod tests {
                     ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(), ".tif".to_owned()),
                     ("GDAL_DISABLE_READDIR_ON_OPEN".to_owned(), "EMPTY_DIR".to_owned()),
                     ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
-                    ("GDAL_HTTP_RETRY_DELAY".to_owned(), "5".to_owned()),
-                    ("GDAL_HTTP_MAX_RETRY".to_owned(), "10".to_owned())
+                    ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_owned())
                     ]),
                 allow_alphaband_as_mask: true,
+                retry: Some(GdalRetryOptions { max_retries: 10 }),
             }),
         }];
 
@@ -924,10 +916,6 @@ mod tests {
         // crate::util::tests::initialize_debugging_in_test(); // use for debugging
         hide_gdal_errors();
 
-        // each requests does `number_of_retries` retries and waits for it `delay_s` seconds
-        let number_of_retries = 1;
-        let delay_s = 1;
-
         let stac_response =
             std::fs::read_to_string(test_data!("pro/stac_responses/items_page_1_limit_500.json"))
                 .unwrap();
@@ -965,39 +953,76 @@ mod tests {
         );
 
         // HEAD request
+        let head_success_response = || {
+            responders::status_code(200)
+                .append_header(
+                    "x-amz-id-2",
+                    "avRd0/ks4ATH99UNXBCfqZAEQ3BckuLJTj7iG1jQrGoxOtwswqHrok10u+VMHO3twVIhUmQKLwg=",
+                )
+                .append_header("x-amz-request-id", "VVHWX1P45NP7KNWV")
+                .append_header("Date", "Tue, 11 Oct 2022 16:06:03 GMT")
+                .append_header("Last-Modified", "Fri, 09 Sep 2022 00:32:25 GMT")
+                .append_header("ETag", "\"09a4c36021930e67dd1c71ed303cdf4e-24\"")
+                .append_header("Cache-Control", "public, max-age=31536000, immutable")
+                .append_header("Accept-Ranges", "bytes")
+                .append_header(
+                    "Content-Type",
+                    "image/tiff; application=geotiff; profile=cloud-optimized",
+                )
+                .append_header("Server", "AmazonS3")
+                .append_header("Content-Length", "197770048")
+        };
+
         server.expect(
-            Expectation::matching(
-                request::method_path("HEAD", "/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif"),
-            )
-            .times(2)
+            Expectation::matching(request::method_path(
+                "HEAD",
+                "/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif",
+            ))
+            .times(7)
             .respond_with(responders::cycle![
                 // first fail
+                responders::status_code(500),
+                // then time out
                 responders::delay_and_then(
                     std::time::Duration::from_secs(10),
                     responders::status_code(500)
                 ),
                 // then succeed
-                responders::status_code(200)
-                    .append_header(
-                        "x-amz-id-2",
-                        "avRd0/ks4ATH99UNXBCfqZAEQ3BckuLJTj7iG1jQrGoxOtwswqHrok10u+VMHO3twVIhUmQKLwg=",
-                    )
-                    .append_header("x-amz-request-id", "VVHWX1P45NP7KNWV")
-                    .append_header("Date", "Tue, 11 Oct 2022 16:06:03 GMT")
-                    .append_header("Last-Modified", "Fri, 09 Sep 2022 00:32:25 GMT")
-                    .append_header("ETag", "\"09a4c36021930e67dd1c71ed303cdf4e-24\"")
-                    .append_header("Cache-Control", "public, max-age=31536000, immutable")
-                    .append_header("Accept-Ranges", "bytes")
-                    .append_header(
-                        "Content-Type",
-                        "image/tiff; application=geotiff; profile=cloud-optimized",
-                    )
-                    .append_header("Server", "AmazonS3")
-                    .append_header("Content-Length", "197770048"),
+                head_success_response(), // -> GET COG header fails
+                head_success_response(), // -> GET COG header times out
+                head_success_response(), // -> GET COG header succeeds, GET tile fails
+                head_success_response(), // -> GET COG header succeeds, GET tile times out
+                head_success_response(), // -> GET COG header succeeds, GET tile IReadBlock failed
             ]),
         );
 
         // GET request to read contents of COG header
+        let get_success_response = || {
+            responders::status_code(206)
+                .append_header("Content-Type", "application/json")
+                .body(
+                    include_bytes!("../../../../../test_data/pro/stac_responses/cog-header.bin")
+                        .to_vec(),
+                )
+                .append_header(
+                    "x-amz-id-2",
+                    "avRd0/ks4ATH99UNXBCfqZAEQ3BckuLJTj7iG1jQrGoxOtwswqHrok10u+VMHO3twVIhUmQKLwg=",
+                )
+                .append_header("x-amz-request-id", "VVHWX1P45NP7KNWV")
+                .append_header("Date", "Tue, 11 Oct 2022 16:06:03 GMT")
+                .append_header("Last-Modified", "Fri, 09 Sep 2022 00:32:25 GMT")
+                .append_header("ETag", "\"09a4c36021930e67dd1c71ed303cdf4e-24\"")
+                .append_header("Cache-Control", "public, max-age=31536000, immutable")
+                .append_header("Accept-Ranges", "bytes")
+                .append_header("Content-Range", "bytes 0-16383/197770048")
+                .append_header(
+                    "Content-Type",
+                    "image/tiff; application=geotiff; profile=cloud-optimized",
+                )
+                .append_header("Server", "AmazonS3")
+                .append_header("Content-Length", "16384")
+        };
+
         server.expect(
             Expectation::matching(all_of![
                 request::method_path(
@@ -1006,38 +1031,19 @@ mod tests {
                 ),
                 request::headers(contains(("range", "bytes=0-16383"))),
             ])
-            .times(2)
+            .times(5)
             .respond_with(responders::cycle![
                 // first fail
+                responders::status_code(500),
+                // then time out
                 responders::delay_and_then(
                     std::time::Duration::from_secs(10),
                     responders::status_code(500)
                 ),
                 // then succeed
-                responders::status_code(206)
-                    .append_header("Content-Type", "application/json")
-                    .body(
-                        include_bytes!(
-                            "../../../../../test_data/pro/stac_responses/cog-header.bin"
-                        )
-                        .to_vec()
-                    ).append_header(
-                        "x-amz-id-2",
-                        "avRd0/ks4ATH99UNXBCfqZAEQ3BckuLJTj7iG1jQrGoxOtwswqHrok10u+VMHO3twVIhUmQKLwg=",
-                    )
-                    .append_header("x-amz-request-id", "VVHWX1P45NP7KNWV")
-                    .append_header("Date", "Tue, 11 Oct 2022 16:06:03 GMT")
-                    .append_header("Last-Modified", "Fri, 09 Sep 2022 00:32:25 GMT")
-                    .append_header("ETag", "\"09a4c36021930e67dd1c71ed303cdf4e-24\"")
-                    .append_header("Cache-Control", "public, max-age=31536000, immutable")
-                    .append_header("Accept-Ranges", "bytes")
-                    .append_header("Content-Range", "bytes 0-16383/197770048")
-                    .append_header(
-                        "Content-Type",
-                        "image/tiff; application=geotiff; profile=cloud-optimized",
-                    )
-                    .append_header("Server", "AmazonS3")
-                    .append_header("Content-Length", "16384"),
+                get_success_response(), // -> GET tile fails
+                get_success_response(), // -> GET tile times out
+                get_success_response(), // -> GET tile times IReadBlock failed
             ]),
         );
 
@@ -1050,14 +1056,41 @@ mod tests {
                 ),
                 request::headers(contains(("range", "bytes=46170112-46186495"))),
             ])
-            .times(2)
+            .times(4)
             .respond_with(responders::cycle![
                 // first fail
+                responders::status_code(500),
+                // then time out
                 responders::delay_and_then(
                     std::time::Duration::from_secs(10),
                     responders::status_code(500)
                 ),
-                // then succeed
+                // then return incomplete tile (to force error "band 1: IReadBlock failed at X offset 0, Y offset 0: TIFFReadEncodedTile() failed.")
+                responders::status_code(206)
+                    .append_header("Content-Type", "application/json")
+                    .body(
+                        include_bytes!(
+                            "../../../../../test_data/pro/stac_responses/cog-tile.bin"
+                        )[0..2]
+                        .to_vec()
+                    ).append_header(
+                        "x-amz-id-2",
+                        "avRd0/ks4ATH99UNXBCfqZAEQ3BckuLJTj7iG1jQrGoxOtwswqHrok10u+VMHO3twVIhUmQKLwg=",
+                    )
+                    .append_header("x-amz-request-id", "VVHWX1P45NP7KNWV")
+                    .append_header("Date", "Tue, 11 Oct 2022 16:06:03 GMT")
+                    .append_header("Last-Modified", "Fri, 09 Sep 2022 00:32:25 GMT")
+                    .append_header("ETag", "\"09a4c36021930e67dd1c71ed303cdf4e-24\"")
+                    .append_header("Cache-Control", "public, max-age=31536000, immutable")
+                    .append_header("Accept-Ranges", "bytes")
+                    .append_header("Content-Range", "bytes 46170112-46170113/173560205")
+                    .append_header(
+                        "Content-Type",
+                        "image/tiff; application=geotiff; profile=cloud-optimized",
+                    )
+                    .append_header("Server", "AmazonS3")
+                    .append_header("Content-Length", "2"),
+                 // then succeed
                 responders::status_code(206)
                     .append_header("Content-Type", "application/json")
                     .body(
@@ -1103,8 +1136,7 @@ mod tests {
                 }],
                 stac_api_retries: Default::default(),
                 gdal_retries: GdalRetries {
-                    number_of_retries,
-                    delay_s,
+                    number_of_retries: 999,
                 },
             });
 
@@ -1162,10 +1194,10 @@ mod tests {
                         ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(), ".tif".to_owned()),
                         ("GDAL_DISABLE_READDIR_ON_OPEN".to_owned(), "EMPTY_DIR".to_owned()),
                         ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
-                        ("GDAL_HTTP_RETRY_DELAY".to_owned(), delay_s.to_string()),
-                        ("GDAL_HTTP_MAX_RETRY".to_owned(), number_of_retries.to_string())
+                        ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
                         ]),
                     allow_alphaband_as_mask: true,
+                    retry: Some(GdalRetryOptions { max_retries: 999 }),
                 }),
             }]
         );

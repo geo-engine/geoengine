@@ -707,7 +707,7 @@ mod tests {
 
         // 2. wait for all subtasks to schedule
 
-        let all_task_ids: Vec<TaskId> = crate::util::retry::retry(5, 100, 2., || {
+        let all_task_ids: Vec<TaskId> = geoengine_datatypes::util::retry::retry(5, 100, 2., || {
             let task_manager = ctx.tasks();
             async move {
                 let task_list = task_manager

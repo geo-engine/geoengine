@@ -5,6 +5,7 @@ pub mod helpers;
 pub mod identifiers;
 pub mod ranges;
 mod result;
+pub mod retry;
 pub mod well_known_data;
 
 pub mod test;

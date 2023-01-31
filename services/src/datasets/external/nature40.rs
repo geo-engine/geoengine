@@ -10,13 +10,13 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::parsing::{deserialize_base_url, string_or_string_array};
-use crate::util::retry::retry;
 use crate::workflows::workflow::Workflow;
 use crate::{error, util::user_input::Validated};
 use async_trait::async_trait;
 use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
+use geoengine_datatypes::util::retry::retry;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -958,6 +958,7 @@ mod tests {
                         gdal_open_options: Some(vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]),
                         gdal_config_options: None,
                         allow_alphaband_as_mask: true,
+                        retry: None,
                     })
                 }
             );
