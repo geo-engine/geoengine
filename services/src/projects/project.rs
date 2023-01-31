@@ -23,7 +23,7 @@ use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
-use utoipa::ToSchema;
+use utoipa::{ToSchema, IntoParams};
 
 identifier!(ProjectId);
 
@@ -437,8 +437,27 @@ impl Default for ProjectFilter {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(example = json!({
+    "name": "Test",
+    "description": "Foo",
+    "bounds": {
+        "spatialReference": "EPSG:4326",
+        "boundingBox": {
+            "lowerLeftCoordinate": { "x": 0, "y": 0 },
+            "upperRightCoordinate": { "x": 1, "y": 1 }
+        },
+        "timeInterval": {
+            "start": 0,
+            "end": 1
+        }
+    },
+    "timeStep": {
+        "step": 1,
+        "granularity": "months"
+    }
+}))]
 pub struct CreateProject {
     pub name: String,
     pub description: String,
@@ -499,12 +518,15 @@ impl UserInput for UpdateProject {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, IntoParams)]
 pub struct ProjectListOptions {
     #[serde(default)]
     pub filter: ProjectFilter,
+    #[param(example = "NameAsc")]
     pub order: OrderBy,
+    #[param(example = 0)]
     pub offset: u32,
+    #[param(example = 2)]
     pub limit: u32,
 }
 

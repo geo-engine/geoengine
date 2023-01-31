@@ -375,7 +375,7 @@ async fn resolve_provenance<C: Context>(
     request_body = RasterDatasetFromWorkflow,
     responses(
         (status = 200, description = "Id of created task", body = TaskResponse,
-        example = json!({"task_id": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"})
+            example = json!({"task_id": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"})
         )
     ),
     params(

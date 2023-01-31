@@ -39,11 +39,7 @@ use crate::layers::layer::{
 use crate::layers::listing::LayerCollectionId;
 use crate::ogc::util::OgcBoundingBox;
 use crate::ogc::{wcs, wfs, wms};
-use crate::projects::{
-    ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
-    PolygonSymbology, ProjectId, RasterSymbology, STRectangle, StrokeParam, Symbology,
-    TextSymbology,
-};
+use crate::projects::{ColorParam, CreateProject, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology, PolygonSymbology, ProjectId, ProjectListing, ProjectListOptions, RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology};
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
 use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo, IdResponse};
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -95,6 +91,8 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
+        handlers::projects::create_project_handler,
+        handlers::projects::list_projects_handler
     ),
     components(
         schemas(
@@ -272,7 +270,11 @@ use utoipa::{Modify, OpenApi};
             AddDataset,
             Volume,
             VolumeName,
-            DataPath
+            DataPath,
+
+            CreateProject,
+            ProjectListOptions,
+            ProjectListing
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

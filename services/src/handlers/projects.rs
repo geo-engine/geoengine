@@ -1,9 +1,10 @@
 use crate::error::Result;
 use crate::handlers::Context;
-use crate::projects::{CreateProject, ProjectDb, ProjectId, ProjectListOptions, UpdateProject};
+use crate::projects::{ProjectDb, ProjectFilter, ProjectId, UpdateProject};
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use actix_web::{web, FromRequest, HttpResponse, Responder};
+pub use crate::projects::{CreateProject, ProjectListOptions};
 
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -20,40 +21,21 @@ where
         );
 }
 
-/// Create a new project for the user by providing [`CreateProject`].
-///
-/// # Example
-///
-/// ```text
-/// POST /project
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "name": "Test",
-///   "description": "Foo",
-///   "bounds": {
-///     "spatialReference": "EPSG:4326",
-///     "boundingBox": {
-///       "lowerLeftCoordinate": { "x": 0, "y": 0 },
-///       "upperRightCoordinate": { "x": 1, "y": 1 }
-///     },
-///     "timeInterval": {
-///       "start": 0,
-///       "end": 1
-///     }
-///   },
-///   "timeStep": {
-///     "step": 1,
-///     "granularity": "months"
-///   }
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"
-/// }
-/// ```
+/// Create a new project for the user.
+#[utoipa::path(
+    tag = "Projects",
+    post,
+    path = "/project",
+    request_body = CreateProject,
+    responses(
+        (status = 200, description = "OK", body = IdResponse,
+            example = json!({"id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"})
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn create_project_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -85,6 +67,29 @@ pub(crate) async fn create_project_handler<C: Context>(
 ///   }
 /// ]
 /// ```
+#[utoipa::path(
+    tag = "Projects",
+    get,
+    path = "/projects",
+    responses(
+        (status = 200, description = "List of projects the user can access", body = [ProjectListing],
+            example = json!([
+                {
+                    "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+                    "name": "Test",
+                    "description": "Foo",
+                    "layerNames": [],
+                    "plotNames": [],
+                    "changed": "2021-04-26T14:03:51.984537900Z"
+                }
+            ])
+        )
+    ),
+    params(ProjectListOptions),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn list_projects_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
