@@ -40,7 +40,7 @@ pub struct Dataset {
     pub result_descriptor: TypedResultDescriptor,
     pub source_operator: String,
     pub symbology: Option<Symbology>,
-    pub provenance: Option<Provenance>,
+    pub provenance: Option<Vec<Provenance>>,
 }
 
 impl Dataset {

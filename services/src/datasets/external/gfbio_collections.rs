@@ -1254,11 +1254,11 @@ mod tests {
                     provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
                     layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0602".to_string()),
                 }),
-                provenance: Some(Provenance {
+                provenance: Some(vec![Provenance {
                     citation: "ZFMK Arthropoda Working Group. (2021). ZFMK Scorpiones collection. [Dataset]. Version: 1.2. Data Publisher: Data Center ZFMK. https://doi.org/10.20363/zfmk-coll.scorpiones-2018-11.".to_owned(),
                     license: "CC-BY-SA".to_owned(),
                     uri: "https://www.zfmk.de/en/research/collections/basal-arthropods".to_owned(),
-                }),
+                }]),
             };
 
             if result != expected {

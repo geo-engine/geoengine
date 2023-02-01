@@ -882,11 +882,13 @@ mod tests {
                     "temporalExtend":null
                 }
             },
-            "provenance":{
-            "citation":"Test",
-            "license":"MIT",
-            "uri":"http://geoengine.io"
-            }
+            "provenance": [
+                {
+                    "citation":"Test",
+                    "license":"MIT",
+                    "uri":"http://geoengine.io"
+                }
+            ]
         })
     }
 
@@ -910,11 +912,13 @@ mod tests {
                     }
                 }
             },
-            "provenance":{
-                "citation":"Test",
-                "license":"MIT",
-                "uri":"http://geoengine.io"
-            }
+            "provenance": [
+                {
+                    "citation":"Test",
+                    "license":"MIT",
+                    "uri":"http://geoengine.io"
+                }
+            ]
         })
     }
 
