@@ -43,6 +43,8 @@ use std::convert::TryInto;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
+static STAC_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SentinelS2L2ACogsProviderDefinition {
@@ -574,6 +576,7 @@ impl SentinelS2L2aCogsMetaData {
             self.stac_api_retries.number_of_retries,
             self.stac_api_retries.initial_delay_ms,
             self.stac_api_retries.exponential_backoff_factor,
+            Some(STAC_RETRY_MAX_BACKOFF_MS),
             || async {
                 let text = client
                     .get(&self.api_url)

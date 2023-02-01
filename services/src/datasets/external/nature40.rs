@@ -300,6 +300,7 @@ impl Nature40DataProvider {
             self.request_retries.number_of_retries,
             self.request_retries.initial_delay_ms,
             self.request_retries.exponential_backoff_factor,
+            None,
             || self.try_load_dataset(db_url.clone()),
         )
         .await

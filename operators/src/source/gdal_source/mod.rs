@@ -59,7 +59,8 @@ use tracing::{span, Level};
 mod error;
 mod loading_info;
 
-static GDAL_RETRY_INITIAL_BACKOFF_MS: u64 = 1;
+static GDAL_RETRY_INITIAL_BACKOFF_MS: u64 = 1000;
+static GDAL_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
 static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 
 /// Parameters for the GDAL Source Operator
@@ -443,6 +444,7 @@ impl GdalRasterLoader {
                 .unwrap_or_default(),
             GDAL_RETRY_INITIAL_BACKOFF_MS,
             GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
+            Some(GDAL_RETRY_MAX_BACKOFF_MS),
             move || {
                 let ds = dataset_params.clone();
                 let file_path = ds.file_path.clone();
