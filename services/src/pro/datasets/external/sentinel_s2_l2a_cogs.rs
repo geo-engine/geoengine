@@ -23,7 +23,6 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
-use geoengine_datatypes::util::retry::retry;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, OperatorName, RasterOperator, RasterResultDescriptor,
     TypedOperator, VectorResultDescriptor,
@@ -34,6 +33,7 @@ use geoengine_operators::source::{
     GdalLoadingInfoTemporalSliceIterator, GdalRetryOptions, GdalSource, GdalSourceParameters,
     OgrSourceDataset,
 };
+use geoengine_operators::util::retry::retry;
 use log::debug;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};

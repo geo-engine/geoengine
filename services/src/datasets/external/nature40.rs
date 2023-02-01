@@ -16,7 +16,6 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
-use geoengine_datatypes::util::retry::retry;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -29,6 +28,7 @@ use geoengine_operators::source::GdalSourceParameters;
 use geoengine_operators::util::gdal::{
     gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
 };
+use geoengine_operators::util::retry::retry;
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,

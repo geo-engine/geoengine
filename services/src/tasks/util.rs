@@ -13,7 +13,7 @@ pub mod test {
         task_manager: Arc<impl TaskManager<C>>,
         task_id: TaskId,
     ) {
-        geoengine_datatypes::util::retry::retry(5, 100, 2., move || {
+        geoengine_operators::util::retry::retry(5, 100, 2., move || {
             let task_manager = task_manager.clone();
             async move {
                 let status = task_manager.status(task_id).await.unwrap();

@@ -2,6 +2,7 @@ use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{CreateSpan, MetaData, OperatorData, OperatorName, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
+use crate::util::retry::retry;
 use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::{
     engine::{
@@ -33,7 +34,6 @@ use geoengine_datatypes::raster::{
     RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
     TilingStrategy,
 };
-use geoengine_datatypes::util::retry::retry;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{dataset::DataId, raster::TileInformation};
 use geoengine_datatypes::{
