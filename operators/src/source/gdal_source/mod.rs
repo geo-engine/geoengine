@@ -435,6 +435,7 @@ impl GdalRasterLoader {
         tile_information: TileInformation,
         tile_time: TimeInterval,
     ) -> Result<RasterTile2D<T>> {
+        // TODO: detect usage of vsi curl properly, e.g. also check for `/vsicurl_streaming` and combinations with `/vsizip`
         let is_vsi_curl = dataset_params.file_path.starts_with("/vsicurl/");
 
         retry(
