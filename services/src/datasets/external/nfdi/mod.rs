@@ -414,6 +414,7 @@ impl NFDIDataProvider {
                 gdal_open_options: None,
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
+                retry: None,
             }),
         };
 
@@ -881,11 +882,13 @@ mod tests {
                     "temporalExtend":null
                 }
             },
-            "provenance":{
-            "citation":"Test",
-            "license":"MIT",
-            "uri":"http://geoengine.io"
-            }
+            "provenance": [
+                {
+                    "citation":"Test",
+                    "license":"MIT",
+                    "uri":"http://geoengine.io"
+                }
+            ]
         })
     }
 
@@ -909,11 +912,13 @@ mod tests {
                     }
                 }
             },
-            "provenance":{
-                "citation":"Test",
-                "license":"MIT",
-                "uri":"http://geoengine.io"
-            }
+            "provenance": [
+                {
+                    "citation":"Test",
+                    "license":"MIT",
+                    "uri":"http://geoengine.io"
+                }
+            ]
         })
     }
 

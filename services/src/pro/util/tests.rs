@@ -344,11 +344,11 @@ pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
             description: "NDVI data from MODIS".to_string(),
             source_operator: "GdalSource".to_string(),
             symbology: None,
-            provenance: Some(Provenance {
+            provenance: Some(vec![Provenance {
                 citation: "Sample Citation".to_owned(),
                 license: "Sample License".to_owned(),
                 uri: "http://example.org/".to_owned(),
-            }),
+            }]),
         },
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };

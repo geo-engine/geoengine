@@ -850,6 +850,7 @@ mod tests {
                     gdal_open_options: None,
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
+                    retry: None,
                 },
                 step: TimeStep {
                     granularity: TimeGranularity::Months,
@@ -944,6 +945,7 @@ mod tests {
                     gdal_open_options: None,
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
+                    retry: None,
                 },
                 step: TimeStep {
                     granularity: TimeGranularity::Years,
@@ -1219,6 +1221,7 @@ mod tests {
                             gdal_open_options: None,
                             gdal_config_options: None,
                             allow_alphaband_as_mask: true,
+                            retry: None,
                         }),
                     },
                     GdalLoadingInfoTemporalSlice {
@@ -1244,6 +1247,7 @@ mod tests {
                             gdal_open_options: None,
                             gdal_config_options: None,
                             allow_alphaband_as_mask: true,
+                            retry: None,
                         }),
                     },
                     GdalLoadingInfoTemporalSlice {
@@ -1269,6 +1273,7 @@ mod tests {
                             gdal_open_options: None,
                             gdal_config_options: None,
                             allow_alphaband_as_mask: true,
+                            retry: None,
                         }),
                     }
                 ],

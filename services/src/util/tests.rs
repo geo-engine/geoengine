@@ -127,11 +127,11 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
             description: "NDVI data from MODIS".to_string(),
             source_operator: "GdalSource".to_string(),
             symbology: None,
-            provenance: Some(Provenance {
+            provenance: Some(vec![Provenance {
                 citation: "Sample Citation".to_owned(),
                 license: "Sample License".to_owned(),
                 uri: "http://example.org/".to_owned(),
-            }),
+            }]),
         },
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
@@ -186,11 +186,11 @@ pub async fn add_land_cover_to_datasets(ctx: &InMemoryContext) -> DatasetId {
                     RgbaColor::transparent(),
                 ).unwrap().into(),
             })),
-            provenance: Some(Provenance {
+            provenance: Some(vec![Provenance {
                 citation: "Friedl, M., D. Sulla-Menashe. MCD12C1 MODIS/Terra+Aqua Land Cover Type Yearly L3 Global 0.05Deg CMG V006. 2015, distributed by NASA EOSDIS Land Processes DAAC, https://doi.org/10.5067/MODIS/MCD12C1.006. Accessed 2022-03-16.".to_owned(),
                 license: "All data distributed by the LP DAAC contain no restrictions on the data reuse. (https://lpdaac.usgs.gov/resources/faqs/#am-i-allowed-to-reuse-lp-daac-data)".to_owned(),
                 uri: "https://doi.org/10.5067/MODIS/MCD12C1.006".to_owned(),
-            }),
+            }]),
         },
         meta_data: MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
             time: Some(geoengine_datatypes::primitives::TimeInterval::default().into()),

@@ -881,6 +881,9 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
     responses(
         (status = 200, description = "OK"),
     ),
+    params(
+        ("dataset" = DatasetId, description = "Dataset id")
+    ),
     security(
         ("session_token" = [])
     )
