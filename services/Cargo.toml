@@ -106,3 +106,4 @@ vergen = "7"
 [[bench]]
 name = "quota_check"
 harness = false
+required-features = ["pro"]

@@ -337,11 +337,6 @@ mod tests {
 
         let session = ctx.user_db_ref().anonymous().await.unwrap();
 
-        ctx.user_db_ref()
-            .update_quota_available_by_user(&session.user.id, 9999)
-            .await
-            .unwrap();
-
         let session_id = session.id();
 
         let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;

@@ -43,6 +43,13 @@ impl UserDb for HashMapUserDb {
         let id = user.id;
         users.insert(user_registration.email, user);
 
+        let mut quota_available = self.quota_available.write().await;
+        quota_available.insert(
+            id,
+            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                .default_available_quota,
+        );
+
         Ok(id)
     }
 

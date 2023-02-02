@@ -367,7 +367,6 @@ mod tests {
     use super::*;
     use crate::contexts::{Context, Session};
     use crate::error::Result;
-    use crate::pro::users::UserDb;
     use crate::test_data;
     use crate::util::tests::TestDataUploads;
     use crate::{
@@ -422,11 +421,6 @@ mod tests {
 
         let ctx = ProInMemoryContext::test_default();
         let session = create_session_helper(&ctx).await;
-
-        ctx.user_db_ref()
-            .update_quota_available_by_user(&session.user.id, 9999)
-            .await
-            .unwrap();
 
         // file upload into geo engine
         // TODO: properly upload the data using the handler once this is possible in a test (after migration to actix)

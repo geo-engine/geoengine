@@ -15,7 +15,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::pro::meta::quota::QuotaCheck;
-use geoengine_operators::pro::meta::statistics::InitializedProcessorStatistics;
+use geoengine_operators::pro::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 pub use in_memory::ProInMemoryContext;
 #[cfg(feature = "postgres")]
@@ -124,7 +124,7 @@ where
         op: Box<dyn geoengine_operators::engine::InitializedRasterOperator>,
         span: CreateSpan,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
-        Box::new(InitializedProcessorStatistics::new(op, span))
+        Box::new(InitializedOperatorWrapper::new(op, span))
     }
 
     fn wrap_initialized_vector_operator(
@@ -132,7 +132,7 @@ where
         op: Box<dyn InitializedVectorOperator>,
         span: CreateSpan,
     ) -> Box<dyn InitializedVectorOperator> {
-        Box::new(InitializedProcessorStatistics::new(op, span))
+        Box::new(InitializedOperatorWrapper::new(op, span))
     }
 
     fn wrap_initialized_plot_operator(

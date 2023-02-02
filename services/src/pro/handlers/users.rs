@@ -1372,7 +1372,12 @@ mod tests {
             ));
         let res = send_pro_test_request(req, ctx.clone()).await;
         let quota: Quota = test::read_body_json(res).await;
-        assert_eq!(quota.available, 0);
+        assert_eq!(
+            quota.available,
+            crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                .unwrap()
+                .default_available_quota
+        );
 
         let update = UpdateQuota { available: 123 };
 
@@ -1440,6 +1445,11 @@ mod tests {
             ("exceptions", "JSON"),
         ];
 
+        ctx.user_db_ref()
+            .update_quota_available_by_user(&session.user.id, 0)
+            .await
+            .unwrap();
+
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
                 "/wms/{}?{}",
@@ -1449,7 +1459,13 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
         let res = send_pro_test_request(req, ctx.clone()).await;
 
-        ErrorResponse::assert(res, 200, "Operator", "Operator: QuotaExhausted").await;
+        ErrorResponse::assert(
+            res,
+            200,
+            "Operator",
+            "Operator: CreatingProcessorFailed: QuotaExhausted",
+        )
+        .await;
 
         ctx.user_db_ref()
             .update_quota_available_by_user(&session.user.id, 9999)

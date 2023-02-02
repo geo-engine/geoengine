@@ -2396,7 +2396,9 @@ mod tests {
 
             assert_eq!(
                 ctx.user_db_ref().quota_available(&session).await.unwrap(),
-                0
+                crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                    .unwrap()
+                    .default_available_quota
             );
 
             assert_eq!(
@@ -2404,7 +2406,9 @@ mod tests {
                     .quota_available_by_user(&user)
                     .await
                     .unwrap(),
-                0
+                crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                    .unwrap()
+                    .default_available_quota
             );
 
             ctx.user_db_ref()

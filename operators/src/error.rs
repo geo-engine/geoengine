@@ -354,7 +354,6 @@ pub enum Error {
         found: usize,
     },
 
-    #[cfg(feature = "pro")]
     QuotaExhausted,
 
     QueryingProcessorFailed {
