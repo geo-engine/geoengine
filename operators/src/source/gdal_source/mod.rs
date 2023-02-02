@@ -52,7 +52,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::CString;
 use std::marker::PhantomData;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tracing::{span, Level};
 
@@ -462,13 +462,7 @@ impl GdalRasterLoader {
                             if is_vsi_curl {
                                 // clear the VSICurl cache, to force GDAL to try to re-download the file
                                 // otherwise it will assume any observed error will happen again
-                                unsafe {
-                                    if let Some(Some(c_string)) =
-                                        file_path.to_str().map(|s| CString::new(s).ok())
-                                    {
-                                        VSICurlPartialClearCache(c_string.as_ptr());
-                                    }
-                                }
+                                clear_gdal_vsi_cache_for_path(file_path.as_path());
                             }
 
                             Err(e)
@@ -552,15 +546,7 @@ impl GdalRasterLoader {
         );
 
         if let Err(error) = &dataset_result {
-            let is_file_not_found = matches!(
-                error,
-                Error::Gdal {
-                    source: GdalError::NullPointer {
-                        method_name,
-                        msg
-                    },
-                } if *method_name == "GDALOpenEx" && (*msg == "HTTP response code: 404" || msg.ends_with("No such file or directory"))
-            );
+            let is_file_not_found = error_is_gdal_file_not_found(error);
 
             let err_result = match dataset_params.file_not_found_handling {
                 FileNotFoundHandling::NoData if is_file_not_found => {
@@ -623,6 +609,26 @@ impl GdalRasterLoader {
             })
             .try_flatten()
             .try_buffered(16) // TODO: make this configurable
+    }
+}
+
+fn error_is_gdal_file_not_found(error: &Error) -> bool {
+    matches!(
+        error,
+        Error::Gdal {
+            source: GdalError::NullPointer {
+                method_name,
+                msg
+            },
+        } if *method_name == "GDALOpenEx" && (*msg == "HTTP response code: 404" || msg.ends_with("No such file or directory"))
+    )
+}
+
+fn clear_gdal_vsi_cache_for_path(file_path: &Path) {
+    unsafe {
+        if let Some(Some(c_string)) = file_path.to_str().map(|s| CString::new(s).ok()) {
+            VSICurlPartialClearCache(c_string.as_ptr());
+        }
     }
 }
 
@@ -2232,5 +2238,88 @@ mod tests {
         // 500 => error
         let result = GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn it_retries_only_after_clearing_vsi_cache() {
+        hide_gdal_errors();
+
+        let server = Server::run();
+
+        server.expect(
+            Expectation::matching(request::method_path("HEAD", "/foo.tif"))
+                .times(2)
+                .respond_with(responders::cycle![
+                    // first generic error
+                    responders::status_code(500),
+                    // then 404 file not found
+                    responders::status_code(404)
+                ]),
+        );
+
+        let file_path: PathBuf = format!("/vsicurl/{}", server.url_str("/foo.tif")).into();
+
+        let options = Some(vec![
+            (
+                "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
+                ".tif".to_owned(),
+            ),
+            (
+                "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                "EMPTY_DIR".to_owned(),
+            ),
+            ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
+            ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
+        ]);
+
+        let _thread_local_configs = options
+            .as_ref()
+            .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
+
+        // first fail
+        let result = gdal_open_dataset_ex(
+            file_path.as_path(),
+            DatasetOptions {
+                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
+                ..DatasetOptions::default()
+            },
+        );
+
+        // it failed, but not with file not found
+        assert!(result.is_err());
+        if let Err(error) = result {
+            assert!(!error_is_gdal_file_not_found(&error));
+        }
+
+        // second fail doesn't even try, so still not "file not found", even though it should be now
+        let result = gdal_open_dataset_ex(
+            file_path.as_path(),
+            DatasetOptions {
+                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
+                ..DatasetOptions::default()
+            },
+        );
+
+        assert!(result.is_err());
+        if let Err(error) = result {
+            assert!(!error_is_gdal_file_not_found(&error));
+        }
+
+        clear_gdal_vsi_cache_for_path(file_path.as_path());
+
+        // after clearing the cache, it tries again
+        let result = gdal_open_dataset_ex(
+            file_path.as_path(),
+            DatasetOptions {
+                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
+                ..DatasetOptions::default()
+            },
+        );
+
+        // now we get the file not found error
+        assert!(result.is_err());
+        if let Err(error) = result {
+            assert!(error_is_gdal_file_not_found(&error));
+        }
     }
 }
