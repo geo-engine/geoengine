@@ -699,31 +699,32 @@ mod tests {
 
         // 2. wait for all subtasks to schedule
 
-        let all_task_ids: Vec<TaskId> = crate::util::retry::retry(5, 100, 2., || {
-            let task_manager = ctx.tasks();
-            async move {
-                let task_list = task_manager
-                    .list(
-                        TaskListOptions {
-                            filter: None,
-                            offset: 0,
-                            limit: 10,
-                        }
-                        .validated()
-                        .unwrap(),
-                    )
-                    .await
-                    .unwrap();
+        let all_task_ids: Vec<TaskId> =
+            geoengine_operators::util::retry::retry(5, 100, 2., None, || {
+                let task_manager = ctx.tasks();
+                async move {
+                    let task_list = task_manager
+                        .list(
+                            TaskListOptions {
+                                filter: None,
+                                offset: 0,
+                                limit: 10,
+                            }
+                            .validated()
+                            .unwrap(),
+                        )
+                        .await
+                        .unwrap();
 
-                if task_list.len() == 3 {
-                    Ok(task_list.into_iter().map(|t| t.task_id).collect())
-                } else {
-                    Err(())
+                    if task_list.len() == 3 {
+                        Ok(task_list.into_iter().map(|t| t.task_id).collect())
+                    } else {
+                        Err(())
+                    }
                 }
-            }
-        })
-        .await
-        .unwrap();
+            })
+            .await
+            .unwrap();
 
         // 3. abort task
 

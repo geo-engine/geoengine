@@ -69,6 +69,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
+            retry: None,
         },
         result_descriptor: RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -200,6 +201,7 @@ pub fn gdal_parameters_from_dataset(
         gdal_open_options: open_options,
         gdal_config_options: None,
         allow_alphaband_as_mask: true,
+        retry: None,
     })
 }
 
