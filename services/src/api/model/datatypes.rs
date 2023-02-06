@@ -269,10 +269,13 @@ impl SpatialReference {
     }
 }
 
-impl ToSchema for SpatialReference {
-    fn schema() -> utoipa::openapi::schema::Schema {
+impl<'a> ToSchema<'a> for SpatialReference {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
-        ObjectBuilder::new().schema_type(SchemaType::String).into()
+        (
+            "SpatialReference",
+            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+        )
     }
 }
 
@@ -780,58 +783,17 @@ impl From<SpatialPartition2D> for geoengine_datatypes::primitives::SpatialPartit
 }
 
 /// A spatio-temporal rectangle with a specified resolution
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[aliases(
+    VectorQueryRectangle = QueryRectangle<BoundingBox2D>,
+    RasterQueryRectangle = QueryRectangle<SpatialPartition2D>,
+    PlotQueryRectangle = QueryRectangle<BoundingBox2D>)
+]
 pub struct QueryRectangle<SpatialBounds> {
     pub spatial_bounds: SpatialBounds,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
-}
-
-pub type VectorQueryRectangle = QueryRectangle<BoundingBox2D>;
-pub type RasterQueryRectangle = QueryRectangle<SpatialPartition2D>;
-pub type PlotQueryRectangle = QueryRectangle<BoundingBox2D>;
-
-// manual implementation, because derivation can't handle the `SpatialBounds` generic (yet)
-impl ToSchema for QueryRectangle<SpatialPartition2D> {
-    fn schema() -> utoipa::openapi::Schema {
-        use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property("spatialBounds", Ref::from_schema_name("SpatialPartition2D"))
-            .required("spatialBounds")
-            .property("timeInterval", Ref::from_schema_name("TimeInterval"))
-            .required("timeInterval")
-            .property(
-                "spatialResolution",
-                Ref::from_schema_name("SpatialResolution"),
-            )
-            .required("spatialResolution")
-            .description(Some(
-                "A spatio-temporal rectangle with a specified resolution",
-            ))
-            .into()
-    }
-}
-
-/// manual implementation, because derivation can't handle the `SpatialBounds` generic (yet)
-impl ToSchema for QueryRectangle<BoundingBox2D> {
-    fn schema() -> utoipa::openapi::Schema {
-        use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property("spatialBounds", Ref::from_schema_name("BoundingBox2D"))
-            .required("spatialBounds")
-            .property("timeInterval", Ref::from_schema_name("TimeInterval"))
-            .required("timeInterval")
-            .property(
-                "spatialResolution",
-                Ref::from_schema_name("SpatialResolution"),
-            )
-            .required("spatialResolution")
-            .description(Some(
-                "A spatio-temporal rectangle with a specified resolution",
-            ))
-            .into()
-    }
 }
 
 /// The spatial resolution in SRS units
@@ -1019,10 +981,13 @@ pub struct TimeInterval {
     end: TimeInstance,
 }
 
-impl ToSchema for TimeInterval {
-    fn schema() -> utoipa::openapi::schema::Schema {
+impl<'a> ToSchema<'a> for TimeInterval {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
-        ObjectBuilder::new().schema_type(SchemaType::String).into()
+        (
+            "TimeInterval",
+            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+        )
     }
 }
 
@@ -1134,14 +1099,17 @@ impl std::fmt::Display for ResamplingMethod {
 pub struct RgbaColor([u8; 4]);
 
 // manual implementation utoipa generates an integer field
-impl ToSchema for RgbaColor {
-    fn schema() -> utoipa::openapi::schema::Schema {
+impl<'a> ToSchema<'a> for RgbaColor {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
-        ArrayBuilder::new()
-            .items(ObjectBuilder::new().schema_type(SchemaType::Integer))
-            .min_items(Some(4))
-            .max_items(Some(4))
-            .into()
+        (
+            "RgbaColor",
+            ArrayBuilder::new()
+                .items(ObjectBuilder::new().schema_type(SchemaType::Integer))
+                .min_items(Some(4))
+                .max_items(Some(4))
+                .into(),
+        )
     }
 }
 
@@ -1165,13 +1133,16 @@ pub struct Breakpoint {
 }
 
 // manual implementation because of NotNan
-impl ToSchema for Breakpoint {
-    fn schema() -> utoipa::openapi::schema::Schema {
+impl<'a> ToSchema<'a> for Breakpoint {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property("value", Object::with_type(SchemaType::Number))
-            .property("color", Ref::from_schema_name("RgbaColor"))
-            .into()
+        (
+            "Breakpoint",
+            ObjectBuilder::new()
+                .property("value", Object::with_type(SchemaType::Number))
+                .property("color", Ref::from_schema_name("RgbaColor"))
+                .into(),
+        )
     }
 }
 
@@ -1451,7 +1422,7 @@ impl DateTimeParseFormat {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct NoGeometry;
 
 impl From<geoengine_datatypes::primitives::NoGeometry> for NoGeometry {
@@ -1463,16 +1434,6 @@ impl From<geoengine_datatypes::primitives::NoGeometry> for NoGeometry {
 impl From<NoGeometry> for geoengine_datatypes::primitives::NoGeometry {
     fn from(_: NoGeometry) -> Self {
         Self {}
-    }
-}
-
-impl ToSchema for NoGeometry {
-    fn schema() -> utoipa::openapi::Schema {
-        use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .default(Some(serde_json::Value::Null))
-            .example(Some(serde_json::Value::Null))
-            .into()
     }
 }
 
@@ -1566,14 +1527,17 @@ impl From<MultiPolygon> for geoengine_datatypes::primitives::MultiPolygon {
 #[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
 pub struct StringPair((String, String));
 
-impl ToSchema for StringPair {
-    fn schema() -> utoipa::openapi::Schema {
+impl<'a> ToSchema<'a> for StringPair {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
-        ArrayBuilder::new()
-            .items(Object::with_type(SchemaType::String))
-            .min_items(Some(2))
-            .max_items(Some(2))
-            .into()
+        (
+            "StringPair",
+            ArrayBuilder::new()
+                .items(Object::with_type(SchemaType::String))
+                .min_items(Some(2))
+                .max_items(Some(2))
+                .into(),
+        )
     }
 }
 
