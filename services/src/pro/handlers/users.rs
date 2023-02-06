@@ -281,7 +281,7 @@ pub struct Quota {
 pub(crate) async fn quota_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: C::Session,
-) -> Result<impl Responder> {
+) -> Result<web::Json<Quota>> {
     let available = ctx.user_db_ref().quota_available(&session).await?;
     let used = ctx.user_db_ref().quota_used(&session).await?;
 
@@ -312,7 +312,7 @@ pub(crate) async fn get_user_quota_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: Either<AdminSession, C::Session>,
     user: web::Path<UserId>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<Quota>> {
     let user = user.into_inner();
 
     if let Either::Right(session) = session {
@@ -354,7 +354,7 @@ pub(crate) async fn update_user_quota_handler<C: ProContext>(
     _session: AdminSession,
     user: web::Path<UserId>,
     update: web::Json<UpdateQuota>,
-) -> Result<impl Responder> {
+) -> Result<HttpResponse> {
     let user = user.into_inner();
 
     let update = update.into_inner();
@@ -363,7 +363,7 @@ pub(crate) async fn update_user_quota_handler<C: ProContext>(
         .update_quota_available_by_user(&user, update.available)
         .await?;
 
-    Ok(actix_web::HttpResponse::Ok())
+    Ok(actix_web::HttpResponse::Ok().finish())
 }
 
 /// Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.
