@@ -28,3 +28,7 @@ client_id = ""
 client_secret = ""
 redirect_uri = ""
 scopes = [ ]
+
+[user]
+quota_check = true
+default_available_quota = 9999

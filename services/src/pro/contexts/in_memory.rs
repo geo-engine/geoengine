@@ -18,14 +18,14 @@ use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
-use geoengine_operators::pro::meta::quota::ComputationContext;
+use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::ExecutionContextImpl;
+use super::{ExecutionContextImpl, QuotaCheckerImpl};
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
@@ -192,8 +192,7 @@ impl Context for ProInMemoryContext {
     type LayerDB = HashMapLayerDb;
     type LayerProviderDB = HashMapLayerProviderDb;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext =
-        ExecutionContextImpl<UserSession, ProHashMapDatasetDb, HashMapLayerProviderDb>;
+    type ExecutionContext = ExecutionContextImpl<ProHashMapDatasetDb, HashMapLayerProviderDb>;
     type TaskContext = SimpleTaskManagerContext;
     type TaskManager = SimpleTaskManager;
 
@@ -245,6 +244,11 @@ impl Context for ProInMemoryContext {
             self.quota
                 .create_quota_tracking(&session, ComputationContext::new()),
         );
+        extensions.insert(Box::new(QuotaCheckerImpl {
+            user_db: self.user_db.clone(),
+            session,
+        }) as QuotaChecker);
+
         Ok(QueryContextImpl::new_with_extensions(
             self.query_ctx_chunk_size,
             self.thread_pool.clone(),
@@ -254,7 +258,6 @@ impl Context for ProInMemoryContext {
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<
-            UserSession,
             ProHashMapDatasetDb,
             HashMapLayerProviderDb,
         >::new(

@@ -1,4 +1,5 @@
 use geoengine_operators::pro::meta::quota::{ComputationContext, ComputationUnit, QuotaTracking};
+use snafu::Snafu;
 use std::sync::Arc;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
@@ -7,6 +8,13 @@ use geoengine_datatypes::util::test::TestDefault;
 use crate::pro::users::UserId;
 
 use super::users::{UserDb, UserSession};
+
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))]
+pub enum QuotaError {
+    QuotaExhausted,
+}
 
 #[derive(Debug, Clone)]
 pub struct QuotaTrackingFactory {
