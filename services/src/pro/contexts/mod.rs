@@ -361,7 +361,7 @@ impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
 
         if quota_available <= 0 {
             return Err(geoengine_operators::error::Error::CreatingProcessorFailed {
-                source: Box::new(crate::error::Error::QuotaExhausted),
+                source: Box::new(crate::pro::quota::QuotaError::QuotaExhausted),
             });
         }
 

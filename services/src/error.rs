@@ -421,8 +421,6 @@ pub enum Error {
         query_bbox: crate::api::model::datatypes::BoundingBox2D,
     },
 
-    QuotaExhausted,
-
     #[snafu(display("Result Descriptor field '{}' {}", field, cause))]
     LayerResultDescriptorMissingFields {
         field: String,

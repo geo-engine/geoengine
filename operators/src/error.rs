@@ -354,8 +354,6 @@ pub enum Error {
         found: usize,
     },
 
-    QuotaExhausted,
-
     QueryingProcessorFailed {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
