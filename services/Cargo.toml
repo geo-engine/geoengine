@@ -98,7 +98,7 @@ rand = "0.8.4"
 tempfile = "3.1"
 wiremock-grpc = "0.0.3-alpha1"
 xml-rs = "0.8.3"
-serial_test = "0.10.0"
+serial_test = "1.0.0"
 
 [build-dependencies]
 vergen = "7"
