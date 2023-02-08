@@ -40,7 +40,7 @@ pub struct Dataset {
     pub result_descriptor: TypedResultDescriptor,
     pub source_operator: String,
     pub symbology: Option<Symbology>,
-    pub provenance: Option<Provenance>,
+    pub provenance: Option<Vec<Provenance>>,
 }
 
 impl Dataset {
@@ -198,6 +198,8 @@ pub trait DatasetStore<S: Session>: DatasetStorer {
         dataset: Validated<AddDataset>,
         meta_data: Self::StorageType,
     ) -> Result<DatasetId>;
+
+    async fn delete_dataset(&self, session: &S, dataset: DatasetId) -> Result<()>;
 
     /// turn given `meta` data definition into the corresponding `StorageType` for the `DatasetStore`
     /// for use in the `add_dataset` method

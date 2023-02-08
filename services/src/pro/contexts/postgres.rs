@@ -25,7 +25,7 @@ use bb8_postgres::{
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
-use geoengine_operators::pro::meta::quota::ComputationContext;
+use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, warn};
 use rayon::ThreadPool;
@@ -33,7 +33,7 @@ use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{ExecutionContextImpl, ProContext};
+use super::{ExecutionContextImpl, ProContext, QuotaCheckerImpl};
 
 // TODO: do not report postgres error details to user
 
@@ -208,7 +208,8 @@ where
                             password_hash character varying (256),
                             real_name character varying (256),
                             active boolean NOT NULL,
-                            quota_used bigint NOT NULL DEFAULT 0,
+                            quota_available bigint NOT NULL DEFAULT 0,
+                            quota_used bigint NOT NULL DEFAULT 0, -- TODO: rename to total_quota_used?
                             CONSTRAINT users_anonymous_ck CHECK (
                                (email IS NULL AND password_hash IS NULL AND real_name IS NULL) OR 
                                (email IS NOT NULL AND password_hash IS NOT NULL AND 
@@ -586,7 +587,7 @@ where
     type TaskManager = SimpleTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
     type ExecutionContext =
-        ExecutionContextImpl<UserSession, PostgresDatasetDb<Tls>, PostgresLayerProviderDb<Tls>>;
+        ExecutionContextImpl<PostgresDatasetDb<Tls>, PostgresLayerProviderDb<Tls>>;
 
     fn project_db(&self) -> Arc<Self::ProjectDB> {
         self.project_db.clone()
@@ -638,6 +639,10 @@ where
             self.quota
                 .create_quota_tracking(&session, ComputationContext::new()),
         );
+        extensions.insert(Box::new(QuotaCheckerImpl {
+            user_db: self.user_db.clone(),
+            session,
+        }) as QuotaChecker);
 
         Ok(QueryContextImpl::new_with_extensions(
             self.query_ctx_chunk_size,
@@ -648,7 +653,6 @@ where
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<
-            UserSession,
             PostgresDatasetDb<Tls>,
             PostgresLayerProviderDb<Tls>,
         >::new(
@@ -677,6 +681,7 @@ mod tests {
     use super::*;
     use crate::api::model::datatypes::{DataProviderId, DatasetId};
     use crate::api::model::services::AddDataset;
+    use crate::contexts::AdminSession;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -1381,11 +1386,11 @@ mod tests {
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
                     symbology: None,
-                    provenance: Some(Provenance {
+                    provenance: Some(vec![Provenance {
                         citation: "citation".to_owned(),
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
-                    }),
+                    }]),
                 }
                 .validated()
                 .unwrap(),
@@ -1445,11 +1450,11 @@ mod tests {
                 provenance,
                 ProvenanceOutput {
                     data: dataset_id.into(),
-                    provenance: Some(Provenance {
+                    provenance: Some(vec![Provenance {
                         citation: "citation".to_owned(),
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
-                    })
+                    }])
                 }
             );
 
@@ -2259,7 +2264,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_tracks_quota_in_postgres() {
+    async fn it_tracks_used_quota_in_postgres() {
         with_temp_context(|ctx, _| async move {
             let _user = ctx
                 .user_db_ref()
@@ -2304,6 +2309,125 @@ mod tests {
             }
 
             assert!(success);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_tracks_available_quota() {
+        with_temp_context(|ctx, _| async move {
+            let user = ctx
+                .user_db_ref()
+                .register(
+                    UserRegistration {
+                        email: "foo@example.com".to_string(),
+                        password: "secret1234".to_string(),
+                        real_name: "Foo Bar".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let session = ctx
+                .user_db_ref()
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
+
+            ctx.user_db_ref()
+                .update_quota_available_by_user(&user, 1)
+                .await
+                .unwrap();
+
+            let quota = initialize_quota_tracking(ctx.user_db());
+
+            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+
+            tracking.work_unit_done();
+            tracking.work_unit_done();
+
+            // wait for quota to be recorded
+            let mut success = false;
+            for _ in 0..10 {
+                let available = ctx.user_db_ref().quota_available(&session).await.unwrap();
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+                if available == -1 {
+                    success = true;
+                    break;
+                }
+            }
+
+            assert!(success);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_updates_quota_in_postgres() {
+        with_temp_context(|ctx, _| async move {
+            let user = ctx
+                .user_db_ref()
+                .register(
+                    UserRegistration {
+                        email: "foo@example.com".to_string(),
+                        password: "secret1234".to_string(),
+                        real_name: "Foo Bar".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let session = ctx
+                .user_db_ref()
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(
+                ctx.user_db_ref().quota_available(&session).await.unwrap(),
+                crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                    .unwrap()
+                    .default_available_quota
+            );
+
+            assert_eq!(
+                ctx.user_db_ref()
+                    .quota_available_by_user(&user)
+                    .await
+                    .unwrap(),
+                crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                    .unwrap()
+                    .default_available_quota
+            );
+
+            ctx.user_db_ref()
+                .update_quota_available_by_user(&user, 123)
+                .await
+                .unwrap();
+
+            assert_eq!(
+                ctx.user_db_ref().quota_available(&session).await.unwrap(),
+                123
+            );
+
+            assert_eq!(
+                ctx.user_db_ref()
+                    .quota_available_by_user(&user)
+                    .await
+                    .unwrap(),
+                123
+            );
         })
         .await;
     }
@@ -2704,6 +2828,194 @@ mod tests {
             );
 
             db.get_layer(&layer_in_two_collections).await.unwrap();
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_deletes_dataset() {
+        with_temp_context(|ctx, _| async move {
+            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+                },
+                phantom: Default::default(),
+            });
+
+            let session = ctx.user_db_ref().anonymous().await.unwrap();
+
+            let db = ctx.dataset_db_ref();
+            let wrap = db.wrap_meta_data(meta_data);
+            db.add_dataset(
+                &session,
+                AddDataset {
+                    id: Some(dataset_id),
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    provenance: Some(vec![Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }]),
+                }
+                .validated()
+                .unwrap(),
+                wrap,
+            )
+            .await
+            .unwrap();
+
+            assert!(db.load(&session, &dataset_id).await.is_ok());
+
+            db.delete_dataset(&session, dataset_id).await.unwrap();
+
+            assert!(db.load(&session, &dataset_id).await.is_err());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_deletes_admin_dataset() {
+        with_temp_context(|ctx, _| async move {
+            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+                },
+                phantom: Default::default(),
+            });
+
+            let session: UserSession = AdminSession::default().into();
+
+            let db = ctx.dataset_db_ref();
+            let wrap = db.wrap_meta_data(meta_data);
+            db.add_dataset(
+                &session,
+                AddDataset {
+                    id: Some(dataset_id),
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    provenance: Some(vec![Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }]),
+                }
+                .validated()
+                .unwrap(),
+                wrap,
+            )
+            .await
+            .unwrap();
+
+            assert!(db.load(&session, &dataset_id).await.is_ok());
+
+            db.delete_dataset(&session, dataset_id).await.unwrap();
+
+            assert!(db.load(&session, &dataset_id).await.is_err());
         })
         .await;
     }

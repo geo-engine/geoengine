@@ -2,6 +2,7 @@
 bind_address = "127.0.0.1:3030"
 # set the public address of the server, if it is different from the bind address
 # external_address = "http://localhost:3030"
+api_prefix = "/api"
 backend = "in_memory" # TODO: remove option
 version_api = true
 
@@ -136,6 +137,8 @@ anonymous_access = true
 # Settings for Geo Engine Pro
 [user]
 user_registration = true
+quota_check = false
+# default_available_quota = 999999
 
 [odm]
 endpoint = "http://localhost:3000/"
@@ -147,7 +150,7 @@ endpoint = "http://localhost:3000/"
 basket_api_base_url= "https://dev.gfbio.uni-jena.de/daisi-api/api/baskets/"
 # If this is set to true, basket entries that belong to the
 # same dataset AND species are grouped within a single layer.
-# This is the behavious of the old VAT system.
+# This is the behaviour of the old VAT system.
 # If false, every basket entry translates into a layer on the map.
 group_abcd_units = true
 

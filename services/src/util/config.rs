@@ -1,19 +1,19 @@
-use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::sync::RwLock;
-
+use crate::api::model::datatypes::TimeInterval;
 use crate::contexts::SessionId;
 use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
-use crate::util::parsing::{deserialize_base_url, deserialize_base_url_option};
-
-use crate::api::model::datatypes::TimeInterval;
+use crate::util::parsing::{
+    deserialize_api_prefix, deserialize_base_url, deserialize_base_url_option,
+};
 use config::{Config, Environment, File};
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
+use std::collections::{HashMap, HashSet};
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::RwLock;
 use url::Url;
 
 lazy_static! {
@@ -120,16 +120,18 @@ pub struct Web {
     pub bind_address: SocketAddr,
     #[serde(deserialize_with = "deserialize_base_url_option", default)]
     pub external_address: Option<url::Url>,
+    #[serde(deserialize_with = "deserialize_api_prefix")]
+    pub api_prefix: String,
     pub backend: Backend,
     pub version_api: bool,
 }
 
 impl Web {
     pub fn external_address(&self) -> Result<Url> {
-        Ok(self
-            .external_address
-            .clone()
-            .unwrap_or(Url::parse(&format!("http://{}/", self.bind_address))?))
+        Ok(self.external_address.clone().unwrap_or(Url::parse(&format!(
+            "http://{}{}/",
+            self.bind_address, self.api_prefix
+        ))?))
     }
 }
 

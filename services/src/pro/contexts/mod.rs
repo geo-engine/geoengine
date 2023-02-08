@@ -14,7 +14,8 @@ use geoengine_operators::engine::{
     MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::pro::meta::statistics::InitializedProcessorStatistics;
+use geoengine_operators::pro::meta::quota::QuotaCheck;
+use geoengine_operators::pro::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 pub use in_memory::ProInMemoryContext;
 #[cfg(feature = "postgres")]
@@ -22,7 +23,7 @@ pub use postgres::PostgresContext;
 use rayon::ThreadPool;
 use tokio::io::AsyncWriteExt;
 
-use crate::contexts::{Context, Session};
+use crate::contexts::Context;
 use crate::datasets::listing::SessionMetaDataProvider;
 use crate::datasets::storage::DatasetDb;
 use crate::layers::storage::LayerProviderDb;
@@ -54,30 +55,28 @@ pub trait ProContext: Context<Session = UserSession> {
     fn pro_project_db_ref(&self) -> &Self::ProProjectDB;
 }
 
-pub struct ExecutionContextImpl<S, D, L>
+pub struct ExecutionContextImpl<D, L>
 where
-    D: DatasetDb<S>,
+    D: DatasetDb<UserSession>,
     L: LayerProviderDb,
-    S: Session,
 {
     dataset_db: Arc<D>,
     layer_provider_db: Arc<L>,
     thread_pool: Arc<ThreadPool>,
-    session: S,
+    session: UserSession,
     tiling_specification: TilingSpecification,
 }
 
-impl<S, D, L> ExecutionContextImpl<S, D, L>
+impl<D, L> ExecutionContextImpl<D, L>
 where
-    D: DatasetDb<S>,
+    D: DatasetDb<UserSession>,
     L: LayerProviderDb,
-    S: Session,
 {
     pub fn new(
         dataset_db: Arc<D>,
         layer_provider_db: Arc<L>,
         thread_pool: Arc<ThreadPool>,
-        session: S,
+        session: UserSession,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
@@ -91,18 +90,26 @@ where
 }
 
 #[async_trait::async_trait]
-impl<S, D, L> ExecutionContext for ExecutionContextImpl<S, D, L>
+impl<D, L> ExecutionContext for ExecutionContextImpl<D, L>
 where
-    D: DatasetDb<S>
+    D: DatasetDb<UserSession>
         + SessionMetaDataProvider<
-            S,
+            UserSession,
             MockDatasetDataSourceLoadingInfo,
             VectorResultDescriptor,
             VectorQueryRectangle,
-        > + SessionMetaDataProvider<S, OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-        + SessionMetaDataProvider<S, GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
+        > + SessionMetaDataProvider<
+            UserSession,
+            OgrSourceDataset,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        > + SessionMetaDataProvider<
+            UserSession,
+            GdalLoadingInfo,
+            RasterResultDescriptor,
+            RasterQueryRectangle,
+        >,
     L: LayerProviderDb,
-    S: Session,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
@@ -117,7 +124,7 @@ where
         op: Box<dyn geoengine_operators::engine::InitializedRasterOperator>,
         span: CreateSpan,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
-        Box::new(InitializedProcessorStatistics::new(op, span))
+        Box::new(InitializedOperatorWrapper::new(op, span))
     }
 
     fn wrap_initialized_vector_operator(
@@ -125,7 +132,7 @@ where
         op: Box<dyn InitializedVectorOperator>,
         span: CreateSpan,
     ) -> Box<dyn InitializedVectorOperator> {
-        Box::new(InitializedProcessorStatistics::new(op, span))
+        Box::new(InitializedOperatorWrapper::new(op, span))
     }
 
     fn wrap_initialized_plot_operator(
@@ -178,6 +185,7 @@ where
         // TODO: add routine or error, if a given modelpath would overwrite an existing model
         let mut file = tokio::fs::File::create(model_path).await?;
         file.write_all(ml_model_str.as_bytes()).await?;
+        file.flush().await?;
 
         Ok(())
     }
@@ -185,19 +193,18 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<S, D, L>
+impl<D, L>
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for ExecutionContextImpl<S, D, L>
+    for ExecutionContextImpl<D, L>
 where
-    D: DatasetDb<S>
+    D: DatasetDb<UserSession>
         + SessionMetaDataProvider<
-            S,
+            UserSession,
             MockDatasetDataSourceLoadingInfo,
             VectorResultDescriptor,
             VectorQueryRectangle,
         >,
     L: LayerProviderDb,
-    S: Session,
 {
     async fn meta_data(
         &self,
@@ -236,13 +243,17 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<S, D, L> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for ExecutionContextImpl<S, D, L>
+impl<D, L> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for ExecutionContextImpl<D, L>
 where
-    D: DatasetDb<S>
-        + SessionMetaDataProvider<S, OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+    D: DatasetDb<UserSession>
+        + SessionMetaDataProvider<
+            UserSession,
+            OgrSourceDataset,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        >,
     L: LayerProviderDb,
-    S: Session,
 {
     async fn meta_data(
         &self,
@@ -275,13 +286,17 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<S, D, L> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for ExecutionContextImpl<S, D, L>
+impl<D, L> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for ExecutionContextImpl<D, L>
 where
-    D: DatasetDb<S>
-        + SessionMetaDataProvider<S, GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
+    D: DatasetDb<UserSession>
+        + SessionMetaDataProvider<
+            UserSession,
+            GdalLoadingInfo,
+            RasterResultDescriptor,
+            RasterQueryRectangle,
+        >,
     L: LayerProviderDb,
-    S: Session,
 {
     async fn meta_data(
         &self,
@@ -309,6 +324,48 @@ where
                     .await
             }
         }
+    }
+}
+
+pub struct QuotaCheckerImpl<U: UserDb> {
+    user_db: Arc<U>,
+    session: UserSession,
+}
+
+#[async_trait]
+impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
+    async fn ensure_quota_available(&self) -> geoengine_operators::util::Result<()> {
+        // TODO: cache the result, s.th. other operators in the same workflow can re-use it
+        let quota_check_enabled =
+            crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                .map_err(
+                    |e| geoengine_operators::error::Error::CreatingProcessorFailed {
+                        source: Box::new(e),
+                    },
+                )?
+                .quota_check;
+
+        if !quota_check_enabled {
+            return Ok(());
+        }
+
+        let quota_available = self
+            .user_db
+            .quota_available(&self.session)
+            .await
+            .map_err(
+                |e| geoengine_operators::error::Error::CreatingProcessorFailed {
+                    source: Box::new(e),
+                },
+            )?;
+
+        if quota_available <= 0 {
+            return Err(geoengine_operators::error::Error::CreatingProcessorFailed {
+                source: Box::new(crate::pro::quota::QuotaError::QuotaExhausted),
+            });
+        }
+
+        Ok(())
     }
 }
 

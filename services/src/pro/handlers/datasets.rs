@@ -12,7 +12,7 @@ use crate::{
     error::{self, Result},
     handlers::datasets::{
         adjust_meta_data_path, auto_create_dataset_handler, create_user_dataset,
-        get_dataset_handler, list_datasets_handler, list_volumes_handler,
+        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
         suggest_meta_data_handler, AdminOrSession,
     },
     pro::{
@@ -36,7 +36,11 @@ where
             .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler)))
-            .service(web::resource("/{dataset}").route(web::get().to(get_dataset_handler::<C>)))
+            .service(
+                web::resource("/{dataset}")
+                    .route(web::get().to(get_dataset_handler::<C>))
+                    .route(web::delete().to(delete_dataset_handler::<C>)),
+            )
             .service(web::resource("").route(web::post().to(create_dataset_handler::<C>))), // must come last to not match other routes
     )
     .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)));
@@ -164,9 +168,16 @@ mod tests {
 
     use crate::{
         api::model::services::{AddDataset, DatasetDefinition, MetaDataDefinition},
-        contexts::{Context, Session, SessionId},
-        datasets::upload::{UploadId, UploadRootPath, VolumeName},
-        pro::{contexts::ProInMemoryContext, users::UserDb, util::tests::send_pro_test_request},
+        contexts::{AdminSession, Context, Session, SessionId},
+        datasets::{
+            listing::DatasetProvider,
+            upload::{UploadId, UploadRootPath, VolumeName},
+        },
+        pro::{
+            contexts::ProInMemoryContext,
+            users::{UserDb, UserSession},
+            util::tests::send_pro_test_request,
+        },
         util::tests::{SetMultipartBody, TestDataUploads},
     };
 
@@ -325,6 +336,7 @@ mod tests {
         );
 
         let session = ctx.user_db_ref().anonymous().await.unwrap();
+
         let session_id = session.id();
 
         let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
@@ -429,6 +441,93 @@ mod tests {
 
         let res = send_pro_test_request(req, ctx.clone()).await;
         assert_eq!(res.status(), 200);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_deletes_dataset() -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let ctx = ProInMemoryContext::test_default();
+
+        let session = ctx.user_db_ref().anonymous().await.unwrap();
+        let session_id = session.id();
+
+        let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
+
+        let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
+
+        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_ok());
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_id}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
+
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_err());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_deletes_admin_dataset() -> Result<()> {
+        let ctx = ProInMemoryContext::test_default();
+
+        let volume = VolumeName("test_data".to_string());
+
+        let mut meta_data = create_ndvi_meta_data();
+
+        // make path relative to volume
+        meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    id: None,
+                    name: "ndvi".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                },
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
+
+        let session: UserSession = AdminSession::default().into();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
+        let dataset_id = dataset_id.id;
+
+        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_ok());
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_id}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
+
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_err());
 
         Ok(())
     }

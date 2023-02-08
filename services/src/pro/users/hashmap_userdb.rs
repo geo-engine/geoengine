@@ -23,6 +23,7 @@ pub struct HashMapUserDb {
     external_users: Db<HashMap<SubjectIdentifier, ExternalUser>>, //TODO: Key only works if a single identity provider is used
     sessions: Db<HashMap<SessionId, UserSession>>,
     quota_used: Db<HashMap<UserId, u64>>,
+    quota_available: Db<HashMap<UserId, i64>>,
 }
 
 #[async_trait]
@@ -41,6 +42,14 @@ impl UserDb for HashMapUserDb {
         let user = User::from(user_registration.clone());
         let id = user.id;
         users.insert(user_registration.email, user);
+
+        let mut quota_available = self.quota_available.write().await;
+        quota_available.insert(
+            id,
+            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                .default_available_quota,
+        );
+
         Ok(id)
     }
 
@@ -55,6 +64,13 @@ impl UserDb for HashMapUserDb {
         };
 
         self.users.write().await.insert(id.to_string(), user);
+
+        let mut quota_available = self.quota_available.write().await;
+        quota_available.insert(
+            id,
+            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                .default_available_quota,
+        );
 
         let session = UserSession {
             id: SessionId::new(),
@@ -125,6 +141,13 @@ impl UserDb for HashMapUserDb {
                     active: true,
                 };
                 db.insert(external_id, result);
+
+                let mut quota_available = self.quota_available.write().await;
+                quota_available.insert(
+                    id,
+                    crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                        .default_available_quota,
+                );
                 id
             }
         };
@@ -211,6 +234,41 @@ impl UserDb for HashMapUserDb {
             .get(user)
             .copied()
             .unwrap_or_default())
+    }
+
+    async fn quota_available(&self, session: &UserSession) -> Result<i64> {
+        Ok(self
+            .quota_available
+            .read()
+            .await
+            .get(&session.user.id)
+            .copied()
+            .unwrap_or_default())
+    }
+
+    async fn quota_available_by_user(&self, user: &UserId) -> Result<i64> {
+        Ok(self
+            .quota_available
+            .read()
+            .await
+            .get(user)
+            .copied()
+            .unwrap_or_default())
+    }
+
+    async fn update_quota_available_by_user(
+        &self,
+        user: &UserId,
+        new_available_quota: i64,
+    ) -> Result<()> {
+        *self
+            .quota_available
+            .write()
+            .await
+            .entry(*user)
+            .or_insert(new_available_quota) = new_available_quota;
+
+        Ok(())
     }
 }
 

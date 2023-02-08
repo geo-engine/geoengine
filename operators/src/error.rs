@@ -222,6 +222,10 @@ pub enum Error {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    CreatingProcessorFailed {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
     NotImplemented,
 
     TileLimitExceeded {
@@ -348,6 +352,10 @@ pub enum Error {
     InvalidNumberOfTimeSteps {
         expected: usize,
         found: usize,
+    },
+
+    QueryingProcessorFailed {
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
 }
 

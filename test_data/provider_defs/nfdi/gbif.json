@@ -1,0 +1,12 @@
+{
+  "type": "GbifDataProviderDefinition",
+  "name": "GBIF",
+  "dbConfig": {
+    "user": "geoengine",
+    "password": "geoengine",
+    "host": "localhost",
+    "port": 5432,
+    "database": "geoengine",
+    "schema": "public"
+  }
+}

@@ -2,6 +2,7 @@ use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{CreateSpan, MetaData, OperatorData, OperatorName, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
+use crate::util::retry::retry;
 use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::{
     engine::{
@@ -19,8 +20,10 @@ use futures::{
     Stream,
 };
 use futures::{Future, TryStreamExt};
+use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
+use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
     SpatialPartition2D, SpatialPartitioned,
@@ -47,13 +50,18 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::ffi::CString;
 use std::marker::PhantomData;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tracing::{span, Level};
 
 mod error;
 mod loading_info;
+
+static GDAL_RETRY_INITIAL_BACKOFF_MS: u64 = 1000;
+static GDAL_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
+static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 
 /// Parameters for the GDAL Source Operator
 ///
@@ -135,6 +143,13 @@ pub struct GdalDatasetParameters {
     pub gdal_config_options: Option<Vec<(String, String)>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
+    pub retry: Option<GdalRetryOptions>,
+}
+
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalRetryOptions {
+    pub max_retries: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -420,11 +435,44 @@ impl GdalRasterLoader {
         tile_information: TileInformation,
         tile_time: TimeInterval,
     ) -> Result<RasterTile2D<T>> {
-        crate::util::spawn_blocking(move || {
-            Self::load_tile_data(&dataset_params, tile_information, tile_time)
-        })
+        // TODO: detect usage of vsi curl properly, e.g. also check for `/vsicurl_streaming` and combinations with `/vsizip`
+        let is_vsi_curl = dataset_params.file_path.starts_with("/vsicurl/");
+
+        retry(
+            dataset_params
+                .retry
+                .map(|r| r.max_retries)
+                .unwrap_or_default(),
+            GDAL_RETRY_INITIAL_BACKOFF_MS,
+            GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
+            Some(GDAL_RETRY_MAX_BACKOFF_MS),
+            move || {
+                let ds = dataset_params.clone();
+                let file_path = ds.file_path.clone();
+
+                async move {
+                    let load_tile_result = crate::util::spawn_blocking(move || {
+                        Self::load_tile_data(&ds, tile_information, tile_time)
+                    })
+                    .await
+                    .context(crate::error::TokioJoin);
+
+                    match load_tile_result {
+                        Ok(Ok(r)) => Ok(r),
+                        Ok(Err(e)) | Err(e) => {
+                            if is_vsi_curl {
+                                // clear the VSICurl cache, to force GDAL to try to re-download the file
+                                // otherwise it will assume any observed error will happen again
+                                clear_gdal_vsi_cache_for_path(file_path.as_path());
+                            }
+
+                            Err(e)
+                        }
+                    }
+                }
+            },
+        )
         .await
-        .context(crate::error::TokioJoin)?
     }
 
     async fn load_tile_async<T: Pixel + GdalType + FromPrimitive>(
@@ -498,14 +546,14 @@ impl GdalRasterLoader {
             },
         );
 
-        if dataset_result.is_err() {
-            // TODO: check if Gdal error is actually file not found
+        if let Err(error) = &dataset_result {
+            let is_file_not_found = error_is_gdal_file_not_found(error);
 
             let err_result = match dataset_params.file_not_found_handling {
-                FileNotFoundHandling::NoData => {
+                FileNotFoundHandling::NoData if is_file_not_found => {
                     Ok(create_no_data_tile(tile_information, tile_time))
                 }
-                FileNotFoundHandling::Error => Err(crate::error::Error::CouldNotOpenGdalDataset {
+                _ => Err(crate::error::Error::CouldNotOpenGdalDataset {
                     file_path: dataset_params.file_path.to_string_lossy().to_string(),
                 }),
             };
@@ -562,6 +610,26 @@ impl GdalRasterLoader {
             })
             .try_flatten()
             .try_buffered(16) // TODO: make this configurable
+    }
+}
+
+fn error_is_gdal_file_not_found(error: &Error) -> bool {
+    matches!(
+        error,
+        Error::Gdal {
+            source: GdalError::NullPointer {
+                method_name,
+                msg
+            },
+        } if *method_name == "GDALOpenEx" && (*msg == "HTTP response code: 404" || msg.ends_with("No such file or directory"))
+    )
+}
+
+fn clear_gdal_vsi_cache_for_path(file_path: &Path) {
+    unsafe {
+        if let Some(Some(c_string)) = file_path.to_str().map(|s| CString::new(s).ok()) {
+            VSICurlPartialClearCache(c_string.as_ptr());
+        }
     }
 }
 
@@ -1084,6 +1152,8 @@ mod tests {
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::util::gdal::hide_gdal_errors;
     use geoengine_datatypes::{primitives::SpatialResolution, raster::GridShape2D};
+    use httptest::matchers::request;
+    use httptest::{responders, Expectation, Server};
 
     async fn query_gdal_source(
         exe_ctx: &MockExecutionContext,
@@ -1167,6 +1237,7 @@ mod tests {
                 gdal_open_options: None,
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
+                retry: None,
             },
             TileInformation::with_partition_and_shape(output_bounds, output_shape),
             TimeInterval::default(),
@@ -1350,6 +1421,7 @@ mod tests {
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
+            retry: None,
         };
         let replaced = params
             .replace_time_placeholders(
@@ -1753,6 +1825,7 @@ mod tests {
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
+            retry: None,
         };
 
         let dataset_parameters_json = serde_json::to_value(&dataset_parameters).unwrap();
@@ -1800,6 +1873,7 @@ mod tests {
                 "gdalOpenOptions": null,
                 "gdalConfigOptions": null,
                 "allowAlphabandAsMask": true,
+                "retry": null,
             })
         );
 
@@ -2002,6 +2076,7 @@ mod tests {
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
+            retry: None,
         };
 
         let tile_information =
@@ -2037,5 +2112,214 @@ mod tests {
 
         assert_eq!(grid.validity_mask.data.len(), 64);
         assert_eq!(grid.validity_mask.data, &[true; 64]);
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn it_creates_no_data_only_for_missing_files() {
+        hide_gdal_errors();
+
+        let ds = GdalDatasetParameters {
+            file_path: "nonexisting_file.tif".into(),
+            rasterband_channel: 1,
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+
+        let tile_info = TileInformation {
+            tile_size_in_pixels: [100, 100].into(),
+            global_tile_position: [0, 0].into(),
+            global_geo_transform: TestDefault::test_default(),
+        };
+
+        let tile_time = TimeInterval::default();
+
+        // file doesn't exist => no data
+        let result = GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time).unwrap();
+        assert!(matches!(result.grid_array, GridOrEmpty::Empty(_)));
+
+        let ds = GdalDatasetParameters {
+            file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
+            rasterband_channel: 100, // invalid channel
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+
+        // invalid channel => error
+        let result = GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time);
+        assert!(result.is_err());
+
+        let server = Server::run();
+
+        server.expect(
+            Expectation::matching(request::method_path("HEAD", "/non_existing.tif"))
+                .times(1)
+                .respond_with(responders::cycle![responders::status_code(404),]),
+        );
+
+        server.expect(
+            Expectation::matching(request::method_path("HEAD", "/internal_error.tif"))
+                .times(1)
+                .respond_with(responders::cycle![responders::status_code(500),]),
+        );
+
+        let ds = GdalDatasetParameters {
+            file_path: format!("/vsicurl/{}", server.url_str("/non_existing.tif")).into(),
+            rasterband_channel: 1,
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: Some(vec![
+                (
+                    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
+                    ".tif".to_owned(),
+                ),
+                (
+                    "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                    "EMPTY_DIR".to_owned(),
+                ),
+                ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
+                ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
+            ]),
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+
+        // 404 => no data
+        let result = GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time).unwrap();
+        assert!(matches!(result.grid_array, GridOrEmpty::Empty(_)));
+
+        let ds = GdalDatasetParameters {
+            file_path: format!("/vsicurl/{}", server.url_str("/internal_error.tif")).into(),
+            rasterband_channel: 1,
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: Some(vec![
+                (
+                    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
+                    ".tif".to_owned(),
+                ),
+                (
+                    "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                    "EMPTY_DIR".to_owned(),
+                ),
+                ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
+                ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
+            ]),
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+
+        // 500 => error
+        let result = GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn it_retries_only_after_clearing_vsi_cache() {
+        hide_gdal_errors();
+
+        let server = Server::run();
+
+        server.expect(
+            Expectation::matching(request::method_path("HEAD", "/foo.tif"))
+                .times(2)
+                .respond_with(responders::cycle![
+                    // first generic error
+                    responders::status_code(500),
+                    // then 404 file not found
+                    responders::status_code(404)
+                ]),
+        );
+
+        let file_path: PathBuf = format!("/vsicurl/{}", server.url_str("/foo.tif")).into();
+
+        let options = Some(vec![
+            (
+                "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
+                ".tif".to_owned(),
+            ),
+            (
+                "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                "EMPTY_DIR".to_owned(),
+            ),
+            ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
+            ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
+        ]);
+
+        let _thread_local_configs = options
+            .as_ref()
+            .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
+
+        // first fail
+        let result = gdal_open_dataset_ex(
+            file_path.as_path(),
+            DatasetOptions {
+                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
+                ..DatasetOptions::default()
+            },
+        );
+
+        // it failed, but not with file not found
+        assert!(result.is_err());
+        if let Err(error) = result {
+            assert!(!error_is_gdal_file_not_found(&error));
+        }
+
+        // second fail doesn't even try, so still not "file not found", even though it should be now
+        let result = gdal_open_dataset_ex(
+            file_path.as_path(),
+            DatasetOptions {
+                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
+                ..DatasetOptions::default()
+            },
+        );
+
+        assert!(result.is_err());
+        if let Err(error) = result {
+            assert!(!error_is_gdal_file_not_found(&error));
+        }
+
+        clear_gdal_vsi_cache_for_path(file_path.as_path());
+
+        // after clearing the cache, it tries again
+        let result = gdal_open_dataset_ex(
+            file_path.as_path(),
+            DatasetOptions {
+                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
+                ..DatasetOptions::default()
+            },
+        );
+
+        // now we get the file not found error
+        assert!(result.is_err());
+        if let Err(error) = result {
+            assert!(error_is_gdal_file_not_found(&error));
+        }
     }
 }

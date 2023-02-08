@@ -87,6 +87,58 @@ where
         .map_err(D::Error::custom)
 }
 
+/// Deserialize an API prefix that is prepended to all services.
+/// Must only consist of characters nad numbers, underscores and dashes, and slashes.
+/// If it does not start with a slash, it is added.
+/// If it ends with a slash, it is removed.
+pub fn deserialize_api_prefix<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let mut api_prefix = String::deserialize(deserializer)?;
+
+    if !api_prefix.starts_with('/') {
+        api_prefix.insert(0, '/');
+    }
+
+    let mut prev_c = None;
+    for c in api_prefix.chars() {
+        if !c.is_ascii_alphanumeric() && c != '_' && c != '-' && c != '/' {
+            return Err(D::Error::custom(format!(
+                "Invalid character '{c}' in API prefix"
+            )));
+        }
+
+        if let Some(prev_c) = prev_c {
+            if prev_c == '/' && c == '/' {
+                return Err(D::Error::custom(
+                    "API prefix must not contain consecutive slashes",
+                ));
+            }
+
+            if prev_c == '-' && c == '-' {
+                return Err(D::Error::custom(
+                    "API prefix must not contain consecutive dashes",
+                ));
+            }
+
+            if prev_c == '_' && c == '_' {
+                return Err(D::Error::custom(
+                    "API prefix must not contain consecutive underscores",
+                ));
+            }
+        }
+
+        prev_c = Some(c);
+    }
+
+    if api_prefix.ends_with('/') {
+        api_prefix.pop();
+    }
+
+    Ok(api_prefix)
+}
+
 #[cfg(test)]
 mod tests {
     use std::fmt::Display;
@@ -159,5 +211,36 @@ mod tests {
                 .to_string(),
             ""
         );
+    }
+
+    #[test]
+    fn test_deserialize_api_prefix() {
+        #[derive(Deserialize)]
+        struct ApiPrefix(#[serde(deserialize_with = "deserialize_api_prefix")] String);
+
+        assert_eq!(
+            serde_json::from_str::<ApiPrefix>(r#""/api/""#).unwrap().0,
+            "/api"
+        );
+
+        assert_eq!(
+            serde_json::from_str::<ApiPrefix>(r#""/api""#).unwrap().0,
+            "/api"
+        );
+
+        assert_eq!(serde_json::from_str::<ApiPrefix>(r#""/""#).unwrap().0, "");
+
+        assert_eq!(serde_json::from_str::<ApiPrefix>(r#""""#).unwrap().0, "");
+
+        assert_eq!(
+            serde_json::from_str::<ApiPrefix>(r#""/a/b/c_d/e-f/""#)
+                .unwrap()
+                .0,
+            "/a/b/c_d/e-f"
+        );
+
+        assert!(serde_json::from_str::<ApiPrefix>(r#""//""#).is_err());
+        assert!(serde_json::from_str::<ApiPrefix>(r#""hello?""#).is_err());
+        assert!(serde_json::from_str::<ApiPrefix>(r#""foo=bar""#).is_err());
     }
 }

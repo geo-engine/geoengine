@@ -37,7 +37,11 @@ where
         )
         .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)))
         .service(web::resource("/quota").route(web::get().to(quota_handler::<C>)))
-        .service(web::resource("/quotas/{user}").route(web::get().to(user_quota_handler::<C>)))
+        .service(
+            web::resource("/quotas/{user}")
+                .route(web::get().to(get_user_quota_handler::<C>))
+                .route(web::post().to(update_user_quota_handler::<C>)),
+        )
         .service(web::resource("/oidcInit").route(web::post().to(oidc_init::<C>)))
         .service(web::resource("/oidcLogin").route(web::post().to(oidc_login::<C>)));
 }
@@ -252,18 +256,20 @@ pub(crate) async fn session_view_handler<C: ProContext>(
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct QuotaUsed {
+pub struct Quota {
+    pub available: i64,
     pub used: u64,
 }
 
-/// Retrieves the used quota of the current user.
+/// Retrieves the available and used quota of the current user.
 #[utoipa::path(
     tag = "User",
     get,
     path = "/quota",
     responses(
-        (status = 200, description = "The used quota of the user", body = QuotaUsed,
+        (status = 200, description = "The available and used quota of the user", body = Quota,
             example = json!({
+                "available": 4321,
                 "used": 1234,
             })
         )
@@ -275,19 +281,22 @@ pub struct QuotaUsed {
 pub(crate) async fn quota_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: C::Session,
-) -> Result<impl Responder> {
-    let quota_used = ctx.user_db_ref().quota_used(&session).await?;
-    Ok(web::Json(QuotaUsed { used: quota_used }))
+) -> Result<web::Json<Quota>> {
+    let available = ctx.user_db_ref().quota_available(&session).await?;
+    let used = ctx.user_db_ref().quota_used(&session).await?;
+
+    Ok(web::Json(Quota { available, used }))
 }
 
-/// Retrieves the used quota of a specific user.
+/// Retrieves the available and used quota of a specific user.
 #[utoipa::path(
     tag = "User",
     get,
     path = "/quotas/{user}",
     responses(
-        (status = 200, description = "The used quota of the user", body = QuotaUsed,
+        (status = 200, description = "The available and used quota of the user", body = Quota,
             example = json!({
+                "available": 4321,
                 "used": 1234,
             })
         )
@@ -299,23 +308,62 @@ pub(crate) async fn quota_handler<C: ProContext>(
         ("session_token" = [])
     )
 )]
-pub(crate) async fn user_quota_handler<C: ProContext>(
+pub(crate) async fn get_user_quota_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: Either<AdminSession, C::Session>,
     user: web::Path<UserId>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<Quota>> {
     let user = user.into_inner();
 
     if let Either::Right(session) = session {
         if session.user.id != user {
             return Err(error::Error::Authorization {
-                source: Box::new(error::Error::AnonymousAccessDisabled),
+                source: Box::new(error::Error::OperationRequiresAdminPrivilige),
             });
         }
     }
 
-    let quota_used = ctx.user_db_ref().quota_used_by_user(&user).await?;
-    Ok(web::Json(QuotaUsed { used: quota_used }))
+    let available = ctx.user_db_ref().quota_available_by_user(&user).await?;
+    let used = ctx.user_db_ref().quota_used_by_user(&user).await?;
+    Ok(web::Json(Quota { available, used }))
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct UpdateQuota {
+    pub available: i64,
+}
+
+/// Update the available quota of a specific user.
+#[utoipa::path(
+    tag = "User",
+    post,
+    path = "/quotas/{user}",
+    request_body = UpdateQuota,
+    responses(
+        (status = 200, description = "Quota was updated")
+    ),
+    params(
+        ("user" = UserId, description = "User id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn update_user_quota_handler<C: ProContext>(
+    ctx: web::Data<C>,
+    _session: AdminSession,
+    user: web::Path<UserId>,
+    update: web::Json<UpdateQuota>,
+) -> Result<HttpResponse> {
+    let user = user.into_inner();
+
+    let update = update.into_inner();
+
+    ctx.user_db_ref()
+        .update_quota_available_by_user(&user, update.available)
+        .await?;
+
+    Ok(actix_web::HttpResponse::Ok().finish())
 }
 
 /// Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.
@@ -419,7 +467,8 @@ mod tests {
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
     };
     use crate::pro::util::tests::{
-        create_project_helper, create_session_helper, send_pro_test_request,
+        create_project_helper, create_session_helper, register_ndvi_workflow_helper,
+        send_pro_test_request,
     };
     use crate::pro::{contexts::ProInMemoryContext, users::UserId};
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
@@ -427,9 +476,11 @@ mod tests {
 
     use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb};
     use crate::pro::util::config::Oidc;
+    use actix_http::header::CONTENT_TYPE;
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
     use httptest::matchers::request;
@@ -1261,7 +1312,7 @@ mod tests {
             .uri("/quota")
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
         let res = send_pro_test_request(req, ctx.clone()).await;
-        let quota: QuotaUsed = test::read_body_json(res).await;
+        let quota: Quota = test::read_body_json(res).await;
         assert_eq!(quota.used, 111);
 
         // specific user quota (self)
@@ -1269,7 +1320,7 @@ mod tests {
             .uri(&format!("/quotas/{}", session.user.id))
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
         let res = send_pro_test_request(req, ctx.clone()).await;
-        let quota: QuotaUsed = test::read_body_json(res).await;
+        let quota: Quota = test::read_body_json(res).await;
         assert_eq!(quota.used, 111);
 
         // specific user quota (other)
@@ -1293,7 +1344,147 @@ mod tests {
                 ),
             ));
         let res = send_pro_test_request(req, ctx).await;
-        let quota: QuotaUsed = test::read_body_json(res).await;
+        let quota: Quota = test::read_body_json(res).await;
         assert_eq!(quota.used, 111);
+    }
+
+    #[tokio::test]
+    async fn it_updates_quota() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let user = Validated {
+            user_input: UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+                real_name: "Foo Bar".to_string(),
+            },
+        };
+
+        let user_id = ctx.user_db_ref().register(user).await.unwrap();
+
+        let admin_session: UserSession = AdminSession::default().into();
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/quotas/{user_id}"))
+            .append_header((
+                header::AUTHORIZATION,
+                format!("Bearer {}", admin_session.id),
+            ));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        let quota: Quota = test::read_body_json(res).await;
+        assert_eq!(
+            quota.available,
+            crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                .unwrap()
+                .default_available_quota
+        );
+
+        let update = UpdateQuota { available: 123 };
+
+        let req = test::TestRequest::post()
+            .uri(&format!("/quotas/{user_id}"))
+            .append_header((
+                header::AUTHORIZATION,
+                format!("Bearer {}", admin_session.id),
+            ))
+            .set_json(update);
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/quotas/{user_id}"))
+            .append_header((
+                header::AUTHORIZATION,
+                format!("Bearer {}", admin_session.id),
+            ));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        let quota: Quota = test::read_body_json(res).await;
+        assert_eq!(quota.available, 123);
+    }
+
+    #[tokio::test]
+    async fn it_checks_quota_before_querying() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let session = ctx.user_db_ref().anonymous().await.unwrap();
+
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::white()).try_into().unwrap(),
+                (255.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            DefaultColors::OverUnder {
+                over_color: RgbaColor::white(),
+                under_color: RgbaColor::black(),
+            },
+        )
+        .unwrap();
+
+        let params = &[
+            ("request", "GetMap"),
+            ("service", "WMS"),
+            ("version", "1.3.0"),
+            ("layers", &id.to_string()),
+            (
+                "bbox",
+                "1.95556640625,0.90087890625,1.9775390625,0.9228515625",
+            ),
+            ("width", "256"),
+            ("height", "256"),
+            ("crs", "EPSG:4326"),
+            (
+                "styles",
+                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+            ),
+            ("format", "image/png"),
+            ("time", "2014-04-01T12:00:00.0Z"),
+            ("exceptions", "JSON"),
+        ];
+
+        ctx.user_db_ref()
+            .update_quota_available_by_user(&session.user.id, 0)
+            .await
+            .unwrap();
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/wms/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        ErrorResponse::assert(
+            res,
+            200,
+            "Operator",
+            "Operator: CreatingProcessorFailed: QuotaExhausted",
+        )
+        .await;
+
+        ctx.user_db_ref()
+            .update_quota_available_by_user(&session.user.id, 9999)
+            .await
+            .unwrap();
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/wms/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
+        let res = send_pro_test_request(req, ctx).await;
+
+        assert_eq!(res.status(), 200);
+        assert_eq!(
+            res.headers().get(&CONTENT_TYPE),
+            Some(&header::HeaderValue::from_static("image/png"))
+        );
     }
 }

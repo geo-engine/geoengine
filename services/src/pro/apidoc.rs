@@ -1,11 +1,12 @@
 use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId,
-    FeatureDataType, LayerId, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
-    Palette, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
-    RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority,
-    SpatialReferenceOption, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
-    TimeInterval, TimeStep, VectorDataType,
+    Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, DateTimeParseFormat, DefaultColors,
+    ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
+    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, OverUnderColors, Palette,
+    PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
+    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
+    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
+    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
@@ -26,6 +27,7 @@ use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::datasets::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::handlers;
+use crate::handlers::plots::WrappedPlotOutput;
 use crate::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
@@ -39,7 +41,7 @@ use crate::layers::listing::LayerCollectionId;
 use crate::ogc::util::OgcBoundingBox;
 use crate::ogc::{wcs, wfs, wms};
 use crate::pro;
-use crate::pro::handlers::users::QuotaUsed;
+use crate::pro::handlers::users::{Quota, UpdateQuota};
 use crate::projects::{
     ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
     PolygonSymbology, ProjectId, RasterSymbology, STRectangle, StrokeParam, Symbology,
@@ -93,9 +95,11 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::login_handler,
         pro::handlers::users::logout_handler,
         pro::handlers::users::quota_handler,
-        pro::handlers::users::user_quota_handler,
+        pro::handlers::users::get_user_quota_handler,
+        pro::handlers::users::update_user_quota_handler,
         pro::handlers::users::register_user_handler,
         pro::handlers::users::session_handler,
+        handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
         handlers::datasets::get_dataset_handler,
@@ -111,7 +115,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             UserRegistration,
             DateTime,
             UserInfo,
-            QuotaUsed,
+            Quota,
+            UpdateQuota,
 
             DataId,
             DataProviderId,
@@ -199,6 +204,10 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             StrokeParam,
             Symbology,
             TextSymbology,
+            LinearGradient,
+            LogarithmicGradient,
+            DefaultColors,
+            OverUnderColors,
 
             OgcBoundingBox,
             MapResponse,
@@ -281,7 +290,10 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             AddDataset,
             Volume,
             VolumeName,
-            DataPath
+            DataPath,
+
+            PlotOutputFormat,
+            WrappedPlotOutput
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

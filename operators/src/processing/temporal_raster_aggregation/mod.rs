@@ -4,6 +4,6 @@ mod subquery;
 mod temporal_aggregation_operator;
 
 pub use temporal_aggregation_operator::{
-    TemporalRasterAggregation, TemporalRasterAggregationParameters,
+    Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters,
     TemporalRasterAggregationProcessor,
 };

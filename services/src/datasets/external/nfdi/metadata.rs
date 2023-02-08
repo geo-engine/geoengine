@@ -16,7 +16,7 @@ pub const METADATA_KEY: &str = "geoengine";
 pub struct GEMetadata {
     pub crs: Option<SpatialReference>,
     pub data_type: DataType,
-    pub provenance: Option<Provenance>,
+    pub provenance: Option<Vec<Provenance>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -108,11 +108,11 @@ mod tests {
                 }],
                 temporal_extend: None,
             }),
-            provenance: Some(Provenance {
+            provenance: Some(vec![Provenance {
                 citation: "Test".to_string(),
                 license: "MIT".to_string(),
                 uri: "http://geoengine.io".to_string(),
-            }),
+            }]),
         };
 
         let json = serde_json::json!({
@@ -128,11 +128,13 @@ mod tests {
                     "temporalExtend":null
                 }
             },
-            "provenance":{
-                "citation":"Test",
-                "license":"MIT",
-                "uri":"http://geoengine.io"
-            }
+            "provenance": [
+                {
+                    "citation":"Test",
+                    "license":"MIT",
+                    "uri":"http://geoengine.io"
+                }
+            ]
         });
 
         let des = serde_json::from_value::<GEMetadata>(serde_json::to_value(&md).unwrap()).unwrap();
@@ -159,11 +161,11 @@ mod tests {
                     y_pixel_size: -0.1,
                 },
             }),
-            provenance: Some(Provenance {
+            provenance: Some(vec![Provenance {
                 citation: "Test".to_string(),
                 license: "MIT".to_string(),
                 uri: "http://geoengine.io".to_string(),
-            }),
+            }]),
         };
 
         let json = serde_json::json!({
@@ -185,11 +187,13 @@ mod tests {
                     }
                 }
             },
-            "provenance":{
-                "citation":"Test",
-                "license":"MIT",
-                "uri":"http://geoengine.io"
-            }
+            "provenance": [
+                {
+                    "citation":"Test",
+                    "license":"MIT",
+                    "uri":"http://geoengine.io"
+                }
+            ]
         });
 
         let des = serde_json::from_value::<GEMetadata>(serde_json::to_value(&md).unwrap()).unwrap();

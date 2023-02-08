@@ -29,5 +29,8 @@ pub use raster_type_conversion::{RasterTypeConversionParams, RasterTypeConversio
 pub use reprojection::{
     InitializedRasterReprojection, InitializedVectorReprojection, Reprojection, ReprojectionParams,
 };
+pub use temporal_raster_aggregation::{
+    Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters,
+};
 pub use time_projection::{TimeProjection, TimeProjectionError, TimeProjectionParams};
 pub use time_shift::{TimeShift, TimeShiftError, TimeShiftParams};

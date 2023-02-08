@@ -76,7 +76,7 @@ pub struct AddDataset {
     pub description: String,
     pub source_operator: String,
     pub symbology: Option<Symbology>,
-    pub provenance: Option<Provenance>,
+    pub provenance: Option<Vec<Provenance>>,
 }
 
 impl UserInput for AddDataset {
