@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - https://github.com/geo-engine/geoengine/pull/684
 
+- Added a GBIF.org occurrence snapshot data provider.
+
+  - https://github.com/geo-engine/geoengine/pull/718
+
 - Added a GFBio Collection Data Provider that replaces the custom GFBio API for accessing search results.
 
   - https://github.com/geo-engine/geoengine/pull/697
