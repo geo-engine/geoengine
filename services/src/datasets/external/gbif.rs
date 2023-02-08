@@ -147,7 +147,10 @@ impl GbifDataProvider {
             filter = filters
                 .iter()
                 .enumerate()
-                .map(|(index, (column, _))| format!(" AND {column} = ${index}", index = index + 4))
+                .map(|(index, (column, _))| format!(
+                    r#" AND "{column}" = ${index}"#,
+                    index = index + 4
+                ))
                 .collect::<String>()
         );
 
@@ -202,7 +205,10 @@ impl GbifDataProvider {
             filter = filters
                 .iter()
                 .enumerate()
-                .map(|(index, (column, _))| format!(" AND {column} = ${index}", index = index + 3))
+                .map(|(index, (column, _))| format!(
+                    r#" AND "{column}" = ${index}"#,
+                    index = index + 3
+                ))
                 .collect::<String>()
         );
         let stmt = conn.prepare(query).await?;
