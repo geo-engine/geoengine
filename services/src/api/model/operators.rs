@@ -64,10 +64,12 @@ pub enum TypedOperator {
     Plot(Box<dyn geoengine_operators::engine::PlotOperator>),
 }
 
-impl ToSchema for TypedOperator {
-    fn schema() -> utoipa::openapi::Schema {
+impl<'a> ToSchema<'a> for TypedOperator {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
-        ObjectBuilder::new()
+        (
+            "TypedOperator",
+            ObjectBuilder::new()
             .property(
                 "type",
                 ObjectBuilder::new()
@@ -98,6 +100,7 @@ impl ToSchema for TypedOperator {
             })))
             .description(Some("An enum to differentiate between `Operator` variants"))
             .into()
+        )
     }
 }
 
@@ -397,36 +400,42 @@ impl From<OgrMetaData>
     }
 }
 
-impl ToSchema for MockMetaData {
-    fn schema() -> utoipa::openapi::Schema {
+impl<'a> ToSchema<'a> for MockMetaData {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property(
-                "loadingInfo",
-                Ref::from_schema_name("MockDatasetDataSourceLoadingInfo"),
-            )
-            .required("loadingInfo")
-            .property(
-                "resultDescriptor",
-                Ref::from_schema_name("VectorResultDescriptor"),
-            )
-            .required("resultDescriptor")
-            .into()
+        (
+            "MockMetaData",
+            ObjectBuilder::new()
+                .property(
+                    "loadingInfo",
+                    Ref::from_schema_name("MockDatasetDataSourceLoadingInfo"),
+                )
+                .required("loadingInfo")
+                .property(
+                    "resultDescriptor",
+                    Ref::from_schema_name("VectorResultDescriptor"),
+                )
+                .required("resultDescriptor")
+                .into(),
+        )
     }
 }
 
-impl ToSchema for OgrMetaData {
-    fn schema() -> utoipa::openapi::Schema {
+impl<'a> ToSchema<'a> for OgrMetaData {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
-        ObjectBuilder::new()
-            .property("loadingInfo", Ref::from_schema_name("OgrSourceDataset"))
-            .required("loadingInfo")
-            .property(
-                "resultDescriptor",
-                Ref::from_schema_name("VectorResultDescriptor"),
-            )
-            .required("resultDescriptor")
-            .into()
+        (
+            "MockMetaData",
+            ObjectBuilder::new()
+                .property("loadingInfo", Ref::from_schema_name("OgrSourceDataset"))
+                .required("loadingInfo")
+                .property(
+                    "resultDescriptor",
+                    Ref::from_schema_name("VectorResultDescriptor"),
+                )
+                .required("resultDescriptor")
+                .into(),
+        )
     }
 }
 

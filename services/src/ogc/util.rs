@@ -22,9 +22,12 @@ pub struct OgcBoundingBox {
     values: [f64; 4],
 }
 
-impl ToSchema for OgcBoundingBox {
-    fn schema() -> utoipa::openapi::schema::Schema {
-        ObjectBuilder::new().schema_type(SchemaType::String).into()
+impl<'a> ToSchema<'a> for OgcBoundingBox {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        (
+            "OgcBoundingBox",
+            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+        )
     }
 }
 
