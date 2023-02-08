@@ -146,9 +146,11 @@ mod tests {
         let mut success = false;
         for _ in 0..10 {
             let used = ctx.user_db_ref().quota_used(&session).await.unwrap();
+            let available = ctx.user_db_ref().quota_available(&session).await.unwrap();
+
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-            if used == 2 {
+            if used == 2 && available == 9997 {
                 success = true;
                 break;
             }

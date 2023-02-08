@@ -213,6 +213,7 @@ impl UserDb for HashMapUserDb {
 
     async fn increment_quota_used(&self, user: &UserId, quota_used: u64) -> Result<()> {
         *self.quota_used.write().await.entry(*user).or_default() += quota_used;
+        *self.quota_available.write().await.entry(*user).or_default() -= quota_used as i64;
         Ok(())
     }
 
