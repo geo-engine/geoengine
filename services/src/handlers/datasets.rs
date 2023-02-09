@@ -236,7 +236,91 @@ impl<C: Context> FromRequest for AdminOrSession<C> {
     tag = "Datasets",
     post,
     path = "/dataset",
-    request_body = CreateDataset,
+    request_body(content = CreateDataset, examples(
+        ("Germany Border" = (value = json!({
+            "dataPath": {
+                "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+            },
+            "definition": {
+                "properties": {
+                    "name": "Germany Border",
+                    "description": "The Outline of Germany",
+                    "sourceOperator": "OgrSource"
+                },
+                "metaData": {
+                    "type": "OgrMetaData",
+                    "loadingInfo": {
+                        "fileName": "germany_polygon.gpkg",
+                        "layerName": "test_germany",
+                        "dataType": "MultiPolygon",
+                        "time": {
+                            "type": "none"
+                        },
+                        "columns": {
+                            "x": "",
+                            "y": null,
+                            "text": [],
+                            "float": [],
+                            "int": [],
+                            "bool": [],
+                            "datetime": [],
+                        },
+                        "forceOgrTimeFilter": false,
+                        "onError": "ignore"
+                    },
+                    "resultDescriptor": {
+                        "dataType": "MultiPolygon",
+                        "spatialReference": "EPSG:4326",
+                        "columns": {}
+                    }
+                }
+            }
+        }))),
+        ("Plain Data" = (value = json!({
+            "dataPath": {
+                "upload": "f3bd61ef-d9ce-471c-89a1-46b5f7295886"
+            },
+            "definition": {
+                "properties": {
+                    "name": "Plain Data",
+                    "description": "Demo Dataset",
+                    "sourceOperator": "OgrSource"
+                },
+                "metaData": {
+                    "type": "OgrMetaData",
+                    "loadingInfo": {
+                        "fileName": "plain_data.csv",
+                        "layerName": "plain_data",
+                        "dataType": "Data",
+                        "time": {
+                            "type": "none"
+                        },
+                        "columns": {
+                            "x": "",
+                            "y": null,
+                            "text": [],
+                            "float": [],
+                            "int": ["a"]
+                        },
+                        "forceOgrTimeFilter": false,
+                        "onError": "abort"
+                    },
+                    "resultDescriptor": {
+                        "dataType": "Data",
+                        "spatialReference": "EPSG:4326",
+                        "columns": {
+                            "a": {
+                                "dataType": "int",
+                                "measurement": {
+                                    "type": "unitless"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }))))
+    ),
     responses(
         (status = 200, description = "OK", body = IdResponse,
             example = json!({
