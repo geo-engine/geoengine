@@ -1118,9 +1118,7 @@ fn properties_from_gdal_metadata<'a, I, M>(
                 &m.source_key, &m.target_key, &entry
             );
 
-            properties
-                .properties_map
-                .insert(m.target_key.clone(), entry);
+            properties.insert_property(m.target_key.clone(), entry);
         }
     }
 }
@@ -1133,8 +1131,9 @@ fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRa
         properties.set_offset(offset);
     };
 
-    if let Some(band_name) = gdal_dataset.metadata_item("band_name", "") {
-        properties.set_band_name(band_name);
+    // ignore if there is no description
+    if let Ok(description) = gdal_dataset.description() {
+        properties.set_description(description);
     }
 }
 
@@ -1480,17 +1479,17 @@ mod tests {
         assert_eq!(grid.validity_mask.data.len(), 64);
         assert_eq!(grid.validity_mask.data, &[true; 64]);
 
-        assert!(properties.scale.is_none());
-        assert!(properties.offset.is_none());
+        assert!((properties.scale_option()).is_none());
+        assert!(properties.offset_option().is_none());
         assert_eq!(
-            properties.properties_map.get(&RasterPropertiesKey {
+            properties.get_property(&RasterPropertiesKey {
                 key: "AREA_OR_POINT".to_string(),
                 domain: None,
             }),
             Some(&RasterPropertiesEntry::String("Area".to_string()))
         );
         assert_eq!(
-            properties.properties_map.get(&RasterPropertiesKey {
+            properties.get_property(&RasterPropertiesKey {
                 domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
                 key: "COMPRESSION".to_string(),
             }),

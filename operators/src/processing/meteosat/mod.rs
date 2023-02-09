@@ -101,27 +101,19 @@ mod test_util {
         let mut props = RasterProperties::default();
 
         if let Some(v) = channel {
-            props
-                .properties_map
-                .insert(new_channel_key(), RasterPropertiesEntry::Number(v.as_()));
+            props.insert_property(new_channel_key(), RasterPropertiesEntry::Number(v.as_()));
         }
 
         if let Some(v) = satellite {
-            props
-                .properties_map
-                .insert(new_satellite_key(), RasterPropertiesEntry::Number(v.as_()));
+            props.insert_property(new_satellite_key(), RasterPropertiesEntry::Number(v.as_()));
         }
 
         if let Some(v) = slope {
-            props
-                .properties_map
-                .insert(new_slope_key(), RasterPropertiesEntry::Number(v));
+            props.insert_property(new_slope_key(), RasterPropertiesEntry::Number(v));
         }
 
         if let Some(v) = offset {
-            props
-                .properties_map
-                .insert(new_offset_key(), RasterPropertiesEntry::Number(v));
+            props.insert_property(new_offset_key(), RasterPropertiesEntry::Number(v));
         }
         props
     }

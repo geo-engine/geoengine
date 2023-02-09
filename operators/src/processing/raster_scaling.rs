@@ -25,8 +25,8 @@ use tracing::{span, Level};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterScalingParams {
-    slope: PropertiesKeyOrValue,
-    offset: PropertiesKeyOrValue,
+    slope_key_or_value: Option<PropertiesKeyOrValue>,
+    offset_key_or_value: Option<PropertiesKeyOrValue>,
     output_measurement: Option<Measurement>,
     scaling_mode: ScalingMode,
 }
@@ -69,8 +69,8 @@ impl OperatorName for RasterScaling {
 }
 
 pub struct InitializedRasterScalingOperator {
-    slope: PropertiesKeyOrValue,
-    offset: PropertiesKeyOrValue,
+    slope_key_or_value: Option<PropertiesKeyOrValue>,
+    offset_key_or_value: Option<PropertiesKeyOrValue>,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     scaling_mode: ScalingMode,
@@ -99,8 +99,8 @@ impl RasterOperator for RasterScaling {
         };
 
         let initialized_operator = InitializedRasterScalingOperator {
-            slope: self.params.slope,
-            offset: self.params.offset,
+            slope_key_or_value: self.params.slope_key_or_value,
+            offset_key_or_value: self.params.offset_key_or_value,
             result_descriptor: out_desc,
             source: input,
             scaling_mode: self.params.scaling_mode,
@@ -118,17 +118,17 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        let slope = self.slope.clone();
-        let offset = self.offset.clone();
+        let slope_key_or_value = self.slope_key_or_value.clone();
+        let offset_key_or_value = self.offset_key_or_value.clone();
         let source = self.source.query_processor()?;
         let scaling_mode = self.scaling_mode;
 
         let res = match scaling_mode {
             ScalingMode::Scale => {
-                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, ScaleTransformation>(slope, offset,  source_proc)) })
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, ScaleTransformation>(slope_key_or_value, offset_key_or_value,  source_proc)) })
             }
             ScalingMode::Unscale => {
-                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, UnscaleTransformation>(slope, offset,  source_proc)) })
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, UnscaleTransformation>(slope_key_or_value, offset_key_or_value,  source_proc)) })
             }
         };
 
@@ -141,14 +141,14 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
-    slope: PropertiesKeyOrValue,
-    offset: PropertiesKeyOrValue,
+    slope_key_or_value: Option<PropertiesKeyOrValue>,
+    offset_key_or_value: Option<PropertiesKeyOrValue>,
     _transformation: PhantomData<S>,
 }
 
 fn create_boxed_processor<Q, P, S>(
-    slope: PropertiesKeyOrValue,
-    offset: PropertiesKeyOrValue,
+    slope_key_or_value: Option<PropertiesKeyOrValue>,
+    offset_key_or_value: Option<PropertiesKeyOrValue>,
     source: Q,
 ) -> Box<dyn RasterQueryProcessor<RasterType = P>>
 where
@@ -157,7 +157,12 @@ where
     f64: AsPrimitive<P>,
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
-    RasterTransformationProcessor::<Q, P, S>::create(slope, offset, source).boxed()
+    RasterTransformationProcessor::<Q, P, S>::create(
+        slope_key_or_value,
+        offset_key_or_value,
+        source,
+    )
+    .boxed()
 }
 
 impl<Q, P, S> RasterTransformationProcessor<Q, P, S>
@@ -168,14 +173,14 @@ where
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
     pub fn create(
-        slope: PropertiesKeyOrValue,
-        offset: PropertiesKeyOrValue,
+        slope_key_or_value: Option<PropertiesKeyOrValue>,
+        offset_key_or_value: Option<PropertiesKeyOrValue>,
         source: Q,
     ) -> RasterTransformationProcessor<Q, P, S> {
         RasterTransformationProcessor {
             source,
-            slope,
-            offset,
+            slope_key_or_value,
+            offset_key_or_value,
             _transformation: PhantomData,
         }
     }
@@ -185,8 +190,18 @@ where
         tile: RasterTile2D<P>,
         _pool: Arc<ThreadPool>,
     ) -> Result<RasterTile2D<P>> {
-        let offset = Self::prop_value(&self.offset, &tile.properties)?;
-        let slope = Self::prop_value(&self.slope, &tile.properties)?;
+        // either use the provided metadata/constant or the default values from the properties
+        let offset = if let Some(offset_key_or_value) = &self.offset_key_or_value {
+            Self::prop_value(offset_key_or_value, &tile.properties)?
+        } else {
+            tile.properties.offset().as_()
+        };
+
+        let slope = if let Some(slope_key_or_value) = &self.slope_key_or_value {
+            Self::prop_value(slope_key_or_value, &tile.properties)?
+        } else {
+            tile.properties.scale().as_()
+        };
 
         let res_tile =
             crate::util::spawn_blocking(move || tile.transform_elements::<S>(slope, offset))
@@ -296,23 +311,14 @@ mod tests {
         }
         .boxed();
 
-        let slope = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
-            domain: None,
-            key: "scale".to_string(),
-        });
-        let offset = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
-            domain: None,
-            key: "offset".to_string(),
-        });
-
         let scaling_mode = ScalingMode::Unscale;
 
         let output_measurement = None;
 
         let op = RasterScaling {
             params: RasterScalingParams {
-                slope,
-                offset,
+                slope_key_or_value: None,
+                offset_key_or_value: None,
                 output_measurement,
                 scaling_mode,
             },
@@ -410,22 +416,13 @@ mod tests {
         }
         .boxed();
 
-        let slope = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
-            domain: None,
-            key: "scale".to_string(),
-        });
-        let offset = PropertiesKeyOrValue::MetadataKey(RasterPropertiesKey {
-            domain: None,
-            key: "offset".to_string(),
-        });
-
         let scaling_mode = ScalingMode::Scale;
 
         let output_measurement = None;
 
         let params = RasterScalingParams {
-            slope,
-            offset,
+            slope_key_or_value: None,
+            offset_key_or_value: None,
             output_measurement,
             scaling_mode,
         };
