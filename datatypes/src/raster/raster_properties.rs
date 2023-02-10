@@ -8,31 +8,38 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
+/// This struct stores properties of a raster tile.
+/// This includes the scale and offset of the raster as well as a a description and a map of additional properties.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RasterProperties {
-    pub scale: Option<f64>,
-    pub offset: Option<f64>,
-    pub band_name: Option<String>,
-    pub properties_map: HashMap<RasterPropertiesKey, RasterPropertiesEntry>,
+    scale: Option<f64>,
+    offset: Option<f64>,
+    description: Option<String>,
+    properties_map: HashMap<RasterPropertiesKey, RasterPropertiesEntry>,
 }
 
 impl RasterProperties {
+    /// Returns an iterator over all domains of the properties.
     pub fn domains(&self) -> impl Iterator<Item = Option<&String>> {
         self.properties_map.keys().map(|m| m.domain.as_ref())
     }
 
+    /// Sets the scale factor of the raster.
     pub fn set_scale(&mut self, scale: f64) {
         self.scale = Some(scale);
     }
 
+    /// Sets the offset of the raster.
     pub fn set_offset(&mut self, offset: f64) {
         self.offset = Some(offset);
     }
 
-    pub fn set_band_name(&mut self, band_name: String) {
-        self.band_name = Some(band_name);
+    /// Sets the description of the raster.
+    pub fn set_description(&mut self, description: String) {
+        self.description = Some(description);
     }
 
+    /// Inserts a property into the properties map.
     pub fn insert_property(
         &mut self,
         key: RasterPropertiesKey,
@@ -41,53 +48,62 @@ impl RasterProperties {
         self.properties_map.insert(key, value)
     }
 
+    /// Returns the scale factor of the raster. Will return `1.0` if no scale factor is set.
+    pub fn scale(&self) -> f64 {
+        self.scale.unwrap_or(1.0)
+    }
+
+    /// Returns the offset of the raster. Will return `0.0` if no offset is set.
+    pub fn offset(&self) -> f64 {
+        self.offset.unwrap_or(0.0)
+    }
+
+    /// Returns the scale factor of the raster. Will return `None` if no scale factor is set.
+    pub fn scale_option(&self) -> Option<f64> {
+        self.scale
+    }
+
+    /// Returns the offset of the raster. Will return `None` if no offset is set.
+    pub fn offset_option(&self) -> Option<f64> {
+        self.offset
+    }
+
+    /// Returns the description of the raster. Will return `None` if no description is set.
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    /// Returns the value of the property with the given key.
+    /// If the key is not found, `None` is returned.
     pub fn get_property(&self, key: &RasterPropertiesKey) -> Option<&RasterPropertiesEntry> {
         self.properties_map.get(key)
     }
 
+    /// Returns a number value of the property with the given key and domain.
+    ///
+    /// # Errors
+    /// IF the property is not found or the type does not match, an error is returned.
     pub fn number_property<T: Copy + FromPrimitive>(&self, key: &RasterPropertiesKey) -> Result<T> {
-        if key.domain.is_none() && key.key == "scale" {
-            return self
-                .scale
-                .and_then(|s| T::from_f64(s))
-                .ok_or(Error::MissingRasterProperty {
-                    property: key.to_string(),
-                });
-        }
-
-        if key.domain.is_none() && key.key == "offset" {
-            return self
-                .offset
-                .and_then(|s| T::from_f64(s))
-                .ok_or(Error::MissingRasterProperty {
-                    property: key.to_string(),
-                });
-        }
-
-        let val = f64::try_from(
-            self.get_property(key)
-                .ok_or(Error::MissingRasterProperty {
-                    property: key.to_string(),
-                })?
-                .clone(),
-        )?;
+        let val = f64::try_from(self.get_property(key).cloned().ok_or(
+            Error::MissingRasterProperty {
+                property: key.to_string(),
+            },
+        )?)?;
         T::from_f64(val).ok_or(Error::WrongMetadataType)
     }
 
-    pub fn string_property(&self, key: &RasterPropertiesKey) -> Result<String> {
-        if key.domain.is_none() && key.key == "band_name" {
-            return self.band_name.clone().ok_or(Error::MissingRasterProperty {
-                property: key.to_string(),
-            });
+    /// Returns a string value of the property with the given key and domain.
+    ///
+    /// # Errors
+    /// IF the property is not found or the type does not match, an error is returned.
+    pub fn string_property(&self, key: &RasterPropertiesKey) -> Result<&str> {
+        let s = self.get_property(key).ok_or(Error::MissingRasterProperty {
+            property: key.to_string(),
+        })?;
+        match s {
+            RasterPropertiesEntry::String(s) => Ok(s),
+            RasterPropertiesEntry::Number(_) => Err(Error::WrongMetadataType),
         }
-
-        let s = self
-            .get_property(key)
-            .ok_or(Error::MissingRasterProperty {
-                property: key.to_string(),
-            })?
-            .to_string();
-        Ok(s)
     }
 }
 
@@ -230,7 +246,7 @@ mod tests {
             .insert(key.clone(), RasterPropertiesEntry::String("test".into()));
 
         match props.string_property(&key) {
-            Ok(v) => assert_eq!("test", v.as_str()),
+            Ok(v) => assert_eq!("test", v),
             _ => panic!("Expected valid property entry."),
         }
     }

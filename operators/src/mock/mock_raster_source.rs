@@ -347,7 +347,7 @@ mod tests {
                     "properties":{
                         "scale":null,
                         "offset":null,
-                        "band_name":null,
+                        "description":null,
                         "properties_map":{}
                     }
                 }],
