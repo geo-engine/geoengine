@@ -137,6 +137,8 @@ anonymous_access = true
 # Settings for Geo Engine Pro
 [user]
 user_registration = true
+quota_check = false
+# default_available_quota = 999999
 
 [odm]
 endpoint = "http://localhost:3000/"

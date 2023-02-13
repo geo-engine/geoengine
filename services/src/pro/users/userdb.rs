@@ -86,6 +86,14 @@ pub trait UserDb: Send + Sync {
     ///
     async fn quota_used(&self, session: &UserSession) -> Result<u64>;
 
+    /// Gets the current users available quota. `session` is used to identify the user.
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the session is invalid
+    ///
+    async fn quota_available(&self, session: &UserSession) -> Result<i64>;
+
     /// Increments a users quota by the given amount
     ///
     /// # Errors
@@ -103,4 +111,26 @@ pub trait UserDb: Send + Sync {
     ///
     /// // TODO: move this method to some AdminDb?
     async fn quota_used_by_user(&self, user: &UserId) -> Result<u64>;
+
+    /// Gets a specific users available quota
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the user is unknown
+    ///
+    /// // TODO: move this method to some AdminDb?
+    async fn quota_available_by_user(&self, user: &UserId) -> Result<i64>;
+
+    /// Updates a specific users available quota
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the user is unknown
+    ///
+    /// // TODO: move this method to some AdminDb?
+    async fn update_quota_available_by_user(
+        &self,
+        user: &UserId,
+        new_available_quota: i64,
+    ) -> Result<()>;
 }

@@ -375,12 +375,15 @@ fn handle_wms_error(
 
 pub struct MapResponse {}
 
-impl ToSchema for MapResponse {
-    fn schema() -> utoipa::openapi::schema::Schema {
-        ObjectBuilder::new()
-            .schema_type(SchemaType::String)
-            .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
-            .into()
+impl<'a> ToSchema<'a> for MapResponse {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        (
+            "MapResponse",
+            ObjectBuilder::new()
+                .schema_type(SchemaType::String)
+                .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
+                .into(),
+        )
     }
 }
 

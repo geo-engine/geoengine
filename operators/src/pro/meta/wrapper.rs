@@ -4,27 +4,26 @@ use crate::engine::{
     VectorResultDescriptor,
 };
 use crate::pro::adapters::stream_statistics_adapter::StreamStatisticsAdapter;
-use crate::pro::meta::quota::QuotaTracking;
+use crate::pro::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{QueryRectangle, SpatialQuery};
 
-pub struct InitializedProcessorStatistics<S> {
+// A wrapper around an initialized operator that adds statistics and quota tracking
+pub struct InitializedOperatorWrapper<S> {
     source: S,
     span: CreateSpan,
 }
 
-impl<S> InitializedProcessorStatistics<S> {
+impl<S> InitializedOperatorWrapper<S> {
     pub fn new(source: S, span: CreateSpan) -> Self {
         Self { source, span }
     }
 }
 
-impl InitializedRasterOperator
-    for InitializedProcessorStatistics<Box<dyn InitializedRasterOperator>>
-{
+impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn InitializedRasterOperator>> {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         tracing::debug!(event = "raster result descriptor");
         self.source.result_descriptor()
@@ -37,34 +36,34 @@ impl InitializedRasterOperator
             Ok(p) => {
                 let res_processor = match p {
                     TypedRasterQueryProcessor::U8(p) => TypedRasterQueryProcessor::U8(Box::new(
-                        ProcessorStatisticsProcessor::new(p, self.span),
+                        QueryProcessorWrapper::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::U16(p) => TypedRasterQueryProcessor::U16(Box::new(
-                        ProcessorStatisticsProcessor::new(p, self.span),
+                        QueryProcessorWrapper::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::U32(p) => TypedRasterQueryProcessor::U32(Box::new(
-                        ProcessorStatisticsProcessor::new(p, self.span),
+                        QueryProcessorWrapper::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::U64(p) => TypedRasterQueryProcessor::U64(Box::new(
-                        ProcessorStatisticsProcessor::new(p, self.span),
+                        QueryProcessorWrapper::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::I8(p) => TypedRasterQueryProcessor::I8(Box::new(
-                        ProcessorStatisticsProcessor::new(p, self.span),
+                        QueryProcessorWrapper::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::I16(p) => TypedRasterQueryProcessor::I16(Box::new(
-                        ProcessorStatisticsProcessor::new(p, self.span),
+                        QueryProcessorWrapper::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::I32(p) => TypedRasterQueryProcessor::I32(Box::new(
-                        ProcessorStatisticsProcessor::new(p, self.span),
+                        QueryProcessorWrapper::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::I64(p) => TypedRasterQueryProcessor::I64(Box::new(
-                        ProcessorStatisticsProcessor::new(p, self.span),
+                        QueryProcessorWrapper::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::F32(p) => TypedRasterQueryProcessor::F32(Box::new(
-                        ProcessorStatisticsProcessor::new(p, self.span),
+                        QueryProcessorWrapper::new(p, self.span),
                     )),
                     TypedRasterQueryProcessor::F64(p) => TypedRasterQueryProcessor::F64(Box::new(
-                        ProcessorStatisticsProcessor::new(p, self.span),
+                        QueryProcessorWrapper::new(p, self.span),
                     )),
                 };
                 tracing::debug!(event = "query processor created");
@@ -78,9 +77,7 @@ impl InitializedRasterOperator
     }
 }
 
-impl InitializedVectorOperator
-    for InitializedProcessorStatistics<Box<dyn InitializedVectorOperator>>
-{
+impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn InitializedVectorOperator>> {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         tracing::debug!(event = "vector result descriptor");
         self.source.result_descriptor()
@@ -93,7 +90,7 @@ impl InitializedVectorOperator
             Ok(p) => {
                 let result = map_typed_query_processor!(
                     p,
-                    p => Box::new(ProcessorStatisticsProcessor::new(p,
+                    p => Box::new(QueryProcessorWrapper::new(p,
                     self.span))
                 );
                 tracing::debug!(event = "query processor created");
@@ -107,7 +104,8 @@ impl InitializedVectorOperator
     }
 }
 
-struct ProcessorStatisticsProcessor<Q, T>
+// A wrapper around a query processor that adds statistics and quota tracking
+struct QueryProcessorWrapper<Q, T>
 where
     Q: QueryProcessor<Output = T>,
 {
@@ -115,17 +113,17 @@ where
     span: CreateSpan,
 }
 
-impl<Q, T> ProcessorStatisticsProcessor<Q, T>
+impl<Q, T> QueryProcessorWrapper<Q, T>
 where
     Q: QueryProcessor<Output = T> + Sized,
 {
     pub fn new(processor: Q, span: CreateSpan) -> Self {
-        ProcessorStatisticsProcessor { processor, span }
+        QueryProcessorWrapper { processor, span }
     }
 }
 
 #[async_trait]
-impl<Q, T, S> QueryProcessor for ProcessorStatisticsProcessor<Q, T>
+impl<Q, T, S> QueryProcessor for QueryProcessorWrapper<Q, T>
 where
     Q: QueryProcessor<Output = T, SpatialQuery = S>,
     S: SpatialQuery + Send + Sync + 'static,
@@ -139,7 +137,15 @@ where
         query: QueryRectangle<Self::SpatialQuery>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let quota = ctx
+        let quota_checker = ctx
+            .extensions()
+            .get::<QuotaChecker>()
+            .expect("`QuotaChecker` extension should be set during `ProContext` creation");
+
+        // TODO: check the quota only once per query and not for every operator
+        quota_checker.ensure_quota_available().await?;
+
+        let quota_tracker = ctx
             .extensions()
             .get::<QuotaTracking>()
             .expect("`QuotaTracking` extension should be set during `ProContext` creation")
@@ -155,7 +161,7 @@ where
         match stream_result {
             Ok(stream) => {
                 tracing::debug!(event = "query ok");
-                Ok(StreamStatisticsAdapter::new(stream, span.clone(), quota).boxed())
+                Ok(StreamStatisticsAdapter::new(stream, span.clone(), quota_tracker).boxed())
             }
             Err(err) => {
                 tracing::debug!(event = "query error");

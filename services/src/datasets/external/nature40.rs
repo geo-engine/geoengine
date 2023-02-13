@@ -10,7 +10,6 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::parsing::{deserialize_base_url, string_or_string_array};
-use crate::util::retry::retry;
 use crate::workflows::workflow::Workflow;
 use crate::{error, util::user_input::Validated};
 use async_trait::async_trait;
@@ -29,6 +28,7 @@ use geoengine_operators::source::GdalSourceParameters;
 use geoengine_operators::util::gdal::{
     gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
 };
+use geoengine_operators::util::retry::retry;
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
@@ -300,6 +300,7 @@ impl Nature40DataProvider {
             self.request_retries.number_of_retries,
             self.request_retries.initial_delay_ms,
             self.request_retries.exponential_backoff_factor,
+            None,
             || self.try_load_dataset(db_url.clone()),
         )
         .await
@@ -956,6 +957,7 @@ mod tests {
                         gdal_open_options: Some(vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]),
                         gdal_config_options: None,
                         allow_alphaband_as_mask: true,
+                        retry: None,
                     })
                 }
             );

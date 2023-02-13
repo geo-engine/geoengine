@@ -69,6 +69,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
+            retry: None,
         },
         result_descriptor: RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -103,7 +104,6 @@ pub fn gdal_open_dataset(path: &Path) -> Result<Dataset> {
 /// Opens a Gdal Dataset with the given `path` and `dataset_options`.
 /// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
 pub fn gdal_open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Result<Dataset> {
-    #[cfg(debug_assertions)]
     let dataset_options = {
         let mut dataset_options = dataset_options;
         dataset_options.open_flags |= gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR;
@@ -200,6 +200,7 @@ pub fn gdal_parameters_from_dataset(
         gdal_open_options: open_options,
         gdal_config_options: None,
         allow_alphaband_as_mask: true,
+        retry: None,
     })
 }
 

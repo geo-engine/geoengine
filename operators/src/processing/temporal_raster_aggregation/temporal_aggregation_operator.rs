@@ -36,14 +36,14 @@ use typetag;
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TemporalRasterAggregationParameters {
-    aggregation: Aggregation,
-    window: TimeStep,
+    pub aggregation: Aggregation,
+    pub window: TimeStep,
     /// Define an anchor point for `window`
     /// If `None`, the anchor point is `1970-01-01T00:00:00Z` by default
-    window_reference: Option<TimeInstance>,
+    pub window_reference: Option<TimeInstance>,
     /// If specified, this will be the output type.
     /// If not, the output type will be the same as the input type.
-    output_type: Option<RasterDataType>,
+    pub output_type: Option<RasterDataType>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]

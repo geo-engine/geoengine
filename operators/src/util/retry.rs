@@ -15,6 +15,7 @@ pub async fn retry<F, T, E, Fut>(
     mut max_retries: usize,
     initial_delay_ms: u64,
     exponential_backoff_factor: f64,
+    max_delay_ms: Option<u64>,
     mut f: F,
 ) -> Result<T, E>
 where
@@ -32,6 +33,10 @@ where
 
         max_retries -= 1;
         sleep_delay *= exponential_backoff_factor;
+
+        if let Some(max_delay_ms) = max_delay_ms {
+            sleep_delay = sleep_delay.min(max_delay_ms as f64);
+        }
     }
 
     result
@@ -49,7 +54,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_immediate_success() {
-        let result: Result<(), ()> = retry(3, 0, 1., || ok(())).await;
+        let result: Result<(), ()> = retry(3, 0, 1., None, || ok(())).await;
 
         assert!(result.is_ok());
     }
@@ -58,7 +63,7 @@ mod tests {
     async fn test_retry_success_after_tries() {
         let i = Arc::new(AtomicUsize::new(0));
 
-        let result = retry(3, 0, 1., || {
+        let result = retry(3, 0, 1., None, || {
             let i = i.clone();
             poll_fn(move |_ctx| {
                 Poll::Ready(match i.fetch_add(1, Ordering::Relaxed) {
@@ -74,7 +79,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_failure() {
-        let result: Result<(), ()> = retry(3, 0, 1., || err(())).await;
+        let result: Result<(), ()> = retry(3, 0, 1., None, || err(())).await;
 
         assert!(result.is_err());
     }

@@ -19,18 +19,6 @@ impl WorkflowId {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
-#[schema(example = json!({
-    "type": "Vector",
-    "operator": {
-      "type": "MockPointSource",
-      "params": {
-        "points": [
-          { "x": 0.0, "y": 0.1 },
-          { "x": 1.0, "y": 1.1 }
-        ]
-      }
-    }
- }))]
 pub struct Workflow {
     #[serde(flatten)]
     pub operator: TypedOperator,

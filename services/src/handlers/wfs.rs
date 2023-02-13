@@ -543,9 +543,9 @@ pub struct Feature {
 #[derive(Debug, Deserialize)]
 pub struct Coordinates;
 
-impl ToSchema for Coordinates {
-    fn schema() -> utoipa::openapi::schema::Schema {
-        ArrayBuilder::new().into()
+impl<'a> ToSchema<'a> for Coordinates {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        ("Coordinates", ArrayBuilder::new().into())
     }
 }
 

@@ -443,12 +443,15 @@ async fn wcs_get_coverage_handler<C: Context>(
 
 pub struct CoverageResponse {}
 
-impl ToSchema for CoverageResponse {
-    fn schema() -> utoipa::openapi::schema::Schema {
-        ObjectBuilder::new()
-            .schema_type(SchemaType::String)
-            .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
-            .into()
+impl<'a> ToSchema<'a> for CoverageResponse {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        (
+            "CoverageResponse",
+            ObjectBuilder::new()
+                .schema_type(SchemaType::String)
+                .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
+                .into(),
+        )
     }
 }
 
