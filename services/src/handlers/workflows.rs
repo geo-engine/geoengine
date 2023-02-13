@@ -70,7 +70,40 @@ where
     tag = "Workflows",
     post,
     path = "/workflow",
-    request_body = Workflow,
+    request_body(content = Workflow, examples(
+        ("MockPointSource" = (value = json!({
+            "type": "Vector",
+            "operator": {
+                "type": "MockPointSource",
+                    "params": {
+                        "points": [
+                            { "x": 0.0, "y": 0.1 },
+                            { "x": 1.0, "y": 1.1 }
+                        ]
+                    }
+                }
+        }))),
+        ("Statistics Plot" = (value = json!({
+            "type": "Plot",
+            "operator": {
+                "type": "Statistics",
+                "params": {},
+                "sources": {
+                    "source": {
+                        "type": "OgrSource",
+                        "params": {
+                            "data": {
+                                "type": "internal",
+                                "datasetId": "c36f5ce7-d0df-4982-babb-cc9e67d2a196"
+                            },
+                            "attributeProjection": null,
+                            "attributeFilters": null
+                        }
+                    }
+                }
+            }
+        }))))
+    ),
     responses(
         (status = 200, description = "OK", body = IdResponse,
             example = json!({"id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"})
@@ -386,7 +419,7 @@ async fn resolve_provenance<C: Context>(
     request_body = RasterDatasetFromWorkflow,
     responses(
         (status = 200, description = "Id of created task", body = TaskResponse,
-        example = json!({"task_id": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"})
+            example = json!({"task_id": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"})
         )
     ),
     params(

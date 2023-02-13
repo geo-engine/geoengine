@@ -42,9 +42,12 @@ pub struct TypeNames {
     pub feature_type: String,
 }
 
-impl ToSchema for TypeNames {
-    fn schema() -> utoipa::openapi::schema::Schema {
-        ObjectBuilder::new().schema_type(SchemaType::String).into()
+impl<'a> ToSchema<'a> for TypeNames {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        (
+            "TypeNames",
+            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+        )
     }
 }
 
@@ -87,9 +90,12 @@ pub struct GetFeature {
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct WfsResolution(pub SpatialResolution);
 
-impl ToSchema for WfsResolution {
-    fn schema() -> utoipa::openapi::schema::Schema {
-        ObjectBuilder::new().schema_type(SchemaType::String).into()
+impl<'a> ToSchema<'a> for WfsResolution {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        (
+            "WfsResolution",
+            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+        )
     }
 }
 

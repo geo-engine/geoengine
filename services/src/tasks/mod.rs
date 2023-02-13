@@ -117,57 +117,60 @@ pub enum TaskStatus {
 }
 
 // TODO: replace TaskStatus with a more API friendly type
-impl utoipa::ToSchema for TaskStatus {
-    fn schema() -> utoipa::openapi::Schema {
+impl<'a> ToSchema<'a> for TaskStatus {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
-        OneOfBuilder::new()
-            .item(
-                ObjectBuilder::new()
-                    .property(
-                        "status",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::String)
-                            .enum_values::<[&str; 1], &str>(Some(["running"])),
-                    )
-                    .property("info", Object::new())
-                    .property("pctComplete", Object::with_type(SchemaType::String))
-                    .property("timeEstimate", Object::with_type(SchemaType::String))
-                    .property("timeStarted", Object::with_type(SchemaType::Integer)),
-            )
-            .item(
-                ObjectBuilder::new()
-                    .property(
-                        "status",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::String)
-                            .enum_values::<[&str; 1], &str>(Some(["completed"])),
-                    )
-                    .property("info", Object::new())
-                    .property("timeTotal", Object::with_type(SchemaType::String))
-                    .property("timeStarted", Object::with_type(SchemaType::Integer)),
-            )
-            .item(
-                ObjectBuilder::new()
-                    .property(
-                        "status",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::String)
-                            .enum_values::<[&str; 1], &str>(Some(["aborted"])),
-                    )
-                    .property("cleanUp", Object::new()),
-            )
-            .item(
-                ObjectBuilder::new()
-                    .property(
-                        "status",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::String)
-                            .enum_values::<[&str; 1], &str>(Some(["failed"])),
-                    )
-                    .property("error", Object::new())
-                    .property("cleanUp", Object::new()),
-            )
-            .into()
+        (
+            "TaskStatus",
+            OneOfBuilder::new()
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "status",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::String)
+                                .enum_values::<[&str; 1], &str>(Some(["running"])),
+                        )
+                        .property("info", Object::new())
+                        .property("pctComplete", Object::with_type(SchemaType::String))
+                        .property("timeEstimate", Object::with_type(SchemaType::String))
+                        .property("timeStarted", Object::with_type(SchemaType::Integer)),
+                )
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "status",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::String)
+                                .enum_values::<[&str; 1], &str>(Some(["completed"])),
+                        )
+                        .property("info", Object::new())
+                        .property("timeTotal", Object::with_type(SchemaType::String))
+                        .property("timeStarted", Object::with_type(SchemaType::Integer)),
+                )
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "status",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::String)
+                                .enum_values::<[&str; 1], &str>(Some(["aborted"])),
+                        )
+                        .property("cleanUp", Object::new()),
+                )
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "status",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::String)
+                                .enum_values::<[&str; 1], &str>(Some(["failed"])),
+                        )
+                        .property("error", Object::new())
+                        .property("cleanUp", Object::new()),
+                )
+                .into(),
+        )
     }
 }
 

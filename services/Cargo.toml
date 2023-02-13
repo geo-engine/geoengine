@@ -85,8 +85,8 @@ tracing-opentelemetry = "0.18"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi", "tracing-log"] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
-utoipa = { version = "2.4", features = ["actix_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { version = "=3.0.1", features = ["actix-web"] }
+utoipa = { version = "3.0", features = ["actix_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "=3.0.2", features = ["actix-web"] }
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
 walkdir = "2.3"
 zip = "0.6"
