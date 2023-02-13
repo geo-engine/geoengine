@@ -1,8 +1,12 @@
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use super::query::QueryContext;
 use crate::processing::RasterTypeConversionQueryProcessor;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
+use futures::Stream;
 use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
 };
@@ -13,6 +17,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
+use ouroboros::self_referencing;
 
 /// An instantiation of an operator that produces a stream of results for a query
 #[async_trait]
@@ -35,6 +40,22 @@ pub trait QueryProcessor: Send + Sync {
         Ok(Box::pin(
             ctx.abort_registration()
                 .wrap(self._query(query, ctx).await?),
+        ))
+    }
+
+    async fn into_query(
+        self,
+        query: QueryRectangle<Self::SpatialBounds>,
+        ctx: Box<dyn QueryContext>,
+    ) -> Result<BoxStream<'static, Result<Self::Output>>>
+    where
+        Self: Sized + 'static,
+    {
+        Ok(Box::pin(
+            QueryAndProcessor::try_new_async_send(self, ctx, |processor, ctx| {
+                processor.query(query, ctx.as_ref())
+            })
+            .await?,
         ))
     }
 }
@@ -637,4 +658,27 @@ macro_rules! map_typed_query_processor {
             )+
         }
     };
+}
+
+#[self_referencing]
+struct QueryAndProcessor<Q>
+where
+    Q: QueryProcessor + 'static,
+{
+    processor: Q,
+    ctx: Box<dyn QueryContext>,
+    #[borrows(processor, ctx)]
+    #[covariant]
+    stream: BoxStream<'this, Result<Q::Output>>,
+}
+
+impl<Q> Stream for QueryAndProcessor<Q>
+where
+    Q: QueryProcessor + 'static,
+{
+    type Item = Result<Q::Output>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.with_stream_mut(|stream| Pin::new(stream).poll_next(cx))
+    }
 }
