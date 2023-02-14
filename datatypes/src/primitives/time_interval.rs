@@ -441,8 +441,8 @@ impl ArrowTyped for TimeInterval {
             let ints_a_ref = a.values();
             let ints_b_ref = b.values();
 
-            let ints_a: &Int64Array = downcast_array(&ints_a_ref);
-            let ints_b: &Int64Array = downcast_array(&ints_b_ref);
+            let ints_a: &Int64Array = downcast_array(ints_a_ref);
+            let ints_b: &Int64Array = downcast_array(ints_b_ref);
 
             int_builder.append_slice(ints_a.values());
             int_builder.append_slice(ints_b.values());
