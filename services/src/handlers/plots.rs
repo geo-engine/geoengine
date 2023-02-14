@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use crate::api::model::datatypes::TimeInterval;
 use crate::error;
 use crate::error::Result;
@@ -11,6 +9,7 @@ use crate::util::server::connection_closed;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, Responder};
+use base64::Engine;
 use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle};
@@ -19,6 +18,7 @@ use geoengine_operators::engine::{QueryContext, ResultDescriptor, TypedPlotQuery
 use geoengine_operators::util::abortable_query_execution;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use std::time::Duration;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -176,7 +176,10 @@ async fn get_plot_handler<C: Context>(
                 abortable_query_execution(png_bytes, conn_closed, query_abort_trigger).await;
             let png_bytes = png_bytes.context(error::Operator)?;
 
-            let data_uri = format!("data:image/png;base64,{}", base64::encode(png_bytes));
+            let data_uri = format!(
+                "data:image/png;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(png_bytes)
+            );
 
             serde_json::to_value(data_uri).context(error::SerdeJson)?
         }
