@@ -783,10 +783,11 @@ mod tests {
 
         let loading_info = meta
             .loading_info(RasterQueryRectangle::with_partition_and_resolution(
-                SpatialPartition2D::new_unchecked(
-                    (166_021.44, 0.00).into(),
-                    (534_994.66, 9_329_005.18).into(),
-                ),
+                SpatialPartition2D::new(
+                    (166_021.44, 9_329_005.18).into(),
+                    (534_994.66, 0.00).into(),
+                )
+                .unwrap(),
                 SpatialResolution::one(),
                 TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
             ))
@@ -883,12 +884,13 @@ mod tests {
 
         let processor = op.query_processor()?.get_u16().unwrap();
 
+        let sp =
+            SpatialPartition2D::new((166_021.44, 9_329_005.18).into(), (534_994.66, 0.00).into())
+                .unwrap();
+        let sr = SpatialResolution::new_unchecked(sp.size_x() / 256., sp.size_y() / 256.);
         let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked(
-                (166_021.44, 9_329_005.18).into(),
-                (534_994.66, 0.00).into(),
-            ),
-            SpatialResolution::new_unchecked(166_021.44 / 256., (9_329_005.18 - 534_994.66) / 256.),
+            sp,
+            sr,
             exe.tiling_specification.origin_coordinate,
             TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
         );
@@ -902,7 +904,8 @@ mod tests {
             .await;
 
         // TODO: check actual data
-        assert_eq!(result.len(), 2);
+        // Note this is 1 IF the tile size larger then 256x25
+        assert_eq!(result.len(), 1);
 
         Ok(())
     }
