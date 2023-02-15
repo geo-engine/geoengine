@@ -31,18 +31,18 @@ impl GeometryCollection for MultiPolygonCollection {
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let polygons_ref = geometries.values();
-        let polygons: &ListArray = downcast_array(&polygons_ref);
+        let polygons: &ListArray = downcast_array(polygons_ref);
 
         let rings_ref = polygons.values();
-        let rings: &ListArray = downcast_array(&rings_ref);
+        let rings: &ListArray = downcast_array(rings_ref);
 
         let coordinates_ref = rings.values();
-        let coordinates: &FixedSizeListArray = downcast_array(&coordinates_ref);
+        let coordinates: &FixedSizeListArray = downcast_array(coordinates_ref);
 
         let number_of_coordinates = coordinates.data().len();
 
         let floats_ref = coordinates.values();
-        let floats: &Float64Array = downcast_array(&floats_ref);
+        let floats: &Float64Array = downcast_array(floats_ref);
 
         unsafe {
             slice::from_raw_parts(
@@ -77,7 +77,7 @@ impl MultiPolygonCollection {
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let polygons_ref = geometries.values();
-        let polygons: &ListArray = downcast_array(&polygons_ref);
+        let polygons: &ListArray = downcast_array(polygons_ref);
 
         let data = polygons.data();
         let buffer = &data.buffers()[0];
@@ -94,10 +94,10 @@ impl MultiPolygonCollection {
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let polygons_ref = geometries.values();
-        let polygons: &ListArray = downcast_array(&polygons_ref);
+        let polygons: &ListArray = downcast_array(polygons_ref);
 
         let rings_ref = polygons.values();
-        let rings: &ListArray = downcast_array(&rings_ref);
+        let rings: &ListArray = downcast_array(rings_ref);
 
         let data = rings.data();
         let buffer = &data.buffers()[0];

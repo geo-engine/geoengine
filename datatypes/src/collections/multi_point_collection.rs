@@ -158,12 +158,12 @@ impl GeometryCollection for MultiPointCollection {
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let coordinates_ref = geometries.values();
-        let coordinates: &FixedSizeListArray = downcast_array(&coordinates_ref);
+        let coordinates: &FixedSizeListArray = downcast_array(coordinates_ref);
 
         let number_of_coordinates = coordinates.data().len();
 
         let floats_ref = coordinates.values();
-        let floats: &Float64Array = downcast_array(&floats_ref);
+        let floats: &Float64Array = downcast_array(floats_ref);
 
         unsafe {
             slice::from_raw_parts(

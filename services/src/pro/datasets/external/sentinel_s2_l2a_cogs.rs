@@ -787,10 +787,11 @@ mod tests {
 
         let loading_info = meta
             .loading_info(RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
-                    (166_021.44, 0.00).into(),
-                    (534_994.66, 9_329_005.18).into(),
-                ),
+                spatial_bounds: SpatialPartition2D::new(
+                    (166_021.44, 9_329_005.18).into(),
+                    (534_994.66, 0.00).into(),
+                )
+                .unwrap(),
                 time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
                 spatial_resolution: SpatialResolution::one(),
             })
@@ -887,16 +888,18 @@ mod tests {
 
         let processor = op.query_processor()?.get_u16().unwrap();
 
+        let spatial_bounds =
+            SpatialPartition2D::new((166_021.44, 9_329_005.18).into(), (534_994.66, 0.00).into())
+                .unwrap();
+
+        let spatial_resolution = SpatialResolution::new_unchecked(
+            spatial_bounds.size_x() / 256.,
+            spatial_bounds.size_y() / 256.,
+        );
         let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (166_021.44, 9_329_005.18).into(),
-                (534_994.66, 0.00).into(),
-            ),
+            spatial_bounds,
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
-            spatial_resolution: SpatialResolution::new_unchecked(
-                166_021.44 / 256.,
-                (9_329_005.18 - 534_994.66) / 256.,
-            ),
+            spatial_resolution,
         };
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
@@ -908,7 +911,7 @@ mod tests {
             .await;
 
         // TODO: check actual data
-        assert_eq!(result.len(), 2);
+        assert_eq!(result.len(), 1);
 
         Ok(())
     }
