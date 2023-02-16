@@ -1,8 +1,5 @@
 use super::{Grid2D, GridOrEmpty, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TypedGrid2D};
-use crate::{
-    primitives::SpatialPartitioned, raster::RasterDataType,
-    spatial_reference::SpatialReferenceOption, util::Result,
-};
+use crate::{raster::RasterDataType, spatial_reference::SpatialReferenceOption, util::Result};
 use arrow::{
     array::{Array, ArrayRef, PrimitiveBuilder},
     datatypes::{
@@ -18,7 +15,7 @@ use arrow::{
 use std::{collections::HashMap, sync::Arc};
 
 pub const RASTER_DATA_FIELD_NAME: &str = "data";
-pub const SPATIAL_PARTITION_KEY: &str = "spatialPartition";
+pub const GEO_TRANSFORM_KEY: &str = "geoTransform";
 pub const X_SIZE_KEY: &str = "xSize";
 pub const Y_SIZE_KEY: &str = "ySize";
 pub const TIME_KEY: &str = "time";
@@ -45,11 +42,10 @@ fn raster_tile_2d_to_arrow_record_batch<P: Pixel>(
     tile: RasterTile2D<P>,
     spatial_ref: SpatialReferenceOption,
 ) -> Result<RecordBatch> {
-    let spatial_partition = tile.tile_information().spatial_partition();
     let metadata: HashMap<String, String> = [
         (
-            SPATIAL_PARTITION_KEY.to_string(),
-            serde_json::to_string(&spatial_partition).unwrap_or_default(),
+            GEO_TRANSFORM_KEY.to_string(),
+            serde_json::to_string(&tile.tile_geo_transform()).unwrap_or_default(),
         ),
         (
             X_SIZE_KEY.to_string(),
@@ -227,7 +223,7 @@ mod tests {
         let schema = reader.schema();
 
         assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&schema.metadata()[SPATIAL_PARTITION_KEY])
+            serde_json::from_str::<serde_json::Value>(&schema.metadata()[GEO_TRANSFORM_KEY])
                 .unwrap(),
             serde_json::json!({"upperLeftCoordinate":{"x":0.0,"y":0.0},"lowerRightCoordinate":{"x":2.0,"y":-3.0}})
         );
@@ -274,7 +270,7 @@ mod tests {
         let schema = reader.schema();
 
         assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&schema.metadata()[SPATIAL_PARTITION_KEY])
+            serde_json::from_str::<serde_json::Value>(&schema.metadata()[GEO_TRANSFORM_KEY])
                 .unwrap(),
             serde_json::json!({"upperLeftCoordinate":{"x":0.0,"y":0.0},"lowerRightCoordinate":{"x":2.0,"y":-3.0}})
         );
