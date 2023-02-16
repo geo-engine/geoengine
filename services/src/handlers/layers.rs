@@ -551,7 +551,7 @@ async fn layer_to_workflow_id_handler<C: Context>(
     responses(
         (status = 200, description = "Id of created task", body = TaskResponse,
             example = json!({
-                "task_id": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"
+                "taskId": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"
             })
         )
     ),

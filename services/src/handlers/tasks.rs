@@ -79,7 +79,7 @@ async fn status_handler<C: Context>(
         (status = 200, description = "Status of all tasks", body = TaskStatus,
             example = json!([
                 {
-                    "task_id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+                    "taskId": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
                     "status": "completed",
                     "info": "completed",
                     "timeTotal": "00:00:30",
@@ -433,7 +433,7 @@ mod tests {
         assert_eq!(res_status, 200, "{res_body:?}");
 
         let res_body = res_body.get(0).unwrap();
-        assert_eq!(res_body["task_id"], json!(task_id));
+        assert_eq!(res_body["taskId"], json!(task_id));
         assert_eq!(res_body["status"], json!("completed"));
         assert_eq!(res_body["info"], json!("completed"));
         assert_eq!(res_body["timeTotal"], json!("00:00:00"));
