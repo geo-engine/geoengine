@@ -42,23 +42,33 @@ pub trait QueryProcessor: Send + Sync {
                 .wrap(self._query(query, ctx).await?),
         ))
     }
+}
 
-    async fn into_query(
+/// Advanced methods for query processors
+#[async_trait]
+pub trait QueryProcessorExt: QueryProcessor {
+    /// Query the processor and retrieve a stream of results.
+    ///
+    /// This stream owns the processor and the query context to provide a static lifetime.
+    /// Thus, it can be stored in a struct.
+    async fn query_into_owned_stream(
         self,
         query: QueryRectangle<Self::SpatialBounds>,
         ctx: Box<dyn QueryContext>,
-    ) -> Result<BoxStream<'static, Result<Self::Output>>>
+    ) -> Result<OwnedQueryResultStream<Self>>
     where
         Self: Sized + 'static,
     {
-        Ok(Box::pin(
-            QueryAndProcessor::try_new_async_send(self, ctx, |processor, ctx| {
+        Ok(
+            OwnedQueryResultStream::try_new_async_send(self, ctx, |processor, ctx| {
                 processor.query(query, ctx.as_ref())
             })
             .await?,
-        ))
+        )
     }
 }
+
+impl<Q> QueryProcessorExt for Q where Q: QueryProcessor {}
 
 /// An instantiation of a raster operator that produces a stream of raster results for a query
 #[async_trait]
@@ -660,8 +670,12 @@ macro_rules! map_typed_query_processor {
     };
 }
 
+/// In the case that it is required to store a query stream in a struct with a static lifetime,
+///  one can use this struct.
+/// This struct owns the query processor and the query context and thus ensures that the query
+/// has the lifetime dependencies it needs.
 #[self_referencing]
-struct QueryAndProcessor<Q>
+pub struct OwnedQueryResultStream<Q>
 where
     Q: QueryProcessor + 'static,
 {
@@ -672,7 +686,17 @@ where
     stream: BoxStream<'this, Result<Q::Output>>,
 }
 
-impl<Q> Stream for QueryAndProcessor<Q>
+impl<Q> OwnedQueryResultStream<Q>
+where
+    Q: QueryProcessor + 'static,
+{
+    /// Stop/drop the current stream and return the query processor.
+    pub fn into_query_processor(self) -> Q {
+        self.into_heads().processor
+    }
+}
+
+impl<Q> Stream for OwnedQueryResultStream<Q>
 where
     Q: QueryProcessor + 'static,
 {

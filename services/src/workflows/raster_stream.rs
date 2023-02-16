@@ -10,7 +10,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
-    engine::{QueryAbortTrigger, QueryContext, QueryProcessor, RasterOperator},
+    engine::{QueryAbortTrigger, QueryContext, QueryProcessorExt, RasterOperator},
 };
 
 pub struct RasterWebsocketStreamHandler {
@@ -78,7 +78,7 @@ impl RasterWebsocketStreamHandler {
 
         let byte_stream = call_on_generic_raster_processor!(query_processor, p => {
             let tile_stream = p
-                .into_query(query_rectangle, Box::new(query_ctx))
+                .query_into_owned_stream(query_rectangle, Box::new(query_ctx))
                 .await?;
 
             tile_stream.and_then(
