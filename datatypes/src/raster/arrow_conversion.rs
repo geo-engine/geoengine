@@ -225,7 +225,7 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&schema.metadata()[GEO_TRANSFORM_KEY])
                 .unwrap(),
-            serde_json::json!({"upperLeftCoordinate":{"x":0.0,"y":0.0},"lowerRightCoordinate":{"x":2.0,"y":-3.0}})
+            serde_json::json!({"originCoordinate":{"x":0.0,"y":0.0}, "xPixelSize": 1., "yPixelSize": -1.})
         );
         assert_eq!(schema.metadata()[X_SIZE_KEY], "2");
         assert_eq!(schema.metadata()[Y_SIZE_KEY], "3");
@@ -272,7 +272,7 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&schema.metadata()[GEO_TRANSFORM_KEY])
                 .unwrap(),
-            serde_json::json!({"upperLeftCoordinate":{"x":0.0,"y":0.0},"lowerRightCoordinate":{"x":2.0,"y":-3.0}})
+            serde_json::json!({"originCoordinate":{"x":0.0,"y":0.0}, "xPixelSize": 1., "yPixelSize": -1.})
         );
         assert_eq!(schema.metadata()[X_SIZE_KEY], "2");
         assert_eq!(schema.metadata()[Y_SIZE_KEY], "3");
