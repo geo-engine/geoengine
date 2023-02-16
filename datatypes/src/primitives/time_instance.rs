@@ -6,7 +6,7 @@ use crate::util::Result;
 use postgres_types::private::BytesMut;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, IsNull, ToSql, Type};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use snafu::ensure;
 #[cfg(feature = "postgres")]
 use snafu::Error;
@@ -261,6 +261,16 @@ impl<'de> Deserialize<'de> for TimeInstance {
     }
 }
 
+pub fn serialize_as_rfc_3339<S>(
+    time_instance: TimeInstance,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    time_instance.as_date_time().serialize(serializer)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,5 +287,17 @@ mod tests {
         assert_eq!(TimeInstance::MIN - 1, TimeInstance::MIN);
         assert_eq!(TimeInstance::MAX + 1, TimeInstance::MAX);
         assert_eq!(TimeInstance::MAX - 1, TimeInstance::MAX);
+    }
+
+    #[test]
+    fn serialize_as_chrono() {
+        let time_instance = TimeInstance::from_millis(1_234_567_890_000).unwrap();
+        let mut writer = Vec::new();
+        let mut serializer = serde_json::Serializer::new(&mut writer);
+        serialize_as_rfc_3339(time_instance, &mut serializer).unwrap();
+        assert_eq!(
+            r#""2009-02-13T23:31:30.000Z""#,
+            String::from_utf8(writer).unwrap()
+        );
     }
 }
