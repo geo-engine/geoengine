@@ -46,7 +46,7 @@ impl TaskResponse {
                 "status": "running",
                 "pctComplete": 0,
                 "timeStarted": 1_675_088_001_004i64,
-                "timeEstimate": "? (± ?)",
+                "estimatedTimeRemaining": "? (± ?)",
                 "info": (),
             })
         )
@@ -343,8 +343,8 @@ mod tests {
         assert_eq!(res_body["status"], json!("running"));
         assert_eq!(res_body["pctComplete"], json!("0.00%"));
         assert!(res_body["info"].is_null());
-        assert_eq!(res_body["timeEstimate"], json!("? (± ?)"));
-        assert!(res_body["timeStarted"].is_number());
+        assert_eq!(res_body["estimatedTimeRemaining"], json!("? (± ?)"));
+        assert!(res_body["timeStarted"].is_string());
 
         // 2. wait for task to finish
 
@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(res_body["status"], json!("completed"));
         assert_eq!(res_body["info"], json!("completed"));
         assert_eq!(res_body["timeTotal"], json!("00:00:00"));
-        assert!(res_body["timeStarted"].is_number());
+        assert!(res_body["timeStarted"].is_string());
     }
 
     #[tokio::test]
@@ -405,8 +405,8 @@ mod tests {
         assert_eq!(res_body["status"], json!("running"));
         assert_eq!(res_body["pctComplete"], json!("0.00%"));
         assert!(res_body["info"].is_null());
-        assert_eq!(res_body["timeEstimate"], json!("? (± ?)"));
-        assert!(res_body["timeStarted"].is_number());
+        assert_eq!(res_body["estimatedTimeRemaining"], json!("? (± ?)"));
+        assert!(res_body["timeStarted"].is_string());
     }
 
     #[tokio::test]
@@ -437,7 +437,7 @@ mod tests {
         assert_eq!(res_body["status"], json!("completed"));
         assert_eq!(res_body["info"], json!("completed"));
         assert_eq!(res_body["timeTotal"], json!("00:00:00"));
-        assert!(res_body["timeStarted"].is_number());
+        assert!(res_body["timeStarted"].is_string());
     }
 
     #[tokio::test]

@@ -43,6 +43,6 @@ pub use spatial_partition::{
 };
 pub use spatial_resolution::SpatialResolution;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
-pub use time_instance::{serialize_as_rfc_3339, TimeInstance};
+pub use time_instance::TimeInstance;
 pub use time_interval::{time_interval_extent, TimeInterval};
 pub use time_step::{TimeGranularity, TimeStep, TimeStepIter};
