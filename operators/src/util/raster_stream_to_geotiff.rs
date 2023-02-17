@@ -13,12 +13,13 @@ use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
 use gdal::{Dataset, DriverManager, Metadata};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D,
-    TimeInterval,
+    AxisAlignedRectangle, DateTimeParseFormat, QueryRectangle, RasterQueryRectangle,
+    SpatialPartition2D, TimeInterval,
 };
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridIdx2D, GridSize,
     MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D, TilingSpecification,
+    TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use log::debug;
@@ -27,15 +28,16 @@ use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
 
-use super::gdal::gdal_open_dataset;
 use super::{abortable_query_execution, spawn_blocking};
 
 /// consume a raster stream and write it to a geotiff file, one band for each time step
+/// Note: the entire process is done in memory, and will take 2x the size of the raster
+///       time series
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: RasterQueryRectangle,
-    query_ctx: C,
+    mut query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
@@ -45,115 +47,188 @@ pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'stat
 where
     T: Pixel + GdalType,
 {
-    let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+    let query_abort_trigger = query_ctx.abort_trigger()?;
 
-    let timestep_tiffs = raster_stream_to_geotiff(
-        &file_path,
-        processor,
-        query_rect,
-        query_ctx,
-        gdal_tiff_metadata,
-        gdal_tiff_options,
-        tile_limit,
+    let tiles = abortable_query_execution(
+        consume_stream_into_vec(processor, query_rect, query_ctx, tile_limit),
         conn_closed,
-        tiling_specification,
+        query_abort_trigger,
     )
-    .await?
-    .into_iter()
-    .map(|x| match x.params {
-        Some(p) => Result::Ok((
-            x.time,
-            gdal::vsi::get_vsi_mem_file_bytes_owned(p.file_path)?,
-        )),
-        None => Result::Ok((x.time, vec![])),
-    })
-    .collect::<Result<Vec<_>, Error>>()?;
+    .await?;
 
-    spawn_blocking(move || merge_tiffs::<T>(timestep_tiffs, gdal_tiff_options)).await?
+    let (initial_tile_time, file_path, dataset, writer) = create_multiband_dataset_and_writer(
+        &tiles,
+        query_rect,
+        tiling_specification,
+        gdal_tiff_options,
+        gdal_tiff_metadata,
+    )?;
+
+    spawn_blocking(move || {
+        let mut band_idx = 1;
+        let mut time = initial_tile_time;
+
+        for tile in tiles {
+            if tile.time != time {
+                // new time step => next band
+                time = tile.time;
+                band_idx += 1;
+
+                let mut band = dataset.rasterband(band_idx)?;
+
+                band.set_metadata_item(
+                    "start",
+                    &time.start().as_datetime_string_with_millis(),
+                    "time",
+                )?;
+                band.set_metadata_item(
+                    "end",
+                    &time.end().as_datetime_string_with_millis(),
+                    "time",
+                )?;
+            }
+
+            writer.write_tile_into_band(tile, dataset.rasterband(band_idx)?)?;
+        }
+
+        Result::<(), Error>::Ok(())
+    })
+    .await??;
+
+    Ok(gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)?)
 }
 
-/// merges multiple single band tiffs into a multiband tiff in memory
-/// Note: if an input tiff has multiple bands, only the first band is used
-fn merge_tiffs<T>(
-    mut tiffs_bytes: Vec<(TimeInterval, Vec<u8>)>,
+fn create_multiband_dataset_and_writer<T>(
+    tiles: &Vec<RasterTile2D<T>>,
+    query_rect: QueryRectangle<SpatialPartition2D>,
+    tiling_specification: TilingSpecification,
     gdal_tiff_options: GdalGeoTiffOptions,
-) -> Result<Vec<u8>>
+    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+) -> Result<(TimeInterval, PathBuf, Dataset, GdalDatasetWriter<T>), Error>
 where
     T: Pixel + GdalType,
 {
-    let number_of_bands = tiffs_bytes.len();
-
-    let driver = DriverManager::get_driver_by_name("GTiff")?;
-
-    let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
-    let out_ds = file_path.join("out.tiff");
-
-    let ((width, height), sref, geotransform) = {
-        let _mem_file = gdal::vsi::create_mem_file_from_ref(
-            file_path.join("in_0.tiff"),
-            tiffs_bytes[0].1.as_mut_slice(),
-        )?;
-
-        let in_ds = gdal_open_dataset(&file_path.join("in_0.tiff"))?;
-        (
-            (in_ds.raster_size().0, in_ds.raster_size().1),
-            in_ds.spatial_ref()?,
-            in_ds.geo_transform()?,
-        )
+    let (initial_tile_info, initial_tile_time) = {
+        let tile = &tiles
+            .first()
+            .expect("tiles should not be empty because query rectangle in not empty");
+        (tile.tile_information(), tile.time)
     };
 
+    let strat = TilingStrategy {
+        tile_size_in_pixels: initial_tile_info.tile_size_in_pixels,
+        geo_transform: initial_tile_info.global_geo_transform,
+    };
+    let num_tiles_per_timestep = strat
+        .tile_grid_box(query_rect.spatial_bounds)
+        .number_of_elements();
+    let num_timesteps = tiles.len() / num_tiles_per_timestep;
+
+    let x_pixel_size = query_rect.spatial_resolution.x;
+    let y_pixel_size = query_rect.spatial_resolution.y;
+    let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as usize;
+    let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as usize;
+    let output_geo_transform = GeoTransform::new(
+        query_rect.spatial_bounds.upper_left(),
+        x_pixel_size,
+        -y_pixel_size,
+    );
+
+    let global_geo_transform = tiling_specification
+        .strategy(x_pixel_size, -y_pixel_size)
+        .geo_transform;
+    let window_start =
+        global_geo_transform.coordinate_to_grid_idx_2d(query_rect.spatial_bounds.upper_left());
+    let window_end = window_start + GridIdx2D::from([height as isize, width as isize]);
+
     let uncompressed_byte_size = width * height * std::mem::size_of::<T>();
+
     let use_big_tiff =
         gdal_tiff_options.force_big_tiff || uncompressed_byte_size >= BIG_TIFF_BYTE_THRESHOLD;
 
     let gdal_compression_num_threads = gdal_tiff_options.compression_num_threads.to_string();
+
     let options = create_gdal_tiff_options(
         &gdal_compression_num_threads,
         gdal_tiff_options.as_cog,
         use_big_tiff,
     );
 
+    let driver = DriverManager::get_driver_by_name("GTiff")?;
+
+    let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+
+    let gdal_config_options = if gdal_tiff_metadata.no_data_value.is_none() {
+        // If we want to write a mask into the geotiff we need to do that internaly because of vismem.
+        Some(vec![(
+            "GDAL_TIFF_INTERNAL_MASK".to_string(),
+            "YES".to_string(),
+        )])
+    } else {
+        None
+    };
+
+    gdal_config_options
+        .as_deref()
+        .map(TemporaryGdalThreadLocalConfigOptions::new);
+
     let mut dataset = driver.create_with_band_type_with_options::<T, _>(
-        &out_ds,
+        &file_path,
         width as isize,
         height as isize,
-        number_of_bands as isize,
+        num_timesteps as isize,
         &options,
     )?;
+    dataset.set_spatial_ref(&gdal_tiff_metadata.spatial_reference.try_into()?)?;
+    dataset.set_geo_transform(&output_geo_transform.into())?;
 
-    dataset.set_spatial_ref(&sref)?;
-    dataset.set_geo_transform(&geotransform)?;
-
-    for (timestep, (time, data)) in tiffs_bytes.iter_mut().enumerate() {
-        let filename = file_path.join(format!("in_{timestep}.tiff"));
-        let _mem_file = gdal::vsi::create_mem_file_from_ref(&filename, data.as_mut_slice())?;
-        let in_ds = gdal_open_dataset(&filename)?;
-
-        let mut raster_band = dataset.rasterband((timestep + 1) as isize)?;
-
-        raster_band.set_metadata_item(
-            "start",
-            &time.start().as_datetime_string_with_millis(),
-            "time",
-        )?;
-        raster_band.set_metadata_item(
-            "end",
-            &time.end().as_datetime_string_with_millis(),
-            "time",
-        )?;
-
-        raster_band.write(
-            (0, 0),
-            (width, height),
-            &in_ds
-                .rasterband(1)?
-                .read_as::<T>((0, 0), (width, height), (width, height), None)?,
-        )?;
+    for band_idx in 0..dataset.raster_count() {
+        let mut band = dataset.rasterband(band_idx + 1)?;
+        if let Some(no_data) = gdal_tiff_metadata.no_data_value {
+            band.set_no_data_value(Some(no_data))?;
+        } else {
+            band.create_mask_band(false)?;
+        }
     }
 
-    drop(dataset);
+    let writer = GdalDatasetWriter::<T> {
+        gdal_tiff_options,
+        gdal_tiff_metadata,
+        _output_bounds: query_rect.spatial_bounds,
+        output_geo_transform,
+        use_big_tiff,
+        _type: Default::default(),
+        window_start,
+        window_end,
+    };
 
-    Ok(gdal::vsi::get_vsi_mem_file_bytes_owned(out_ds)?)
+    Ok((initial_tile_time, file_path, dataset, writer))
+}
+
+async fn consume_stream_into_vec<T, C: QueryContext + 'static>(
+    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    query_rect: geoengine_datatypes::primitives::QueryRectangle<SpatialPartition2D>,
+    query_ctx: C,
+    tile_limit: Option<usize>,
+) -> Result<Vec<RasterTile2D<T>>>
+where
+    T: Pixel + GdalType,
+{
+    let mut tile_stream = processor
+        .raster_query(query_rect, &query_ctx)
+        .await?
+        .enumerate();
+    let mut tiles = Vec::new();
+    while let Some((tile_index, tile)) = tile_stream.next().await {
+        if tile_limit.map_or_else(|| false, |limit| tile_index >= limit) {
+            return Err(Error::TileLimitExceeded {
+                limit: tile_limit.expect("limit exist because it is exceeded"),
+            });
+        }
+
+        tiles.push(tile?);
+    }
+    Ok(tiles)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -925,6 +1000,7 @@ mod tests {
     };
 
     use crate::mock::MockRasterSourceProcessor;
+    use crate::util::gdal::gdal_open_dataset;
     use crate::{
         engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
     };
@@ -1587,7 +1663,7 @@ mod tests {
     async fn multi_band_geotriff() {
         let ctx = MockQueryContext::test_default();
         let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+            TilingSpecification::new(Coordinate2D::default(), [512, 512].into());
 
         let metadata = create_ndvi_meta_data();
 
@@ -1609,7 +1685,7 @@ mod tests {
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
-                no_data_value: Some(0.),
+                no_data_value: None,
                 spatial_reference: SpatialReference::epsg_4326(),
             },
             GdalGeoTiffOptions {
