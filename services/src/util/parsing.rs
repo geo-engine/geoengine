@@ -1,4 +1,4 @@
-use geoengine_datatypes::primitives::SpatialResolution;
+use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution};
 use serde::de;
 use serde::de::Error;
 use serde::Deserialize;
@@ -20,6 +20,24 @@ where
         Ok(&[x, y]) => SpatialResolution::new(x, y).map_err(D::Error::custom),
         Err(error) => Err(D::Error::custom(error)),
         Ok(..) => Err(D::Error::custom("Invalid spatial resolution")),
+    }
+}
+
+/// Parse spatial partition, format is: "x1,y1,x2,y2"
+pub fn parse_spatial_partition<'de, D>(deserializer: D) -> Result<SpatialPartition2D, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    let split: Vec<Result<f64, std::num::ParseFloatError>> =
+        s.splitn(4, ',').map(str::parse).collect();
+
+    if let [Ok(x1), Ok(y1), Ok(x2), Ok(y2)] = *split.as_slice() {
+        SpatialPartition2D::new(Coordinate2D::new(x1, y2), Coordinate2D::new(x2, y1))
+            .map_err(D::Error::custom)
+    } else {
+        Err(D::Error::custom("Invalid spatial partition"))
     }
 }
 
@@ -242,5 +260,23 @@ mod tests {
         assert!(serde_json::from_str::<ApiPrefix>(r#""//""#).is_err());
         assert!(serde_json::from_str::<ApiPrefix>(r#""hello?""#).is_err());
         assert!(serde_json::from_str::<ApiPrefix>(r#""foo=bar""#).is_err());
+    }
+
+    #[test]
+    fn test_parse_spatial_partition() {
+        #[derive(Deserialize)]
+        struct MySpatialPartition {
+            #[serde(deserialize_with = "parse_spatial_partition")]
+            spatial_partition: SpatialPartition2D,
+        }
+
+        assert_eq!(
+            serde_json::from_str::<MySpatialPartition>(
+                r#"{"spatial_partition": "-180,-90,180,90"}"#
+            )
+            .unwrap()
+            .spatial_partition,
+            SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        );
     }
 }
