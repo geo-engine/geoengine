@@ -492,7 +492,8 @@ mod tests {
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use geoengine_operators::util::raster_stream_to_geotiff::{
-        raster_stream_to_multiband_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+        single_timestep_raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata,
+        GdalGeoTiffOptions,
     };
     use serde_json::json;
     use std::io::Read;
@@ -1236,7 +1237,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_u8().unwrap();
 
-        let result = raster_stream_to_multiband_geotiff_bytes(
+        let result = single_timestep_raster_stream_to_geotiff_bytes(
             processor,
             query_rect,
             query_ctx,

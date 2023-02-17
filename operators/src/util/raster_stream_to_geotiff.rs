@@ -232,6 +232,44 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
+    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    query_rect: RasterQueryRectangle,
+    query_ctx: C,
+    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+    gdal_tiff_options: GdalGeoTiffOptions,
+    tile_limit: Option<usize>,
+    conn_closed: BoxFuture<'_, ()>,
+    tiling_specification: TilingSpecification,
+) -> Result<Vec<u8>>
+where
+    T: Pixel + GdalType,
+{
+    let mut timesteps = raster_stream_to_geotiff_bytes(
+        processor,
+        query_rect,
+        query_ctx,
+        gdal_tiff_metadata,
+        gdal_tiff_options,
+        tile_limit,
+        conn_closed,
+        tiling_specification,
+    )
+    .await?;
+
+    if timesteps.len() == 1 {
+        Ok(timesteps
+            .pop()
+            .expect("there should be exactly one timestep"))
+    } else {
+        Err(Error::InvalidNumberOfTimeSteps {
+            expected: 1,
+            found: timesteps.len(),
+        })
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: RasterQueryRectangle,
@@ -1023,7 +1061,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = raster_stream_to_multiband_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1079,7 +1117,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = raster_stream_to_multiband_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1131,7 +1169,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = raster_stream_to_multiband_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1187,7 +1225,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = raster_stream_to_multiband_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1246,7 +1284,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = raster_stream_to_multiband_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1381,7 +1419,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = raster_stream_to_multiband_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1430,7 +1468,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = raster_stream_to_multiband_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1478,7 +1516,7 @@ mod tests {
             SpatialPartition2D::new((-180., -66.227_224_576_271_84).into(), (180., -90.).into())
                 .unwrap();
 
-        let bytes = raster_stream_to_multiband_geotiff_bytes(
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
