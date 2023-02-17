@@ -546,6 +546,17 @@ impl Add<Duration> for DateTime {
     }
 }
 
+impl Sub<DateTime> for DateTime {
+    type Output = Duration;
+
+    fn sub(self, rhs: DateTime) -> Self::Output {
+        let duration = chrono::DateTime::<chrono::FixedOffset>::from(self)
+            .signed_duration_since(chrono::DateTime::<chrono::FixedOffset>::from(rhs));
+
+        Duration::milliseconds(duration.num_milliseconds())
+    }
+}
+
 impl Sub<Duration> for DateTime {
     type Output = Self;
 
@@ -592,7 +603,7 @@ mod sql {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Duration {
     milliseconds: i64,
 }
@@ -744,5 +755,12 @@ mod tests {
             DateTime::new_utc(-2010, 1, 2, 3, 4, 5).to_datetime_string(),
             "-002010-01-02T03:04:05+00:00"
         );
+    }
+
+    #[test]
+    fn test_sub_datetime_datetime() {
+        let a = DateTime::new_utc(2010, 1, 2, 3, 4, 5);
+        let b = DateTime::new_utc(2010, 1, 2, 3, 4, 5);
+        assert_eq!(a - b, Duration::milliseconds(0));
     }
 }
