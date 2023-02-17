@@ -137,7 +137,7 @@ impl<'a> ToSchema<'a> for TaskStatus {
                             "estimatedTimeRemaining",
                             Object::with_type(SchemaType::String),
                         )
-                        .property("timeStarted", Object::with_type(SchemaType::Integer)),
+                        .property("timeStarted", Object::with_type(SchemaType::String)),
                 )
                 .item(
                     ObjectBuilder::new()
@@ -149,7 +149,7 @@ impl<'a> ToSchema<'a> for TaskStatus {
                         )
                         .property("info", Object::new())
                         .property("timeTotal", Object::with_type(SchemaType::String))
-                        .property("timeStarted", Object::with_type(SchemaType::Integer)),
+                        .property("timeStarted", Object::with_type(SchemaType::String)),
                 )
                 .item(
                     ObjectBuilder::new()

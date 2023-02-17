@@ -45,7 +45,7 @@ impl TaskResponse {
             example = json!({
                 "status": "running",
                 "pctComplete": 0,
-                "timeStarted": 1_675_088_001_004i64,
+                "timeStarted": "2023-02-16T15:25:45.390Z",
                 "estimatedTimeRemaining": "? (± ?)",
                 "info": (),
             })
@@ -83,7 +83,7 @@ async fn status_handler<C: Context>(
                     "status": "completed",
                     "info": "completed",
                     "timeTotal": "00:00:30",
-                    "timeStarted": 1_675_088_001_004i64
+                    "timeStarted": "2023-02-16T15:25:45.390Z"
                 }
             ])
         )
