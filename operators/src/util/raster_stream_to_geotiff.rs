@@ -11,7 +11,7 @@ use crate::{
 use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
-use gdal::{Dataset, DriverManager};
+use gdal::{Dataset, DriverManager, Metadata};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D,
     TimeInterval,
@@ -27,10 +27,12 @@ use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
 
-use super::abortable_query_execution;
+use super::gdal::gdal_open_dataset;
+use super::{abortable_query_execution, spawn_blocking};
 
+/// consume a raster stream and write it to a geotiff file, one band for each time step
 #[allow(clippy::too_many_arguments)]
-pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
+pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
@@ -43,7 +45,10 @@ pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext +
 where
     T: Pixel + GdalType,
 {
-    let mut timesteps = raster_stream_to_geotiff_bytes(
+    let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+
+    let timestep_tiffs = raster_stream_to_geotiff(
+        &file_path,
         processor,
         query_rect,
         query_ctx,
@@ -53,18 +58,102 @@ where
         conn_closed,
         tiling_specification,
     )
-    .await?;
+    .await?
+    .into_iter()
+    .map(|x| match x.params {
+        Some(p) => Result::Ok((
+            x.time,
+            gdal::vsi::get_vsi_mem_file_bytes_owned(p.file_path)?,
+        )),
+        None => Result::Ok((x.time, vec![])),
+    })
+    .collect::<Result<Vec<_>, Error>>()?;
 
-    if timesteps.len() == 1 {
-        Ok(timesteps
-            .pop()
-            .expect("there should be exactly one timestep"))
-    } else {
-        Err(Error::InvalidNumberOfTimeSteps {
-            expected: 1,
-            found: timesteps.len(),
-        })
+    spawn_blocking(move || merge_tiffs::<T>(timestep_tiffs, gdal_tiff_options)).await?
+}
+
+/// merges multiple single band tiffs into a multiband tiff in memory
+/// Note: if an input tiff has multiple bands, only the first band is used
+fn merge_tiffs<T>(
+    mut tiffs_bytes: Vec<(TimeInterval, Vec<u8>)>,
+    gdal_tiff_options: GdalGeoTiffOptions,
+) -> Result<Vec<u8>>
+where
+    T: Pixel + GdalType,
+{
+    let number_of_bands = tiffs_bytes.len();
+
+    let driver = DriverManager::get_driver_by_name("GTiff")?;
+
+    let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+    let out_ds = file_path.join("out.tiff");
+
+    let ((width, height), sref, geotransform) = {
+        let _mem_file = gdal::vsi::create_mem_file_from_ref(
+            file_path.join("in_0.tiff"),
+            tiffs_bytes[0].1.as_mut_slice(),
+        )?;
+
+        let in_ds = gdal_open_dataset(&file_path.join("in_0.tiff"))?;
+        (
+            (in_ds.raster_size().0, in_ds.raster_size().1),
+            in_ds.spatial_ref()?,
+            in_ds.geo_transform()?,
+        )
+    };
+
+    let uncompressed_byte_size = width * height * std::mem::size_of::<T>();
+    let use_big_tiff =
+        gdal_tiff_options.force_big_tiff || uncompressed_byte_size >= BIG_TIFF_BYTE_THRESHOLD;
+
+    let gdal_compression_num_threads = gdal_tiff_options.compression_num_threads.to_string();
+    let options = create_gdal_tiff_options(
+        &gdal_compression_num_threads,
+        gdal_tiff_options.as_cog,
+        use_big_tiff,
+    );
+
+    let mut dataset = driver.create_with_band_type_with_options::<T, _>(
+        &out_ds,
+        width as isize,
+        height as isize,
+        number_of_bands as isize,
+        &options,
+    )?;
+
+    dataset.set_spatial_ref(&sref)?;
+    dataset.set_geo_transform(&geotransform)?;
+
+    for (timestep, (time, data)) in tiffs_bytes.iter_mut().enumerate() {
+        let filename = file_path.join(format!("in_{timestep}.tiff"));
+        let _mem_file = gdal::vsi::create_mem_file_from_ref(&filename, data.as_mut_slice())?;
+        let in_ds = gdal_open_dataset(&filename)?;
+
+        let mut raster_band = dataset.rasterband((timestep + 1) as isize)?;
+
+        raster_band.set_metadata_item(
+            "start",
+            &time.start().as_datetime_string_with_millis(),
+            "time",
+        )?;
+        raster_band.set_metadata_item(
+            "end",
+            &time.end().as_datetime_string_with_millis(),
+            "time",
+        )?;
+
+        raster_band.write(
+            (0, 0),
+            (width, height),
+            &in_ds
+                .rasterband(1)?
+                .read_as::<T>((0, 0), (width, height), (width, height), None)?,
+        )?;
     }
+
+    drop(dataset);
+
+    Ok(gdal::vsi::get_vsi_mem_file_bytes_owned(out_ds)?)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -858,7 +947,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
+        let bytes = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -914,7 +1003,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
+        let bytes = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -966,7 +1055,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
+        let bytes = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1022,7 +1111,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
+        let bytes = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1081,7 +1170,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
+        let bytes = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1216,7 +1305,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
+        let bytes = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1265,7 +1354,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
+        let bytes = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1313,7 +1402,7 @@ mod tests {
             SpatialPartition2D::new((-180., -66.227_224_576_271_84).into(), (180., -90.).into())
                 .unwrap();
 
-        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
+        let bytes = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
@@ -1492,5 +1581,59 @@ mod tests {
             )
             .await;
         }
+    }
+
+    #[tokio::test]
+    async fn multi_band_geotriff() {
+        let ctx = MockQueryContext::test_default();
+        let tiling_specification =
+            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+
+        let metadata = create_ndvi_meta_data();
+
+        let gdal_source = GdalSourceProcessor::<u8> {
+            tiling_specification,
+            meta_data: Box::new(metadata),
+            _phantom_data: PhantomData,
+        };
+
+        let query_bbox = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+
+        let mut bytes = raster_stream_to_multiband_geotiff_bytes(
+            gdal_source.boxed(),
+            RasterQueryRectangle {
+                spatial_bounds: query_bbox,
+                // 1.1.2014 - 1.4.2014
+                time_interval: TimeInterval::new(1_388_534_400_000, 1_396_306_800_000).unwrap(),
+                spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
+            },
+            ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: false,
+                compression_num_threads: GdalCompressionNumThreads::AllCpus,
+                force_big_tiff: false,
+            },
+            None,
+            Box::pin(futures::future::pending()),
+            tiling_specification,
+        )
+        .await
+        .unwrap();
+
+        let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+        let _mem_file =
+            gdal::vsi::create_mem_file_from_ref(&file_path, bytes.as_mut_slice()).unwrap();
+        let ds = gdal_open_dataset(&file_path).unwrap();
+
+        // three bands for Jan, Feb, Mar
+        assert_eq!(ds.raster_count(), 3);
+
+        // TODO: check that the time is encoded in the geotiff band metadata
+
+        drop(ds);
     }
 }
