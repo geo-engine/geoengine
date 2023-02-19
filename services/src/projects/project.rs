@@ -23,11 +23,11 @@ use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
-use utoipa::{ToSchema, IntoParams};
+use utoipa::{IntoParams, ToSchema};
 
 identifier!(ProjectId);
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: ProjectId,
@@ -375,7 +375,7 @@ impl Default for LayerVisibility {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct Plot {
     pub workflow: WorkflowId,
     pub name: String,
@@ -400,7 +400,7 @@ impl OrderBy {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectListing {
     pub id: ProjectId,
@@ -476,8 +476,28 @@ impl UserInput for CreateProject {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(example = json!({
+    "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+    "name": "TestUpdate",
+    "layers": [
+        {
+            "workflow": "100ee39c-761c-4218-9d85-ec861a8f3097",
+            "name": "L1",
+            "visibility": {
+                "data": true,
+                "legend": false
+            },
+            "symbology": {
+                "raster": {
+                    "opacity": 1.0,
+                    "colorizer": "rgba"
+                }
+            }
+        }
+    ]
+}))]
 pub struct UpdateProject {
     pub id: ProjectId,
     pub name: Option<String>,
@@ -543,7 +563,7 @@ impl UserInput for ProjectListOptions {
 
 identifier!(ProjectVersionId);
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy, ToSchema)]
 pub struct ProjectVersion {
     pub id: ProjectVersionId,
     pub changed: DateTime,
