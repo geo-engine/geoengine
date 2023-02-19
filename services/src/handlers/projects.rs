@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::handlers::Context;
-use crate::projects::{ProjectDb, ProjectId, UpdateProject, CreateProject};
+use crate::projects::{CreateProject, ProjectDb, ProjectId, ProjectListOptions, UpdateProject};
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use actix_web::{web, FromRequest, HttpResponse, Responder};

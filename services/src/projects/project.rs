@@ -219,7 +219,7 @@ impl TemporalBounded for STRectangle {
 }
 
 // TODO: split into Raster and VectorLayer like in frontend?
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct Layer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
     // TODO: LayerId?
@@ -359,7 +359,7 @@ pub struct DerivedColor {
     pub colorizer: Colorizer,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub struct LayerVisibility {
     pub data: bool,
@@ -424,7 +424,7 @@ impl From<&Project> for ProjectListing {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 pub enum ProjectFilter {
     Name { term: String },
     Description { term: String },
@@ -521,6 +521,50 @@ pub type PlotUpdate = VecUpdate<Plot>;
 
 string_token!(NoUpdate, "none");
 string_token!(Delete, "delete");
+
+impl<'a> ToSchema<'a> for LayerUpdate {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        use utoipa::openapi::*;
+        (
+            "LayerUpdate",
+            OneOfBuilder::new()
+                .item(
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::String)
+                        .enum_values::<[&str; 1], &str>(Some(["none"])),
+                )
+                .item(
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::String)
+                        .enum_values::<[&str; 1], &str>(Some(["delete"])),
+                )
+                .item(Ref::from_schema_name("Layer"))
+                .into(),
+        )
+    }
+}
+
+impl<'a> ToSchema<'a> for PlotUpdate {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        use utoipa::openapi::*;
+        (
+            "PlotUpdate",
+            OneOfBuilder::new()
+                .item(
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::String)
+                        .enum_values::<[&str; 1], &str>(Some(["none"])),
+                )
+                .item(
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::String)
+                        .enum_values::<[&str; 1], &str>(Some(["delete"])),
+                )
+                .item(Ref::from_schema_name("Plot"))
+                .into(),
+        )
+    }
+}
 
 impl UserInput for UpdateProject {
     fn validate(&self) -> Result<(), Error> {
