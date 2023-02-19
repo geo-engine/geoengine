@@ -88,13 +88,16 @@ impl From<(String, String)> for Property {
 }
 
 // manual implementation because utoipa doesn't support tuples for now
-impl ToSchema for Property {
-    fn schema() -> utoipa::openapi::schema::Schema {
-        ArrayBuilder::new()
-            .items(ObjectBuilder::new().schema_type(SchemaType::String))
-            .min_items(Some(2))
-            .max_items(Some(2))
-            .into()
+impl<'a> ToSchema<'a> for Property {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        (
+            "Property",
+            ArrayBuilder::new()
+                .items(ObjectBuilder::new().schema_type(SchemaType::String))
+                .min_items(Some(2))
+                .max_items(Some(2))
+                .into(),
+        )
     }
 }
 

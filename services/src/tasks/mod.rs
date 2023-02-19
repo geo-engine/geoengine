@@ -14,7 +14,7 @@ use crate::{
 };
 pub use error::TaskError;
 use futures::channel::oneshot;
-use geoengine_datatypes::primitives::TimeInstance;
+use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::{error::ErrorSource, util::AsAnyArc};
 pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
@@ -102,7 +102,7 @@ pub enum TaskStatus {
     Completed {
         info: Arc<dyn TaskStatusInfo>,
         time_total: String,
-        time_started: TimeInstance,
+        time_started: DateTime,
     },
     #[serde(rename_all = "camelCase")]
     Aborted {
@@ -117,57 +117,63 @@ pub enum TaskStatus {
 }
 
 // TODO: replace TaskStatus with a more API friendly type
-impl utoipa::ToSchema for TaskStatus {
-    fn schema() -> utoipa::openapi::Schema {
+impl<'a> ToSchema<'a> for TaskStatus {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
-        OneOfBuilder::new()
-            .item(
-                ObjectBuilder::new()
-                    .property(
-                        "status",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::String)
-                            .enum_values::<[&str; 1], &str>(Some(["running"])),
-                    )
-                    .property("info", Object::new())
-                    .property("pctComplete", Object::with_type(SchemaType::String))
-                    .property("timeEstimate", Object::with_type(SchemaType::String))
-                    .property("timeStarted", Object::with_type(SchemaType::Integer)),
-            )
-            .item(
-                ObjectBuilder::new()
-                    .property(
-                        "status",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::String)
-                            .enum_values::<[&str; 1], &str>(Some(["completed"])),
-                    )
-                    .property("info", Object::new())
-                    .property("timeTotal", Object::with_type(SchemaType::String))
-                    .property("timeStarted", Object::with_type(SchemaType::Integer)),
-            )
-            .item(
-                ObjectBuilder::new()
-                    .property(
-                        "status",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::String)
-                            .enum_values::<[&str; 1], &str>(Some(["aborted"])),
-                    )
-                    .property("cleanUp", Object::new()),
-            )
-            .item(
-                ObjectBuilder::new()
-                    .property(
-                        "status",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::String)
-                            .enum_values::<[&str; 1], &str>(Some(["failed"])),
-                    )
-                    .property("error", Object::new())
-                    .property("cleanUp", Object::new()),
-            )
-            .into()
+        (
+            "TaskStatus",
+            OneOfBuilder::new()
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "status",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::String)
+                                .enum_values::<[&str; 1], &str>(Some(["running"])),
+                        )
+                        .property("info", Object::new())
+                        .property("pctComplete", Object::with_type(SchemaType::String))
+                        .property(
+                            "estimatedTimeRemaining",
+                            Object::with_type(SchemaType::String),
+                        )
+                        .property("timeStarted", Object::with_type(SchemaType::String)),
+                )
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "status",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::String)
+                                .enum_values::<[&str; 1], &str>(Some(["completed"])),
+                        )
+                        .property("info", Object::new())
+                        .property("timeTotal", Object::with_type(SchemaType::String))
+                        .property("timeStarted", Object::with_type(SchemaType::String)),
+                )
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "status",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::String)
+                                .enum_values::<[&str; 1], &str>(Some(["aborted"])),
+                        )
+                        .property("cleanUp", Object::new()),
+                )
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "status",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::String)
+                                .enum_values::<[&str; 1], &str>(Some(["failed"])),
+                        )
+                        .property("error", Object::new())
+                        .property("cleanUp", Object::new()),
+                )
+                .into(),
+        )
     }
 }
 
@@ -193,6 +199,7 @@ pub enum TaskCleanUpStatus {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskStatusWithId {
     pub task_id: TaskId,
     #[serde(flatten)]
@@ -257,15 +264,15 @@ impl TaskStatus {
     fn time_total(&self) -> String {
         match self {
             TaskStatus::Completed { time_total, .. } => time_total.clone(),
-            TaskStatus::Running(info) => info.time_estimate.time_total(),
+            TaskStatus::Running(info) => info.estimated_time_remaining.time_total(),
             _ => String::new(),
         }
     }
 
-    fn time_started(&self) -> Option<TimeInstance> {
+    fn time_started(&self) -> Option<DateTime> {
         match self {
             TaskStatus::Completed { time_started, .. } => Some(*time_started),
-            TaskStatus::Running(info) => Some(info.time_estimate.time_started()),
+            TaskStatus::Running(info) => Some(info.estimated_time_remaining.time_started()),
             _ => None,
         }
     }
@@ -276,8 +283,8 @@ impl TaskStatus {
 pub struct RunningTaskStatusInfo {
     #[serde(serialize_with = "serialize_as_pct")]
     pct_complete: f64,
-    time_started: TimeInstance,
-    time_estimate: TimeEstimation,
+    time_started: DateTime,
+    estimated_time_remaining: TimeEstimation,
     info: Box<dyn TaskStatusInfo>,
 }
 
@@ -287,7 +294,7 @@ impl RunningTaskStatusInfo {
         Arc::new(RunningTaskStatusInfo {
             pct_complete: pct_complete.clamp(0., 1.),
             time_started: time_estimate.time_started(),
-            time_estimate,
+            estimated_time_remaining: time_estimate,
             info,
         })
     }
@@ -295,13 +302,13 @@ impl RunningTaskStatusInfo {
     pub fn update(&self, pct_complete: f64, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
         let pct_complete = pct_complete.clamp(0., 1.);
 
-        let mut time_estimate = self.time_estimate;
+        let mut time_estimate = self.estimated_time_remaining;
         time_estimate.update_now(pct_complete);
 
         Arc::new(RunningTaskStatusInfo {
             pct_complete,
             time_started: self.time_started,
-            time_estimate,
+            estimated_time_remaining: time_estimate,
             info,
         })
     }

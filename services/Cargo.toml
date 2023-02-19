@@ -22,20 +22,22 @@ xgboost = ["pro", "geoengine-operators/xgboost"]
 
 
 [dependencies]
+actix = { version = "0.13", default-features = false }
 actix-files = "0.6"
-actix-http = "3.2"
-actix-multipart = "0.4"
+actix-http = { version = "3.2", features = ["ws"] }
+actix-multipart = "0.5"
 actix-rt = "2.6"
 actix-web = "4.2"
+actix-web-actors = "4.2"
 actix-web-httpauth = "0.8"
 async-trait = "0.1"
-base64 = "0.20"
+base64 = "0.21"
 bb8-postgres = { version = "0.8", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"], optional = true }
 bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.13"
 erased-serde = "0.3"
-flexi_logger = { version = "0.24", features = ["trc"] }
+flexi_logger = { version = "0.25", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
@@ -83,8 +85,8 @@ tracing-opentelemetry = "0.18"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi", "tracing-log"] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
-utoipa = { version = "2.4", features = ["actix_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { version = "=3.0.1", features = ["actix-web"] }
+utoipa = { version = "3.0", features = ["actix_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "=3.0.2", features = ["actix-web"] }
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
 walkdir = "2.3"
 zip = "0.6"
@@ -98,7 +100,12 @@ rand = "0.8.4"
 tempfile = "3.1"
 wiremock-grpc = "0.0.3-alpha1"
 xml-rs = "0.8.3"
-serial_test = "0.10.0"
+serial_test = "1.0"
 
 [build-dependencies]
 vergen = "7"
+
+[[bench]]
+name = "quota_check"
+harness = false
+required-features = ["pro"]

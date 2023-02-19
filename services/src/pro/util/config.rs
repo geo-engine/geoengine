@@ -8,6 +8,9 @@ use crate::util::parsing::deserialize_base_url;
 #[derive(Debug, Deserialize)]
 pub struct User {
     pub user_registration: bool,
+    pub quota_check: bool,
+    #[serde(default)]
+    pub default_available_quota: i64,
 }
 
 impl ConfigElement for User {

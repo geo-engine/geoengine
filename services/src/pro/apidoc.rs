@@ -41,7 +41,7 @@ use crate::layers::listing::LayerCollectionId;
 use crate::ogc::util::OgcBoundingBox;
 use crate::ogc::{wcs, wfs, wms};
 use crate::pro;
-use crate::pro::handlers::users::QuotaUsed;
+use crate::pro::handlers::users::{Quota, UpdateQuota};
 use crate::projects::{
     ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
     PolygonSymbology, ProjectId, RasterSymbology, STRectangle, StrokeParam, Symbology,
@@ -90,12 +90,14 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::workflows::get_workflow_metadata_handler,
         handlers::workflows::get_workflow_provenance_handler,
         handlers::workflows::load_workflow_handler,
+        handlers::workflows::raster_stream_websocket,
         handlers::workflows::register_workflow_handler,
         pro::handlers::users::anonymous_handler,
         pro::handlers::users::login_handler,
         pro::handlers::users::logout_handler,
         pro::handlers::users::quota_handler,
-        pro::handlers::users::user_quota_handler,
+        pro::handlers::users::get_user_quota_handler,
+        pro::handlers::users::update_user_quota_handler,
         pro::handlers::users::register_user_handler,
         pro::handlers::users::session_handler,
         handlers::datasets::delete_dataset_handler,
@@ -114,7 +116,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             UserRegistration,
             DateTime,
             UserInfo,
-            QuotaUsed,
+            Quota,
+            UpdateQuota,
 
             DataId,
             DataProviderId,

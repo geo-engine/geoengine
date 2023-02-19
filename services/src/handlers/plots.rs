@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use crate::api::model::datatypes::TimeInterval;
 use crate::error;
 use crate::error::Result;
@@ -11,6 +9,7 @@ use crate::util::server::connection_closed;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, Responder};
+use base64::Engine;
 use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle};
@@ -19,6 +18,7 @@ use geoengine_operators::engine::{QueryContext, ResultDescriptor, TypedPlotQuery
 use geoengine_operators::util::abortable_query_execution;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use std::time::Duration;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -57,105 +57,8 @@ pub(crate) struct GetPlot {
 /// 1
 /// 2
 /// ```
-/// Response:
-/// ```json
-/// {
-/// 	"id": "f3bd61ef-d9ce-471c-89a1-46b5f7295886"
-/// }
-/// ```
-///
-/// 2. Create a dataset from it.
-///
-/// ```text
-/// POST /dataset
-/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
-///
-/// {
-///   "dataPath": {
-///     "upload": "f3bd61ef-d9ce-471c-89a1-46b5f7295886"
-///   },
-///   "definition": {
-///     "properties": {
-///       "name": "Plain Data",
-///       "description": "Demo Dataset",
-///       "sourceOperator": "OgrSource"
-///     },
-///     "metaData": {
-///       "type": "OgrMetaData",
-///       "loadingInfo": {
-///         "fileName": "plain_data.csv",
-///         "layerName": "plain_data",
-///         "dataType": "Data",
-///         "time": {
-///           "type": "none"
-///         },
-///         "columns": {
-///           "x": "",
-///           "y": null,
-///           "text": [],
-///           "float": [],
-///           "int": ["a"]
-///         },
-///         "forceOgrTimeFilter": false,
-///         "onError": "abort"
-///       },
-///       "resultDescriptor": {
-///         "dataType": "Data",
-///         "spatialReference": "EPSG:4326",
-///         "columns": {
-///           "a": {
-///             "dataType": "int",
-///             "measurement": {
-///               "type": "unitless"
-///             }
-///           }
-///         }
-///       }
-///     }
-///   }
-/// }
-/// ```
-/// Response:
-/// ```json
-/// {
-///   "id": "c36f5ce7-d0df-4982-babb-cc9e67d2a196"
-/// }
-/// ```
-///
-/// 3. Create a statistics workflow.
-///
-/// ```text
-/// POST /workflow
-/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
-///
-/// {
-///   "type": "Plot",
-///   "operator": {
-///     "type": "Statistics",
-///     "params": {},
-///     "sources": {
-///       "source": {
-///         "type": "OgrSource",
-///         "params": {
-///           "data": {
-///             "type": "internal",
-///             "datasetId": "c36f5ce7-d0df-4982-babb-cc9e67d2a196"
-///           },
-///           "attributeProjection": null,
-///           "attributeFilters": null
-///         }
-///       }
-///     }
-///   }
-/// }
-/// ```
-/// Response:
-/// ```json
-/// {
-///   "id": "504ed8a4-e0a4-5cef-9f91-b2ffd4a2b56b"
-/// }
-/// ```
-///
+/// 2. Create a dataset from it using the "Plain Data" example at `/dataset`.
+/// 3. Create a statistics workflow using the "Statistics Plot" example at `/workflow`.
 /// 4. Generate the plot with this handler.
 #[utoipa::path(
     tag = "Plots",
@@ -273,7 +176,10 @@ async fn get_plot_handler<C: Context>(
                 abortable_query_execution(png_bytes, conn_closed, query_abort_trigger).await;
             let png_bytes = png_bytes.context(error::Operator)?;
 
-            let data_uri = format!("data:image/png;base64,{}", base64::encode(png_bytes));
+            let data_uri = format!(
+                "data:image/png;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(png_bytes)
+            );
 
             serde_json::to_value(data_uri).context(error::SerdeJson)?
         }

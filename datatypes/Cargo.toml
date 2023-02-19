@@ -14,7 +14,7 @@ postgres = ["postgres-types", "postgres-protocol"]
 pro = ["postgres"]
 
 [dependencies]
-arrow = { version = "29.0", features = ["simd"] }
+arrow = { version = "33.0", features = ["simd", "ipc_compression"] }
 async-trait = "0.1"
 chrono = "0.4"
 float-cmp = "0.9"

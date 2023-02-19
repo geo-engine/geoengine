@@ -83,6 +83,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::get_workflow_metadata_handler,
         handlers::workflows::get_workflow_provenance_handler,
         handlers::workflows::load_workflow_handler,
+        handlers::workflows::raster_stream_websocket,
         handlers::workflows::register_workflow_handler,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,

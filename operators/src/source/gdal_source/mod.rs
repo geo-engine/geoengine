@@ -559,7 +559,8 @@ impl GdalRasterLoader {
             };
             let elapsed = start.elapsed();
             debug!(
-                "file not found -> returning error = {}, took: {:?}, file: {:?}",
+                "error opening dataset: {:?} -> returning error = {}, took: {:?}, file: {:?}",
+                error,
                 err_result.is_err(),
                 elapsed,
                 dataset_params.file_path
@@ -1041,10 +1042,10 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
     let mut properties = RasterProperties::default();
 
     if let Some(properties_mapping) = dataset_params.properties_mapping.as_ref() {
-        properties_from_gdal(&mut properties, dataset, properties_mapping);
         let rasterband = dataset.rasterband(dataset_params.rasterband_channel as isize)?;
-        properties_from_gdal(&mut properties, &rasterband, properties_mapping);
         properties_from_band(&mut properties, &rasterband);
+        properties_from_gdal_metadata(&mut properties, dataset, properties_mapping);
+        properties_from_gdal_metadata(&mut properties, &rasterband, properties_mapping);
     }
 
     Ok(RasterTile2D::new_with_tile_info_and_properties(
@@ -1087,7 +1088,7 @@ impl GdalMetadataMapping {
     }
 }
 
-fn properties_from_gdal<'a, I, M>(
+fn properties_from_gdal_metadata<'a, I, M>(
     properties: &mut RasterProperties,
     gdal_dataset: &M,
     properties_mapping: I,
@@ -1118,24 +1119,22 @@ fn properties_from_gdal<'a, I, M>(
                 &m.source_key, &m.target_key, &entry
             );
 
-            properties
-                .properties_map
-                .insert(m.target_key.clone(), entry);
+            properties.insert_property(m.target_key.clone(), entry);
         }
     }
 }
 
 fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRasterBand) {
-    if let Some(scale) = gdal_dataset.metadata_item("scale", "") {
-        properties.scale = scale.parse::<f64>().ok();
+    if let Some(scale) = gdal_dataset.scale() {
+        properties.set_scale(scale);
+    };
+    if let Some(offset) = gdal_dataset.offset() {
+        properties.set_offset(offset);
     };
 
-    if let Some(offset) = gdal_dataset.metadata_item("offset", "") {
-        properties.offset = offset.parse::<f64>().ok();
-    };
-
-    if let Some(band_name) = gdal_dataset.metadata_item("band_name", "") {
-        properties.band_name = Some(band_name);
+    // ignore if there is no description
+    if let Ok(description) = gdal_dataset.description() {
+        properties.set_description(description);
     }
 }
 
@@ -1481,17 +1480,17 @@ mod tests {
         assert_eq!(grid.validity_mask.data.len(), 64);
         assert_eq!(grid.validity_mask.data, &[true; 64]);
 
-        assert!(properties.scale.is_none());
-        assert!(properties.offset.is_none());
+        assert!((properties.scale_option()).is_none());
+        assert!(properties.offset_option().is_none());
         assert_eq!(
-            properties.properties_map.get(&RasterPropertiesKey {
+            properties.get_property(&RasterPropertiesKey {
                 key: "AREA_OR_POINT".to_string(),
                 domain: None,
             }),
             Some(&RasterPropertiesEntry::String("Area".to_string()))
         );
         assert_eq!(
-            properties.properties_map.get(&RasterPropertiesKey {
+            properties.get_property(&RasterPropertiesKey {
                 domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
                 key: "COMPRESSION".to_string(),
             }),
