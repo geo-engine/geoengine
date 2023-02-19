@@ -3,10 +3,10 @@ use crate::api::model::datatypes::{
     Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, DefaultColors,
     ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
     MultiLineString, MultiPoint, MultiPolygon, NoGeometry, OverUnderColors, Palette,
-    RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
-    RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority,
-    SpatialReferenceOption, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
-    TimeInterval, TimeStep, VectorDataType,
+    PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
+    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
+    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
+    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
@@ -27,6 +27,7 @@ use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::datasets::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::handlers;
+use crate::handlers::plots::WrappedPlotOutput;
 use crate::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
@@ -91,6 +92,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
+        handlers::plots::get_plot_handler,
         handlers::projects::create_project_handler,
         handlers::projects::list_projects_handler
     ),
@@ -271,6 +273,9 @@ use utoipa::{Modify, OpenApi};
             Volume,
             VolumeName,
             DataPath,
+
+            PlotOutputFormat,
+            WrappedPlotOutput,
 
             CreateProject,
             ProjectListOptions,

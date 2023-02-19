@@ -320,6 +320,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
+            retry: None,
         };
 
         let uncompressed_byte_size = intermediate_dataset_parameters.width

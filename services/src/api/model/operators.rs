@@ -954,6 +954,7 @@ impl From<GdalDatasetParameters> for geoengine_operators::source::GdalDatasetPar
                 .gdal_config_options
                 .map(|x| x.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
+            retry: None,
         }
     }
 }
