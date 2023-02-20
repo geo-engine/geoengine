@@ -1,8 +1,12 @@
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use super::query::QueryContext;
 use crate::processing::RasterTypeConversionQueryProcessor;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
+use futures::Stream;
 use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
 };
@@ -13,6 +17,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
+use ouroboros::self_referencing;
 
 /// An instantiation of an operator that produces a stream of results for a query
 #[async_trait]
@@ -38,6 +43,32 @@ pub trait QueryProcessor: Send + Sync {
         ))
     }
 }
+
+/// Advanced methods for query processors
+#[async_trait]
+pub trait QueryProcessorExt: QueryProcessor {
+    /// Query the processor and retrieve a stream of results.
+    ///
+    /// This stream owns the processor and the query context to provide a static lifetime.
+    /// Thus, it can be stored in a struct.
+    async fn query_into_owned_stream(
+        self,
+        query: QueryRectangle<Self::SpatialBounds>,
+        ctx: Box<dyn QueryContext>,
+    ) -> Result<OwnedQueryResultStream<Self>>
+    where
+        Self: Sized + 'static,
+    {
+        Ok(
+            OwnedQueryResultStream::try_new_async_send(self, ctx, |processor, ctx| {
+                processor.query(query, ctx.as_ref())
+            })
+            .await?,
+        )
+    }
+}
+
+impl<Q> QueryProcessorExt for Q where Q: QueryProcessor {}
 
 /// An instantiation of a raster operator that produces a stream of raster results for a query
 #[async_trait]
@@ -637,4 +668,41 @@ macro_rules! map_typed_query_processor {
             )+
         }
     };
+}
+
+/// In the case that it is required to store a query stream in a struct with a static lifetime,
+///  one can use this struct.
+/// This struct owns the query processor and the query context and thus ensures that the query
+/// has the lifetime dependencies it needs.
+#[self_referencing]
+pub struct OwnedQueryResultStream<Q>
+where
+    Q: QueryProcessor + 'static,
+{
+    processor: Q,
+    ctx: Box<dyn QueryContext>,
+    #[borrows(processor, ctx)]
+    #[covariant]
+    stream: BoxStream<'this, Result<Q::Output>>,
+}
+
+impl<Q> OwnedQueryResultStream<Q>
+where
+    Q: QueryProcessor + 'static,
+{
+    /// Stop/drop the current stream and return the query processor.
+    pub fn into_query_processor(self) -> Q {
+        self.into_heads().processor
+    }
+}
+
+impl<Q> Stream for OwnedQueryResultStream<Q>
+where
+    Q: QueryProcessor + 'static,
+{
+    type Item = Result<Q::Output>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.with_stream_mut(|stream| Pin::new(stream).poll_next(cx))
+    }
 }

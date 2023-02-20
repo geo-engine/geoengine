@@ -1,20 +1,27 @@
 use std::collections::HashMap;
 use std::io::{Cursor, Write};
 
-use crate::api::model::datatypes::DataId;
+use crate::api::model::datatypes::{DataId, TimeInterval};
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::layers::storage::LayerProviderDb;
+use crate::ogc::util::parse_time;
+use crate::util::parsing::{parse_spatial_partition, parse_spatial_resolution};
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
-use actix_web::{web, FromRequest, HttpResponse, Responder};
+use crate::workflows::RasterWebsocketStreamHandler;
+use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
+use geoengine_datatypes::primitives::{
+    RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+};
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use utoipa::IntoParams;
 
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::handlers::tasks::TaskResponse;
@@ -45,6 +52,10 @@ where
                     .service(
                         web::resource("/allMetadata/zip")
                             .route(web::get().to(get_workflow_all_metadata_zip_handler::<C>)),
+                    )
+                    .service(
+                        web::resource("/rasterStream")
+                            .route(web::get().to(raster_stream_websocket::<C>)),
                     ),
             ),
     )
@@ -408,7 +419,7 @@ async fn resolve_provenance<C: Context>(
     request_body = RasterDatasetFromWorkflow,
     responses(
         (status = 200, description = "Id of created task", body = TaskResponse,
-            example = json!({"task_id": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"})
+            example = json!({"taskId": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"})
         )
     ),
     params(
@@ -440,6 +451,92 @@ async fn dataset_from_workflow_handler<C: Context>(
     Ok(web::Json(TaskResponse::new(task_id)))
 }
 
+/// The query parameters for `raster_stream_websocket`.
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct RasterStreamWebsocketQuery {
+    #[serde(deserialize_with = "parse_spatial_partition")]
+    pub spatial_bounds: SpatialPartition2D,
+    #[serde(deserialize_with = "parse_time")]
+    pub time_interval: TimeInterval,
+    #[serde(deserialize_with = "parse_spatial_resolution")]
+    pub spatial_resolution: SpatialResolution,
+    pub result_type: RasterStreamWebsocketResultType,
+}
+
+/// The stream result type for `raster_stream_websocket`.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RasterStreamWebsocketResultType {
+    Arrow,
+}
+
+/// Query a workflow raster result as a stream of tiles via a websocket connection.
+#[utoipa::path(
+    tag = "Workflows",
+    get,
+    path = "/workflow/{id}/rasterStream",
+    responses(
+        (
+            status = 101,
+            description = "Upgrade to websocket connection",
+            example = json!({
+                "connection": "upgrade",
+                "upgrade": "websocket",
+                "sec-websocket-accept": "c31quXa8jR1ISUyecRy0pTdNLXk",
+                "date": "Mon, 13 Feb 2023 12:10:15 GMT",
+            })
+        )
+    ),
+    params(
+        ("id" = WorkflowId, description = "Workflow id"),
+        RasterStreamWebsocketQuery,
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn raster_stream_websocket<C: Context>(
+    ctx: web::Data<C>,
+    session: C::Session,
+    id: web::Path<WorkflowId>,
+    query: web::Query<RasterStreamWebsocketQuery>,
+    request: HttpRequest,
+    stream: web::Payload,
+) -> Result<HttpResponse> {
+    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+
+    let operator = workflow
+        .operator
+        .get_raster()
+        .boxed_context(error::WorkflowMustBeOfTypeRaster)?;
+
+    let query_rectangle = RasterQueryRectangle {
+        spatial_bounds: query.spatial_bounds,
+        time_interval: query.time_interval.into(),
+        spatial_resolution: query.spatial_resolution,
+    };
+
+    // this is the only result type for now
+    debug_assert!(matches!(
+        query.result_type,
+        RasterStreamWebsocketResultType::Arrow
+    ));
+
+    let stream_handler = RasterWebsocketStreamHandler::new::<C>(
+        operator,
+        query_rectangle,
+        ctx.execution_context(session.clone())?,
+        ctx.query_context(session.clone())?,
+    )
+    .await?;
+
+    match actix_web_actors::ws::start(stream_handler, &request, stream) {
+        Ok(websocket) => Ok(websocket),
+        Err(e) => Ok(e.error_response()),
+    }
+}
+
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(module(error), context(suffix(false)))] // disables default `Snafu` suffix
@@ -451,6 +548,8 @@ pub enum WorkflowApiError {
     },
     #[snafu(display("Finishing to output ZIP file failed"))]
     CannotFinishZipFile { source: Box<dyn ErrorSource> },
+    #[snafu(display("You can only query a raster stream for a raster workflow"))]
+    WorkflowMustBeOfTypeRaster { source: Box<dyn ErrorSource> },
 }
 
 #[cfg(test)]

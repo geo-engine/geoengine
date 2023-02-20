@@ -87,7 +87,7 @@ pub struct GetFeature {
     pub queryResolution: Option<WfsResolution>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct WfsResolution(pub SpatialResolution);
 
 impl<'a> ToSchema<'a> for WfsResolution {
