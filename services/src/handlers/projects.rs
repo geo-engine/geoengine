@@ -150,6 +150,9 @@ async fn load_project_handler<C: Context>(
     responses(
         (status = 200, description = "OK")
     ),
+    params(
+        ("project" = ProjectId, description = "Project id")
+    ),
     security(
         ("session_token" = [])
     )
@@ -173,6 +176,9 @@ pub(crate) async fn update_project_handler<C: Context>(
     path = "/project/{project}",
     responses(
         (status = 200, description = "OK")
+    ),
+    params(
+        ("project" = ProjectId, description = "Project id")
     ),
     security(
         ("session_token" = [])

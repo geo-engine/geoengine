@@ -46,51 +46,56 @@ where
     );
 }
 
-/// Retrieves details about a [project](crate::projects::project::Project).
-/// If no version is specified, it loads the latest version.
-///
-/// # Example
-///
-/// ```text
-/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9/[version]
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
-///   "version": {
-///     "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
-///     "changed": "2021-04-26T14:05:39.677390600Z",
-///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-///   },
-///   "name": "Test",
-///   "description": "Foo",
-///   "layers": [],
-///   "plots": [],
-///   "bounds": {
-///     "spatialReference": "EPSG:4326",
-///     "boundingBox": {
-///       "lowerLeftCoordinate": {
-///         "x": 0.0,
-///         "y": 0.0
-///       },
-///       "upperRightCoordinate": {
-///         "x": 1.0,
-///         "y": 1.0
-///       }
-///     },
-///     "timeInterval": {
-///       "start": 0,
-///       "end": 1
-///     }
-///   },
-///   "timeStep": {
-///     "granularity": "months",
-///     "step": 1
-///   }
-/// }
-/// ```
+/// Retrieves details about the given version of a project.
+#[utoipa::path(
+    tag = "Projects",
+    get,
+    path = "/project/{project}/{version}",
+    responses(
+        (status = 200, description = "Project loaded from database", body = Project,
+            example = json!({
+                "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+                "version": {
+                    "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
+                    "changed": "2021-04-26T14:05:39.677390600Z",
+                    "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
+                },
+                "name": "Test",
+                "description": "Foo",
+                "layers": [],
+                "plots": [],
+                "bounds": {
+                    "spatialReference": "EPSG:4326",
+                    "boundingBox": {
+                        "lowerLeftCoordinate": {
+                            "x": 0.0,
+                            "y": 0.0
+                        },
+                        "upperRightCoordinate": {
+                            "x": 1.0,
+                            "y": 1.0
+                        }
+                    },
+                    "timeInterval": {
+                        "start": 0,
+                        "end": 1
+                    }
+                },
+                "timeStep": {
+                    "granularity": "months",
+                    "step": 1
+                }
+            })
+        )
+    ),
+    params(
+        ("project" = ProjectId, description = "Project id"),
+        ("version" = ProjectVersionId, description = "Version id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn load_project_version_handler<C: ProContext>(
     project: web::Path<(ProjectId, ProjectVersionId)>,
     session: C::Session,
@@ -104,6 +109,55 @@ pub(crate) async fn load_project_version_handler<C: ProContext>(
     Ok(web::Json(id))
 }
 
+/// Retrieves details about the latest version of a project.
+#[utoipa::path(
+    tag = "Projects",
+    get,
+    path = "/project/{project}",
+    responses(
+        (status = 200, description = "Project loaded from database", body = Project,
+            example = json!({
+                "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+                "version": {
+                    "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
+                    "changed": "2021-04-26T14:05:39.677390600Z",
+                    "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
+                },
+                "name": "Test",
+                "description": "Foo",
+                "layers": [],
+                "plots": [],
+                "bounds": {
+                    "spatialReference": "EPSG:4326",
+                    "boundingBox": {
+                        "lowerLeftCoordinate": {
+                            "x": 0.0,
+                            "y": 0.0
+                        },
+                        "upperRightCoordinate": {
+                            "x": 1.0,
+                            "y": 1.0
+                        }
+                    },
+                    "timeInterval": {
+                        "start": 0,
+                        "end": 1
+                    }
+                },
+                "timeStep": {
+                    "granularity": "months",
+                    "step": 1
+                }
+            })
+        )
+    ),
+    params(
+        ("project" = ProjectId, description = "Project id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn load_project_latest_handler<C: ProContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
@@ -116,31 +170,32 @@ pub(crate) async fn load_project_latest_handler<C: ProContext>(
     Ok(web::Json(id))
 }
 
-/// Lists all [versions](crate::projects::project::ProjectVersion) of a project.
-///
-/// # Example
-///
-/// ```text
-/// GET /project/versions
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"
-/// ```
-/// Response:
-/// ```text
-/// [
-///   {
-///     "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
-///     "changed": "2021-04-26T14:05:39.677390600Z",
-///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-///   },
-///   {
-///     "id": "ced041c7-4b1d-4d13-b076-94596be6a36a",
-///     "changed": "2021-04-26T14:13:10.901912700Z",
-///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-///   }
-/// ]
-/// ```
+/// Lists all available versions of a project.
+#[utoipa::path(
+    tag = "Projects",
+    get,
+    path = "/project/versions",
+    request_body = ProjectId,
+    responses(
+        (status = 200, description = "OK", body = [ProjectVersion],
+            example = json!([
+                {
+                    "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
+                    "changed": "2021-04-26T14:05:39.677390600Z",
+                    "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
+                },
+                {
+                    "id": "ced041c7-4b1d-4d13-b076-94596be6a36a",
+                    "changed": "2021-04-26T14:13:10.901912700Z",
+                    "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
+                }
+            ])
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn project_versions_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -153,21 +208,19 @@ pub(crate) async fn project_versions_handler<C: ProContext>(
     Ok(web::Json(versions))
 }
 
-/// Add a [permission](crate::projects::project::ProjectPermission) for another user
-/// if the session user is the owner of the target project.
-///
-/// # Example
-///
-/// ```text
-/// POST /project/permission/add
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "user": "3cbe632e-c50a-46d0-8490-f12621347bb1",
-///   "project": "aaed86a1-49d4-482d-b993-39159bb853df",
-///   "permission": "Read"
-/// }
-/// ```
+/// Add a permission for another user if the session user is the owner of the target project.
+#[utoipa::path(
+    tag = "Projects",
+    post,
+    path = "/project/permission/add",
+    request_body = UserProjectPermission,
+    responses(
+        (status = 200, description = "OK"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn add_permission_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -179,21 +232,19 @@ pub(crate) async fn add_permission_handler<C: ProContext>(
     Ok(HttpResponse::Ok())
 }
 
-/// Removes a [permission](crate::projects::project::ProjectPermission) of another user
-/// if the session user is the owner of the target project.
-///
-/// # Example
-///
-/// ```text
-/// DELETE /project/permission
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "user": "3cbe632e-c50a-46d0-8490-f12621347bb1",
-///   "project": "aaed86a1-49d4-482d-b993-39159bb853df",
-///   "permission": "Read"
-/// }
-/// ```
+/// Removes a permission of another user if the session user is the owner of the target project.
+#[utoipa::path(
+    tag = "Projects",
+    delete,
+    path = "/project/permission",
+    request_body = UserProjectPermission,
+    responses(
+        (status = 200, description = "OK"),
+    ),
+    security(
+       ("session_token" = [])
+    )
+)]
 pub(crate) async fn remove_permission_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -206,23 +257,28 @@ pub(crate) async fn remove_permission_handler<C: ProContext>(
 }
 
 /// Shows the access rights the user has for a given project.
-///
-/// # Example
-///
-/// ```text
-/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9/permissions
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-/// Response:
-/// ```text
-/// [
-///   {
-///     "user": "5b4466d2-8bab-4ed8-a182-722af3c80958",
-///     "project": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
-///     "permission": "Owner"
-///   }
-/// ]
-/// ```
+#[utoipa::path(
+    tag = "Projects",
+    get,
+    path = "/project/{project}/permissions",
+    responses(
+        (status = 200, description = "Project loaded from database", body = [UserProjectPermission],
+            example = json!([
+                {
+                    "user": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+                    "project": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+                    "permission": "Owner"
+                }
+            ])
+        )
+    ),
+    params(
+        ("project" = ProjectId, description = "Project id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn list_permissions_handler<C: ProContext>(
     project: web::Path<ProjectId>,
     session: C::Session,

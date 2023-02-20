@@ -3,10 +3,10 @@ use crate::api::model::datatypes::{
     Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, DateTimeParseFormat, DefaultColors,
     ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
     MultiLineString, MultiPoint, MultiPolygon, NoGeometry, OverUnderColors, Palette,
-    PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
+    PlotOutputFormat, PlotQueryRectangle, RasterDataType, RasterPropertiesEntryType,
+    RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
     SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
-    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType,
+    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
@@ -42,10 +42,12 @@ use crate::ogc::util::OgcBoundingBox;
 use crate::ogc::{wcs, wfs, wms};
 use crate::pro;
 use crate::pro::handlers::users::{Quota, UpdateQuota};
+use crate::pro::projects::{ProjectPermission, UserProjectPermission};
 use crate::projects::{
-    ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
-    PolygonSymbology, ProjectId, RasterSymbology, STRectangle, StrokeParam, Symbology,
-    TextSymbology,
+    ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
+    LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
+    ProjectFilter, ProjectId, ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology,
+    STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
 use crate::util::server::ServerInfo;
@@ -108,6 +110,16 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
+        handlers::projects::list_projects_handler,
+        pro::handlers::projects::project_versions_handler,
+        pro::handlers::projects::add_permission_handler,
+        pro::handlers::projects::remove_permission_handler,
+        handlers::projects::create_project_handler,
+        pro::handlers::projects::load_project_latest_handler,
+        handlers::projects::update_project_handler,
+        handlers::projects::delete_project_handler,
+        pro::handlers::projects::list_permissions_handler,
+        pro::handlers::projects::load_project_version_handler
     ),
     components(
         schemas(
@@ -135,6 +147,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             ProviderLayerId,
             ProviderLayerCollectionId,
             LayerCollectionId,
+            ProjectVersionId,
 
             TimeInstance,
             TimeInterval,
@@ -172,8 +185,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             RasterDatasetFromWorkflow,
             RasterDatasetFromWorkflowResult,
             RasterQueryRectangle,
-            // VectorQueryRectangle,
-            // PlotQueryRectangle,
+            VectorQueryRectangle,
+            PlotQueryRectangle,
 
             TaskAbortOptions,
             TaskFilter,
@@ -294,7 +307,21 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             DataPath,
 
             PlotOutputFormat,
-            WrappedPlotOutput
+            WrappedPlotOutput,
+
+            CreateProject,
+            UserProjectPermission,
+            Project,
+            UpdateProject,
+            ProjectFilter,
+            ProjectListing,
+            ProjectPermission,
+            ProjectVersion,
+            LayerUpdate,
+            PlotUpdate,
+            Plot,
+            crate::projects::Layer,
+            LayerVisibility
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

@@ -8,6 +8,7 @@ use async_trait::async_trait;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use super::LoadVersion;
 
@@ -51,7 +52,7 @@ pub trait ProProjectDb: ProjectDb<UserSession> {
     ) -> Result<()>;
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub enum ProjectPermission {
     Read,
@@ -59,7 +60,12 @@ pub enum ProjectPermission {
     Owner,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
+#[schema(example = json!({
+    "user": "3cbe632e-c50a-46d0-8490-f12621347bb1",
+    "project": "aaed86a1-49d4-482d-b993-39159bb853df",
+    "permission": "Read"
+}))]
 pub struct UserProjectPermission {
     pub project: ProjectId,
     pub permission: ProjectPermission,

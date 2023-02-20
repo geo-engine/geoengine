@@ -34,6 +34,7 @@ pub struct Project {
     pub version: ProjectVersion,
     pub name: String,
     pub description: String,
+    #[schema(value_type = [ShortLayerInfo])]
     pub layers: Vec<Layer>,
     pub plots: Vec<Plot>,
     pub bounds: STRectangle,
@@ -220,6 +221,7 @@ impl TemporalBounded for STRectangle {
 
 // TODO: split into Raster and VectorLayer like in frontend?
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[schema(as = ShortLayerInfo)]
 pub struct Layer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
     // TODO: LayerId?
@@ -490,9 +492,10 @@ impl UserInput for CreateProject {
                 "legend": false
             },
             "symbology": {
-                "raster": {
-                    "opacity": 1.0,
-                    "colorizer": "rgba"
+                "type": "raster",
+                "opacity": 1.0,
+                "colorizer": {
+                   "type": "rgba"
                 }
             }
         }
@@ -538,7 +541,7 @@ impl<'a> ToSchema<'a> for LayerUpdate {
                         .schema_type(SchemaType::String)
                         .enum_values::<[&str; 1], &str>(Some(["delete"])),
                 )
-                .item(Ref::from_schema_name("Layer"))
+                .item(Ref::from_schema_name("ShortLayerInfo"))
                 .into(),
         )
     }
