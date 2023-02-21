@@ -729,15 +729,15 @@ mod tests {
                 // in the first iteration, there is no model yet.
                 matrix_vec.push(xg_matrix);
 
-                let mut initial_training_config: HashMap<&str, &str> = HashMap::new();
+                let mut initial_training_config: HashMap<String, String> = HashMap::new();
 
-                initial_training_config.insert("validate_parameters", "1");
-                initial_training_config.insert("process_type", "default");
-                initial_training_config.insert("tree_method", "hist");
-                initial_training_config.insert("max_depth", "10");
-                initial_training_config.insert("objective", "multi:softmax");
-                initial_training_config.insert("num_class", "4");
-                initial_training_config.insert("eta", "0.75");
+                initial_training_config.insert("validate_parameters".into(), "1".into());
+                initial_training_config.insert("process_type".into(), "default".into());
+                initial_training_config.insert("tree_method".into(), "hist".into());
+                initial_training_config.insert("max_depth".into(), "10".into());
+                initial_training_config.insert("objective".into(), "multi:softmax".into());
+                initial_training_config.insert("num_class".into(), "4".into());
+                initial_training_config.insert("eta".into(), "0.75".into());
 
                 let evals = &[(matrix_vec.get(0).unwrap(), "train")];
                 let bst = Booster::train(
@@ -757,15 +757,15 @@ mod tests {
                 // to update the model
                 let bst = booster_vec.pop().unwrap();
 
-                let mut update_training_config: HashMap<&str, &str> = HashMap::new();
+                let mut update_training_config: HashMap<String, String> = HashMap::new();
 
-                update_training_config.insert("validate_parameters", "1");
-                update_training_config.insert("process_type", "update");
-                update_training_config.insert("updater", "refresh");
-                update_training_config.insert("refresh_leaf", "true");
-                update_training_config.insert("objective", "multi:softmax");
-                update_training_config.insert("num_class", "4");
-                update_training_config.insert("max_depth", "15");
+                update_training_config.insert("validate_parameters".into(), "1".into());
+                update_training_config.insert("process_type".into(), "update".into());
+                update_training_config.insert("updater".into(), "refresh".into());
+                update_training_config.insert("refresh_leaf".into(), "true".into());
+                update_training_config.insert("objective".into(), "multi:softmax".into());
+                update_training_config.insert("num_class".into(), "4".into());
+                update_training_config.insert("max_depth".into(), "15".into());
 
                 let evals = &[(matrix_vec.get(0).unwrap(), "orig"), (&xg_matrix2, "train")];
                 let bst_updated = Booster::train(
