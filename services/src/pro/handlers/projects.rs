@@ -17,7 +17,6 @@ where
     )
     .service(
         web::scope("/project")
-            .service(web::resource("/versions").route(web::get().to(project_versions_handler::<C>)))
             .service(
                 web::resource("/permission/add").route(web::post().to(add_permission_handler::<C>)),
             )
@@ -38,6 +37,10 @@ where
             .service(
                 web::resource("/{project}/permissions")
                     .route(web::get().to(list_permissions_handler::<C>)),
+            )
+            .service(
+                web::resource("/{project}/versions")
+                    .route(web::get().to(project_versions_handler::<C>)),
             )
             .service(
                 web::resource("/{project}/{version}")
@@ -174,8 +177,7 @@ pub(crate) async fn load_project_latest_handler<C: ProContext>(
 #[utoipa::path(
     tag = "Projects",
     get,
-    path = "/project/versions",
-    request_body = ProjectId,
+    path = "/project/{project}/versions",
     responses(
         (status = 200, description = "OK", body = [ProjectVersion],
             example = json!([
@@ -192,6 +194,9 @@ pub(crate) async fn load_project_latest_handler<C: ProContext>(
             ])
         )
     ),
+    params(
+        ("project" = ProjectId, description = "Project id")
+    ),
     security(
         ("session_token" = [])
     )
@@ -199,7 +204,7 @@ pub(crate) async fn load_project_latest_handler<C: ProContext>(
 pub(crate) async fn project_versions_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
-    project: web::Json<ProjectId>,
+    project: web::Path<ProjectId>,
 ) -> Result<impl Responder> {
     let versions = ctx
         .pro_project_db_ref()
