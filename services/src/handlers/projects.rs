@@ -207,7 +207,7 @@ mod tests {
     use crate::{
         contexts::InMemoryContext,
         projects::{
-            Layer, LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId,
+            LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,
             ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
         },
     };
@@ -569,7 +569,7 @@ mod tests {
             session: &SimpleSession,
             project_id: ProjectId,
             update: UpdateProject,
-        ) -> Vec<Layer> {
+        ) -> Vec<ProjectLayer> {
             let req = test::TestRequest::patch()
                 .uri(&format!("/project/{project_id}"))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
@@ -587,7 +587,7 @@ mod tests {
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        let layer_1 = Layer {
+        let layer_1 = ProjectLayer {
             workflow: WorkflowId::new(),
             name: "L1".to_string(),
             visibility: LayerVisibility {
@@ -600,7 +600,7 @@ mod tests {
             }),
         };
 
-        let layer_2 = Layer {
+        let layer_2 = ProjectLayer {
             workflow: WorkflowId::new(),
             name: "L2".to_string(),
             visibility: LayerVisibility {

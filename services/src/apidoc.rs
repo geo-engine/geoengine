@@ -43,8 +43,8 @@ use crate::ogc::{wcs, wfs, wms};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
-    ProjectFilter, ProjectId, ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology,
-    STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
+    ProjectFilter, ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId,
+    RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
 use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo, IdResponse};
@@ -295,7 +295,7 @@ use utoipa::{Modify, OpenApi};
             Project,
             LayerUpdate,
             PlotUpdate,
-            crate::projects::Layer,
+            ProjectLayer,
             LayerVisibility,
             ProjectFilter,
             Plot,

@@ -15,7 +15,7 @@ use crate::datasets::upload::UploadId;
 use crate::datasets::upload::UploadRootPath;
 use crate::handlers::ErrorResponse;
 use crate::projects::{
-    CreateProject, Layer, LayerUpdate, ProjectDb, ProjectId, RasterSymbology, STRectangle,
+    CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
 };
 use crate::util::server::{configure_extractors, render_404, render_405};
@@ -80,7 +80,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
         id: project,
         name: Some("TestUpdate".to_string()),
         description: None,
-        layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
+        layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
             workflow: WorkflowId::new(),
             name: "L1".to_string(),
             visibility: Default::default(),

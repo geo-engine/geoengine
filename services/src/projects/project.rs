@@ -34,8 +34,7 @@ pub struct Project {
     pub version: ProjectVersion,
     pub name: String,
     pub description: String,
-    #[schema(value_type = [ShortLayerInfo])]
-    pub layers: Vec<Layer>,
+    pub layers: Vec<ProjectLayer>,
     pub plots: Vec<Plot>,
     pub bounds: STRectangle,
     pub time_step: TimeStep,
@@ -221,8 +220,7 @@ impl TemporalBounded for STRectangle {
 
 // TODO: split into Raster and VectorLayer like in frontend?
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
-#[schema(as = ShortLayerInfo)]
-pub struct Layer {
+pub struct ProjectLayer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
     // TODO: LayerId?
     pub workflow: WorkflowId,
@@ -231,7 +229,7 @@ pub struct Layer {
     pub symbology: Symbology,
 }
 
-impl Layer {
+impl ProjectLayer {
     pub fn layer_type(&self) -> LayerType {
         match self.symbology {
             Symbology::Raster(_) => LayerType::Raster,
@@ -519,7 +517,7 @@ pub enum VecUpdate<Content> {
     UpdateOrInsert(Content),
 }
 
-pub type LayerUpdate = VecUpdate<Layer>;
+pub type LayerUpdate = VecUpdate<ProjectLayer>;
 pub type PlotUpdate = VecUpdate<Plot>;
 
 string_token!(NoUpdate, "none");
@@ -704,7 +702,7 @@ mod tests {
                 .to_string()
             )
             .unwrap(),
-            LayerUpdate::UpdateOrInsert(Layer {
+            LayerUpdate::UpdateOrInsert(ProjectLayer {
                 workflow,
                 name: "L2".to_string(),
                 visibility: LayerVisibility {
@@ -728,7 +726,7 @@ mod tests {
             layers: Some(vec![
                 LayerUpdate::None(Default::default()),
                 LayerUpdate::Delete(Default::default()),
-                LayerUpdate::UpdateOrInsert(Layer {
+                LayerUpdate::UpdateOrInsert(ProjectLayer {
                     workflow: WorkflowId::new(),
                     name: "vector layer".to_string(),
                     visibility: Default::default(),
@@ -737,7 +735,7 @@ mod tests {
                         colorizer: Colorizer::Rgba,
                     }),
                 }),
-                LayerUpdate::UpdateOrInsert(Layer {
+                LayerUpdate::UpdateOrInsert(ProjectLayer {
                     workflow: WorkflowId::new(),
                     name: "raster layer".to_string(),
                     visibility: Default::default(),

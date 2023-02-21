@@ -46,8 +46,8 @@ use crate::pro::projects::{ProjectPermission, UserProjectPermission};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
-    ProjectFilter, ProjectId, ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology,
-    STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
+    ProjectFilter, ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId,
+    RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
 use crate::util::server::ServerInfo;
@@ -320,7 +320,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             LayerUpdate,
             PlotUpdate,
             Plot,
-            crate::projects::Layer,
+            ProjectLayer,
             LayerVisibility
         ),
     ),
