@@ -669,10 +669,9 @@ mod tests {
 
         let req = test::TestRequest::default()
             .method(method)
-            .uri("/project/versions")
+            .uri(&format!("/project/{project}/versions"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())))
-            .set_json(project);
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
         send_pro_test_request(req, ctx).await
     }
 
@@ -705,7 +704,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri("/project/versions")
+            .uri(&format!("/project/{project}/versions"))
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(project);
         let res = send_pro_test_request(req, ctx).await;

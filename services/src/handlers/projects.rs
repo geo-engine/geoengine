@@ -533,7 +533,7 @@ mod tests {
         let update = json!({
             "name": "TestUpdate",
             "description": None::<String>,
-            "layers": vec![LayerUpdate::UpdateOrInsert(Layer {
+            "layers": vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
                 workflow: WorkflowId::new(),
                 name: "L1".to_string(),
                 visibility: Default::default(),
