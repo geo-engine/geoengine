@@ -2,42 +2,40 @@ use crate::{contexts::Context, error::Result};
 use actix::{
     fut::wrap_future, Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler,
 };
-use actix_http::ws::{CloseCode, CloseReason};
+use actix_http::ws::{CloseCode, CloseReason, Item};
 use actix_web_actors::ws;
 use futures::{stream::BoxStream, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
-use geoengine_datatypes::{
-    primitives::RasterQueryRectangle, raster::raster_tile_2d_to_arrow_ipc_file,
-};
+use geoengine_datatypes::{collections::FeatureCollectionIpc, primitives::VectorQueryRectangle};
 use geoengine_operators::{
-    call_on_generic_raster_processor,
-    engine::{QueryAbortTrigger, QueryContext, QueryProcessorExt, RasterOperator},
+    call_on_generic_vector_processor,
+    engine::{QueryAbortTrigger, QueryContext, QueryProcessorExt, VectorOperator},
 };
 
-pub struct RasterWebsocketStreamHandler {
-    state: RasterWebsocketStreamHandlerState,
+pub struct VectorWebsocketStreamHandler {
+    state: VectorWebsocketStreamHandlerState,
     abort_handle: Option<QueryAbortTrigger>,
 }
 
 type ByteStream = BoxStream<'static, StreamResult>;
 type StreamResult = Result<Vec<u8>>;
 
-enum RasterWebsocketStreamHandlerState {
+enum VectorWebsocketStreamHandlerState {
     Closed,
     Idle { stream: ByteStream },
     Processing { _fut: SpawnHandle },
 }
 
-impl Default for RasterWebsocketStreamHandlerState {
+impl Default for VectorWebsocketStreamHandlerState {
     fn default() -> Self {
         Self::Closed
     }
 }
 
-impl Actor for RasterWebsocketStreamHandler {
+impl Actor for VectorWebsocketStreamHandler {
     type Context = ws::WebsocketContext<Self>;
 }
 
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RasterWebsocketStreamHandler {
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for VectorWebsocketStreamHandler {
     fn started(&mut self, _ctx: &mut Self::Context) {}
 
     fn finished(&mut self, ctx: &mut Self::Context) {
@@ -61,14 +59,14 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RasterWebsocketSt
     }
 }
 
-impl RasterWebsocketStreamHandler {
+impl VectorWebsocketStreamHandler {
     pub async fn new<C: Context>(
-        raster_operator: Box<dyn RasterOperator>,
-        query_rectangle: RasterQueryRectangle,
+        vector_operator: Box<dyn VectorOperator>,
+        query_rectangle: VectorQueryRectangle,
         execution_ctx: C::ExecutionContext,
         mut query_ctx: C::QueryContext,
     ) -> Result<Self> {
-        let initialized_operator = raster_operator.initialize(&execution_ctx).await?;
+        let initialized_operator = vector_operator.initialize(&execution_ctx).await?;
 
         let spatial_reference = initialized_operator.result_descriptor().spatial_reference;
 
@@ -76,14 +74,14 @@ impl RasterWebsocketStreamHandler {
 
         let abort_handle = query_ctx.abort_trigger().ok();
 
-        let byte_stream = call_on_generic_raster_processor!(query_processor, p => {
-            let tile_stream = p
+        let byte_stream = call_on_generic_vector_processor!(query_processor, p => {
+            let batch_stream = p
                 .query_into_owned_stream(query_rectangle, Box::new(query_ctx))
                 .await?;
 
-            tile_stream.and_then(
-                move |tile| crate::util::spawn_blocking(
-                    move || raster_tile_2d_to_arrow_ipc_file(tile, spatial_reference).map_err(Into::into)
+            batch_stream.and_then(
+                move |batch| crate::util::spawn_blocking(
+                    move || batch.to_arrow_ipc_file_bytes(spatial_reference).map_err(Into::into)
                 ).err_into().map(| r | r.and_then(std::convert::identity))
             ).boxed()
         });
@@ -91,7 +89,7 @@ impl RasterWebsocketStreamHandler {
         // TODO: think about buffering the stream?
 
         Ok(Self {
-            state: RasterWebsocketStreamHandlerState::Idle {
+            state: VectorWebsocketStreamHandlerState::Idle {
                 stream: byte_stream.map_err(Into::into).boxed(),
             },
             abort_handle,
@@ -102,12 +100,12 @@ impl RasterWebsocketStreamHandler {
         let state = std::mem::take(&mut self.state);
 
         self.state = match state {
-            RasterWebsocketStreamHandlerState::Closed => {
+            VectorWebsocketStreamHandlerState::Closed => {
                 self.finished(ctx);
                 return;
             }
-            RasterWebsocketStreamHandlerState::Idle { mut stream } => {
-                RasterWebsocketStreamHandlerState::Processing {
+            VectorWebsocketStreamHandlerState::Idle { mut stream } => {
+                VectorWebsocketStreamHandlerState::Processing {
                     _fut: ctx.spawn(
                         wrap_future(async move {
                             let tile = stream.next().await;
@@ -118,7 +116,7 @@ impl RasterWebsocketStreamHandler {
                     ),
                 }
             }
-            RasterWebsocketStreamHandlerState::Processing { _fut: _ } => state,
+            VectorWebsocketStreamHandlerState::Processing { _fut: _ } => state,
         };
     }
 
@@ -131,17 +129,42 @@ impl RasterWebsocketStreamHandler {
 
 fn send_result(
     (tile, stream): (Option<StreamResult>, ByteStream),
-    actor: &mut RasterWebsocketStreamHandler,
-    ctx: &mut <RasterWebsocketStreamHandler as Actor>::Context,
+    actor: &mut VectorWebsocketStreamHandler,
+    ctx: &mut <VectorWebsocketStreamHandler as Actor>::Context,
 ) -> futures::future::Ready<()> {
+    // TODO: spawn thread instead of blocking and returning an ok future
+
     match tile {
         Some(Ok(tile)) => {
-            actor.state = RasterWebsocketStreamHandlerState::Idle { stream };
-            ctx.binary(tile);
+            const MESSAGE_MAX_SIZE: usize = 16 * 1024 * 1024; // 16 MB
+
+            actor.state = VectorWebsocketStreamHandlerState::Idle { stream };
+
+            // we can send the whole message at once if it is small enough, i.e. <= `MESSAGE_MAX_SIZE`
+            if tile.len() <= MESSAGE_MAX_SIZE {
+                ctx.binary(tile);
+                return futures::future::ready(());
+            }
+
+            // limit message chunks to `MESSAGE_MAX_SIZE`
+            let mut chunks = tile.chunks(MESSAGE_MAX_SIZE).enumerate();
+
+            while let Some((i, chunk)) = chunks.next() {
+                let chunk_bytes = chunk.to_vec().into();
+                if i == 0 {
+                    // first chunk
+                    ctx.write_raw(ws::Message::Continuation(Item::FirstBinary(chunk_bytes)));
+                } else if chunks.len() == 0 {
+                    // last chunk
+                    ctx.write_raw(ws::Message::Continuation(Item::Last(chunk_bytes)));
+                } else {
+                    ctx.write_raw(ws::Message::Continuation(Item::Continue(chunk_bytes)));
+                }
+            }
         }
         Some(Err(e)) => {
             // on error, send the error and close the connection
-            actor.state = RasterWebsocketStreamHandlerState::Closed;
+            actor.state = VectorWebsocketStreamHandlerState::Closed;
             ctx.close(Some(CloseReason {
                 code: CloseCode::Error,
                 description: Some(e.to_string()),
@@ -150,7 +173,7 @@ fn send_result(
         }
         None => {
             // stream ended
-            actor.state = RasterWebsocketStreamHandlerState::Closed;
+            actor.state = VectorWebsocketStreamHandlerState::Closed;
             ctx.close(Some(CloseReason {
                 code: CloseCode::Normal,
                 description: None,
@@ -167,16 +190,20 @@ mod tests {
     use super::*;
     use crate::{
         contexts::{InMemoryContext, SimpleContext},
-        util::tests::register_ndvi_workflow_helper,
+        workflows::workflow::Workflow,
     };
     use actix_http::error::PayloadError;
     use actix_web_actors::ws::WebsocketContext;
     use bytes::{Bytes, BytesMut};
     use futures::channel::mpsc::UnboundedSender;
     use geoengine_datatypes::{
-        primitives::{DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
+        collections::MultiPointCollection,
+        primitives::{
+            BoundingBox2D, DateTime, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+        },
         util::{arrow::arrow_ipc_file_to_record_batches, test::TestDefault},
     };
+    use geoengine_operators::{engine::TypedOperator, mock::MockFeatureCollectionSource};
 
     #[tokio::test]
     async fn test_websocket_stream() {
@@ -193,21 +220,62 @@ mod tests {
             input_sender.unbounded_send(Ok(buf.into())).unwrap();
         }
 
-        let ctx = InMemoryContext::test_default();
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
+            vec![
+                TimeInterval::new(
+                    DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2015, 1, 1, 0, 0, 0)
+                )
+                .unwrap();
+                3
+            ],
+            [
+                (
+                    "foobar".to_string(),
+                    FeatureData::NullableInt(vec![Some(0), None, Some(2)]),
+                ),
+                (
+                    "strings".to_string(),
+                    FeatureData::Text(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let ctx = InMemoryContext::new_with_context_spec(
+            TestDefault::test_default(),
+            usize::MAX.into(), // ensure that we get one chunk per input
+        );
         let session = ctx.default_session_ref().await.clone();
 
-        let (workflow, _workflow_id) = register_ndvi_workflow_helper(&ctx).await;
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockFeatureCollectionSource::multiple(vec![
+                    collection.clone(),
+                    collection.clone(),
+                    collection.clone(),
+                ])
+                .boxed(),
+            ),
+        };
 
-        let query_rectangle = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                .unwrap(),
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new_upper_left_lower_right(
+                (-180., 90.).into(),
+                (180., -90.).into(),
+            )
+            .unwrap(),
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
                 .unwrap(),
             spatial_resolution: SpatialResolution::one(),
         };
 
-        let handler = RasterWebsocketStreamHandler::new::<InMemoryContext>(
-            workflow.operator.get_raster().unwrap(),
+        let handler = VectorWebsocketStreamHandler::new::<InMemoryContext>(
+            workflow.operator.get_vector().unwrap(),
             query_rectangle,
             ctx.execution_context(session.clone()).unwrap(),
             ctx.query_context(session).unwrap(),
@@ -219,8 +287,8 @@ mod tests {
 
         let mut websocket_context = WebsocketContext::create(handler, input_receiver);
 
-        // 4 tiles
-        for _ in 0..4 {
+        // 3 batches
+        for _ in 0..3 {
             send_next(&input_sender);
 
             let bytes = websocket_context.next().await.unwrap().unwrap();
@@ -233,6 +301,9 @@ mod tests {
             let schema = record_batch.schema();
 
             assert_eq!(schema.metadata()["spatialReference"], "EPSG:4326");
+
+            assert_eq!(record_batch.column_by_name("foobar").unwrap().len(), 3);
+            assert_eq!(record_batch.column_by_name("strings").unwrap().len(), 3);
         }
 
         send_next(&input_sender);

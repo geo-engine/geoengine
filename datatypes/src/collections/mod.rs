@@ -6,6 +6,7 @@ mod feature_collection;
 mod feature_collection_builder;
 #[macro_use]
 mod geo_feature_collection;
+mod ipc;
 
 mod data_collection;
 mod multi_line_string_collection;
@@ -35,6 +36,7 @@ pub use multi_point_collection::MultiPointCollection;
 pub use multi_polygon_collection::MultiPolygonCollection;
 
 pub use batch_builder::RawFeatureCollectionBuilder;
+pub use ipc::FeatureCollectionIpc;
 
 /// Calls a function on a `TypedFeatureCollection` by calling it on its variant.
 /// Call via `call_generic_features!(input, features => function)`.
