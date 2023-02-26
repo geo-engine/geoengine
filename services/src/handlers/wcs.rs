@@ -4,7 +4,7 @@ use std::time::Duration;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::util::raster_stream_to_geotiff::{
-    single_timestep_raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+    raster_stream_to_multiband_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
 };
 use log::info;
 use snafu::{ensure, ResultExt};
@@ -416,7 +416,7 @@ async fn wcs_get_coverage_handler<C: Context>(
     let query_ctx = ctx.query_context(session)?;
 
     let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
-        single_timestep_raster_stream_to_geotiff_bytes(
+        raster_stream_to_multiband_geotiff_bytes(
             p,
             query_rect,
             query_ctx,
