@@ -23,18 +23,18 @@ use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 identifier!(ProjectId);
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: ProjectId,
     pub version: ProjectVersion,
     pub name: String,
     pub description: String,
-    pub layers: Vec<Layer>,
+    pub layers: Vec<ProjectLayer>,
     pub plots: Vec<Plot>,
     pub bounds: STRectangle,
     pub time_step: TimeStep,
@@ -219,8 +219,8 @@ impl TemporalBounded for STRectangle {
 }
 
 // TODO: split into Raster and VectorLayer like in frontend?
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub struct Layer {
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+pub struct ProjectLayer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
     // TODO: LayerId?
     pub workflow: WorkflowId,
@@ -229,7 +229,7 @@ pub struct Layer {
     pub symbology: Symbology,
 }
 
-impl Layer {
+impl ProjectLayer {
     pub fn layer_type(&self) -> LayerType {
         match self.symbology {
             Symbology::Raster(_) => LayerType::Raster,
@@ -359,7 +359,7 @@ pub struct DerivedColor {
     pub colorizer: Colorizer,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub struct LayerVisibility {
     pub data: bool,
@@ -375,7 +375,7 @@ impl Default for LayerVisibility {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct Plot {
     pub workflow: WorkflowId,
     pub name: String,
@@ -400,7 +400,7 @@ impl OrderBy {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectListing {
     pub id: ProjectId,
@@ -424,7 +424,7 @@ impl From<&Project> for ProjectListing {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 pub enum ProjectFilter {
     Name { term: String },
     Description { term: String },
@@ -437,8 +437,27 @@ impl Default for ProjectFilter {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(example = json!({
+    "name": "Test",
+    "description": "Foo",
+    "bounds": {
+        "spatialReference": "EPSG:4326",
+        "boundingBox": {
+            "lowerLeftCoordinate": { "x": 0, "y": 0 },
+            "upperRightCoordinate": { "x": 1, "y": 1 }
+        },
+        "timeInterval": {
+            "start": 0,
+            "end": 1
+        }
+    },
+    "timeStep": {
+        "step": 1,
+        "granularity": "months"
+    }
+}))]
 pub struct CreateProject {
     pub name: String,
     pub description: String,
@@ -457,8 +476,29 @@ impl UserInput for CreateProject {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(example = json!({
+    "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+    "name": "TestUpdate",
+    "layers": [
+        {
+            "workflow": "100ee39c-761c-4218-9d85-ec861a8f3097",
+            "name": "L1",
+            "visibility": {
+                "data": true,
+                "legend": false
+            },
+            "symbology": {
+                "type": "raster",
+                "opacity": 1.0,
+                "colorizer": {
+                   "type": "rgba"
+                }
+            }
+        }
+    ]
+}))]
 pub struct UpdateProject {
     pub id: ProjectId,
     pub name: Option<String>,
@@ -477,11 +517,55 @@ pub enum VecUpdate<Content> {
     UpdateOrInsert(Content),
 }
 
-pub type LayerUpdate = VecUpdate<Layer>;
+pub type LayerUpdate = VecUpdate<ProjectLayer>;
 pub type PlotUpdate = VecUpdate<Plot>;
 
 string_token!(NoUpdate, "none");
 string_token!(Delete, "delete");
+
+impl<'a> ToSchema<'a> for LayerUpdate {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        use utoipa::openapi::*;
+        (
+            "LayerUpdate",
+            OneOfBuilder::new()
+                .item(
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::String)
+                        .enum_values::<[&str; 1], &str>(Some(["none"])),
+                )
+                .item(
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::String)
+                        .enum_values::<[&str; 1], &str>(Some(["delete"])),
+                )
+                .item(Ref::from_schema_name("ShortLayerInfo"))
+                .into(),
+        )
+    }
+}
+
+impl<'a> ToSchema<'a> for PlotUpdate {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        use utoipa::openapi::*;
+        (
+            "PlotUpdate",
+            OneOfBuilder::new()
+                .item(
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::String)
+                        .enum_values::<[&str; 1], &str>(Some(["none"])),
+                )
+                .item(
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::String)
+                        .enum_values::<[&str; 1], &str>(Some(["delete"])),
+                )
+                .item(Ref::from_schema_name("Plot"))
+                .into(),
+        )
+    }
+}
 
 impl UserInput for UpdateProject {
     fn validate(&self) -> Result<(), Error> {
@@ -499,12 +583,15 @@ impl UserInput for UpdateProject {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, IntoParams)]
 pub struct ProjectListOptions {
     #[serde(default)]
     pub filter: ProjectFilter,
+    #[param(example = "NameAsc")]
     pub order: OrderBy,
+    #[param(example = 0)]
     pub offset: u32,
+    #[param(example = 2)]
     pub limit: u32,
 }
 
@@ -521,7 +608,7 @@ impl UserInput for ProjectListOptions {
 
 identifier!(ProjectVersionId);
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy, ToSchema)]
 pub struct ProjectVersion {
     pub id: ProjectVersionId,
     pub changed: DateTime,
@@ -615,7 +702,7 @@ mod tests {
                 .to_string()
             )
             .unwrap(),
-            LayerUpdate::UpdateOrInsert(Layer {
+            LayerUpdate::UpdateOrInsert(ProjectLayer {
                 workflow,
                 name: "L2".to_string(),
                 visibility: LayerVisibility {
@@ -639,7 +726,7 @@ mod tests {
             layers: Some(vec![
                 LayerUpdate::None(Default::default()),
                 LayerUpdate::Delete(Default::default()),
-                LayerUpdate::UpdateOrInsert(Layer {
+                LayerUpdate::UpdateOrInsert(ProjectLayer {
                     workflow: WorkflowId::new(),
                     name: "vector layer".to_string(),
                     visibility: Default::default(),
@@ -648,7 +735,7 @@ mod tests {
                         colorizer: Colorizer::Rgba,
                     }),
                 }),
-                LayerUpdate::UpdateOrInsert(Layer {
+                LayerUpdate::UpdateOrInsert(ProjectLayer {
                     workflow: WorkflowId::new(),
                     name: "raster layer".to_string(),
                     visibility: Default::default(),

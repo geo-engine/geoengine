@@ -1,8 +1,8 @@
 use crate::pro::contexts::PostgresContext;
 use crate::pro::users::UserId;
 use crate::pro::users::UserSession;
-use crate::projects::Layer;
 use crate::projects::Plot;
+use crate::projects::ProjectLayer;
 use crate::projects::{
     CreateProject, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject,
@@ -500,7 +500,7 @@ where
 
         let mut layers = vec![];
         for row in rows {
-            layers.push(Layer {
+            layers.push(ProjectLayer {
                 workflow: WorkflowId(row.get(1)),
                 name: row.get(0),
                 symbology: serde_json::from_value(row.get(2)).context(error::SerdeJson)?,
