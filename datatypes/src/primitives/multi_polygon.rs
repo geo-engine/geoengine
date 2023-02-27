@@ -6,6 +6,7 @@ use float_cmp::{ApproxEq, F64Margin};
 use geo::intersects::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use wkt::{ToWkt, Wkt};
 
 use crate::collections::VectorDataType;
 use crate::error::Error;
@@ -356,6 +357,34 @@ impl<'g> MultiPolygonAccess for MultiPolygonRef<'g> {
     }
 }
 
+impl<'r> ToWkt<f64> for MultiPolygonRef<'r> {
+    fn to_wkt(&self) -> Wkt<f64> {
+        let multi_polygon = self.polygons();
+        let mut wkt_multi_polygon =
+            wkt::types::MultiPolygon(Vec::with_capacity(multi_polygon.len()));
+
+        for polygon in multi_polygon {
+            let mut wkt_polygon = wkt::types::Polygon(Vec::with_capacity(polygon.len()));
+
+            for ring in polygon {
+                let mut wkt_line_string = wkt::types::LineString(Vec::with_capacity(ring.len()));
+
+                for coord in *ring {
+                    wkt_line_string.0.push(coord.into());
+                }
+
+                wkt_polygon.0.push(wkt_line_string);
+            }
+
+            wkt_multi_polygon.0.push(wkt_polygon);
+        }
+
+        Wkt {
+            item: wkt::Geometry::MultiPolygon(wkt_multi_polygon),
+        }
+    }
+}
+
 impl<'g> From<MultiPolygonRef<'g>> for geojson::Geometry {
     fn from(geometry: MultiPolygonRef<'g>) -> geojson::Geometry {
         geojson::Geometry::new(match geometry.polygons.len() {
@@ -399,6 +428,24 @@ impl<'g> From<&MultiPolygonRef<'g>> for MultiPolygon {
                 .map(|polygon| polygon.iter().copied().map(ToOwned::to_owned).collect())
                 .collect(),
         )
+    }
+}
+
+impl<'g> From<&'g MultiPolygon> for MultiPolygonRef<'g> {
+    fn from(multi_point_ref: &'g MultiPolygon) -> Self {
+        let mut polygons = Vec::with_capacity(multi_point_ref.polygons().len());
+
+        for polygon in multi_point_ref.polygons() {
+            let mut rings = Vec::with_capacity(polygon.len());
+
+            for ring in polygon {
+                rings.push(ring.as_ref());
+            }
+
+            polygons.push(rings);
+        }
+
+        MultiPolygonRef::new_unchecked(polygons)
     }
 }
 
@@ -679,5 +726,47 @@ mod tests {
         .unwrap();
 
         assert!(!approx_eq!(&MultiPolygon, &a, &b, F64Margin::default()));
+    }
+
+    #[test]
+    fn test_to_wkt() {
+        let a = MultiPolygon::new(vec![
+            vec![
+                vec![
+                    (0.1, 0.1).into(),
+                    (0.8, 0.1).into(),
+                    (0.8, 0.8).into(),
+                    (0.1, 0.1).into(),
+                ],
+                vec![
+                    (0.2, 0.2).into(),
+                    (0.9, 0.2).into(),
+                    (0.9, 0.9).into(),
+                    (0.2, 0.2).into(),
+                ],
+            ],
+            vec![
+                vec![
+                    (1.1, 1.1).into(),
+                    (1.8, 1.1).into(),
+                    (1.8, 1.8).into(),
+                    (1.1, 1.1).into(),
+                ],
+                vec![
+                    (1.2, 1.2).into(),
+                    (1.9, 1.2).into(),
+                    (1.9, 1.9).into(),
+                    (1.2, 1.2).into(),
+                ],
+            ],
+        ])
+        .unwrap();
+
+        let a_ref = MultiPolygonRef::from(&a);
+
+        assert_eq!(
+            a_ref.wkt_string(),
+            "MULTIPOLYGON(((0.1 0.1,0.8 0.1,0.8 0.8,0.1 0.1),(0.2 0.2,0.9 0.2,0.9 0.9,0.2 0.2)),((1.1 1.1,1.8 1.1,1.8 1.8,1.1 1.1),(1.2 1.2,1.9 1.2,1.9 1.9,1.2 1.2)))"
+        );
     }
 }
