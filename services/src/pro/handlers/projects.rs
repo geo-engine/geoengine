@@ -267,7 +267,7 @@ pub(crate) async fn remove_permission_handler<C: ProContext>(
     get,
     path = "/project/{project}/permissions",
     responses(
-        (status = 200, description = "Project loaded from database", body = [UserProjectPermission],
+        (status = 200, description = "Permissions for project", body = [UserProjectPermission],
             example = json!([
                 {
                     "user": "5b4466d2-8bab-4ed8-a182-722af3c80958",
