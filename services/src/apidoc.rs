@@ -3,10 +3,10 @@ use crate::api::model::datatypes::{
     Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, DefaultColors,
     ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
     MultiLineString, MultiPoint, MultiPolygon, NoGeometry, OverUnderColors, Palette,
-    PlotOutputFormat, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
+    PlotOutputFormat, PlotQueryRectangle, RasterDataType, RasterPropertiesEntryType,
+    RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
     SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
-    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType,
+    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
@@ -41,9 +41,10 @@ use crate::layers::listing::LayerCollectionId;
 use crate::ogc::util::OgcBoundingBox;
 use crate::ogc::{wcs, wfs, wms};
 use crate::projects::{
-    ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
-    PolygonSymbology, ProjectId, RasterSymbology, STRectangle, StrokeParam, Symbology,
-    TextSymbology,
+    ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
+    LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
+    ProjectFilter, ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId,
+    RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
 use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo, IdResponse};
@@ -98,6 +99,11 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::suggest_meta_data_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::plots::get_plot_handler,
+        handlers::projects::create_project_handler,
+        handlers::projects::list_projects_handler,
+        handlers::projects::load_project_handler,
+        handlers::projects::update_project_handler,
+        handlers::projects::delete_project_handler
     ),
     components(
         schemas(
@@ -117,6 +123,7 @@ use utoipa::{Modify, OpenApi};
             ProviderLayerId,
             ProviderLayerCollectionId,
             LayerCollectionId,
+            ProjectVersionId,
 
             TimeInstance,
             TimeInterval,
@@ -154,8 +161,8 @@ use utoipa::{Modify, OpenApi};
             RasterDatasetFromWorkflow,
             RasterDatasetFromWorkflowResult,
             RasterQueryRectangle,
-            // VectorQueryRectangle,
-            // PlotQueryRectangle,
+            VectorQueryRectangle,
+            PlotQueryRectangle,
 
             TaskAbortOptions,
             TaskFilter,
@@ -278,7 +285,21 @@ use utoipa::{Modify, OpenApi};
             DataPath,
 
             PlotOutputFormat,
-            WrappedPlotOutput
+            WrappedPlotOutput,
+
+            CreateProject,
+            ProjectListing,
+            UpdateProject,
+            PlotUpdate,
+            LayerUpdate,
+            Project,
+            LayerUpdate,
+            PlotUpdate,
+            ProjectLayer,
+            LayerVisibility,
+            ProjectFilter,
+            Plot,
+            ProjectVersion
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

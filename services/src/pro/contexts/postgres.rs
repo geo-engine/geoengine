@@ -702,8 +702,9 @@ mod tests {
     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
     use crate::pro::users::{ExternalUserClaims, UserCredentials, UserDb, UserRegistration};
     use crate::projects::{
-        CreateProject, Layer, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
-        ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, STRectangle, UpdateProject,
+        CreateProject, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
+        ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
+        UpdateProject,
     };
     use crate::util::config::{get_config_element, Postgres};
     use crate::util::user_input::UserInput;
@@ -1050,7 +1051,7 @@ mod tests {
             id: project.id,
             name: Some("Test9 Updated".into()),
             description: None,
-            layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
                 workflow: layer_workflow_id,
                 name: "TestLayer".into(),
                 symbology: PointSymbology::default().into(),
@@ -1080,7 +1081,7 @@ mod tests {
             id: project.id,
             name: Some("Test9 Updated".into()),
             description: None,
-            layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
                 workflow: layer_workflow_id,
                 name: "TestLayer".into(),
                 symbology: PointSymbology::default().into(),

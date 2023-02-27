@@ -20,40 +20,21 @@ where
         );
 }
 
-/// Create a new project for the user by providing [`CreateProject`].
-///
-/// # Example
-///
-/// ```text
-/// POST /project
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "name": "Test",
-///   "description": "Foo",
-///   "bounds": {
-///     "spatialReference": "EPSG:4326",
-///     "boundingBox": {
-///       "lowerLeftCoordinate": { "x": 0, "y": 0 },
-///       "upperRightCoordinate": { "x": 1, "y": 1 }
-///     },
-///     "timeInterval": {
-///       "start": 0,
-///       "end": 1
-///     }
-///   },
-///   "timeStep": {
-///     "step": 1,
-///     "granularity": "months"
-///   }
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"
-/// }
-/// ```
+/// Create a new project for the user.
+#[utoipa::path(
+    tag = "Projects",
+    post,
+    path = "/project",
+    request_body = CreateProject,
+    responses(
+        (status = 200, description = "OK", body = IdResponse,
+            example = json!({"id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"})
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn create_project_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -64,27 +45,30 @@ pub(crate) async fn create_project_handler<C: Context>(
     Ok(web::Json(IdResponse::from(id)))
 }
 
-/// List all projects accessible to the user that match the [`ProjectListOptions`].
-///
-/// # Example
-///
-/// ```text
-/// GET /projects?permissions=%5B%22Read%22,%20%22Write%22,%20%22Owner%22%5Dorder=NameAsc&offset=0&limit=2
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-/// Response:
-/// ```text
-/// [
-///   {
-///     "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
-///     "name": "Test",
-///     "description": "Foo",
-///     "layerNames": [],
-///     "plotNames": [],
-///     "changed": "2021-04-26T14:03:51.984537900Z"
-///   }
-/// ]
-/// ```
+/// List all projects accessible to the user that match the selected criteria.
+#[utoipa::path(
+    tag = "Projects",
+    get,
+    path = "/projects",
+    responses(
+        (status = 200, description = "List of projects the user can access", body = [ProjectListing],
+            example = json!([
+                {
+                    "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+                    "name": "Test",
+                    "description": "Foo",
+                    "layerNames": [],
+                    "plotNames": [],
+                    "changed": "2021-04-26T14:03:51.984537900Z"
+                }
+            ])
+        )
+    ),
+    params(ProjectListOptions),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn list_projects_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
@@ -95,50 +79,55 @@ pub(crate) async fn list_projects_handler<C: Context>(
     Ok(web::Json(listing))
 }
 
-/// Retrieves details about the latest version of a [project](crate::projects::project::Project).
-///
-/// # Example
-///
-/// ```text
-/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
-///   "version": {
-///     "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
-///     "changed": "2021-04-26T14:05:39.677390600Z",
-///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-///   },
-///   "name": "Test",
-///   "description": "Foo",
-///   "layers": [],
-///   "plots": [],
-///   "bounds": {
-///     "spatialReference": "EPSG:4326",
-///     "boundingBox": {
-///       "lowerLeftCoordinate": {
-///         "x": 0.0,
-///         "y": 0.0
-///       },
-///       "upperRightCoordinate": {
-///         "x": 1.0,
-///         "y": 1.0
-///       }
-///     },
-///     "timeInterval": {
-///       "start": 0,
-///       "end": 1
-///     }
-///   },
-///   "timeStep": {
-///     "granularity": "months",
-///     "step": 1
-///   }
-/// }
-/// ```
+/// Retrieves details about the latest version of a project.
+#[utoipa::path(
+    tag = "Projects",
+    get,
+    path = "/project/{project}",
+    responses(
+        (status = 200, description = "Project loaded from database", body = Project,
+            example = json!({
+                "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+                "version": {
+                    "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
+                    "changed": "2021-04-26T14:05:39.677390600Z",
+                    "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
+                },
+                "name": "Test",
+                "description": "Foo",
+                "layers": [],
+                "plots": [],
+                "bounds": {
+                    "spatialReference": "EPSG:4326",
+                    "boundingBox": {
+                        "lowerLeftCoordinate": {
+                            "x": 0.0,
+                            "y": 0.0
+                        },
+                        "upperRightCoordinate": {
+                            "x": 1.0,
+                            "y": 1.0
+                        }
+                    },
+                    "timeInterval": {
+                        "start": 0,
+                        "end": 1
+                    }
+                },
+                "timeStep": {
+                    "granularity": "months",
+                    "step": 1
+                }
+            })
+        )
+    ),
+    params(
+        ("project" = ProjectId, description = "Project id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn load_project_handler<C: Context>(
     project: web::Path<ProjectId>,
     session: C::Session,
@@ -153,34 +142,21 @@ async fn load_project_handler<C: Context>(
 
 /// Updates a project.
 /// This will create a new version.
-///
-/// # Example
-///
-/// ```text
-/// PATCH /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
-///   "name": "TestUpdate",
-///   "layers": [
-///     {
-///       "workflow": "100ee39c-761c-4218-9d85-ec861a8f3097",
-///       "name": "L1",
-///       "visibility": {
-///         "data": true,
-///         "legend": false
-///       },
-///       "symbology": {
-///         "raster": {
-///           "opacity": 1.0,
-///           "colorizer": "rgba"
-///         }
-///       }
-///     }
-///   ]
-/// }
-/// ```
+#[utoipa::path(
+    tag = "Projects",
+    patch,
+    path = "/project/{project}",
+    request_body = UpdateProject,
+    responses(
+        (status = 200, description = "OK")
+    ),
+    params(
+        ("project" = ProjectId, description = "Project id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn update_project_handler<C: Context>(
     project: web::Path<ProjectId>,
     session: C::Session,
@@ -194,13 +170,20 @@ pub(crate) async fn update_project_handler<C: Context>(
 }
 
 /// Deletes a project.
-///
-/// # Example
-///
-/// ```text
-/// DELETE /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
+#[utoipa::path(
+    tag = "Projects",
+    delete,
+    path = "/project/{project}",
+    responses(
+        (status = 200, description = "OK")
+    ),
+    params(
+        ("project" = ProjectId, description = "Project id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 pub(crate) async fn delete_project_handler<C: Context>(
     project: web::Path<ProjectId>,
     session: C::Session,
@@ -224,7 +207,7 @@ mod tests {
     use crate::{
         contexts::InMemoryContext,
         projects::{
-            Layer, LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId,
+            LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,
             ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
         },
     };
@@ -550,7 +533,7 @@ mod tests {
         let update = json!({
             "name": "TestUpdate",
             "description": None::<String>,
-            "layers": vec![LayerUpdate::UpdateOrInsert(Layer {
+            "layers": vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
                 workflow: WorkflowId::new(),
                 name: "L1".to_string(),
                 visibility: Default::default(),
@@ -586,7 +569,7 @@ mod tests {
             session: &SimpleSession,
             project_id: ProjectId,
             update: UpdateProject,
-        ) -> Vec<Layer> {
+        ) -> Vec<ProjectLayer> {
             let req = test::TestRequest::patch()
                 .uri(&format!("/project/{project_id}"))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
@@ -604,7 +587,7 @@ mod tests {
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        let layer_1 = Layer {
+        let layer_1 = ProjectLayer {
             workflow: WorkflowId::new(),
             name: "L1".to_string(),
             visibility: LayerVisibility {
@@ -617,7 +600,7 @@ mod tests {
             }),
         };
 
-        let layer_2 = Layer {
+        let layer_2 = ProjectLayer {
             workflow: WorkflowId::new(),
             name: "L2".to_string(),
             visibility: LayerVisibility {
