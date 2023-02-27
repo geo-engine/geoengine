@@ -47,7 +47,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for VectorWebsocketSt
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         match msg {
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
-            Ok(ws::Message::Text(text)) if &text == "NEXT" => self.next_tile(ctx),
+            Ok(ws::Message::Text(text)) if &text == "NEXT" => self.next_chunk(ctx),
             Ok(ws::Message::Close(reason)) => {
                 ctx.close(reason);
 
@@ -96,7 +96,7 @@ impl VectorWebsocketStreamHandler {
         })
     }
 
-    pub fn next_tile(&mut self, ctx: &mut <Self as Actor>::Context) {
+    pub fn next_chunk(&mut self, ctx: &mut <Self as Actor>::Context) {
         let state = std::mem::take(&mut self.state);
 
         self.state = match state {
