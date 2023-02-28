@@ -85,7 +85,8 @@ where
                     "path": "./test_data/"
                 }
             ])
-        )
+        ),
+        (status = 401, response = crate::api::model::responses::UnauthorizedAdminResponse)
     ),
     security(
         ("session_token" = [])
@@ -126,7 +127,9 @@ pub async fn list_volumes_handler(_session: AdminSession) -> Result<impl Respond
                     }
                 }
             ])
-        )
+        ),
+        (status = 400, response = crate::api::model::responses::BadRequestQueryResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
         DatasetListOptions
@@ -167,7 +170,8 @@ pub async fn list_datasets_handler<C: Context>(
                 },
                 "sourceOperator": "OgrSource"
             })
-        )
+        ),
+        (status = 400, response = crate::api::model::responses::BadRequestUnknownDatasetResponse)
     ),
     params(
         ("dataset" = DatasetId, description = "Dataset id")
@@ -322,13 +326,11 @@ impl<C: Context> FromRequest for AdminOrSession<C> {
         }))))
     ),
     responses(
-        (status = 200, description = "OK", body = IdResponse,
-            example = json!({
-                "id": {
-                    "internal": "8d3471ab-fcf7-4c1b-bbc1-00477adf07c8"
-                }
-            })
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse),
+        (status = 400, response = crate::api::model::responses::BadRequestCreateDatasetResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse),
+        (status = 413, response = crate::api::model::responses::PayloadTooLargeResponse),
+        (status = 415, response = crate::api::model::responses::UnsupportedMediaTypeForJsonResponse)
     ),
     security(
         ("session_token" = [])
@@ -449,13 +451,11 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
     path = "/dataset/auto",
     request_body = AutoCreateDataset,
     responses(
-        (status = 200, description = "OK", body = IdResponse,
-            example = json!({
-                "id": {
-                    "internal": "664d4b3c-c9d7-4e57-b34d-8c709c1c26e8"
-                }
-            })
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse),
+        (status = 400, response = crate::api::model::responses::BadRequestAutoCreateDatasetResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse),
+        (status = 413, response = crate::api::model::responses::PayloadTooLargeResponse),
+        (status = 415, response = crate::api::model::responses::UnsupportedMediaTypeForJsonResponse)
     ),
     security(
         ("session_token" = [])
@@ -539,7 +539,9 @@ pub async fn auto_create_dataset_handler<C: Context>(
                     }
                 }
             })
-        )
+        ),
+        (status = 400, response = crate::api::model::responses::BadRequestSuggestMetadataResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
         SuggestMetaData
@@ -964,6 +966,8 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
     path = "/dataset/{dataset}",
     responses(
         (status = 200, description = "OK"),
+        (status = 400, response = crate::api::model::responses::BadRequestDeleteDatasetResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
         ("dataset" = DatasetId, description = "Dataset id")

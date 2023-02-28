@@ -8,6 +8,7 @@ use actix_web_httpauth::headers::authorization::{Bearer, Scheme};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
+use utoipa::ToSchema;
 
 pub mod datasets;
 #[cfg(feature = "ebv")]
@@ -24,7 +25,7 @@ pub mod wfs;
 pub mod wms;
 pub mod workflows;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub struct ErrorResponse {
     pub error: String,
     pub message: String,

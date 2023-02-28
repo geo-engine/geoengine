@@ -18,6 +18,12 @@ use crate::api::model::operators::{
     TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
     VectorResultDescriptor,
 };
+use crate::api::model::responses::{
+    BadRequestAutoCreateDatasetResponse, BadRequestCreateDatasetResponse,
+    BadRequestDeleteDatasetResponse, BadRequestQueryResponse, BadRequestSuggestMetadataResponse,
+    BadRequestUnknownDatasetResponse, IdResponse, PayloadTooLargeResponse,
+    UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+};
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
 };
@@ -33,6 +39,7 @@ use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
+use crate::handlers::ErrorResponse;
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
@@ -50,8 +57,7 @@ use crate::projects::{
     RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
-use crate::util::server::ServerInfo;
-use crate::util::{apidoc::OpenApiServerInfo, IdResponse};
+use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -122,7 +128,21 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::projects::load_project_version_handler
     ),
     components(
+        responses(
+            UnsupportedMediaTypeForJsonResponse,
+            PayloadTooLargeResponse,
+            IdResponse,
+            UnauthorizedAdminResponse,
+            UnauthorizedUserResponse,
+            BadRequestQueryResponse,
+            BadRequestUnknownDatasetResponse,
+            BadRequestCreateDatasetResponse,
+            BadRequestAutoCreateDatasetResponse,
+            BadRequestSuggestMetadataResponse,
+            BadRequestDeleteDatasetResponse
+        ),
         schemas(
+            ErrorResponse,
             UserSession,
             UserCredentials,
             UserRegistration,
@@ -135,7 +155,6 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             DataProviderId,
             DatasetId,
             ExternalDataId,
-            IdResponse<WorkflowId>,
             LayerId,
             ProjectId,
             RoleId,

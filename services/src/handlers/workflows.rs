@@ -105,9 +105,7 @@ where
         }))))
     ),
     responses(
-        (status = 200, description = "OK", body = IdResponse,
-            example = json!({"id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"})
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse)
     ),
     security(
         ("session_token" = [])

@@ -55,13 +55,7 @@ where
     path = "/dataset/public", 
     request_body = CreateDataset,
     responses(
-        (status = 200, description = "OK", body = IdResponse,
-            example = json!({
-                "id": {
-                    "internal": "8d3471ab-fcf7-4c1b-bbc1-00477adf07c8"
-                }
-            })
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse),
     ),
     security(
         ("session_token" = [])
