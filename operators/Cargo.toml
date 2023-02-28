@@ -14,7 +14,7 @@ pro = ["geoengine-datatypes/pro"]
 xgboost = ["dep:xgboost-rs", "pro"]
 
 [dependencies]
-arrow = { version = "33.0", features = ["simd"] }
+arrow = { version = "34.0", features = ["simd"] }
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
