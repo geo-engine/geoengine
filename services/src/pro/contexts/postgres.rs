@@ -679,7 +679,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::api::model::datatypes::{DataProviderId, DatasetId};
+    use crate::api::model::datatypes::{DataProviderId, DatasetId, LayerId};
     use crate::api::model::services::AddDataset;
     use crate::contexts::AdminSession;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
@@ -3017,6 +3017,66 @@ mod tests {
             db.delete_dataset(&session, dataset_id).await.unwrap();
 
             assert!(db.load(&session, &dataset_id).await.is_err());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_missing_layer_dataset_in_collection_listing() {
+        with_temp_context(|ctx, _| async move {
+            let db = ctx.layer_db_ref();
+
+            let root_collection_id = &db.root_collection_id().await.unwrap();
+
+            let top_collection_id = db
+                .add_collection(
+                    AddLayerCollection {
+                        name: "top collection".to_string(),
+                        description: "description".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    root_collection_id,
+                )
+                .await
+                .unwrap();
+
+            let faux_layer = LayerId("faux".to_string());
+
+            // this should fail
+            db.add_layer_to_collection(&faux_layer, &top_collection_id)
+                .await
+                .unwrap_err();
+
+            let root_collection_layers = db
+                .collection(
+                    &top_collection_id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                root_collection_layers,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: DataProviderId(
+                            "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74".try_into().unwrap()
+                        ),
+                        collection_id: top_collection_id.clone(),
+                    },
+                    name: "top collection".to_string(),
+                    description: "description".to_string(),
+                    items: vec![],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
         })
         .await;
     }
