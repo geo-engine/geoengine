@@ -11,6 +11,7 @@ use crate::error::Result;
 use crate::handlers::Context;
 use crate::util::IdResponse;
 use snafu::ResultExt;
+use utoipa::ToSchema;
 
 pub(crate) fn init_upload_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -20,26 +21,43 @@ where
     cfg.service(web::resource("/upload").route(web::post().to(upload_handler::<C>)));
 }
 
+struct FileUploadRequest;
+
+impl<'a> ToSchema<'a> for FileUploadRequest {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        use utoipa::openapi::*;
+        (
+            "FileUploadRequest",
+            ObjectBuilder::new()
+                .property(
+                    "files[]",
+                    ArrayBuilder::new().items(
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::String)
+                            .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary))),
+                    ),
+                )
+                .required("files[]")
+                .into(),
+        )
+    }
+}
+
 /// Uploads files.
-///
-/// # Example
-///
-/// ```text
-/// POST /upload
-/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
-/// Content-Type: multipart/form-data; boundary=---------------------------10196671711503402186283068890
-///
-/// ---------------------------10196671711503402186283068890
-/// Content-Disposition: form-data; name="files[]"; filename="germany_polygon.gpkg"
-/// <Insert SQLite file>
-/// ---------------------------10196671711503402186283068890
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69"
-/// }
-/// ```
+#[utoipa::path(
+    tag = "Uploads",
+    post,
+    path = "/upload",
+    request_body(content = inline(FileUploadRequest), content_type = "multipart/form-data"),
+    responses(
+        (status = 200, description = "File uploaded", body = IdResponse,
+            example = json!({"id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69"})
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn upload_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
