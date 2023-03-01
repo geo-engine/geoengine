@@ -19,10 +19,10 @@ use crate::api::model::operators::{
     VectorResultDescriptor,
 };
 use crate::api::model::responses::{
-    BadRequestAutoCreateDatasetResponse, BadRequestCreateDatasetResponse,
-    BadRequestDeleteDatasetResponse, BadRequestQueryResponse, BadRequestSuggestMetadataResponse,
-    BadRequestUnknownDatasetResponse, IdResponse, PayloadTooLargeResponse,
-    UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    BadRequestAutoCreateDatasetResponse, BadRequestDeleteDatasetResponse, BadRequestQueryResponse,
+    BadRequestSuggestMetadataResponse, BadRequestUnknownDatasetResponse, IdResponse,
+    PayloadTooLargeResponse, UnauthorizedAdminResponse, UnauthorizedUserResponse,
+    UnsupportedMediaTypeForJsonResponse,
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
@@ -121,7 +121,6 @@ use utoipa::{Modify, OpenApi};
             UnauthorizedUserResponse,
             BadRequestQueryResponse,
             BadRequestUnknownDatasetResponse,
-            BadRequestCreateDatasetResponse,
             BadRequestAutoCreateDatasetResponse,
             BadRequestSuggestMetadataResponse,
             BadRequestDeleteDatasetResponse

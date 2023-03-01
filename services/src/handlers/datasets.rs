@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+use crate::handlers::ErrorResponse;
 use crate::util::user_input::UserInput;
 use crate::{api::model::datatypes::DatasetId, contexts::AdminSession};
 use crate::{
@@ -28,6 +29,7 @@ use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
+use actix_web::http::StatusCode;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::{future::LocalBoxFuture, FutureExt};
 use gdal::{vector::OGRFieldType, DatasetOptions};
@@ -48,7 +50,8 @@ use geoengine_operators::{
     },
     util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
-use snafu::ResultExt;
+use snafu::prelude::*;
+use strum::IntoStaticStr;
 
 use super::get_token;
 
@@ -235,6 +238,33 @@ impl<C: Context> FromRequest for AdminOrSession<C> {
     }
 }
 
+#[derive(Debug, Snafu, IntoStaticStr)]
+pub enum CreateDatasetError {
+    UploadNotFound { source: error::Error },
+    OnlyAdminsCanCreateDatasetFromVolume,
+    AdminsCannotCreateDatasetFromUpload,
+    CannotResolveUploadFilePath { source: error::Error },
+    JsonValidationFailed { source: error::Error },
+    FailedToWriteToDatabase { source: error::Error },
+    CannotAccessConfig { source: error::Error },
+    UnknownVolume,
+}
+
+impl actix_web::error::ResponseError for CreateDatasetError {
+    fn error_response(&self) -> HttpResponse {
+        let (error, message) = (Into::<&str>::into(self).to_string(), self.to_string());
+        HttpResponse::build(self.status_code()).json(ErrorResponse { error, message })
+    }
+
+    fn status_code(&self) -> StatusCode {
+        match self {
+            Self::FailedToWriteToDatabase { source: _ }
+            | Self::CannotAccessConfig { source: _ } => StatusCode::INTERNAL_SERVER_ERROR,
+            _ => StatusCode::BAD_REQUEST,
+        }
+    }
+}
+
 /// Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.
 #[utoipa::path(
     tag = "Datasets",
@@ -327,10 +357,49 @@ impl<C: Context> FromRequest for AdminOrSession<C> {
     ),
     responses(
         (status = 200, response = crate::api::model::responses::IdResponse),
-        (status = 400, response = crate::api::model::responses::BadRequestCreateDatasetResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse, examples(
+            ("Body is invalid json" = (value = json!({
+                "error": "BodyDeserializeError",
+                "message": "expected `,` or `}` at line 13 column 7"
+            }))),
+            ("Failed to read body" = (value = json!({
+                "error": "Payload",
+                "message": "Error that occur during reading payload: Can not decode content-encoding."
+            }))),
+            ("Referenced an unknown upload" = (value = json!({
+                "error": "UploadNotFound",
+                "message": "UploadNotFound: UnknownUploadId"
+            }))),
+            ("Normal user tried to create dataset from a volume" = (value = json!({
+                "error": "OnlyAdminsCanCreateDatasetFromVolume",
+                "message": "OnlyAdminsCanCreateDatasetFromVolume"
+            }))),
+            ("Admin tried to create dataset from an upload" = (value = json!({
+                "error": "AdminsCannotCreateDatasetFromUpload",
+                "message": "AdminsCannotCreateDatasetFromUpload"
+            }))),
+            ("Filepath in metadata is invalid" = (value = json!({
+                "error": "CannotResolveUploadFilePath",
+                "message": "CannotResolveUploadFilePath: PathIsNotAFile"
+            }))),
+            ("Referenced an unknown volume" = (value = json!({
+                "error": "UnknownVolume",
+                "message": "UnknownVolume"
+            })))
+        )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse),
         (status = 413, response = crate::api::model::responses::PayloadTooLargeResponse),
-        (status = 415, response = crate::api::model::responses::UnsupportedMediaTypeForJsonResponse)
+        (status = 415, response = crate::api::model::responses::UnsupportedMediaTypeForJsonResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse, examples(
+            ("Failed to write to database" = (value = json!({
+                "error": "FailedToWriteToDatabase",
+                "message": "FailedToWriteToDatabase: connection closed"
+            }))),
+            ("Cannot access config" = (value = json!({
+                "error": "CannotAccessConfig",
+                "message": "CannotAccessConfig: ConfigLockFailed"
+            })))
+        ))
     ),
     security(
         ("session_token" = [])
@@ -340,7 +409,7 @@ pub async fn create_dataset_handler<C: Context>(
     session: AdminOrSession<C>,
     ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<web::Json<IdResponse<DatasetId>>> {
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
     let create = create.into_inner();
     match (session, create) {
         (
@@ -357,8 +426,10 @@ pub async fn create_dataset_handler<C: Context>(
                 definition,
             },
         ) => create_system_dataset(ctx, volume, definition).await,
-        (AdminOrSession::Session(_), _) => Err(error::Error::OnlyAdminsCanCreateDatasetFromVolume),
-        (AdminOrSession::Admin, _) => Err(error::Error::AdminsCannotCreateDatasetFromUpload),
+        (AdminOrSession::Session(_), _) => {
+            Err(CreateDatasetError::OnlyAdminsCanCreateDatasetFromVolume)
+        }
+        (AdminOrSession::Admin, _) => Err(CreateDatasetError::AdminsCannotCreateDatasetFromUpload),
     }
 }
 
@@ -367,16 +438,29 @@ pub async fn create_user_dataset<C: Context>(
     ctx: web::Data<C>,
     upload_id: UploadId,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>> {
-    let upload = ctx.dataset_db_ref().get_upload(&session, upload_id).await?;
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
+    let upload = ctx
+        .dataset_db_ref()
+        .get_upload(&session, upload_id)
+        .await
+        .context(UploadNotFoundSnafu)?;
 
-    adjust_meta_data_path(&mut definition.meta_data, &upload)?;
+    adjust_meta_data_path(&mut definition.meta_data, &upload)
+        .context(CannotResolveUploadFilePathSnafu)?;
 
     let db = ctx.dataset_db_ref();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
     let id = db
-        .add_dataset(&session, definition.properties.validated()?, meta_data)
-        .await?;
+        .add_dataset(
+            &session,
+            definition
+                .properties
+                .validated()
+                .context(JsonValidationFailedSnafu)?,
+            meta_data,
+        )
+        .await
+        .context(FailedToWriteToDatabaseSnafu)?;
 
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -385,20 +469,23 @@ async fn create_system_dataset<C: Context>(
     ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>>
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError>
 where
     C::Session: MockableSession,
 {
-    let volumes = get_config_element::<Data>()?.volumes;
+    let volumes = get_config_element::<Data>()
+        .context(CannotAccessConfigSnafu)?
+        .volumes;
     let volume_path = volumes
         .get(&volume_name)
-        .ok_or(error::Error::UnknownVolume)?;
+        .ok_or(CreateDatasetError::UnknownVolume)?;
     let volume = Volume {
         name: volume_name,
         path: volume_path.clone(),
     };
 
-    adjust_meta_data_path(&mut definition.meta_data, &volume)?;
+    adjust_meta_data_path(&mut definition.meta_data, &volume)
+        .context(CannotResolveUploadFilePathSnafu)?;
 
     let db = ctx.dataset_db_ref();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
@@ -406,10 +493,14 @@ where
     let id = db
         .add_dataset(
             &AdminSession::default().into(),
-            definition.properties.validated()?,
+            definition
+                .properties
+                .validated()
+                .context(JsonValidationFailedSnafu)?,
             meta_data,
         )
-        .await?;
+        .await
+        .context(FailedToWriteToDatabaseSnafu)?;
 
     Ok(web::Json(IdResponse::from(id)))
 }

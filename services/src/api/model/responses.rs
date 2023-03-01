@@ -116,39 +116,6 @@ pub struct BadRequestUnknownDatasetResponse(ErrorResponse);
         "error": "UnknownUploadId",
         "message": "UnknownUploadId"
     }))),
-    ("Normal user tried to create dataset from a volume" = (value = json!({
-        "error": "OnlyAdminsCanCreateDatasetFromVolume",
-        "message": "OnlyAdminsCanCreateDatasetFromVolume"
-    }))),
-    ("Admin tried to create dataset from an upload" = (value = json!({
-        "error": "AdminsCannotCreateDatasetFromUpload",
-        "message": "AdminsCannotCreateDatasetFromUpload"
-    }))),
-    ("Filepath in metadata is invalid" = (value = json!({
-        "error": "PathIsNotAFile",
-        "message": "PathIsNotAFile"
-    }))),
-    ("Referenced an unknown volume" = (value = json!({
-        "error": "UnknownVolume",
-        "message": "UnknownVolume"
-    })))
-))]
-pub struct BadRequestCreateDatasetResponse(ErrorResponse);
-
-#[derive(ToResponse)]
-#[response(description = "Bad request", examples(
-    ("Body is invalid json" = (value = json!({
-        "error": "BodyDeserializeError",
-        "message": "expected `,` or `}` at line 13 column 7"
-    }))),
-    ("Failed to read body" = (value = json!({
-        "error": "Payload",
-        "message": "Error that occur during reading payload: Can not decode content-encoding."
-    }))),
-    ("Referenced an unknown upload" = (value = json!({
-        "error": "UnknownUploadId",
-        "message": "UnknownUploadId"
-    }))),
     ("Dataset name is empty" = (value = json!({
         "error": "InvalidDatasetName",
         "message": "InvalidDatasetName"
