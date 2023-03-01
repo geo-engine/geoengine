@@ -9,8 +9,6 @@ use geoengine_operators::source::GdalDatasetGeoTransform;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
-pub const METADATA_KEY: &str = "geoengine";
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GEMetadata {

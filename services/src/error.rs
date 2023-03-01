@@ -329,6 +329,10 @@ pub enum Error {
     },
     MissingNFDIMetaData,
 
+    NFDIProviderError {
+        cause: String,
+    },
+
     #[cfg(feature = "ebv")]
     #[snafu(context(false))]
     NetCdfCf4DProvider {
