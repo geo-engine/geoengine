@@ -239,6 +239,7 @@ impl<C: Context> FromRequest for AdminOrSession<C> {
 }
 
 #[derive(Debug, Snafu, IntoStaticStr)]
+#[snafu(visibility(pub(crate)))]
 pub enum CreateDatasetError {
     UploadNotFound { source: error::Error },
     OnlyAdminsCanCreateDatasetFromVolume,

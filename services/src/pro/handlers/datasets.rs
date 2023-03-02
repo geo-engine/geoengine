@@ -1,4 +1,5 @@
 use actix_web::{web, FromRequest};
+use snafu::ResultExt;
 
 use crate::{
     api::model::{
@@ -9,11 +10,11 @@ use crate::{
         storage::DatasetStore,
         upload::{Volume, VolumeName},
     },
-    error::{self, Result},
+    error::Result,
     handlers::datasets::{
-        adjust_meta_data_path, auto_create_dataset_handler, create_user_dataset,
+        self, adjust_meta_data_path, auto_create_dataset_handler, create_user_dataset,
         delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
-        suggest_meta_data_handler, AdminOrSession,
+        suggest_meta_data_handler, AdminOrSession, CreateDatasetError,
     },
     pro::{
         contexts::ProContext,
@@ -65,7 +66,7 @@ async fn create_dataset_handler<C: ProContext>(
     session: AdminOrSession<C>,
     ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<web::Json<IdResponse<DatasetId>>> {
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
     let create = create.into_inner();
     match (session, create) {
         (
@@ -82,8 +83,10 @@ async fn create_dataset_handler<C: ProContext>(
                 definition,
             },
         ) => create_user_dataset(session, ctx, volume, definition).await,
-        (AdminOrSession::Admin, _) => Err(error::Error::AdminsCannotCreateDatasetFromUpload),
-        (AdminOrSession::Session(_), _) => Err(error::Error::OnlyAdminsCanCreateDatasetFromVolume),
+        (AdminOrSession::Admin, _) => Err(CreateDatasetError::AdminsCannotCreateDatasetFromUpload),
+        (AdminOrSession::Session(_), _) => {
+            Err(CreateDatasetError::OnlyAdminsCanCreateDatasetFromVolume)
+        }
     }
 }
 
@@ -91,17 +94,20 @@ async fn create_system_dataset<C: ProContext>(
     ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>> {
-    let volumes = get_config_element::<Data>()?.volumes;
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
+    let volumes = get_config_element::<Data>()
+        .context(datasets::CannotAccessConfigSnafu)?
+        .volumes;
     let volume_path = volumes
         .get(&volume_name)
-        .ok_or(error::Error::UnknownVolume)?;
+        .ok_or(CreateDatasetError::UnknownVolume)?;
     let volume = Volume {
         name: volume_name,
         path: volume_path.clone(),
     };
 
-    adjust_meta_data_path(&mut definition.meta_data, &volume)?;
+    adjust_meta_data_path(&mut definition.meta_data, &volume)
+        .context(datasets::CannotResolveUploadFilePathSnafu)?;
 
     let dataset_db = ctx.pro_dataset_db_ref();
     let meta_data = dataset_db.wrap_meta_data(definition.meta_data.into());
@@ -111,10 +117,14 @@ async fn create_system_dataset<C: ProContext>(
     let dataset_id = dataset_db
         .add_dataset(
             &system_session,
-            definition.properties.validated()?,
+            definition
+                .properties
+                .validated()
+                .context(datasets::JsonValidationFailedSnafu)?,
             meta_data,
         )
-        .await?;
+        .await
+        .context(datasets::FailedToWriteToDatabaseSnafu)?;
 
     dataset_db
         .add_dataset_permission(
@@ -125,7 +135,8 @@ async fn create_system_dataset<C: ProContext>(
                 permission: Permission::Read,
             },
         )
-        .await?;
+        .await
+        .context(datasets::FailedToWriteToDatabaseSnafu)?;
 
     dataset_db
         .add_dataset_permission(
@@ -136,7 +147,8 @@ async fn create_system_dataset<C: ProContext>(
                 permission: Permission::Read,
             },
         )
-        .await?;
+        .await
+        .context(datasets::FailedToWriteToDatabaseSnafu)?;
 
     Ok(web::Json(IdResponse::from(dataset_id)))
 }
