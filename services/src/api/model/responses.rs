@@ -95,15 +95,6 @@ pub struct BadRequestQueryResponse(ErrorResponse);
 
 #[derive(ToResponse)]
 #[response(description = "Bad request", examples(
-    ("Referenced an unknown dataset" = (value = json!({
-        "error": "UnknownDatasetId",
-        "message": "UnknownDatasetId"
-    })))
-))]
-pub struct BadRequestUnknownDatasetResponse(ErrorResponse);
-
-#[derive(ToResponse)]
-#[response(description = "Bad request", examples(
     ("Body is invalid json" = (value = json!({
         "error": "BodyDeserializeError",
         "message": "expected `,` or `}` at line 13 column 7"

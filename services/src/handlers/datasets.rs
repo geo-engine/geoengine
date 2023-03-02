@@ -151,6 +151,21 @@ pub async fn list_datasets_handler<C: Context>(
     Ok(web::Json(list))
 }
 
+#[derive(Debug, Snafu, IntoStaticStr)]
+pub enum GetDatasetError {
+    CannotLoadDataset { source: error::Error },
+}
+
+impl actix_web::error::ResponseError for GetDatasetError {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+    }
+
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+}
+
 /// Retrieves details about a dataset using the internal id.
 #[utoipa::path(
     tag = "Datasets",
@@ -174,7 +189,13 @@ pub async fn list_datasets_handler<C: Context>(
                 "sourceOperator": "OgrSource"
             })
         ),
-        (status = 400, response = crate::api::model::responses::BadRequestUnknownDatasetResponse)
+        (status = 400, description = "Bad request", body = ErrorResponse, examples(
+            ("Referenced an unknown dataset" = (value = json!({
+                "error": "CannotLoadDataset",
+                "message": "CannotLoadDataset: UnknownDatasetId"
+            })))
+        )),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
         ("dataset" = DatasetId, description = "Dataset id")
@@ -187,11 +208,12 @@ pub async fn get_dataset_handler<C: Context>(
     dataset: web::Path<DatasetId>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, GetDatasetError> {
     let dataset = ctx
         .dataset_db_ref()
         .load(&session, &dataset.into_inner())
-        .await?;
+        .await
+        .context(CannotLoadDatasetSnafu)?;
     Ok(web::Json(dataset))
 }
 
@@ -253,14 +275,14 @@ pub enum CreateDatasetError {
 
 impl actix_web::error::ResponseError for CreateDatasetError {
     fn error_response(&self) -> HttpResponse {
-        let (error, message) = (Into::<&str>::into(self).to_string(), self.to_string());
-        HttpResponse::build(self.status_code()).json(ErrorResponse { error, message })
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
     }
 
     fn status_code(&self) -> StatusCode {
         match self {
-            Self::FailedToWriteToDatabase { source: _ }
-            | Self::CannotAccessConfig { source: _ } => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::FailedToWriteToDatabase { .. } | Self::CannotAccessConfig { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
             _ => StatusCode::BAD_REQUEST,
         }
     }

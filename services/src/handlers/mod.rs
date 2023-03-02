@@ -51,6 +51,19 @@ impl ErrorResponse {
     }
 }
 
+impl<'a, T> From<&'a T> for ErrorResponse
+where
+    T: snafu::Error,
+    &'static str: From<&'a T>,
+{
+    fn from(value: &'a T) -> Self {
+        ErrorResponse {
+            error: Into::<&str>::into(value).to_string(),
+            message: value.to_string(),
+        }
+    }
+}
+
 impl actix_web::ResponseError for ErrorResponse {
     fn error_response(&self) -> HttpResponse {
         HttpResponse::build(self.status_code()).json(self)
