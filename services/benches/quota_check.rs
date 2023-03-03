@@ -58,8 +58,8 @@ async fn bench() {
     };
 
     let id = ctx
-        .workflow_registry_ref()
-        .register(workflow.clone())
+        .db(session)
+        .register_workflow(workflow.clone())
         .await
         .unwrap();
 

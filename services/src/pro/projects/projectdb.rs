@@ -14,42 +14,37 @@ use super::LoadVersion;
 
 /// Storage of user projects
 #[async_trait]
-pub trait ProProjectDb: ProjectDb<UserSession> {
+pub trait ProProjectDb: ProjectDb {
     /// Load the the `version` of the `project` for the `user`
-    async fn load_version(
+    async fn load_project_version(
         &self,
-        session: &UserSession,
         project: ProjectId,
         version: LoadVersion,
     ) -> Result<Project>;
 
     /// List all versions of the `project` if given `user` has at least read permission
-    async fn versions(
-        &self,
-        session: &UserSession,
-        project: ProjectId,
-    ) -> Result<Vec<ProjectVersion>>;
+    async fn list_project_versions(&self, project: ProjectId) -> Result<Vec<ProjectVersion>>;
 
-    /// List all permissions of users for the `project` if the `user` is an owner
-    async fn list_permissions(
-        &self,
-        session: &UserSession,
-        project: ProjectId,
-    ) -> Result<Vec<UserProjectPermission>>;
+    // /// List all permissions of users for the `project` if the `user` is an owner
+    // async fn list_permissions(
+    //     &self,
+    //     session: &UserSession,
+    //     project: ProjectId,
+    // ) -> Result<Vec<UserProjectPermission>>;
 
-    /// Add a `permission` if the `user` is owner of the permission's target project
-    async fn add_permission(
-        &self,
-        session: &UserSession,
-        permission: UserProjectPermission,
-    ) -> Result<()>;
+    // /// Add a `permission` if the `user` is owner of the permission's target project
+    // async fn add_permission(
+    //     &self,
+    //     session: &UserSession,
+    //     permission: UserProjectPermission,
+    // ) -> Result<()>;
 
-    /// Remove a `permission` if the `user` is owner of the target project
-    async fn remove_permission(
-        &self,
-        session: &UserSession,
-        permission: UserProjectPermission,
-    ) -> Result<()>;
+    // /// Remove a `permission` if the `user` is owner of the target project
+    // async fn remove_permission(
+    //     &self,
+    //     session: &UserSession,
+    //     permission: UserProjectPermission,
+    // ) -> Result<()>;
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]

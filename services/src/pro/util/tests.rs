@@ -8,7 +8,7 @@ use crate::{
     handlers, pro,
     pro::{
         contexts::{ProContext, ProInMemoryContext},
-        datasets::{DatasetPermission, Permission, Role, UpdateDatasetPermissions},
+        permissions::{Permission, Role},
         users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
@@ -32,26 +32,24 @@ use geoengine_operators::{
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
-    ctx.user_db_ref()
-        .register(
-            UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret123".to_string(),
-                real_name: "Foo Bar".to_string(),
-            }
-            .validated()
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    ctx.user_db_ref()
-        .login(UserCredentials {
+    ctx.register(
+        UserRegistration {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
-        })
-        .await
-        .unwrap()
+            real_name: "Foo Bar".to_string(),
+        }
+        .validated()
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    ctx.login(UserCredentials {
+        email: "foo@example.com".to_string(),
+        password: "secret123".to_string(),
+    })
+    .await
+    .unwrap()
 }
 
 pub fn create_random_user_session_helper() -> UserSession {
@@ -77,9 +75,8 @@ pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, Proj
     let session = create_session_helper(ctx).await;
 
     let project = ctx
-        .project_db_ref()
-        .create(
-            &session,
+        .db(session.clone())
+        .create_project(
             CreateProject {
                 name: "Test".to_string(),
                 description: "Foo".to_string(),
@@ -119,6 +116,8 @@ where
         .wrap(middleware::NormalizePath::trim())
         .configure(configure_extractors)
         .configure(pro::handlers::datasets::init_dataset_routes::<C>)
+        .configure(handlers::layers::init_layer_routes::<C>)
+        .configure(pro::handlers::permissions::init_permissions_routes::<C>)
         .configure(handlers::plots::init_plot_routes::<C>)
         .configure(pro::handlers::projects::init_project_routes::<C>)
         .configure(pro::handlers::users::init_user_routes::<C>)
@@ -138,259 +137,257 @@ where
         .map_into_boxed_body()
 }
 
-#[cfg(test)]
-pub(in crate::pro) mod mock_oidc {
-    use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
-    use chrono::{Duration, Utc};
-    use oauth2::basic::BasicTokenType;
-    use oauth2::{
-        AccessToken, AuthUrl, EmptyExtraTokenFields, Scope, StandardTokenResponse, TokenUrl,
-    };
-    use openidconnect::core::{
-        CoreClaimName, CoreIdToken, CoreIdTokenClaims, CoreIdTokenFields, CoreJsonWebKey,
-        CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreResponseType, CoreRsaPrivateSigningKey,
-        CoreTokenResponse, CoreTokenType,
-    };
-    use openidconnect::{
-        Audience, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, EndUserEmail,
-        EndUserName, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim, Nonce,
-        ResponseTypes, StandardClaims, SubjectIdentifier,
-    };
+// #[cfg(test)]
+// pub(in crate::pro) mod mock_oidc {
+//     use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
+//     use chrono::{Duration, Utc};
+//     use oauth2::basic::BasicTokenType;
+//     use oauth2::{
+//         AccessToken, AuthUrl, EmptyExtraTokenFields, Scope, StandardTokenResponse, TokenUrl,
+//     };
+//     use openidconnect::core::{
+//         CoreClaimName, CoreIdToken, CoreIdTokenClaims, CoreIdTokenFields, CoreJsonWebKey,
+//         CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreResponseType, CoreRsaPrivateSigningKey,
+//         CoreTokenResponse, CoreTokenType,
+//     };
+//     use openidconnect::{
+//         Audience, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, EndUserEmail,
+//         EndUserName, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim, Nonce,
+//         ResponseTypes, StandardClaims, SubjectIdentifier,
+//     };
 
-    const TEST_PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----\n\
-	    MIIEogIBAAKCAQEAxIm5pngAgY4V+6XJPtlATkU6Gbcen22M3Tf16Gwl4uuFagEp\n\
-	    SQ4u/HXvcyAYvdNfAwR34nsAyS1qFQasWYtcU4HwmFvo5ADfdJpfo6myRiGN3ocA\n\
-	    4+/S1tH8HqLH+w7U/9SopwUP0n0+N0UaaFA1htkRY4zNWEDnJ2AVN2Vi0dUtS62D\n\
-	    jOfvz+QMd04mAZaLkLdSxlHCYKjx6jmTQEbVFwSt/Pm1MryF7gkXg6YeiNG6Ehgm\n\
-	    LUHv50Jwt1salVH9/FQVNkqiVivHNAW4cEVbuTZJl8TjtQn6MnOZSP7n8TkonrUd\n\
-	    ULoIxIl3L+kneJABBaQ6zg52w00W1MXwlu+C8wIDAQABAoIBACW+dWLc5Ov8h4g+\n\
-	    fHmPa2Qcs13A5yai+Ux6tMUgD96WcJa9Blq7WJavZ37qiRXbhAGmWAesq6f3Cspi\n\
-	    77J6qw52g+gerokrCb7w7rEVo+EIDKDRuIANzKXoycxwYot6e7lt872voSxBVTN0\n\
-	    F/A0hzMQeOBvZ/gs7reHIkvzMpktSyKVJOt9ie1cZ1jp7r1bazbFs2qIyDc5Z521\n\
-	    BQ6GgRyNJ5toTttmF5ZxpSQXWyvumldWL5Ue9wNEIPjRgsL9UatqagxgmouGxEOL\n\
-	    0F9bFWUFlrsqTArTWNxg5R0zFwfzFqidx0HwyF9SyidVq9Bz8/FtgVe2ed4u7snm\n\
-	    vYOUbsECgYEA7yg6gyhlQvA0j5MAe6rhoMD0sYRG07ZR0vNzzZRoud9DSdE749f+\n\
-	    ZvqUqv3Wuv5p97dd4sGuMkzihXdGqcpWO4CAbalvB2CB5HKVMIKR5cjMIzeVE17v\n\
-	    0Hcdd2Spx6yMahFX3eePLl3wDDLSP2ITYi6m4SGckGwd5BeFkn4gNyMCgYEA0mEd\n\
-	    Vt2bGF9+5sFfsZgd+3yNAnqLGZ+bxZuYcF/YayH8dKKHdrmhTJ+1w78JdFC5uV2G\n\
-	    F75ubyrEEY09ftE/HNG90fanUAYxmVJXMFxxgMIE8VqsjiB/i1Q3ofN2HOlOB1W+\n\
-	    4e8BEXrAxCgsXMGCwU73b52474/BDq4Bh1cNKfECgYB4cfw1/ewxsCPogxJlNgR4\n\
-	    H3WcyY+aJGJFKZMS4EF2CvkqfhP5hdh8KIsjKsAwYN0hgtnnz79ZWdtjeFTAQkT3\n\
-	    ppoHoKNoRbRlR0fXrIqp/VzCB8YugUup47OVY78V7tKwwJdODMbRhUHWAupcPZqh\n\
-	    gflNvM3K9oh/TVFaG+dBnQKBgHE2mddZQlGHcn8zqQ+lUN05VZjz4U9UuTtKVGqE\n\
-	    6a4diAIsRMH7e3YErIg+khPqLUg3sCWu8TcZyJG5dFJ+wHv90yzek4NZEe/0g78e\n\
-	    wGYOAyLvLNT/YCPWmmmo3vMIClmgJyzmtah2aq4lAFqaOIdWu4lxU0h4D+iac3Al\n\
-	    xIvBAoGAZtOeVlJCzmdfP8/J1IMHqFX3/unZEundqL1tiy5UCTK/RJTftr6aLkGL\n\
-	    xN3QxN+Kuc5zMyHeQWY9jKO8SUwyuzrCuwduzzqC1OXEWinfcvCPg1yotRxgPGsV\n\
-	    Wj4iz6nkuRK0fTLfTu6Nglx6mjX8Q3rz0UUFVjOL/gpgEWxzoHk=\n\
-	    -----END RSA PRIVATE KEY-----";
+//     const TEST_PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----\n\
+// 	    MIIEogIBAAKCAQEAxIm5pngAgY4V+6XJPtlATkU6Gbcen22M3Tf16Gwl4uuFagEp\n\
+// 	    SQ4u/HXvcyAYvdNfAwR34nsAyS1qFQasWYtcU4HwmFvo5ADfdJpfo6myRiGN3ocA\n\
+// 	    4+/S1tH8HqLH+w7U/9SopwUP0n0+N0UaaFA1htkRY4zNWEDnJ2AVN2Vi0dUtS62D\n\
+// 	    jOfvz+QMd04mAZaLkLdSxlHCYKjx6jmTQEbVFwSt/Pm1MryF7gkXg6YeiNG6Ehgm\n\
+// 	    LUHv50Jwt1salVH9/FQVNkqiVivHNAW4cEVbuTZJl8TjtQn6MnOZSP7n8TkonrUd\n\
+// 	    ULoIxIl3L+kneJABBaQ6zg52w00W1MXwlu+C8wIDAQABAoIBACW+dWLc5Ov8h4g+\n\
+// 	    fHmPa2Qcs13A5yai+Ux6tMUgD96WcJa9Blq7WJavZ37qiRXbhAGmWAesq6f3Cspi\n\
+// 	    77J6qw52g+gerokrCb7w7rEVo+EIDKDRuIANzKXoycxwYot6e7lt872voSxBVTN0\n\
+// 	    F/A0hzMQeOBvZ/gs7reHIkvzMpktSyKVJOt9ie1cZ1jp7r1bazbFs2qIyDc5Z521\n\
+// 	    BQ6GgRyNJ5toTttmF5ZxpSQXWyvumldWL5Ue9wNEIPjRgsL9UatqagxgmouGxEOL\n\
+// 	    0F9bFWUFlrsqTArTWNxg5R0zFwfzFqidx0HwyF9SyidVq9Bz8/FtgVe2ed4u7snm\n\
+// 	    vYOUbsECgYEA7yg6gyhlQvA0j5MAe6rhoMD0sYRG07ZR0vNzzZRoud9DSdE749f+\n\
+// 	    ZvqUqv3Wuv5p97dd4sGuMkzihXdGqcpWO4CAbalvB2CB5HKVMIKR5cjMIzeVE17v\n\
+// 	    0Hcdd2Spx6yMahFX3eePLl3wDDLSP2ITYi6m4SGckGwd5BeFkn4gNyMCgYEA0mEd\n\
+// 	    Vt2bGF9+5sFfsZgd+3yNAnqLGZ+bxZuYcF/YayH8dKKHdrmhTJ+1w78JdFC5uV2G\n\
+// 	    F75ubyrEEY09ftE/HNG90fanUAYxmVJXMFxxgMIE8VqsjiB/i1Q3ofN2HOlOB1W+\n\
+// 	    4e8BEXrAxCgsXMGCwU73b52474/BDq4Bh1cNKfECgYB4cfw1/ewxsCPogxJlNgR4\n\
+// 	    H3WcyY+aJGJFKZMS4EF2CvkqfhP5hdh8KIsjKsAwYN0hgtnnz79ZWdtjeFTAQkT3\n\
+// 	    ppoHoKNoRbRlR0fXrIqp/VzCB8YugUup47OVY78V7tKwwJdODMbRhUHWAupcPZqh\n\
+// 	    gflNvM3K9oh/TVFaG+dBnQKBgHE2mddZQlGHcn8zqQ+lUN05VZjz4U9UuTtKVGqE\n\
+// 	    6a4diAIsRMH7e3YErIg+khPqLUg3sCWu8TcZyJG5dFJ+wHv90yzek4NZEe/0g78e\n\
+// 	    wGYOAyLvLNT/YCPWmmmo3vMIClmgJyzmtah2aq4lAFqaOIdWu4lxU0h4D+iac3Al\n\
+// 	    xIvBAoGAZtOeVlJCzmdfP8/J1IMHqFX3/unZEundqL1tiy5UCTK/RJTftr6aLkGL\n\
+// 	    xN3QxN+Kuc5zMyHeQWY9jKO8SUwyuzrCuwduzzqC1OXEWinfcvCPg1yotRxgPGsV\n\
+// 	    Wj4iz6nkuRK0fTLfTu6Nglx6mjX8Q3rz0UUFVjOL/gpgEWxzoHk=\n\
+// 	    -----END RSA PRIVATE KEY-----";
 
-    const TEST_JWK: &str = "{\
-        \"kty\":\"RSA\",
-        \"use\":\"sig\",
-        \"n\":\"xIm5pngAgY4V-6XJPtlATkU6Gbcen22M3Tf16Gwl4uuFagEpSQ4u_HXvcyAYv\
-            dNfAwR34nsAyS1qFQasWYtcU4HwmFvo5ADfdJpfo6myRiGN3ocA4-_S1tH8HqLH-w\
-            7U_9SopwUP0n0-N0UaaFA1htkRY4zNWEDnJ2AVN2Vi0dUtS62DjOfvz-QMd04mAZa\
-            LkLdSxlHCYKjx6jmTQEbVFwSt_Pm1MryF7gkXg6YeiNG6EhgmLUHv50Jwt1salVH9\
-            _FQVNkqiVivHNAW4cEVbuTZJl8TjtQn6MnOZSP7n8TkonrUdULoIxIl3L-kneJABB\
-            aQ6zg52w00W1MXwlu-C8w\",
-        \"e\":\"AQAB\",
-        \"d\":\"Jb51Ytzk6_yHiD58eY9rZByzXcDnJqL5THq0xSAP3pZwlr0GWrtYlq9nfuqJF\
-            duEAaZYB6yrp_cKymLvsnqrDnaD6B6uiSsJvvDusRWj4QgMoNG4gA3MpejJzHBii3\
-            p7uW3zva-hLEFVM3QX8DSHMxB44G9n-Czut4ciS_MymS1LIpUk632J7VxnWOnuvVt\
-            rNsWzaojINzlnnbUFDoaBHI0nm2hO22YXlnGlJBdbK-6aV1YvlR73A0Qg-NGCwv1R\
-            q2pqDGCai4bEQ4vQX1sVZQWWuypMCtNY3GDlHTMXB_MWqJ3HQfDIX1LKJ1Wr0HPz8\
-            W2BV7Z53i7uyea9g5RuwQ\"
-        }";
+//     const TEST_JWK: &str = "{\
+//         \"kty\":\"RSA\",
+//         \"use\":\"sig\",
+//         \"n\":\"xIm5pngAgY4V-6XJPtlATkU6Gbcen22M3Tf16Gwl4uuFagEpSQ4u_HXvcyAYv\
+//             dNfAwR34nsAyS1qFQasWYtcU4HwmFvo5ADfdJpfo6myRiGN3ocA4-_S1tH8HqLH-w\
+//             7U_9SopwUP0n0-N0UaaFA1htkRY4zNWEDnJ2AVN2Vi0dUtS62DjOfvz-QMd04mAZa\
+//             LkLdSxlHCYKjx6jmTQEbVFwSt_Pm1MryF7gkXg6YeiNG6EhgmLUHv50Jwt1salVH9\
+//             _FQVNkqiVivHNAW4cEVbuTZJl8TjtQn6MnOZSP7n8TkonrUdULoIxIl3L-kneJABB\
+//             aQ6zg52w00W1MXwlu-C8w\",
+//         \"e\":\"AQAB\",
+//         \"d\":\"Jb51Ytzk6_yHiD58eY9rZByzXcDnJqL5THq0xSAP3pZwlr0GWrtYlq9nfuqJF\
+//             duEAaZYB6yrp_cKymLvsnqrDnaD6B6uiSsJvvDusRWj4QgMoNG4gA3MpejJzHBii3\
+//             p7uW3zva-hLEFVM3QX8DSHMxB44G9n-Czut4ciS_MymS1LIpUk632J7VxnWOnuvVt\
+//             rNsWzaojINzlnnbUFDoaBHI0nm2hO22YXlnGlJBdbK-6aV1YvlR73A0Qg-NGCwv1R\
+//             q2pqDGCai4bEQ4vQX1sVZQWWuypMCtNY3GDlHTMXB_MWqJ3HQfDIX1LKJ1Wr0HPz8\
+//             W2BV7Z53i7uyea9g5RuwQ\"
+//         }";
 
-    const ACCESS_TOKEN: &str = "DUMMY_ACCESS_TOKEN_1";
+//     const ACCESS_TOKEN: &str = "DUMMY_ACCESS_TOKEN_1";
 
-    pub const SINGLE_STATE: &str = "State_1";
-    pub const SINGLE_NONCE: &str = "Nonce_1";
+//     pub const SINGLE_STATE: &str = "State_1";
+//     pub const SINGLE_NONCE: &str = "Nonce_1";
 
-    pub struct MockTokenConfig {
-        issuer: String,
-        client_id: String,
-        pub email: Option<EndUserEmail>,
-        pub name: Option<LocalizedClaim<EndUserName>>,
-        pub nonce: Option<Nonce>,
-        pub duration: Option<core::time::Duration>,
-        pub access: String,
-        pub access_for_id: String,
-    }
+//     pub struct MockTokenConfig {
+//         issuer: String,
+//         client_id: String,
+//         pub email: Option<EndUserEmail>,
+//         pub name: Option<LocalizedClaim<EndUserName>>,
+//         pub nonce: Option<Nonce>,
+//         pub duration: Option<core::time::Duration>,
+//         pub access: String,
+//         pub access_for_id: String,
+//     }
 
-    impl MockTokenConfig {
-        pub fn create_from_issuer_and_client(issuer: String, client_id: String) -> Self {
-            let mut name = LocalizedClaim::new();
-            name.insert(None, EndUserName::new("Robin".to_string()));
-            let name = Some(name);
+//     impl MockTokenConfig {
+//         pub fn create_from_issuer_and_client(issuer: String, client_id: String) -> Self {
+//             let mut name = LocalizedClaim::new();
+//             name.insert(None, EndUserName::new("Robin".to_string()));
+//             let name = Some(name);
 
-            MockTokenConfig {
-                issuer,
-                client_id,
-                email: Some(EndUserEmail::new("robin@dummy_db.com".to_string())),
-                name,
-                nonce: Some(Nonce::new(SINGLE_NONCE.to_string())),
-                duration: Some(core::time::Duration::from_secs(1800)),
-                access: ACCESS_TOKEN.to_string(),
-                access_for_id: ACCESS_TOKEN.to_string(),
-            }
-        }
-    }
+//             MockTokenConfig {
+//                 issuer,
+//                 client_id,
+//                 email: Some(EndUserEmail::new("robin@dummy_db.com".to_string())),
+//                 name,
+//                 nonce: Some(Nonce::new(SINGLE_NONCE.to_string())),
+//                 duration: Some(core::time::Duration::from_secs(1800)),
+//                 access: ACCESS_TOKEN.to_string(),
+//                 access_for_id: ACCESS_TOKEN.to_string(),
+//             }
+//         }
+//     }
 
-    pub fn mock_provider_metadata(provider_base_url: &str) -> DefaultProviderMetadata {
-        CoreProviderMetadata::new(
-            IssuerUrl::new(provider_base_url.to_string())
-                .expect("Parsing mock issuer should not fail"),
-            AuthUrl::new(provider_base_url.to_owned() + "/authorize")
-                .expect("Parsing mock auth url should not fail"),
-            JsonWebKeySetUrl::new(provider_base_url.to_owned() + "/jwk")
-                .expect("Parsing mock jwk url should not fail"),
-            vec![ResponseTypes::new(vec![CoreResponseType::Code])],
-            vec![],
-            vec![CoreJwsSigningAlgorithm::RsaSsaPssSha256],
-            EmptyAdditionalProviderMetadata {},
-        )
-        .set_token_endpoint(Some(
-            TokenUrl::new(provider_base_url.to_owned() + "/token")
-                .expect("Parsing mock token url should not fail"),
-        ))
-        .set_scopes_supported(Some(vec![
-            Scope::new("openid".to_string()),
-            Scope::new("email".to_string()),
-            Scope::new("profile".to_string()),
-        ]))
-        .set_claims_supported(Some(vec![
-            CoreClaimName::new("sub".to_string()),
-            CoreClaimName::new("email".to_string()),
-            CoreClaimName::new("name".to_string()),
-        ]))
-    }
+//     pub fn mock_provider_metadata(provider_base_url: &str) -> DefaultProviderMetadata {
+//         CoreProviderMetadata::new(
+//             IssuerUrl::new(provider_base_url.to_string())
+//                 .expect("Parsing mock issuer should not fail"),
+//             AuthUrl::new(provider_base_url.to_owned() + "/authorize")
+//                 .expect("Parsing mock auth url should not fail"),
+//             JsonWebKeySetUrl::new(provider_base_url.to_owned() + "/jwk")
+//                 .expect("Parsing mock jwk url should not fail"),
+//             vec![ResponseTypes::new(vec![CoreResponseType::Code])],
+//             vec![],
+//             vec![CoreJwsSigningAlgorithm::RsaSsaPssSha256],
+//             EmptyAdditionalProviderMetadata {},
+//         )
+//         .set_token_endpoint(Some(
+//             TokenUrl::new(provider_base_url.to_owned() + "/token")
+//                 .expect("Parsing mock token url should not fail"),
+//         ))
+//         .set_scopes_supported(Some(vec![
+//             Scope::new("openid".to_string()),
+//             Scope::new("email".to_string()),
+//             Scope::new("profile".to_string()),
+//         ]))
+//         .set_claims_supported(Some(vec![
+//             CoreClaimName::new("sub".to_string()),
+//             CoreClaimName::new("email".to_string()),
+//             CoreClaimName::new("name".to_string()),
+//         ]))
+//     }
 
-    pub fn mock_jwks() -> DefaultJsonWebKeySet {
-        let jwk: CoreJsonWebKey =
-            serde_json::from_str(TEST_JWK).expect("Parsing mock jwk should not fail");
-        JsonWebKeySet::new(vec![jwk])
-    }
+//     pub fn mock_jwks() -> DefaultJsonWebKeySet {
+//         let jwk: CoreJsonWebKey =
+//             serde_json::from_str(TEST_JWK).expect("Parsing mock jwk should not fail");
+//         JsonWebKeySet::new(vec![jwk])
+//     }
 
-    pub fn mock_token_response(
-        mock_token_config: MockTokenConfig,
-    ) -> StandardTokenResponse<CoreIdTokenFields, BasicTokenType> {
-        let id_token = CoreIdToken::new(
-            CoreIdTokenClaims::new(
-                IssuerUrl::new(mock_token_config.issuer)
-                    .expect("Parsing mock issuer should not fail"),
-                vec![Audience::new(mock_token_config.client_id)],
-                Utc::now() + Duration::seconds(300),
-                Utc::now(),
-                StandardClaims::new(SubjectIdentifier::new("DUMMY_SUBJECT_ID".to_string()))
-                    .set_email(mock_token_config.email)
-                    .set_name(mock_token_config.name),
-                EmptyAdditionalClaims {},
-            )
-            .set_nonce(mock_token_config.nonce),
-            &CoreRsaPrivateSigningKey::from_pem(TEST_PRIVATE_KEY, None)
-                .expect("Cannot create mock of RSA private key"),
-            CoreJwsSigningAlgorithm::RsaSsaPssSha256,
-            Some(&AccessToken::new(
-                mock_token_config.access_for_id.to_string(),
-            )),
-            None,
-        )
-        .expect("Cannot create mock of ID Token");
+//     pub fn mock_token_response(
+//         mock_token_config: MockTokenConfig,
+//     ) -> StandardTokenResponse<CoreIdTokenFields, BasicTokenType> {
+//         let id_token = CoreIdToken::new(
+//             CoreIdTokenClaims::new(
+//                 IssuerUrl::new(mock_token_config.issuer)
+//                     .expect("Parsing mock issuer should not fail"),
+//                 vec![Audience::new(mock_token_config.client_id)],
+//                 Utc::now() + Duration::seconds(300),
+//                 Utc::now(),
+//                 StandardClaims::new(SubjectIdentifier::new("DUMMY_SUBJECT_ID".to_string()))
+//                     .set_email(mock_token_config.email)
+//                     .set_name(mock_token_config.name),
+//                 EmptyAdditionalClaims {},
+//             )
+//             .set_nonce(mock_token_config.nonce),
+//             &CoreRsaPrivateSigningKey::from_pem(TEST_PRIVATE_KEY, None)
+//                 .expect("Cannot create mock of RSA private key"),
+//             CoreJwsSigningAlgorithm::RsaSsaPssSha256,
+//             Some(&AccessToken::new(
+//                 mock_token_config.access_for_id.to_string(),
+//             )),
+//             None,
+//         )
+//         .expect("Cannot create mock of ID Token");
 
-        let mut result = CoreTokenResponse::new(
-            AccessToken::new(mock_token_config.access.to_string()),
-            CoreTokenType::Bearer,
-            CoreIdTokenFields::new(Some(id_token), EmptyExtraTokenFields {}),
-        );
+//         let mut result = CoreTokenResponse::new(
+//             AccessToken::new(mock_token_config.access.to_string()),
+//             CoreTokenType::Bearer,
+//             CoreIdTokenFields::new(Some(id_token), EmptyExtraTokenFields {}),
+//         );
 
-        result.set_expires_in(mock_token_config.duration.as_ref());
+//         result.set_expires_in(mock_token_config.duration.as_ref());
 
-        result
-    }
-}
+//         result
+//     }
+// }
 
-#[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper(ctx: &ProInMemoryContext) -> (Workflow, WorkflowId) {
-    let dataset = add_ndvi_to_datasets(ctx).await;
+// #[allow(clippy::missing_panics_doc)]
+// pub async fn register_ndvi_workflow_helper(ctx: &ProInMemoryContext) -> (Workflow, WorkflowId) {
+//     let dataset = add_ndvi_to_datasets(ctx).await;
 
-    let workflow = Workflow {
-        operator: TypedOperator::Raster(
-            GdalSource {
-                params: GdalSourceParameters {
-                    data: dataset.into(),
-                },
-            }
-            .boxed(),
-        ),
-    };
+//     let workflow = Workflow {
+//         operator: TypedOperator::Raster(
+//             GdalSource {
+//                 params: GdalSourceParameters {
+//                     data: dataset.into(),
+//                 },
+//             }
+//             .boxed(),
+//         ),
+//     };
 
-    let id = ctx
-        .workflow_registry_ref()
-        .register(workflow.clone())
-        .await
-        .unwrap();
+//     let session = ctx.anoynmous().await.unwrap();
 
-    (workflow, id)
-}
+//     let id = ctx.db(session).register(workflow.clone()).await.unwrap();
 
-#[allow(clippy::missing_panics_doc)]
-pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
-    let ndvi = DatasetDefinition {
-        properties: AddDataset {
-            id: None,
-            name: "NDVI".to_string(),
-            description: "NDVI data from MODIS".to_string(),
-            source_operator: "GdalSource".to_string(),
-            symbology: None,
-            provenance: Some(vec![Provenance {
-                citation: "Sample Citation".to_owned(),
-                license: "Sample License".to_owned(),
-                uri: "http://example.org/".to_owned(),
-            }]),
-        },
-        meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
-    };
+//     (workflow, id)
+// }
 
-    let system_session = UserSession::system_session();
+// #[allow(clippy::missing_panics_doc)]
+// pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
+//     let ndvi = DatasetDefinition {
+//         properties: AddDataset {
+//             id: None,
+//             name: "NDVI".to_string(),
+//             description: "NDVI data from MODIS".to_string(),
+//             source_operator: "GdalSource".to_string(),
+//             symbology: None,
+//             provenance: Some(vec![Provenance {
+//                 citation: "Sample Citation".to_owned(),
+//                 license: "Sample License".to_owned(),
+//                 uri: "http://example.org/".to_owned(),
+//             }]),
+//         },
+//         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
+//     };
 
-    let dataset_db = ctx.dataset_db_ref();
+//     let system_session = UserSession::system_session();
 
-    let dataset_id = dataset_db
-        .add_dataset(
-            &system_session,
-            ndvi.properties
-                .validated()
-                .expect("valid dataset description"),
-            Box::new(ndvi.meta_data),
-        )
-        .await
-        .expect("dataset db access");
+//     let dataset_db = ctx.dataset_db_ref();
 
-    dataset_db
-        .add_dataset_permission(
-            &system_session,
-            DatasetPermission {
-                role: Role::user_role_id(),
-                dataset: dataset_id,
-                permission: Permission::Read,
-            },
-        )
-        .await
-        .unwrap();
+//     let dataset_id = dataset_db
+//         .add_dataset(
+//             &system_session,
+//             ndvi.properties
+//                 .validated()
+//                 .expect("valid dataset description"),
+//             Box::new(ndvi.meta_data),
+//         )
+//         .await
+//         .expect("dataset db access");
 
-    dataset_db
-        .add_dataset_permission(
-            &system_session,
-            DatasetPermission {
-                role: Role::anonymous_role_id(),
-                dataset: dataset_id,
-                permission: Permission::Read,
-            },
-        )
-        .await
-        .unwrap();
+//     dataset_db
+//         .add_dataset_permission(
+//             &system_session,
+//             DatasetPermission {
+//                 role: Role::user_role_id(),
+//                 dataset: dataset_id,
+//                 permission: Permission::Read,
+//             },
+//         )
+//         .await
+//         .unwrap();
 
-    dataset_id
-}
+//     dataset_db
+//         .add_dataset_permission(
+//             &system_session,
+//             DatasetPermission {
+//                 role: Role::anonymous_role_id(),
+//                 dataset: dataset_id,
+//                 permission: Permission::Read,
+//             },
+//         )
+//         .await
+//         .unwrap();
+
+//     dataset_id
+// }

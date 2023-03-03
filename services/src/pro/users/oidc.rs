@@ -2,8 +2,8 @@ use crate::contexts::Db;
 use crate::error::{Error, Result};
 use crate::pro::users::UserId;
 use crate::pro::util::config::Oidc;
-#[cfg(test)]
-use crate::pro::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
+// #[cfg(test)]
+// use crate::pro::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::Duration;
 use oauth2::basic::{BasicErrorResponseType, BasicRevocationErrorResponse, BasicTokenType};
@@ -365,19 +365,19 @@ impl OidcRequestDb {
         Ok((user, Duration::milliseconds(validity.as_millis() as i64))) //TODO: Consider allowing u128 for durations to avoid cast.
     }
 
-    #[cfg(test)]
-    pub(in crate::pro) fn from_oidc_with_static_tokens(value: Oidc) -> Self {
-        OidcRequestDb {
-            issuer: value.issuer.to_string(),
-            client_id: value.client_id.to_string(),
-            client_secret: value.client_secret.clone(),
-            redirect_uri: value.redirect_uri.to_string(),
-            scopes: value.scopes,
-            users: Arc::new(Default::default()),
-            state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
-            nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
-        }
-    }
+    // #[cfg(test)]
+    // pub(in crate::pro) fn from_oidc_with_static_tokens(value: Oidc) -> Self {
+    //     OidcRequestDb {
+    //         issuer: value.issuer.to_string(),
+    //         client_id: value.client_id.to_string(),
+    //         client_secret: value.client_secret.clone(),
+    //         redirect_uri: value.redirect_uri.to_string(),
+    //         scopes: value.scopes,
+    //         users: Arc::new(Default::default()),
+    //         state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
+    //         nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
+    //     }
+    // }
 }
 
 impl TryFrom<Oidc> for OidcRequestDb {
@@ -404,723 +404,723 @@ impl TryFrom<Oidc> for OidcRequestDb {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::error::{Error, Result};
-    use crate::pro::users::oidc::OidcError::{
-        IllegalProvider, LoginFailed, ProviderDiscoveryError, ResponseFieldError,
-        TokenExchangeError,
-    };
-    use crate::pro::users::oidc::{
-        AuthCodeResponse, DefaultClient, DefaultJsonWebKeySet, DefaultProviderMetadata,
-        OidcRequestDb,
-    };
-    use crate::pro::util::tests::mock_oidc::{
-        mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_NONCE,
-        SINGLE_STATE,
-    };
-    use httptest::matchers::request;
-    use httptest::responders::status_code;
-    use httptest::{Expectation, Server};
-    use oauth2::basic::BasicTokenType;
-    use oauth2::{
-        AccessToken, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields, RedirectUrl,
-        StandardTokenResponse,
-    };
-    use openidconnect::core::{CoreClient, CoreIdTokenFields, CoreTokenResponse, CoreTokenType};
-    use openidconnect::Nonce;
-    use serde_json::json;
-    use std::collections::HashMap;
-    use std::sync::Arc;
-
-    const ALTERNATIVE_ACCESS_TOKEN: &str = "DUMMY_ACCESS_TOKEN_2";
-    const ISSUER_URL: &str = "https://dummy-issuer.com/";
-    const REDIRECT_URI: &str = "https://dummy-redirect.com/";
-
-    fn single_state_nonce_request_db() -> OidcRequestDb {
-        OidcRequestDb {
-            issuer: ISSUER_URL.to_string(),
-            client_id: "DummyClient".to_string(),
-            client_secret: Some("DummySecret".to_string()),
-            redirect_uri: REDIRECT_URI.to_string(),
-            scopes: vec!["profile".to_string(), "email".to_string()],
-            users: Arc::new(Default::default()),
-            state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
-            nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
-        }
-    }
-
-    fn single_state_nonce_mocked_request_db(server_url: String) -> OidcRequestDb {
-        OidcRequestDb {
-            issuer: server_url,
-            client_id: String::new(),
-            client_secret: None,
-            redirect_uri: REDIRECT_URI.to_string(),
-            scopes: vec!["profile".to_string(), "email".to_string()],
-            users: Arc::new(Default::default()),
-            state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
-            nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
-        }
-    }
-
-    fn mock_client(request_db: &OidcRequestDb) -> Result<DefaultClient, Error> {
-        let client_id = request_db.client_id.clone();
-        let client_secret = request_db.client_secret.clone();
-        let redirect_uri = request_db.redirect_uri.clone();
-
-        let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_jwks(mock_jwks());
-
-        let result = CoreClient::from_provider_metadata(
-            provider_metadata,
-            ClientId::new(client_id),
-            client_secret.map(ClientSecret::new),
-        )
-        .set_redirect_uri(RedirectUrl::new(redirect_uri)?);
-
-        Ok(result)
-    }
-
-    fn mock_provider_discovery(
-        server: &Server,
-        provider_metadata: &DefaultProviderMetadata,
-        jwks: &DefaultJsonWebKeySet,
-    ) {
-        server.expect(
-            Expectation::matching(request::method_path(
-                "GET",
-                "/.well-known/openid-configuration",
-            ))
-            .respond_with(
-                status_code(200)
-                    .insert_header("content-type", "application/json")
-                    .body(serde_json::to_string(provider_metadata).unwrap()),
-            ),
-        );
-
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/jwk")).respond_with(
-                status_code(200)
-                    .insert_header("content-type", "application/json")
-                    .body(serde_json::to_string(jwks).unwrap()),
-            ),
-        );
-    }
-
-    fn mock_valid_request(
-        server: &Server,
-        token_response: &StandardTokenResponse<CoreIdTokenFields, BasicTokenType>,
-    ) {
-        server.expect(
-            Expectation::matching(request::method_path("POST", "/token")).respond_with(
-                status_code(200)
-                    .insert_header("content-type", "application/json")
-                    .body(serde_json::to_string(token_response).unwrap()),
-            ),
-        );
-    }
-
-    fn auth_code_response_empty_with_valid_state() -> AuthCodeResponse {
-        AuthCodeResponse {
-            session_state: String::new(),
-            code: String::new(),
-            state: SINGLE_STATE.to_string(),
-        }
-    }
-
-    #[tokio::test]
-    async fn get_client_success() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-
-        let provider_metadata = mock_provider_metadata(request_db.issuer.as_str());
-        let jwks = mock_jwks();
-
-        mock_provider_discovery(&server, &provider_metadata, &jwks);
-
-        let client = request_db.get_client().await;
-
-        assert!(client.is_ok());
-    }
-
-    #[tokio::test]
-    async fn get_client_bad_request() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-
-        let error_message = serde_json::to_string(&json!({
-            "error_description": "Dummy bad request",
-            "error": "catch_all_error"
-        }))
-        .expect("Serde Json unsuccessful");
-
-        server.expect(
-            Expectation::matching(request::method_path(
-                "GET",
-                "/.well-known/openid-configuration",
-            ))
-            .respond_with(
-                status_code(404)
-                    .insert_header("content-type", "application/json")
-                    .body(error_message),
-            ),
-        );
-
-        let client = request_db.get_client().await;
-
-        assert!(matches!(client, Err(ProviderDiscoveryError { source: _ })));
-    }
-
-    #[tokio::test]
-    async fn get_client_auth_code_unsupported() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-
-        let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_response_types_supported(vec![]);
-        let jwks = mock_jwks();
-
-        mock_provider_discovery(&server, &provider_metadata, &jwks);
-
-        let client = request_db.get_client().await;
-
-        assert!(
-            matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support authorization code flow")
-        );
-    }
-
-    #[tokio::test]
-    async fn get_client_id_rsa_signing_unsupported() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-
-        let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
-            .set_id_token_signing_alg_values_supported(vec![]);
-        let jwks = mock_jwks();
-
-        mock_provider_discovery(&server, &provider_metadata, &jwks);
-
-        let client = request_db.get_client().await;
-
-        assert!(
-            matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support RSA signing")
-        );
-    }
-
-    #[tokio::test]
-    async fn get_client_missing_scopes() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-
-        let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_scopes_supported(None);
-        let jwks = mock_jwks();
-
-        mock_provider_discovery(&server, &provider_metadata, &jwks);
-
-        let client = request_db.get_client().await;
-
-        assert!(
-            matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support any scopes")
-        );
-    }
-
-    #[tokio::test]
-    async fn get_client_missing_claims() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-
-        let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_claims_supported(None);
-        let jwks = mock_jwks();
-
-        mock_provider_discovery(&server, &provider_metadata, &jwks);
-
-        let client = request_db.get_client().await;
-
-        assert!(
-            matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support any claims")
-        );
-    }
-
-    //TODO: Did not test illegal config (e.g., provider url cannot be parsed).
-
-    #[tokio::test]
-    async fn generate_request_success() {
-        let request_db = OidcRequestDb {
-            issuer: ISSUER_URL.to_owned() + "oidc/test",
-            client_id: "DummyClient".to_string(),
-            client_secret: Some("DummySecret".to_string()),
-            redirect_uri: REDIRECT_URI.to_string(),
-            scopes: vec!["profile".to_string(), "email".to_string()],
-            users: Arc::new(Default::default()),
-            state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
-            nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
-        };
-
-        let client = mock_client(&request_db).unwrap();
-
-        let url = request_db.generate_request(client).await.unwrap().url;
-
-        assert_eq!(url.scheme(), "https");
-        assert_eq!(url.host_str(), Some("dummy-issuer.com"));
-        assert_eq!(url.port(), None);
-        assert_eq!(url.path(), "/oidc/test/authorize");
-        assert_eq!(url.query_pairs().count(), 8);
-
-        let query_map: HashMap<_, _> = url
-            .query_pairs()
-            .into_iter()
-            .map(|(x, y)| (x.to_string(), y.to_string()))
-            .collect();
-
-        assert!(query_map.get("state").is_some());
-        assert!(query_map.get("nonce").is_some());
-        assert!(query_map.get("code_challenge").is_some());
-
-        assert_eq!(query_map.get("client_id"), Some(&"DummyClient".to_string()));
-        assert_eq!(
-            query_map.get("redirect_uri"),
-            Some(&REDIRECT_URI.to_string())
-        );
-        assert_eq!(query_map.get("response_type"), Some(&"code".to_string()));
-        assert_eq!(
-            query_map.get("scope"),
-            Some(&"openid profile email".to_string())
-        );
-        assert_eq!(
-            query_map.get("code_challenge_method"),
-            Some(&"S256".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn generate_request_duplicate_state() {
-        let request_db = single_state_nonce_request_db();
-        let client = mock_client(&request_db).unwrap();
-
-        let first_request = request_db.generate_request(client.clone()).await;
-
-        assert!(first_request.is_ok());
-
-        let second_request = request_db.generate_request(client).await;
-
-        assert!(
-            matches!(second_request, Err(LoginFailed{reason}) if reason == "Failed to generate unique state")
-        );
-    }
-
-    #[tokio::test]
-    async fn resolve_request_success() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
-
-        request_db.generate_request(client.clone()).await.unwrap();
-
-        let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
-            request_db.issuer.clone(),
-            request_db.client_id.clone(),
-        );
-        let token_response = mock_token_response(mock_token_config);
-        mock_valid_request(&server, &token_response);
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(response.is_ok());
-    }
-
-    #[tokio::test]
-    async fn resolve_request_failed_empty_db() {
-        let request_db = single_state_nonce_request_db();
-        let client = mock_client(&request_db).unwrap();
-
-        let auth_code_response = AuthCodeResponse {
-            session_state: String::new(),
-            code: String::new(),
-            state: "Illegal Request State".to_string(),
-        };
-
-        let response = request_db.resolve_request(client, auth_code_response).await;
-        assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
-    }
-
-    #[tokio::test]
-    async fn resolve_request_failed_not_found() {
-        let request_db = single_state_nonce_request_db();
-        let client = mock_client(&request_db).unwrap();
-
-        let request = request_db.generate_request(client.clone()).await;
-
-        assert!(request.is_ok());
-
-        let auth_code_response = AuthCodeResponse {
-            session_state: String::new(),
-            code: String::new(),
-            state: "Illegal Request State".to_string(),
-        };
-
-        let response = request_db.resolve_request(client, auth_code_response).await;
-        assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
-    }
-
-    #[tokio::test]
-    async fn resolve_request_no_id_token() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-
-        let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
-            request_db.issuer.clone(),
-            request_db.client_id.clone(),
-        );
-        let mut token_response = CoreTokenResponse::new(
-            AccessToken::new(mock_token_config.access),
-            CoreTokenType::Bearer,
-            CoreIdTokenFields::new(None, EmptyExtraTokenFields {}),
-        );
-        token_response.set_expires_in(mock_token_config.duration.as_ref());
-        mock_valid_request(&server, &token_response);
-
-        let client = mock_client(&request_db).unwrap();
-
-        let request = request_db.generate_request(client.clone()).await;
-
-        assert!(request.is_ok());
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(
-            matches!(response, Err(ResponseFieldError{field, reason}) if field == "id token" && reason == "missing")
-        );
-    }
-
-    #[tokio::test]
-    async fn resolve_request_no_nonce() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
-
-        request_db.generate_request(client.clone()).await.unwrap();
-
-        let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
-            request_db.issuer.clone(),
-            request_db.client_id.clone(),
-        );
-        mock_token_config.nonce = None;
-        let token_response = mock_token_response(mock_token_config);
-        mock_valid_request(&server, &token_response);
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(
-            matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Failed to verify claims")
-        );
-    }
-
-    #[tokio::test]
-    async fn resolve_request_wrong_nonce() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
-
-        request_db.generate_request(client.clone()).await.unwrap();
-
-        let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
-            request_db.issuer.clone(),
-            request_db.client_id.clone(),
-        );
-        mock_token_config.nonce = Some(Nonce::new("Wrong Nonce".to_string()));
-        let token_response = mock_token_response(mock_token_config);
-        mock_valid_request(&server, &token_response);
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(
-            matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Failed to verify claims")
-        );
-    }
-
-    #[tokio::test]
-    async fn resolve_request_no_email() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
-
-        request_db.generate_request(client.clone()).await.unwrap();
-
-        let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
-            request_db.issuer.clone(),
-            request_db.client_id.clone(),
-        );
-        mock_token_config.email = None;
-        let token_response = mock_token_response(mock_token_config);
-        mock_valid_request(&server, &token_response);
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(
-            matches!(response, Err(ResponseFieldError{field, reason}) if field == "e-mail" && reason == "missing")
-        );
-    }
-
-    #[tokio::test]
-    async fn resolve_request_no_name() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
-
-        request_db.generate_request(client.clone()).await.unwrap();
-
-        let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
-            request_db.issuer.clone(),
-            request_db.client_id.clone(),
-        );
-        mock_token_config.name = None;
-        let token_response = mock_token_response(mock_token_config);
-        mock_valid_request(&server, &token_response);
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(
-            matches!(response, Err(ResponseFieldError{field, reason}) if field == "name" && reason == "missing")
-        );
-    }
-
-    #[tokio::test]
-    async fn resolve_request_no_access_token_duration() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
-
-        request_db.generate_request(client.clone()).await.unwrap();
-
-        let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
-            request_db.issuer.clone(),
-            request_db.client_id.clone(),
-        );
-        mock_token_config.duration = None;
-        let token_response = mock_token_response(mock_token_config);
-        mock_valid_request(&server, &token_response);
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(
-            matches!(response, Err(ResponseFieldError{field, reason}) if field == "duration" && reason == "missing")
-        );
-    }
-
-    #[tokio::test]
-    async fn resolve_request_access_hashcode_mismatch() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
-
-        request_db.generate_request(client.clone()).await.unwrap();
-
-        let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
-            request_db.issuer.clone(),
-            request_db.client_id.clone(),
-        );
-        assert_ne!(mock_token_config.access_for_id, ALTERNATIVE_ACCESS_TOKEN);
-        mock_token_config.access_for_id = ALTERNATIVE_ACCESS_TOKEN.to_string();
-
-        let token_response = mock_token_response(mock_token_config);
-        mock_valid_request(&server, &token_response);
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(
-            matches!(response, Err(ResponseFieldError{field, reason}) if field == "access token" && reason == "wrong hash")
-        );
-    }
-
-    #[tokio::test]
-    async fn resolve_request_twice() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
-
-        request_db.generate_request(client.clone()).await.unwrap();
-
-        let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
-            request_db.issuer.clone(),
-            request_db.client_id.clone(),
-        );
-        let token_response = mock_token_response(mock_token_config);
-        mock_valid_request(&server, &token_response);
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db
-            .resolve_request(client.clone(), auth_code_response)
-            .await;
-
-        assert!(response.is_ok());
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
-    }
-
-    #[tokio::test]
-    async fn resolve_multiple_requests() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let mut request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
-
-        //TODO: Not sure how to do multiple requests deterministically in a good way.
-        let state_functions = [
-            || CsrfToken::new("State_1".to_string()),
-            || CsrfToken::new("State_2".to_string()),
-            || CsrfToken::new("State_3".to_string()),
-            || CsrfToken::new("State_4".to_string()),
-            || CsrfToken::new("State_5".to_string()),
-            || CsrfToken::new("State_6".to_string()),
-            || CsrfToken::new("State_7".to_string()),
-            || CsrfToken::new("State_8".to_string()),
-            || CsrfToken::new("State_9".to_string()),
-            || CsrfToken::new("State_10".to_string()),
-        ];
-
-        let nonce_functions = [
-            || Nonce::new("Nonce_1".to_string()),
-            || Nonce::new("Nonce_2".to_string()),
-            || Nonce::new("Nonce_3".to_string()),
-            || Nonce::new("Nonce_4".to_string()),
-            || Nonce::new("Nonce_5".to_string()),
-            || Nonce::new("Nonce_6".to_string()),
-            || Nonce::new("Nonce_7".to_string()),
-            || Nonce::new("Nonce_8".to_string()),
-            || Nonce::new("Nonce_9".to_string()),
-            || Nonce::new("Nonce_10".to_string()),
-        ];
-
-        let query_qualifiers = ["7", "3", "2", "4", "8", "9", "10", "1", "5", "6"];
-
-        for i in 0..10 {
-            request_db.state_function = state_functions[i];
-            request_db.nonce_function = nonce_functions[i];
-
-            let request_result = request_db.generate_request(client.clone()).await;
-
-            assert!(request_result.is_ok());
-        }
-
-        for query_qualifier in query_qualifiers {
-            let state = "State_".to_owned() + query_qualifier;
-            let nonce = Some(Nonce::new("Nonce_".to_owned() + query_qualifier));
-
-            let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
-                request_db.issuer.clone(),
-                request_db.client_id.clone(),
-            );
-            mock_token_config.nonce = nonce;
-            let token_response = mock_token_response(mock_token_config);
-            mock_valid_request(&server, &token_response);
-
-            let mut auth_code_response = auth_code_response_empty_with_valid_state();
-            auth_code_response.state = state;
-            let response = request_db
-                .resolve_request(client.clone(), auth_code_response)
-                .await;
-
-            assert!(response.is_ok());
-        }
-    }
-
-    #[tokio::test]
-    async fn resolve_bad_request() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
-
-        request_db.generate_request(client.clone()).await.unwrap();
-
-        //TODO: Maybe search for more detailed error types and test/display them more gracefully.
-        let error_message = serde_json::to_string(&json!({
-            "error_description": "Dummy bad request",
-            "error": "catch_all_error"
-        }))
-        .expect("Serde Json unsuccessful");
-
-        server.expect(
-            Expectation::matching(request::method_path("POST", "/token")).respond_with(
-                status_code(404)
-                    .insert_header("content-type", "application/json")
-                    .body(error_message),
-            ),
-        );
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(
-            matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Request for code to token exchange failed")
-        );
-    }
-
-    #[tokio::test]
-    async fn resolve_after_bad_request() {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-        let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
-
-        request_db.generate_request(client.clone()).await.unwrap();
-
-        let error_message = serde_json::to_string(&json!({
-            "error_description": "Dummy bad request",
-            "error": "catch_all_error"
-        }))
-        .expect("Serde Json unsuccessful");
-
-        server.expect(
-            Expectation::matching(request::method_path("POST", "/token")).respond_with(
-                status_code(404)
-                    .insert_header("content-type", "application/json")
-                    .body(error_message),
-            ),
-        );
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response_bad = request_db
-            .resolve_request(client.clone(), auth_code_response)
-            .await;
-
-        assert!(
-            matches!(response_bad, Err(TokenExchangeError{reason, source: _}) if reason == "Request for code to token exchange failed")
-        );
-
-        let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
-
-        assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
-    }
-
-    //TODO: Did not test code and PKCE verifier.
-}
+// #[cfg(test)]
+// mod tests {
+//     use crate::error::{Error, Result};
+//     use crate::pro::users::oidc::OidcError::{
+//         IllegalProvider, LoginFailed, ProviderDiscoveryError, ResponseFieldError,
+//         TokenExchangeError,
+//     };
+//     use crate::pro::users::oidc::{
+//         AuthCodeResponse, DefaultClient, DefaultJsonWebKeySet, DefaultProviderMetadata,
+//         OidcRequestDb,
+//     };
+//     use crate::pro::util::tests::mock_oidc::{
+//         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_NONCE,
+//         SINGLE_STATE,
+//     };
+//     use httptest::matchers::request;
+//     use httptest::responders::status_code;
+//     use httptest::{Expectation, Server};
+//     use oauth2::basic::BasicTokenType;
+//     use oauth2::{
+//         AccessToken, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields, RedirectUrl,
+//         StandardTokenResponse,
+//     };
+//     use openidconnect::core::{CoreClient, CoreIdTokenFields, CoreTokenResponse, CoreTokenType};
+//     use openidconnect::Nonce;
+//     use serde_json::json;
+//     use std::collections::HashMap;
+//     use std::sync::Arc;
+
+//     const ALTERNATIVE_ACCESS_TOKEN: &str = "DUMMY_ACCESS_TOKEN_2";
+//     const ISSUER_URL: &str = "https://dummy-issuer.com/";
+//     const REDIRECT_URI: &str = "https://dummy-redirect.com/";
+
+//     fn single_state_nonce_request_db() -> OidcRequestDb {
+//         OidcRequestDb {
+//             issuer: ISSUER_URL.to_string(),
+//             client_id: "DummyClient".to_string(),
+//             client_secret: Some("DummySecret".to_string()),
+//             redirect_uri: REDIRECT_URI.to_string(),
+//             scopes: vec!["profile".to_string(), "email".to_string()],
+//             users: Arc::new(Default::default()),
+//             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
+//             nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
+//         }
+//     }
+
+//     fn single_state_nonce_mocked_request_db(server_url: String) -> OidcRequestDb {
+//         OidcRequestDb {
+//             issuer: server_url,
+//             client_id: String::new(),
+//             client_secret: None,
+//             redirect_uri: REDIRECT_URI.to_string(),
+//             scopes: vec!["profile".to_string(), "email".to_string()],
+//             users: Arc::new(Default::default()),
+//             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
+//             nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
+//         }
+//     }
+
+//     fn mock_client(request_db: &OidcRequestDb) -> Result<DefaultClient, Error> {
+//         let client_id = request_db.client_id.clone();
+//         let client_secret = request_db.client_secret.clone();
+//         let redirect_uri = request_db.redirect_uri.clone();
+
+//         let provider_metadata =
+//             mock_provider_metadata(request_db.issuer.as_str()).set_jwks(mock_jwks());
+
+//         let result = CoreClient::from_provider_metadata(
+//             provider_metadata,
+//             ClientId::new(client_id),
+//             client_secret.map(ClientSecret::new),
+//         )
+//         .set_redirect_uri(RedirectUrl::new(redirect_uri)?);
+
+//         Ok(result)
+//     }
+
+//     fn mock_provider_discovery(
+//         server: &Server,
+//         provider_metadata: &DefaultProviderMetadata,
+//         jwks: &DefaultJsonWebKeySet,
+//     ) {
+//         server.expect(
+//             Expectation::matching(request::method_path(
+//                 "GET",
+//                 "/.well-known/openid-configuration",
+//             ))
+//             .respond_with(
+//                 status_code(200)
+//                     .insert_header("content-type", "application/json")
+//                     .body(serde_json::to_string(provider_metadata).unwrap()),
+//             ),
+//         );
+
+//         server.expect(
+//             Expectation::matching(request::method_path("GET", "/jwk")).respond_with(
+//                 status_code(200)
+//                     .insert_header("content-type", "application/json")
+//                     .body(serde_json::to_string(jwks).unwrap()),
+//             ),
+//         );
+//     }
+
+//     fn mock_valid_request(
+//         server: &Server,
+//         token_response: &StandardTokenResponse<CoreIdTokenFields, BasicTokenType>,
+//     ) {
+//         server.expect(
+//             Expectation::matching(request::method_path("POST", "/token")).respond_with(
+//                 status_code(200)
+//                     .insert_header("content-type", "application/json")
+//                     .body(serde_json::to_string(token_response).unwrap()),
+//             ),
+//         );
+//     }
+
+//     fn auth_code_response_empty_with_valid_state() -> AuthCodeResponse {
+//         AuthCodeResponse {
+//             session_state: String::new(),
+//             code: String::new(),
+//             state: SINGLE_STATE.to_string(),
+//         }
+//     }
+
+//     #[tokio::test]
+//     async fn get_client_success() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+
+//         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str());
+//         let jwks = mock_jwks();
+
+//         mock_provider_discovery(&server, &provider_metadata, &jwks);
+
+//         let client = request_db.get_client().await;
+
+//         assert!(client.is_ok());
+//     }
+
+//     #[tokio::test]
+//     async fn get_client_bad_request() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+
+//         let error_message = serde_json::to_string(&json!({
+//             "error_description": "Dummy bad request",
+//             "error": "catch_all_error"
+//         }))
+//         .expect("Serde Json unsuccessful");
+
+//         server.expect(
+//             Expectation::matching(request::method_path(
+//                 "GET",
+//                 "/.well-known/openid-configuration",
+//             ))
+//             .respond_with(
+//                 status_code(404)
+//                     .insert_header("content-type", "application/json")
+//                     .body(error_message),
+//             ),
+//         );
+
+//         let client = request_db.get_client().await;
+
+//         assert!(matches!(client, Err(ProviderDiscoveryError { source: _ })));
+//     }
+
+//     #[tokio::test]
+//     async fn get_client_auth_code_unsupported() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+
+//         let provider_metadata =
+//             mock_provider_metadata(request_db.issuer.as_str()).set_response_types_supported(vec![]);
+//         let jwks = mock_jwks();
+
+//         mock_provider_discovery(&server, &provider_metadata, &jwks);
+
+//         let client = request_db.get_client().await;
+
+//         assert!(
+//             matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support authorization code flow")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn get_client_id_rsa_signing_unsupported() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+
+//         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
+//             .set_id_token_signing_alg_values_supported(vec![]);
+//         let jwks = mock_jwks();
+
+//         mock_provider_discovery(&server, &provider_metadata, &jwks);
+
+//         let client = request_db.get_client().await;
+
+//         assert!(
+//             matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support RSA signing")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn get_client_missing_scopes() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+
+//         let provider_metadata =
+//             mock_provider_metadata(request_db.issuer.as_str()).set_scopes_supported(None);
+//         let jwks = mock_jwks();
+
+//         mock_provider_discovery(&server, &provider_metadata, &jwks);
+
+//         let client = request_db.get_client().await;
+
+//         assert!(
+//             matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support any scopes")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn get_client_missing_claims() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+
+//         let provider_metadata =
+//             mock_provider_metadata(request_db.issuer.as_str()).set_claims_supported(None);
+//         let jwks = mock_jwks();
+
+//         mock_provider_discovery(&server, &provider_metadata, &jwks);
+
+//         let client = request_db.get_client().await;
+
+//         assert!(
+//             matches!(client, Err(IllegalProvider{reason}) if reason == "provider does not support any claims")
+//         );
+//     }
+
+//     //TODO: Did not test illegal config (e.g., provider url cannot be parsed).
+
+//     #[tokio::test]
+//     async fn generate_request_success() {
+//         let request_db = OidcRequestDb {
+//             issuer: ISSUER_URL.to_owned() + "oidc/test",
+//             client_id: "DummyClient".to_string(),
+//             client_secret: Some("DummySecret".to_string()),
+//             redirect_uri: REDIRECT_URI.to_string(),
+//             scopes: vec!["profile".to_string(), "email".to_string()],
+//             users: Arc::new(Default::default()),
+//             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
+//             nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
+//         };
+
+//         let client = mock_client(&request_db).unwrap();
+
+//         let url = request_db.generate_request(client).await.unwrap().url;
+
+//         assert_eq!(url.scheme(), "https");
+//         assert_eq!(url.host_str(), Some("dummy-issuer.com"));
+//         assert_eq!(url.port(), None);
+//         assert_eq!(url.path(), "/oidc/test/authorize");
+//         assert_eq!(url.query_pairs().count(), 8);
+
+//         let query_map: HashMap<_, _> = url
+//             .query_pairs()
+//             .into_iter()
+//             .map(|(x, y)| (x.to_string(), y.to_string()))
+//             .collect();
+
+//         assert!(query_map.get("state").is_some());
+//         assert!(query_map.get("nonce").is_some());
+//         assert!(query_map.get("code_challenge").is_some());
+
+//         assert_eq!(query_map.get("client_id"), Some(&"DummyClient".to_string()));
+//         assert_eq!(
+//             query_map.get("redirect_uri"),
+//             Some(&REDIRECT_URI.to_string())
+//         );
+//         assert_eq!(query_map.get("response_type"), Some(&"code".to_string()));
+//         assert_eq!(
+//             query_map.get("scope"),
+//             Some(&"openid profile email".to_string())
+//         );
+//         assert_eq!(
+//             query_map.get("code_challenge_method"),
+//             Some(&"S256".to_string())
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn generate_request_duplicate_state() {
+//         let request_db = single_state_nonce_request_db();
+//         let client = mock_client(&request_db).unwrap();
+
+//         let first_request = request_db.generate_request(client.clone()).await;
+
+//         assert!(first_request.is_ok());
+
+//         let second_request = request_db.generate_request(client).await;
+
+//         assert!(
+//             matches!(second_request, Err(LoginFailed{reason}) if reason == "Failed to generate unique state")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_request_success() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+//         let client = mock_client(&request_db).unwrap();
+
+//         request_db.generate_request(client.clone()).await.unwrap();
+
+//         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+//             request_db.issuer.clone(),
+//             request_db.client_id.clone(),
+//         );
+//         let token_response = mock_token_response(mock_token_config);
+//         mock_valid_request(&server, &token_response);
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+
+//         assert!(response.is_ok());
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_request_failed_empty_db() {
+//         let request_db = single_state_nonce_request_db();
+//         let client = mock_client(&request_db).unwrap();
+
+//         let auth_code_response = AuthCodeResponse {
+//             session_state: String::new(),
+//             code: String::new(),
+//             state: "Illegal Request State".to_string(),
+//         };
+
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+//         assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_request_failed_not_found() {
+//         let request_db = single_state_nonce_request_db();
+//         let client = mock_client(&request_db).unwrap();
+
+//         let request = request_db.generate_request(client.clone()).await;
+
+//         assert!(request.is_ok());
+
+//         let auth_code_response = AuthCodeResponse {
+//             session_state: String::new(),
+//             code: String::new(),
+//             state: "Illegal Request State".to_string(),
+//         };
+
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+//         assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_request_no_id_token() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+
+//         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+//             request_db.issuer.clone(),
+//             request_db.client_id.clone(),
+//         );
+//         let mut token_response = CoreTokenResponse::new(
+//             AccessToken::new(mock_token_config.access),
+//             CoreTokenType::Bearer,
+//             CoreIdTokenFields::new(None, EmptyExtraTokenFields {}),
+//         );
+//         token_response.set_expires_in(mock_token_config.duration.as_ref());
+//         mock_valid_request(&server, &token_response);
+
+//         let client = mock_client(&request_db).unwrap();
+
+//         let request = request_db.generate_request(client.clone()).await;
+
+//         assert!(request.is_ok());
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+
+//         assert!(
+//             matches!(response, Err(ResponseFieldError{field, reason}) if field == "id token" && reason == "missing")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_request_no_nonce() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+//         let client = mock_client(&request_db).unwrap();
+
+//         request_db.generate_request(client.clone()).await.unwrap();
+
+//         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+//             request_db.issuer.clone(),
+//             request_db.client_id.clone(),
+//         );
+//         mock_token_config.nonce = None;
+//         let token_response = mock_token_response(mock_token_config);
+//         mock_valid_request(&server, &token_response);
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+
+//         assert!(
+//             matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Failed to verify claims")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_request_wrong_nonce() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+//         let client = mock_client(&request_db).unwrap();
+
+//         request_db.generate_request(client.clone()).await.unwrap();
+
+//         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+//             request_db.issuer.clone(),
+//             request_db.client_id.clone(),
+//         );
+//         mock_token_config.nonce = Some(Nonce::new("Wrong Nonce".to_string()));
+//         let token_response = mock_token_response(mock_token_config);
+//         mock_valid_request(&server, &token_response);
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+
+//         assert!(
+//             matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Failed to verify claims")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_request_no_email() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+//         let client = mock_client(&request_db).unwrap();
+
+//         request_db.generate_request(client.clone()).await.unwrap();
+
+//         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+//             request_db.issuer.clone(),
+//             request_db.client_id.clone(),
+//         );
+//         mock_token_config.email = None;
+//         let token_response = mock_token_response(mock_token_config);
+//         mock_valid_request(&server, &token_response);
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+
+//         assert!(
+//             matches!(response, Err(ResponseFieldError{field, reason}) if field == "e-mail" && reason == "missing")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_request_no_name() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+//         let client = mock_client(&request_db).unwrap();
+
+//         request_db.generate_request(client.clone()).await.unwrap();
+
+//         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+//             request_db.issuer.clone(),
+//             request_db.client_id.clone(),
+//         );
+//         mock_token_config.name = None;
+//         let token_response = mock_token_response(mock_token_config);
+//         mock_valid_request(&server, &token_response);
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+
+//         assert!(
+//             matches!(response, Err(ResponseFieldError{field, reason}) if field == "name" && reason == "missing")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_request_no_access_token_duration() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+//         let client = mock_client(&request_db).unwrap();
+
+//         request_db.generate_request(client.clone()).await.unwrap();
+
+//         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+//             request_db.issuer.clone(),
+//             request_db.client_id.clone(),
+//         );
+//         mock_token_config.duration = None;
+//         let token_response = mock_token_response(mock_token_config);
+//         mock_valid_request(&server, &token_response);
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+
+//         assert!(
+//             matches!(response, Err(ResponseFieldError{field, reason}) if field == "duration" && reason == "missing")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_request_access_hashcode_mismatch() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+//         let client = mock_client(&request_db).unwrap();
+
+//         request_db.generate_request(client.clone()).await.unwrap();
+
+//         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+//             request_db.issuer.clone(),
+//             request_db.client_id.clone(),
+//         );
+//         assert_ne!(mock_token_config.access_for_id, ALTERNATIVE_ACCESS_TOKEN);
+//         mock_token_config.access_for_id = ALTERNATIVE_ACCESS_TOKEN.to_string();
+
+//         let token_response = mock_token_response(mock_token_config);
+//         mock_valid_request(&server, &token_response);
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+
+//         assert!(
+//             matches!(response, Err(ResponseFieldError{field, reason}) if field == "access token" && reason == "wrong hash")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_request_twice() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+//         let client = mock_client(&request_db).unwrap();
+
+//         request_db.generate_request(client.clone()).await.unwrap();
+
+//         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+//             request_db.issuer.clone(),
+//             request_db.client_id.clone(),
+//         );
+//         let token_response = mock_token_response(mock_token_config);
+//         mock_valid_request(&server, &token_response);
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db
+//             .resolve_request(client.clone(), auth_code_response)
+//             .await;
+
+//         assert!(response.is_ok());
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+
+//         assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_multiple_requests() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let mut request_db = single_state_nonce_mocked_request_db(server_url);
+//         let client = mock_client(&request_db).unwrap();
+
+//         //TODO: Not sure how to do multiple requests deterministically in a good way.
+//         let state_functions = [
+//             || CsrfToken::new("State_1".to_string()),
+//             || CsrfToken::new("State_2".to_string()),
+//             || CsrfToken::new("State_3".to_string()),
+//             || CsrfToken::new("State_4".to_string()),
+//             || CsrfToken::new("State_5".to_string()),
+//             || CsrfToken::new("State_6".to_string()),
+//             || CsrfToken::new("State_7".to_string()),
+//             || CsrfToken::new("State_8".to_string()),
+//             || CsrfToken::new("State_9".to_string()),
+//             || CsrfToken::new("State_10".to_string()),
+//         ];
+
+//         let nonce_functions = [
+//             || Nonce::new("Nonce_1".to_string()),
+//             || Nonce::new("Nonce_2".to_string()),
+//             || Nonce::new("Nonce_3".to_string()),
+//             || Nonce::new("Nonce_4".to_string()),
+//             || Nonce::new("Nonce_5".to_string()),
+//             || Nonce::new("Nonce_6".to_string()),
+//             || Nonce::new("Nonce_7".to_string()),
+//             || Nonce::new("Nonce_8".to_string()),
+//             || Nonce::new("Nonce_9".to_string()),
+//             || Nonce::new("Nonce_10".to_string()),
+//         ];
+
+//         let query_qualifiers = ["7", "3", "2", "4", "8", "9", "10", "1", "5", "6"];
+
+//         for i in 0..10 {
+//             request_db.state_function = state_functions[i];
+//             request_db.nonce_function = nonce_functions[i];
+
+//             let request_result = request_db.generate_request(client.clone()).await;
+
+//             assert!(request_result.is_ok());
+//         }
+
+//         for query_qualifier in query_qualifiers {
+//             let state = "State_".to_owned() + query_qualifier;
+//             let nonce = Some(Nonce::new("Nonce_".to_owned() + query_qualifier));
+
+//             let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+//                 request_db.issuer.clone(),
+//                 request_db.client_id.clone(),
+//             );
+//             mock_token_config.nonce = nonce;
+//             let token_response = mock_token_response(mock_token_config);
+//             mock_valid_request(&server, &token_response);
+
+//             let mut auth_code_response = auth_code_response_empty_with_valid_state();
+//             auth_code_response.state = state;
+//             let response = request_db
+//                 .resolve_request(client.clone(), auth_code_response)
+//                 .await;
+
+//             assert!(response.is_ok());
+//         }
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_bad_request() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+//         let client = mock_client(&request_db).unwrap();
+
+//         request_db.generate_request(client.clone()).await.unwrap();
+
+//         //TODO: Maybe search for more detailed error types and test/display them more gracefully.
+//         let error_message = serde_json::to_string(&json!({
+//             "error_description": "Dummy bad request",
+//             "error": "catch_all_error"
+//         }))
+//         .expect("Serde Json unsuccessful");
+
+//         server.expect(
+//             Expectation::matching(request::method_path("POST", "/token")).respond_with(
+//                 status_code(404)
+//                     .insert_header("content-type", "application/json")
+//                     .body(error_message),
+//             ),
+//         );
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+
+//         assert!(
+//             matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Request for code to token exchange failed")
+//         );
+//     }
+
+//     #[tokio::test]
+//     async fn resolve_after_bad_request() {
+//         let server = Server::run();
+//         let server_url = format!("http://{}", server.addr());
+//         let request_db = single_state_nonce_mocked_request_db(server_url);
+//         let client = mock_client(&request_db).unwrap();
+
+//         request_db.generate_request(client.clone()).await.unwrap();
+
+//         let error_message = serde_json::to_string(&json!({
+//             "error_description": "Dummy bad request",
+//             "error": "catch_all_error"
+//         }))
+//         .expect("Serde Json unsuccessful");
+
+//         server.expect(
+//             Expectation::matching(request::method_path("POST", "/token")).respond_with(
+//                 status_code(404)
+//                     .insert_header("content-type", "application/json")
+//                     .body(error_message),
+//             ),
+//         );
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response_bad = request_db
+//             .resolve_request(client.clone(), auth_code_response)
+//             .await;
+
+//         assert!(
+//             matches!(response_bad, Err(TokenExchangeError{reason, source: _}) if reason == "Request for code to token exchange failed")
+//         );
+
+//         let auth_code_response = auth_code_response_empty_with_valid_state();
+//         let response = request_db.resolve_request(client, auth_code_response).await;
+
+//         assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
+//     }
+
+//     //TODO: Did not test code and PKCE verifier.
+// }

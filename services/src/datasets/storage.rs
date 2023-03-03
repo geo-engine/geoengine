@@ -178,10 +178,7 @@ impl MetaDataDefinition {
 
 /// Handling of datasets provided by geo engine internally, staged and by external providers
 #[async_trait]
-pub trait DatasetDb<S: Session>:
-    DatasetStore<S> + DatasetProvider<S> + UploadDb<S> + LayerCollectionProvider + Send + Sync
-{
-}
+pub trait DatasetDb: DatasetStore + DatasetProvider + UploadDb + Send + Sync {}
 
 /// Defines the type of meta data a `DatasetDB` is able to store
 pub trait DatasetStorer: Send + Sync {
@@ -191,15 +188,14 @@ pub trait DatasetStorer: Send + Sync {
 /// Allow storage of meta data of a particular storage type, e.g. `HashMapStorable` meta data for
 /// `HashMapDatasetDB`
 #[async_trait]
-pub trait DatasetStore<S: Session>: DatasetStorer {
+pub trait DatasetStore: DatasetStorer {
     async fn add_dataset(
         &self,
-        session: &S,
         dataset: Validated<AddDataset>,
         meta_data: Self::StorageType,
     ) -> Result<DatasetId>;
 
-    async fn delete_dataset(&self, session: &S, dataset: DatasetId) -> Result<()>;
+    async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
 
     /// turn given `meta` data definition into the corresponding `StorageType` for the `DatasetStore`
     /// for use in the `add_dataset` method

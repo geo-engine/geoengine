@@ -131,7 +131,7 @@ impl DataProvider for MockExternalDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for MockExternalDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
@@ -185,11 +185,11 @@ impl LayerCollectionProvider for MockExternalDataProvider {
         Ok(out)
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(LayerCollectionId(self.root_collection.id.to_string()))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let layer = self
             .layer(id)
             .ok_or(error::Error::UnknownLayerId { id: id.clone() })?;

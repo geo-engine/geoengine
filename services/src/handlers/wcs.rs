@@ -201,7 +201,7 @@ async fn wcs_describe_coverage_handler<C: Context>(
 
     let wcs_url = wcs_url(identifiers)?;
 
-    let workflow = ctx.workflow_registry_ref().load(&identifiers).await?;
+    let workflow = ctx.db(session.clone()).load_workflow(&identifiers).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -353,7 +353,7 @@ async fn wcs_get_coverage_handler<C: Context>(
         );
     }
 
-    let workflow = ctx.workflow_registry_ref().load(&identifier).await?;
+    let workflow = ctx.db(session.clone()).load_workflow(&identifier).await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 

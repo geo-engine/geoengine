@@ -2,7 +2,7 @@ use crate::contexts::{AdminSession, Context, MockableSession, Session, SessionId
 use crate::error;
 use crate::handlers::get_token;
 use crate::pro::contexts::{PostgresContext, ProInMemoryContext};
-use crate::pro::datasets::{Role, RoleId};
+use crate::pro::permissions::{Role, RoleId};
 use crate::pro::users::UserId;
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::Identifier;

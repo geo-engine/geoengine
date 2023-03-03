@@ -3,9 +3,7 @@ mod hashmap_projectdb;
 mod postgres_projectdb;
 mod projectdb;
 
-pub use hashmap_projectdb::ProHashMapProjectDb;
-#[cfg(feature = "postgres")]
-pub use postgres_projectdb::PostgresProjectDb;
+pub use hashmap_projectdb::ProHashMapProjectDbBackend;
 pub use projectdb::{ProProjectDb, ProjectListOptions, ProjectPermission, UserProjectPermission};
 
 use crate::projects::ProjectVersionId;

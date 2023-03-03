@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::Duration;
 
 #[async_trait]
-pub trait UserDb: Send + Sync {
+pub trait Auth {
     /// Registers a user by providing `UserRegistration` parameters
     ///
     /// # Errors
@@ -46,14 +46,6 @@ pub trait UserDb: Send + Sync {
         duration: Duration,
     ) -> Result<UserSession>;
 
-    /// Removes a session from the `UserDB`
-    ///
-    /// # Errors
-    ///
-    /// This call fails if the session is invalid.
-    ///
-    async fn logout(&self, session: SessionId) -> Result<()>;
-
     /// Get session by id
     ///
     /// # Errors
@@ -61,6 +53,17 @@ pub trait UserDb: Send + Sync {
     /// This call fails if the session is invalid.
     ///
     async fn session(&self, session: SessionId) -> Result<UserSession>;
+}
+
+#[async_trait]
+pub trait UserDb: Send + Sync {
+    /// Removes the session from the `UserDB`
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the session is invalid.
+    ///
+    async fn logout(&self) -> Result<()>;
 
     /// Sets the session project
     ///
@@ -68,7 +71,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn set_session_project(&self, session: &UserSession, project: ProjectId) -> Result<()>;
+    async fn set_session_project(&self, project: ProjectId) -> Result<()>;
 
     /// Sets the session view
     ///
@@ -76,7 +79,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn set_session_view(&self, session: &UserSession, view: STRectangle) -> Result<()>;
+    async fn set_session_view(&self, view: STRectangle) -> Result<()>;
 
     /// Gets the current users total used quota. `session` is used to identify the user.
     ///
@@ -84,7 +87,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn quota_used(&self, session: &UserSession) -> Result<u64>;
+    async fn quota_used(&self) -> Result<u64>;
 
     /// Gets the current users available quota. `session` is used to identify the user.
     ///
@@ -92,7 +95,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn quota_available(&self, session: &UserSession) -> Result<i64>;
+    async fn quota_available(&self) -> Result<i64>;
 
     /// Increments a users quota by the given amount
     ///

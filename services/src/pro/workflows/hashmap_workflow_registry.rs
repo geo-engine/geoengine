@@ -1,24 +1,17 @@
-use std::collections::HashMap;
-
-use super::workflow::{Workflow, WorkflowId};
-use crate::contexts::{Db, InMemoryDb};
-use crate::error;
 use crate::error::Result;
+use crate::{
+    error,
+    pro::contexts::ProInMemoryDb,
+    workflows::{
+        registry::WorkflowRegistry,
+        workflow::{Workflow, WorkflowId},
+    },
+};
+
 use async_trait::async_trait;
 
 #[async_trait]
-pub trait WorkflowRegistry: Send + Sync {
-    async fn register_workflow(&self, workflow: Workflow) -> Result<WorkflowId>;
-    async fn load_workflow(&self, id: &WorkflowId) -> Result<Workflow>;
-}
-
-#[derive(Default)]
-pub struct HashMapRegistryBackend {
-    pub(crate) map: HashMap<WorkflowId, Workflow>,
-}
-
-#[async_trait]
-impl WorkflowRegistry for InMemoryDb {
+impl WorkflowRegistry for ProInMemoryDb {
     async fn register_workflow(&self, workflow: Workflow) -> Result<WorkflowId> {
         let id = WorkflowId::from_hash(&workflow);
         self.backend

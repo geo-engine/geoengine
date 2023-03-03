@@ -5,6 +5,7 @@ pub mod contexts;
 pub mod datasets;
 pub mod handlers;
 pub mod layers;
+pub mod permissions;
 pub mod projects;
 pub mod quota;
 pub mod server;

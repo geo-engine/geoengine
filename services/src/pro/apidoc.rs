@@ -56,7 +56,8 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
-use super::datasets::RoleId;
+use super::handlers::permissions::{PermissionRequest, ResourceType};
+use super::permissions::{Permission, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 
 #[derive(OpenApi)]
@@ -112,14 +113,12 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::projects::list_projects_handler,
         pro::handlers::projects::project_versions_handler,
-        pro::handlers::projects::add_permission_handler,
-        pro::handlers::projects::remove_permission_handler,
         handlers::projects::create_project_handler,
         pro::handlers::projects::load_project_latest_handler,
         handlers::projects::update_project_handler,
         handlers::projects::delete_project_handler,
-        pro::handlers::projects::list_permissions_handler,
-        pro::handlers::projects::load_project_version_handler
+        pro::handlers::projects::load_project_version_handler,
+        pro::handlers::permissions::add_permissions_handler
     ),
     components(
         schemas(
@@ -321,7 +320,11 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             PlotUpdate,
             Plot,
             ProjectLayer,
-            LayerVisibility
+            LayerVisibility,
+
+            PermissionRequest,
+            ResourceType,
+            Permission
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

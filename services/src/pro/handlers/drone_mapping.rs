@@ -258,11 +258,11 @@ async fn dataset_from_drone_mapping_handler<C: ProContext>(
 
     let dataset_definition = dataset_definition_from_geotiff(&tiff_path).await?;
 
-    let db = ctx.dataset_db_ref();
+    let db = ctx.db(session);
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
 
     let dataset = db
-        .add_dataset(&session, dataset_definition.properties.validated()?, meta)
+        .add_dataset(dataset_definition.properties.validated()?, meta)
         .await?;
 
     Ok(web::Json(CreateDatasetResponse {

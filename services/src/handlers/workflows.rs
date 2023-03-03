@@ -121,7 +121,7 @@ async fn register_workflow_handler<C: Context>(
     let workflow = workflow.into_inner();
 
     // ensure the workflow is valid by initializing it
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context(session.clone())?;
     match workflow.clone().operator {
         TypedOperator::Vector(o) => {
             o.initialize(&execution_context)
@@ -140,7 +140,7 @@ async fn register_workflow_handler<C: Context>(
         }
     }
 
-    let id = ctx.workflow_registry_ref().register(workflow).await?;
+    let id = ctx.db(session).register_workflow(workflow).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -163,10 +163,10 @@ async fn register_workflow_handler<C: Context>(
 )]
 async fn load_workflow_handler<C: Context>(
     id: web::Path<WorkflowId>,
-    _session: C::Session,
+    session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let wf = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let wf = ctx.db(session).load_workflow(&id.into_inner()).await?;
     Ok(web::Json(wf))
 }
 
@@ -192,7 +192,10 @@ async fn get_workflow_metadata_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let workflow = ctx
+        .db(session.clone())
+        .load_workflow(&id.into_inner())
+        .await?;
 
     let execution_context = ctx.execution_context(session)?;
 
@@ -243,7 +246,10 @@ async fn get_workflow_provenance_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow: Workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let workflow: Workflow = ctx
+        .db(session.clone())
+        .load_workflow(&id.into_inner())
+        .await?;
 
     let provenance = workflow_provenance(&workflow, ctx.get_ref(), session).await?;
 
@@ -268,12 +274,11 @@ async fn workflow_provenance<C: Context>(
         .map(Into::into)
         .collect();
 
-    let db = ctx.dataset_db_ref();
-    let providers = ctx.layer_provider_db_ref();
+    let db = ctx.db(session);
 
     let provenance: Vec<_> = datasets
         .iter()
-        .map(|id| resolve_provenance::<C>(&session, db, providers, id))
+        .map(|id| resolve_provenance::<C>(&db, id))
         .collect();
     let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
 
@@ -322,7 +327,7 @@ async fn get_workflow_all_metadata_zip_handler<C: Context>(
 ) -> Result<impl Responder> {
     let id = id.into_inner();
 
-    let workflow = ctx.workflow_registry_ref().load(&id).await?;
+    let workflow = ctx.db(session.clone()).load_workflow(&id).await?;
 
     let (metadata, provenance) = futures::try_join!(
         workflow_metadata::<C>(workflow.clone(), ctx.execution_context(session.clone())?),
@@ -393,16 +398,13 @@ async fn get_workflow_all_metadata_zip_handler<C: Context>(
 }
 
 async fn resolve_provenance<C: Context>(
-    session: &C::Session,
-    datasets: &C::DatasetDB,
-    providers: &C::LayerProviderDB,
+    db: &C::GeoEngineDB,
     id: &DataId,
 ) -> Result<ProvenanceOutput> {
     match id {
-        DataId::Internal { dataset_id } => datasets.provenance(session, dataset_id).await,
+        DataId::Internal { dataset_id } => db.load_provenance(dataset_id).await,
         DataId::External(e) => {
-            providers
-                .layer_provider(e.provider_id)
+            db.load_layer_provider(e.provider_id)
                 .await?
                 .provenance(id)
                 .await
@@ -435,7 +437,10 @@ async fn dataset_from_workflow_handler<C: Context>(
     ctx: web::Data<C>,
     info: web::Json<RasterDatasetFromWorkflow>,
 ) -> Result<impl Responder> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let workflow = ctx
+        .db(session.clone())
+        .load_workflow(&id.into_inner())
+        .await?;
     let compression_num_threads =
         get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
 
@@ -504,7 +509,10 @@ async fn raster_stream_websocket<C: Context>(
     request: HttpRequest,
     stream: web::Payload,
 ) -> Result<HttpResponse> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let workflow = ctx
+        .db(session.clone())
+        .load_workflow(&id.into_inner())
+        .await?;
 
     let operator = workflow
         .operator
@@ -784,7 +792,8 @@ mod tests {
     async fn vector_metadata_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -806,8 +815,8 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
+            .db(session)
+            .register_workflow(workflow.clone())
             .await
             .unwrap();
 
@@ -856,7 +865,8 @@ mod tests {
     async fn raster_metadata() {
         let ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockRasterSource::<u8> {
@@ -880,8 +890,8 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
+            .db(session)
+            .register_workflow(workflow.clone())
             .await
             .unwrap();
 
@@ -940,9 +950,12 @@ mod tests {
             .into(),
         };
 
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
         let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
+            .db(session)
+            .register_workflow(workflow.clone())
             .await
             .unwrap();
 
@@ -962,7 +975,8 @@ mod tests {
     async fn plot_metadata() {
         let ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -978,8 +992,8 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
+            .db(session)
+            .register_workflow(workflow.clone())
             .await
             .unwrap();
 
@@ -1007,8 +1021,8 @@ mod tests {
     async fn provenance() {
         let ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
-
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
         let dataset = add_ndvi_to_datasets(&ctx).await;
 
         let workflow = Workflow {
@@ -1023,8 +1037,8 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
+            .db(session)
+            .register_workflow(workflow.clone())
             .await
             .unwrap();
 
@@ -1120,7 +1134,8 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let dataset = add_ndvi_to_datasets(&ctx).await;
 
@@ -1135,11 +1150,7 @@ mod tests {
             ),
         };
 
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db(session).register_workflow(workflow).await.unwrap();
 
         // create dataset from workflow
         let req = test::TestRequest::get()
@@ -1235,7 +1246,8 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let dataset = add_ndvi_to_datasets(&ctx).await;
 
@@ -1250,11 +1262,7 @@ mod tests {
             ),
         };
 
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db(session).register_workflow(workflow).await.unwrap();
 
         // create dataset from workflow
         let req = test::TestRequest::post()

@@ -181,6 +181,9 @@ pub enum Error {
         permission: String,
     },
 
+    // TODO: more information, more fine granular
+    PermissionDenied,
+
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
     InvalidStringLength {
         parameter: String,

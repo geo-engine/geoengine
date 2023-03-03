@@ -174,6 +174,9 @@ pub enum Error {
     InvalidDataId,
     InvalidMetaDataType,
     UnknownDataId,
+    DataIdTypeMissMatch,
+
+    UnknownDatasetId,
 
     // TODO: this error should not be propagated to user
     #[snafu(display("Could not open gdal dataset for file path {:?}", file_path))]
@@ -357,6 +360,9 @@ pub enum Error {
     QueryingProcessorFailed {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
+
+    // TODO: wrap this somehow, because it's pro
+    PermissionDenied,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

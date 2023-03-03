@@ -259,10 +259,10 @@ async fn create_dataset<C: Context>(
         meta_data,
     };
 
-    let db = ctx.dataset_db_ref();
+    let db = ctx.db(session);
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
     let dataset = db
-        .add_dataset(&session, dataset_definition.properties.validated()?, meta)
+        .add_dataset(dataset_definition.properties.validated()?, meta)
         .await?;
 
     Ok(dataset)

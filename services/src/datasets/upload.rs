@@ -103,8 +103,8 @@ pub struct UploadListing {
 }
 
 #[async_trait]
-pub trait UploadDb<S: Session> {
-    async fn get_upload(&self, session: &S, upload: UploadId) -> Result<Upload>;
+pub trait UploadDb {
+    async fn load_upload(&self, upload: UploadId) -> Result<Upload>;
 
-    async fn create_upload(&self, session: &S, upload: Upload) -> Result<()>;
+    async fn create_upload(&self, upload: Upload) -> Result<()>;
 }

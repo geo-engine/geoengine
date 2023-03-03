@@ -80,14 +80,11 @@ async fn upload_handler<C: Context>(
         });
     }
 
-    ctx.dataset_db_ref()
-        .create_upload(
-            &session,
-            Upload {
-                id: upload_id,
-                files,
-            },
-        )
+    ctx.db(session)
+        .create_upload(Upload {
+            id: upload_id,
+            files,
+        })
         .await?;
 
     Ok(web::Json(IdResponse::from(upload_id)))

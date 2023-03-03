@@ -552,13 +552,13 @@ impl DataProvider for NFDIDataProvider {
 
 #[async_trait::async_trait]
 impl LayerCollectionProvider for NFDIDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
         ensure!(
-            *collection == self.root_collection_id().await?,
+            *collection == self.get_root_layer_collection_id().await?,
             error::UnknownLayerCollectionId {
                 id: collection.clone()
             }
@@ -602,11 +602,11 @@ impl LayerCollectionProvider for NFDIDataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(LayerCollectionId("root".to_string()))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let mut project_stub = self.project_stub.clone();
 
         let resp = project_stub
@@ -1202,7 +1202,7 @@ mod tests {
         let addr = format!("http://{}", server.address());
         let provider = new_provider_with_url(addr).await;
 
-        let root = provider.root_collection_id().await.unwrap();
+        let root = provider.get_root_layer_collection_id().await.unwrap();
 
         let opts = LayerCollectionListOptions {
             limit: 100,
@@ -1211,7 +1211,7 @@ mod tests {
         .validated()
         .unwrap();
 
-        let res = provider.collection(&root, opts).await;
+        let res = provider.load_layer_collection(&root, opts).await;
         assert!(res.is_ok());
         let res = res.unwrap();
         assert_eq!(1, res.items.len());
