@@ -520,7 +520,7 @@ async fn layer_handler<C: Context>(
 async fn layer_to_workflow_id_handler<C: Context>(
     ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerId)>,
-) -> Result<web::Json<WorkflowId>> {
+) -> Result<web::Json<IdResponse<WorkflowId>>> {
     let (provider, item) = path.into_inner();
 
     let layer = match provider {
@@ -539,7 +539,7 @@ async fn layer_to_workflow_id_handler<C: Context>(
 
     let workflow_id = ctx.workflow_registry().register(layer.workflow).await?;
 
-    Ok(web::Json(workflow_id))
+    Ok(web::Json(IdResponse::from(workflow_id)))
 }
 
 /// Persist a raster layer from a provider as a dataset.
@@ -550,7 +550,7 @@ async fn layer_to_workflow_id_handler<C: Context>(
     responses(
         (status = 200, description = "Id of created task", body = TaskResponse,
             example = json!({
-                "task_id": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"
+                "taskId": "7f8a4cfe-76ab-4972-b347-b197e5ef0f3c"
             })
         )
     ),

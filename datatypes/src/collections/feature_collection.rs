@@ -964,7 +964,7 @@ where
 
         // TODO: assumes multi features, could be moved to `Geometry`
         let multi_geometry_array_ref = features_array.values();
-        let multi_geometry_array: &ListArray = downcast_array(&multi_geometry_array_ref);
+        let multi_geometry_array: &ListArray = downcast_array(multi_geometry_array_ref);
 
         multi_geometry_array.len() == features_array.len()
     }
@@ -1054,7 +1054,7 @@ where
         let number_of_time_intervals = self.len();
 
         let timestamps_ref = features.values();
-        let timestamps: &arrow::array::Int64Array = downcast_array(&timestamps_ref);
+        let timestamps: &arrow::array::Int64Array = downcast_array(timestamps_ref);
 
         unsafe {
             slice::from_raw_parts(

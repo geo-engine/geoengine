@@ -11,7 +11,7 @@ use crate::{
 use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
-use gdal::{Dataset, DriverManager};
+use gdal::{Dataset, DriverManager, Metadata};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D,
     SpatialPartitioned, SpatialQuery, TimeInterval,
@@ -19,6 +19,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridBounds, GridIdx, GridIdx2D,
     GridSize, MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D, TilingSpecification,
+    TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use log::debug;
@@ -27,7 +28,210 @@ use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
 
-use super::abortable_query_execution;
+use super::{abortable_query_execution, spawn_blocking};
+
+/// consume a raster stream and write it to a geotiff file, one band for each time step
+/// Note: the entire process is done in memory, and will take 2x the size of the raster
+///       time series
+#[allow(clippy::too_many_arguments)]
+pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'static>(
+    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    query_rect: RasterQueryRectangle,
+    mut query_ctx: C,
+    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+    gdal_tiff_options: GdalGeoTiffOptions,
+    tile_limit: Option<usize>,
+    conn_closed: BoxFuture<'_, ()>,
+    tiling_specification: TilingSpecification,
+) -> Result<Vec<u8>>
+where
+    T: Pixel + GdalType,
+{
+    let query_abort_trigger = query_ctx.abort_trigger()?;
+
+    let tiles = abortable_query_execution(
+        consume_stream_into_vec(processor, query_rect, query_ctx, tile_limit),
+        conn_closed,
+        query_abort_trigger,
+    )
+    .await?;
+
+    let (initial_tile_time, file_path, dataset, writer) = create_multiband_dataset_and_writer(
+        &tiles,
+        query_rect,
+        tiling_specification,
+        gdal_tiff_options,
+        gdal_tiff_metadata,
+    )?;
+
+    spawn_blocking(move || {
+        let mut band_idx = 1;
+        let mut time = initial_tile_time;
+
+        for tile in tiles {
+            if tile.time != time {
+                // new time step => next band
+                time = tile.time;
+                band_idx += 1;
+
+                let mut band = dataset.rasterband(band_idx)?;
+
+                band.set_metadata_item(
+                    "start",
+                    &time.start().as_datetime_string_with_millis(),
+                    "time",
+                )?;
+                band.set_metadata_item(
+                    "end",
+                    &time.end().as_datetime_string_with_millis(),
+                    "time",
+                )?;
+            }
+
+            writer.write_tile_into_band(tile, dataset.rasterband(band_idx)?)?;
+        }
+
+        Result::<(), Error>::Ok(())
+    })
+    .await??;
+
+    Ok(gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)?)
+}
+
+fn create_multiband_dataset_and_writer<T>(
+    tiles: &Vec<RasterTile2D<T>>,
+    query_rect: RasterQueryRectangle,
+    tiling_specification: TilingSpecification,
+    gdal_tiff_options: GdalGeoTiffOptions,
+    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+) -> Result<(TimeInterval, PathBuf, Dataset, GdalDatasetWriter<T>), Error>
+where
+    T: Pixel + GdalType,
+{
+    let (initial_tile_info, initial_tile_time) = {
+        let tile = &tiles
+            .first()
+            .expect("tiles should not be empty because query rectangle in not empty");
+        (tile.tile_information(), tile.time)
+    };
+
+    let strat = TilingStrategy {
+        tile_size_in_pixels: initial_tile_info.tile_size_in_pixels,
+        geo_transform: initial_tile_info.global_geo_transform,
+    };
+    let num_tiles_per_timestep = strat
+        .tile_grid_box(query_rect.spatial_query().spatial_partition())
+        .number_of_elements();
+    let num_timesteps = tiles.len() / num_tiles_per_timestep;
+
+    let spatial_query = query_rect.spatial_query();
+
+    let x_pixel_size = spatial_query.spatial_resolution().x;
+    let y_pixel_size = spatial_query.spatial_resolution().y;
+    let width = spatial_query.grid_bounds.axis_size_x();
+    let height = spatial_query.grid_bounds.axis_size_y();
+    let output_geo_transform = GeoTransform::new(
+        spatial_query.spatial_partition().upper_left(),
+        x_pixel_size,
+        -y_pixel_size,
+    );
+
+    let global_geo_transform = tiling_specification
+        .strategy(x_pixel_size, -y_pixel_size)
+        .geo_transform;
+    let window_start = global_geo_transform
+        .coordinate_to_grid_idx_2d(spatial_query.spatial_partition().upper_left());
+    let window_end = window_start + GridIdx2D::from([height as isize, width as isize]);
+
+    let uncompressed_byte_size = width * height * std::mem::size_of::<T>();
+
+    let use_big_tiff =
+        gdal_tiff_options.force_big_tiff || uncompressed_byte_size >= BIG_TIFF_BYTE_THRESHOLD;
+
+    let gdal_compression_num_threads = gdal_tiff_options.compression_num_threads.to_string();
+
+    let options = create_gdal_tiff_options(
+        &gdal_compression_num_threads,
+        gdal_tiff_options.as_cog,
+        use_big_tiff,
+    );
+
+    let driver = DriverManager::get_driver_by_name("GTiff")?;
+
+    let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+
+    let gdal_config_options = if gdal_tiff_metadata.no_data_value.is_none() {
+        // If we want to write a mask into the geotiff we need to do that internaly because of vismem.
+        Some(vec![(
+            "GDAL_TIFF_INTERNAL_MASK".to_string(),
+            "YES".to_string(),
+        )])
+    } else {
+        None
+    };
+
+    gdal_config_options
+        .as_deref()
+        .map(TemporaryGdalThreadLocalConfigOptions::new);
+
+    let mut dataset = driver.create_with_band_type_with_options::<T, _>(
+        &file_path,
+        width as isize,
+        height as isize,
+        num_timesteps as isize,
+        &options,
+    )?;
+    dataset.set_spatial_ref(&gdal_tiff_metadata.spatial_reference.try_into()?)?;
+    dataset.set_geo_transform(&output_geo_transform.into())?;
+
+    for band_idx in 0..dataset.raster_count() {
+        let mut band = dataset.rasterband(band_idx + 1)?;
+        if let Some(no_data) = gdal_tiff_metadata.no_data_value {
+            band.set_no_data_value(Some(no_data))?;
+        } else {
+            band.create_mask_band(false)?;
+        }
+    }
+
+    let writer = GdalDatasetWriter::<T> {
+        gdal_tiff_options,
+        gdal_tiff_metadata,
+        _output_bounds: query_rect.spatial_query().spatial_partition(),
+        output_geo_transform,
+        use_big_tiff,
+        _type: Default::default(),
+        window_start,
+        window_end,
+    };
+
+    Ok((initial_tile_time, file_path, dataset, writer))
+}
+
+async fn consume_stream_into_vec<T, C: QueryContext + 'static>(
+    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    query_rect: geoengine_datatypes::primitives::RasterQueryRectangle,
+    query_ctx: C,
+    tile_limit: Option<usize>,
+) -> Result<Vec<RasterTile2D<T>>>
+where
+    T: Pixel + GdalType,
+{
+    let mut tile_stream = processor
+        .raster_query(query_rect, &query_ctx)
+        .await?
+        .enumerate();
+    let mut tiles = Vec::new();
+    while let Some((tile_index, tile)) = tile_stream.next().await {
+        if tile_limit.map_or_else(|| false, |limit| tile_index >= limit) {
+            return Err(Error::TileLimitExceeded {
+                limit: tile_limit.expect("limit exist because it is exceeded"),
+            });
+        }
+
+        tiles.push(tile?);
+    }
+    Ok(tiles)
+}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
@@ -831,6 +1035,7 @@ mod tests {
     };
 
     use crate::mock::MockRasterSourceProcessor;
+    use crate::util::gdal::gdal_open_dataset;
     use crate::{
         engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
     };
@@ -1482,5 +1687,62 @@ mod tests {
             )
             .await;
         }
+    }
+
+    #[tokio::test]
+    async fn multi_band_geotriff() {
+        let ctx = MockQueryContext::test_default();
+
+        let tiling_origin_coordinate = Coordinate2D::default();
+        let tiling_specification =
+            TilingSpecification::new(tiling_origin_coordinate, [512, 512].into());
+
+        let metadata = create_ndvi_meta_data();
+
+        let gdal_source = GdalSourceProcessor::<u8> {
+            tiling_specification,
+            meta_data: Box::new(metadata),
+            _phantom_data: PhantomData,
+        };
+
+        let query_bbox = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+
+        let mut bytes = raster_stream_to_multiband_geotiff_bytes(
+            gdal_source.boxed(),
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_bbox,
+                // 1.1.2014 - 1.4.2014
+                SpatialResolution::new_unchecked(0.1, 0.1),
+                tiling_origin_coordinate,
+                TimeInterval::new(1_388_534_400_000, 1_396_306_800_000).unwrap(),
+            ),
+            ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: None,
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: false,
+                compression_num_threads: GdalCompressionNumThreads::AllCpus,
+                force_big_tiff: false,
+            },
+            None,
+            Box::pin(futures::future::pending()),
+            tiling_specification,
+        )
+        .await
+        .unwrap();
+
+        let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+        let _mem_file =
+            gdal::vsi::create_mem_file_from_ref(&file_path, bytes.as_mut_slice()).unwrap();
+        let ds = gdal_open_dataset(&file_path).unwrap();
+
+        // three bands for Jan, Feb, Mar
+        assert_eq!(ds.raster_count(), 3);
+
+        // TODO: check that the time is encoded in the geotiff band metadata
+
+        drop(ds);
     }
 }

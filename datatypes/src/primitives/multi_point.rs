@@ -5,6 +5,7 @@ use arrow::error::ArrowError;
 use float_cmp::{ApproxEq, F64Margin};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use wkt::{ToWkt, Wkt};
 
 use crate::collections::VectorDataType;
 use crate::error::Error;
@@ -243,6 +244,21 @@ impl<'g> MultiPointAccess for MultiPointRef<'g> {
     }
 }
 
+impl<'r> ToWkt<f64> for MultiPointRef<'r> {
+    fn to_wkt(&self) -> Wkt<f64> {
+        let points = self.points();
+        let mut multi_point = wkt::types::MultiPoint(Vec::with_capacity(points.len()));
+
+        for point in points {
+            multi_point.0.push(wkt::types::Point(Some(point.into())));
+        }
+
+        Wkt {
+            item: wkt::Geometry::MultiPoint(multi_point),
+        }
+    }
+}
+
 impl<'g> From<MultiPointRef<'g>> for geojson::Geometry {
     fn from(geometry: MultiPointRef<'g>) -> geojson::Geometry {
         geojson::Geometry::new(match geometry.point_coordinates.len() {
@@ -273,6 +289,12 @@ impl<'g> From<MultiPointRef<'g>> for MultiPoint {
 impl<'g> From<&MultiPointRef<'g>> for MultiPoint {
     fn from(multi_point_ref: &MultiPointRef<'g>) -> Self {
         MultiPoint::new_unchecked(multi_point_ref.point_coordinates.to_owned())
+    }
+}
+
+impl<'g> From<&'g MultiPoint> for MultiPointRef<'g> {
+    fn from(multi_point: &'g MultiPoint) -> Self {
+        MultiPointRef::new_unchecked(&multi_point.coordinates)
     }
 }
 
@@ -391,5 +413,22 @@ mod tests {
         .unwrap();
 
         assert!(!approx_eq!(&MultiPoint, &a, &b, F64Margin::default()));
+    }
+
+    #[test]
+    fn test_to_wkt() {
+        let a = MultiPoint::new(vec![
+            (0.5, 0.6).into(),
+            (0.7, 0.8).into(),
+            (0.9, 0.99).into(),
+        ])
+        .unwrap();
+
+        let a_ref = MultiPointRef::from(&a);
+
+        assert_eq!(
+            a_ref.wkt_string(),
+            "MULTIPOINT((0.5 0.6),(0.7 0.8),(0.9 0.99))"
+        );
     }
 }

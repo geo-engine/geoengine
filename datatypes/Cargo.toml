@@ -14,7 +14,7 @@ postgres = ["postgres-types", "postgres-protocol"]
 pro = ["postgres"]
 
 [dependencies]
-arrow = { version = "29.0", features = ["simd"] }
+arrow = { version = "33.0", features = ["simd", "ipc_compression"] }
 async-trait = "0.1"
 chrono = "0.4"
 float-cmp = "0.9"
@@ -35,6 +35,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.7"
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
+wkt = "0.10"
 
 [dev-dependencies]
 criterion = "0.4"

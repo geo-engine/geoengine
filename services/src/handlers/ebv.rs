@@ -696,7 +696,7 @@ mod tests {
         assert_eq!(status["status"], json!("completed"));
         assert_eq!(status["info"], json!(null));
         assert_eq!(status["timeTotal"], json!("00:00:00"));
-        assert!(status["timeStarted"].is_number());
+        assert!(status["timeStarted"].is_string());
 
         assert!(is_empty(overview_folder.path()));
     }
@@ -749,7 +749,7 @@ mod tests {
         assert_eq!(status["status"], json!("completed"));
         assert_eq!(status["info"], json!(null));
         assert_eq!(status["timeTotal"], json!("00:00:00"));
-        assert!(status["timeStarted"].is_number());
+        assert!(status["timeStarted"].is_string());
     }
 
     #[tokio::test]

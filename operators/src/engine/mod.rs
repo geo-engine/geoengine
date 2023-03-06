@@ -19,9 +19,9 @@ pub use query::{
     QueryContextExtensions,
 };
 pub use query_processor::{
-    BoxRasterQueryProcessor, PlotQueryProcessor, QueryProcessor, RasterQueryProcessor,
-    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorQueryProcessor,
+    BoxRasterQueryProcessor, PlotQueryProcessor, QueryProcessor, QueryProcessorExt,
+    RasterQueryProcessor, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 pub use result_descriptor::{
     PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,

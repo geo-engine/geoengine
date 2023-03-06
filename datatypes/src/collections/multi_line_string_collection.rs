@@ -27,15 +27,15 @@ impl GeometryCollection for MultiLineStringCollection {
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let line_strings_ref = geometries.values();
-        let line_strings: &ListArray = downcast_array(&line_strings_ref);
+        let line_strings: &ListArray = downcast_array(line_strings_ref);
 
         let coordinates_ref = line_strings.values();
-        let coordinates: &FixedSizeListArray = downcast_array(&coordinates_ref);
+        let coordinates: &FixedSizeListArray = downcast_array(coordinates_ref);
 
         let number_of_coordinates = coordinates.data().len();
 
         let floats_ref = coordinates.values();
-        let floats: &Float64Array = downcast_array(&floats_ref);
+        let floats: &Float64Array = downcast_array(floats_ref);
 
         unsafe {
             slice::from_raw_parts(
@@ -70,7 +70,7 @@ impl MultiLineStringCollection {
         let geometries: &ListArray = downcast_array(geometries_ref);
 
         let line_strings_ref = geometries.values();
-        let line_strings: &ListArray = downcast_array(&line_strings_ref);
+        let line_strings: &ListArray = downcast_array(line_strings_ref);
 
         let data = line_strings.data();
         let buffer = &data.buffers()[0];

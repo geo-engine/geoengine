@@ -327,6 +327,28 @@ impl ApproxEq for Coordinate2D {
     }
 }
 
+impl From<Coordinate2D> for wkt::types::Coord<f64> {
+    fn from(c: Coordinate2D) -> Self {
+        wkt::types::Coord {
+            x: c.x,
+            y: c.y,
+            z: None,
+            m: None,
+        }
+    }
+}
+
+impl From<&Coordinate2D> for wkt::types::Coord<f64> {
+    fn from(c: &Coordinate2D) -> Self {
+        wkt::types::Coord {
+            x: c.x,
+            y: c.y,
+            z: None,
+            m: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
