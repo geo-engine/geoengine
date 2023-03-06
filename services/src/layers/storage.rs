@@ -30,7 +30,7 @@ pub const INTERNAL_LAYER_DB_ROOT_COLLECTION_ID: Uuid =
 
 #[async_trait]
 /// Storage for layers and layer collections
-pub trait LayerDb: /*LayerCollectionProvider + */ Send + Sync {
+pub trait LayerDb: Send + Sync {
     /// add new `layer` to the given `collection`
     async fn add_layer(
         &self,

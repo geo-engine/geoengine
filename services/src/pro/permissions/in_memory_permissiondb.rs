@@ -183,7 +183,7 @@ impl PermissionDb for ProInMemoryDb {
 
         let mut backend = self.backend.permission_db.write().await;
 
-        backend.permissions.retain(|p| p.r != resource);
+        backend.permissions.retain(|p| p.resource != resource);
 
         Ok(())
     }

@@ -632,2360 +632,2262 @@ where
 {
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use std::collections::HashMap;
-//     use std::str::FromStr;
-
-//     use super::*;
-//     use crate::api::model::datatypes::{DataProviderId, DatasetId};
-//     use crate::api::model::services::AddDataset;
-//     use crate::contexts::AdminSession;
-//     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
-//     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
-//     use crate::datasets::listing::{DatasetProvider, Provenance};
-//     use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
-//     use crate::datasets::upload::{FileId, UploadId};
-//     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
-//     use crate::layers::layer::{
-//         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
-//         LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
-//     };
-//     use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
-//     use crate::layers::storage::{
-//         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
-//         INTERNAL_PROVIDER_ID,
-//     };
-//     use crate::pro::permissions::Permission;
-//     use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
-//     use crate::pro::users::{ExternalUserClaims, UserCredentials, UserDb, UserRegistration};
-//     use crate::projects::{
-//         CreateProject, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
-//         ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
-//         UpdateProject,
-//     };
-//     use crate::util::config::{get_config_element, Postgres};
-//     use crate::util::user_input::UserInput;
-//     use crate::workflows::registry::WorkflowRegistry;
-//     use crate::workflows::workflow::Workflow;
-//     use bb8_postgres::bb8::ManageConnection;
-//     use bb8_postgres::tokio_postgres::{self, NoTls};
-//     use futures::Future;
-//     use geoengine_datatypes::collections::VectorDataType;
-//     use geoengine_datatypes::primitives::{
-//         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
-//         SpatialResolution, TimeInterval, VectorQueryRectangle,
-//     };
-//     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-//     use geoengine_datatypes::util::test::TestDefault;
-//     use geoengine_datatypes::util::Identifier;
-//     use geoengine_operators::engine::{
-//         MetaData, MultipleRasterOrSingleVectorSource, PlotOperator, StaticMetaData, TypedOperator,
-//         TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
-//     };
-//     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
-//     use geoengine_operators::plot::{Statistics, StatisticsParams};
-//     use geoengine_operators::source::{
-//         CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset,
-//         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
-//     };
-//     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
-//     use openidconnect::SubjectIdentifier;
-//     use rand::RngCore;
-//     use tokio::runtime::Handle;
-
-//     /// Setup database schema and return its name.
-//     async fn setup_db() -> (tokio_postgres::Config, String) {
-//         let mut db_config = get_config_element::<Postgres>().unwrap();
-//         db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
-
-//         let mut pg_config = tokio_postgres::Config::new();
-//         pg_config
-//             .user(&db_config.user)
-//             .password(&db_config.password)
-//             .host(&db_config.host)
-//             .dbname(&db_config.database);
-
-//         // generate schema with prior connection
-//         PostgresConnectionManager::new(pg_config.clone(), NoTls)
-//             .connect()
-//             .await
-//             .unwrap()
-//             .batch_execute(&format!("CREATE SCHEMA {};", &db_config.schema))
-//             .await
-//             .unwrap();
-
-//         // fix schema by providing `search_path` option
-//         pg_config.options(&format!("-c search_path={}", db_config.schema));
-
-//         (pg_config, db_config.schema)
-//     }
-
-//     /// Tear down database schema.
-//     async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
-//         // generate schema with prior connection
-//         PostgresConnectionManager::new(pg_config, NoTls)
-//             .connect()
-//             .await
-//             .unwrap()
-//             .batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
-//             .await
-//             .unwrap();
-//     }
-
-//     async fn with_temp_context<F, Fut>(f: F)
-//     where
-//         F: FnOnce(PostgresContext<NoTls>, tokio_postgres::Config) -> Fut
-//             + std::panic::UnwindSafe
-//             + Send
-//             + 'static,
-//         Fut: Future<Output = ()> + Send,
-//     {
-//         let (pg_config, schema) = setup_db().await;
-
-//         // catch all panics and clean up first…
-//         let executed_fn = {
-//             let pg_config = pg_config.clone();
-//             std::panic::catch_unwind(move || {
-//                 tokio::task::block_in_place(move || {
-//                     Handle::current().block_on(async move {
-//                         let ctx = PostgresContext::new_with_context_spec(
-//                             pg_config.clone(),
-//                             tokio_postgres::NoTls,
-//                             TestDefault::test_default(),
-//                             TestDefault::test_default(),
-//                         )
-//                         .await
-//                         .unwrap();
-//                         f(ctx, pg_config.clone()).await;
-//                     });
-//                 });
-//             })
-//         };
-
-//         tear_down_db(pg_config, &schema).await;
-
-//         // then throw errors afterwards
-//         if let Err(err) = executed_fn {
-//             std::panic::resume_unwind(err);
-//         }
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn test() {
-//         with_temp_context(|ctx, _| async move {
-//             anonymous(&ctx).await;
-
-//             let _user_id = user_reg_login(&ctx).await;
-
-//             let session = ctx
-//                 .user_db_ref()
-//                 .login(UserCredentials {
-//                     email: "foo@example.com".into(),
-//                     password: "secret123".into(),
-//                 })
-//                 .await
-//                 .unwrap();
-
-//             create_projects(&ctx, &session).await;
-
-//             let projects = list_projects(&ctx, &session).await;
-
-//             set_session(&ctx, &projects).await;
-
-//             let project_id = projects[0].id;
-
-//             update_projects(&ctx, &session, project_id).await;
-
-//             add_permission(&ctx, &session, project_id).await;
-
-//             delete_project(&ctx, &session, project_id).await;
-//         })
-//         .await;
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn test_external() {
-//         with_temp_context(|ctx, _| async move {
-//             anonymous(&ctx).await;
-
-//             let session = external_user_login_twice(&ctx).await;
-
-//             create_projects(&ctx, &session).await;
-
-//             let projects = list_projects(&ctx, &session).await;
-
-//             set_session_external(&ctx, &projects).await;
-
-//             let project_id = projects[0].id;
-
-//             update_projects(&ctx, &session, project_id).await;
-
-//             add_permission(&ctx, &session, project_id).await;
-
-//             delete_project(&ctx, &session, project_id).await;
-//         })
-//         .await;
-//     }
-
-//     async fn set_session(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
-//         let credentials = UserCredentials {
-//             email: "foo@example.com".into(),
-//             password: "secret123".into(),
-//         };
-
-//         let user_db = ctx.user_db_ref();
-
-//         let session = user_db.login(credentials).await.unwrap();
-
-//         set_session_in_database(user_db, projects, session).await;
-//     }
-
-//     async fn set_session_external(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
-//         let external_user_claims = ExternalUserClaims {
-//             external_id: SubjectIdentifier::new("Foo bar Id".into()),
-//             email: "foo@bar.de".into(),
-//             real_name: "Foo Bar".into(),
-//         };
-
-//         let user_db = ctx.user_db_ref();
-
-//         let session = user_db
-//             .login_external(external_user_claims, Duration::minutes(10))
-//             .await
-//             .unwrap();
-
-//         set_session_in_database(user_db, projects, session).await;
-//     }
-
-//     async fn set_session_in_database(
-//         user_db: &PostgresUserDb<NoTls>,
-//         projects: &[ProjectListing],
-//         session: UserSession,
-//     ) {
-//         user_db
-//             .set_session_project(&session, projects[0].id)
-//             .await
-//             .unwrap();
-
-//         assert_eq!(
-//             user_db.session(session.id).await.unwrap().project,
-//             Some(projects[0].id)
-//         );
-
-//         let rect = STRectangle::new_unchecked(SpatialReference::epsg_4326(), 0., 1., 2., 3., 1, 2);
-//         user_db
-//             .set_session_view(&session, rect.clone())
-//             .await
-//             .unwrap();
-//         assert_eq!(user_db.session(session.id).await.unwrap().view, Some(rect));
-//     }
-
-//     async fn delete_project(
-//         ctx: &PostgresContext<NoTls>,
-//         session: &UserSession,
-//         project_id: ProjectId,
-//     ) {
-//         ctx.project_db_ref()
-//             .delete(session, project_id)
-//             .await
-//             .unwrap();
-
-//         assert!(ctx
-//             .project_db_ref()
-//             .load(session, project_id)
-//             .await
-//             .is_err());
-//     }
-
-//     async fn add_permission(
-//         ctx: &PostgresContext<NoTls>,
-//         session: &UserSession,
-//         project_id: ProjectId,
-//     ) {
-//         assert_eq!(
-//             ctx.project_db_ref()
-//                 .list_permissions(session, project_id)
-//                 .await
-//                 .unwrap()
-//                 .len(),
-//             1
-//         );
-
-//         let user2 = ctx
-//             .user_db_ref()
-//             .register(
-//                 UserRegistration {
-//                     email: "user2@example.com".into(),
-//                     password: "12345678".into(),
-//                     real_name: "User2".into(),
-//                 }
-//                 .validated()
-//                 .unwrap(),
-//             )
-//             .await
-//             .unwrap();
-
-//         ctx.project_db_ref()
-//             .add_permission(
-//                 session,
-//                 UserProjectPermission {
-//                     project: project_id,
-//                     permission: ProjectPermission::Read,
-//                     user: user2,
-//                 },
-//             )
-//             .await
-//             .unwrap();
-
-//         assert_eq!(
-//             ctx.project_db_ref()
-//                 .list_permissions(session, project_id)
-//                 .await
-//                 .unwrap()
-//                 .len(),
-//             2
-//         );
-//     }
-
-//     #[allow(clippy::too_many_lines)]
-//     async fn update_projects(
-//         ctx: &PostgresContext<NoTls>,
-//         session: &UserSession,
-//         project_id: ProjectId,
-//     ) {
-//         let project = ctx
-//             .project_db_ref()
-//             .load_version(session, project_id, LoadVersion::Latest)
-//             .await
-//             .unwrap();
-
-//         let layer_workflow_id = ctx
-//             .workflow_registry_ref()
-//             .register(Workflow {
-//                 operator: TypedOperator::Vector(
-//                     MockPointSource {
-//                         params: MockPointSourceParams {
-//                             points: vec![Coordinate2D::new(1., 2.); 3],
-//                         },
-//                     }
-//                     .boxed(),
-//                 ),
-//             })
-//             .await
-//             .unwrap();
-
-//         assert!(ctx
-//             .workflow_registry_ref()
-//             .load(&layer_workflow_id)
-//             .await
-//             .is_ok());
-
-//         let plot_workflow_id = ctx
-//             .workflow_registry_ref()
-//             .register(Workflow {
-//                 operator: Statistics {
-//                     params: StatisticsParams {
-//                         column_names: vec![],
-//                     },
-//                     sources: MultipleRasterOrSingleVectorSource {
-//                         source: Raster(vec![]),
-//                     },
-//                 }
-//                 .boxed()
-//                 .into(),
-//             })
-//             .await
-//             .unwrap();
-
-//         assert!(ctx
-//             .workflow_registry_ref()
-//             .load(&plot_workflow_id)
-//             .await
-//             .is_ok());
-
-//         // add a plot
-//         let update = UpdateProject {
-//             id: project.id,
-//             name: Some("Test9 Updated".into()),
-//             description: None,
-//             layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-//                 workflow: layer_workflow_id,
-//                 name: "TestLayer".into(),
-//                 symbology: PointSymbology::default().into(),
-//                 visibility: Default::default(),
-//             })]),
-//             plots: Some(vec![PlotUpdate::UpdateOrInsert(Plot {
-//                 workflow: plot_workflow_id,
-//                 name: "Test Plot".into(),
-//             })]),
-//             bounds: None,
-//             time_step: None,
-//         };
-//         ctx.project_db_ref()
-//             .update(session, update.validated().unwrap())
-//             .await
-//             .unwrap();
-
-//         let versions = ctx
-//             .project_db_ref()
-//             .versions(session, project_id)
-//             .await
-//             .unwrap();
-//         assert_eq!(versions.len(), 2);
-
-//         // add second plot
-//         let update = UpdateProject {
-//             id: project.id,
-//             name: Some("Test9 Updated".into()),
-//             description: None,
-//             layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-//                 workflow: layer_workflow_id,
-//                 name: "TestLayer".into(),
-//                 symbology: PointSymbology::default().into(),
-//                 visibility: Default::default(),
-//             })]),
-//             plots: Some(vec![
-//                 PlotUpdate::UpdateOrInsert(Plot {
-//                     workflow: plot_workflow_id,
-//                     name: "Test Plot".into(),
-//                 }),
-//                 PlotUpdate::UpdateOrInsert(Plot {
-//                     workflow: plot_workflow_id,
-//                     name: "Test Plot".into(),
-//                 }),
-//             ]),
-//             bounds: None,
-//             time_step: None,
-//         };
-//         ctx.project_db_ref()
-//             .update(session, update.validated().unwrap())
-//             .await
-//             .unwrap();
-
-//         let versions = ctx
-//             .project_db_ref()
-//             .versions(session, project_id)
-//             .await
-//             .unwrap();
-//         assert_eq!(versions.len(), 3);
-
-//         // delete plots
-//         let update = UpdateProject {
-//             id: project.id,
-//             name: None,
-//             description: None,
-//             layers: None,
-//             plots: Some(vec![]),
-//             bounds: None,
-//             time_step: None,
-//         };
-//         ctx.project_db_ref()
-//             .update(session, update.validated().unwrap())
-//             .await
-//             .unwrap();
-
-//         let versions = ctx
-//             .project_db_ref()
-//             .versions(session, project_id)
-//             .await
-//             .unwrap();
-//         assert_eq!(versions.len(), 4);
-//     }
-
-//     async fn list_projects(
-//         ctx: &PostgresContext<NoTls>,
-//         session: &UserSession,
-//     ) -> Vec<ProjectListing> {
-//         let options = ProjectListOptions {
-//             filter: ProjectFilter::None,
-//             order: OrderBy::NameDesc,
-//             offset: 0,
-//             limit: 2,
-//         }
-//         .validated()
-//         .unwrap();
-//         let projects = ctx.project_db_ref().list(session, options).await.unwrap();
-
-//         assert_eq!(projects.len(), 2);
-//         assert_eq!(projects[0].name, "Test9");
-//         assert_eq!(projects[1].name, "Test8");
-//         projects
-//     }
-
-//     async fn create_projects(ctx: &PostgresContext<NoTls>, session: &UserSession) {
-//         for i in 0..10 {
-//             let create = CreateProject {
-//                 name: format!("Test{i}"),
-//                 description: format!("Test{}", 10 - i),
-//                 bounds: STRectangle::new(
-//                     SpatialReferenceOption::Unreferenced,
-//                     0.,
-//                     0.,
-//                     1.,
-//                     1.,
-//                     0,
-//                     1,
-//                 )
-//                 .unwrap(),
-//                 time_step: None,
-//             }
-//             .validated()
-//             .unwrap();
-//             ctx.project_db_ref().create(session, create).await.unwrap();
-//         }
-//     }
-
-//     async fn user_reg_login(ctx: &PostgresContext<NoTls>) -> UserId {
-//         let db = ctx.user_db_ref();
-
-//         let user_registration = UserRegistration {
-//             email: "foo@example.com".into(),
-//             password: "secret123".into(),
-//             real_name: "Foo Bar".into(),
-//         }
-//         .validated()
-//         .unwrap();
-
-//         let user_id = db.register(user_registration).await.unwrap();
-
-//         let credentials = UserCredentials {
-//             email: "foo@example.com".into(),
-//             password: "secret123".into(),
-//         };
-
-//         let session = db.login(credentials).await.unwrap();
-
-//         db.session(session.id).await.unwrap();
-
-//         db.logout(session.id).await.unwrap();
-
-//         assert!(db.session(session.id).await.is_err());
-
-//         user_id
-//     }
-
-//     //TODO: No duplicate tests for postgres and hashmap implementation possible?
-//     async fn external_user_login_twice(ctx: &PostgresContext<NoTls>) -> UserSession {
-//         let db = ctx.user_db_ref();
-
-//         let external_user_claims = ExternalUserClaims {
-//             external_id: SubjectIdentifier::new("Foo bar Id".into()),
-//             email: "foo@bar.de".into(),
-//             real_name: "Foo Bar".into(),
-//         };
-//         let duration = Duration::minutes(30);
-
-//         //NEW
-//         let login_result = db
-//             .login_external(external_user_claims.clone(), duration)
-//             .await;
-//         assert!(login_result.is_ok());
-
-//         let session_1 = login_result.unwrap();
-//         let user_id = session_1.user.id; //TODO: Not a deterministic test.
-
-//         assert!(session_1.user.email.is_some());
-//         assert_eq!(session_1.user.email.unwrap(), "foo@bar.de");
-//         assert!(session_1.user.real_name.is_some());
-//         assert_eq!(session_1.user.real_name.unwrap(), "Foo Bar");
-
-//         let expected_duration = session_1.created + duration;
-//         assert_eq!(session_1.valid_until, expected_duration);
-
-//         assert!(db.session(session_1.id).await.is_ok());
-
-//         assert!(db.logout(session_1.id).await.is_ok());
-
-//         assert!(db.session(session_1.id).await.is_err());
-
-//         let duration = Duration::minutes(10);
-//         let login_result = db
-//             .login_external(external_user_claims.clone(), duration)
-//             .await;
-//         assert!(login_result.is_ok());
-
-//         let session_2 = login_result.unwrap();
-//         let result = session_2.clone();
-
-//         assert!(session_2.user.email.is_some()); //TODO: Technically, user details could change for each login. For simplicity, this is not covered yet.
-//         assert_eq!(session_2.user.email.unwrap(), "foo@bar.de");
-//         assert!(session_2.user.real_name.is_some());
-//         assert_eq!(session_2.user.real_name.unwrap(), "Foo Bar");
-//         assert_eq!(session_2.user.id, user_id);
-
-//         let expected_duration = session_2.created + duration;
-//         assert_eq!(session_2.valid_until, expected_duration);
-
-//         assert!(db.session(session_2.id).await.is_ok());
-
-//         result
-//     }
-
-//     async fn anonymous(ctx: &PostgresContext<NoTls>) {
-//         let db = ctx.user_db_ref();
-
-//         let now: DateTime = chrono::offset::Utc::now().into();
-//         let session = db.anonymous().await.unwrap();
-//         let then: DateTime = chrono::offset::Utc::now().into();
-
-//         assert!(session.created >= now && session.created <= then);
-//         assert!(session.valid_until > session.created);
-
-//         let session = db.session(session.id).await.unwrap();
-
-//         db.logout(session.id).await.unwrap();
-
-//         assert!(db.session(session.id).await.is_err());
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_persists_workflows() {
-//         with_temp_context(|ctx, pg_config| async move {
-//             let workflow = Workflow {
-//                 operator: TypedOperator::Vector(
-//                     MockPointSource {
-//                         params: MockPointSourceParams {
-//                             points: vec![Coordinate2D::new(1., 2.); 3],
-//                         },
-//                     }
-//                     .boxed(),
-//                 ),
-//             };
-
-//             let session = ctx.anonymous().await.unwrap();
-
-//             let id = ctx
-//                 .db(session)
-//                 .register_workflow(workflow)
-//                 .await
-//                 .unwrap();
-
-//             drop(ctx);
-
-//             let ctx = PostgresContext::new_with_context_spec(pg_config.clone(), tokio_postgres::NoTls, TestDefault::test_default(), TestDefault::test_default())
-//                 .await
-//                 .unwrap();
-
-//             let workflow = ctx.db(session.clone()).load_workflow(&id).await.unwrap();
-
-//             let json = serde_json::to_string(&workflow).unwrap();
-//             assert_eq!(json, r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}]}}}"#);
-//         })
-//         .await;
-//     }
-
-//     #[allow(clippy::too_many_lines)]
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_persists_datasets() {
-//         with_temp_context(|ctx, _| async move {
-//             let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
-
-//             let loading_info = OgrSourceDataset {
-//                 file_name: PathBuf::from("test.csv"),
-//                 layer_name: "test.csv".to_owned(),
-//                 data_type: Some(VectorDataType::MultiPoint),
-//                 time: OgrSourceDatasetTimeType::Start {
-//                     start_field: "start".to_owned(),
-//                     start_format: OgrSourceTimeFormat::Auto,
-//                     duration: OgrSourceDurationSpec::Zero,
-//                 },
-//                 default_geometry: None,
-//                 columns: Some(OgrSourceColumnSpec {
-//                     format_specifics: Some(FormatSpecifics::Csv {
-//                         header: CsvHeader::Auto,
-//                     }),
-//                     x: "x".to_owned(),
-//                     y: None,
-//                     int: vec![],
-//                     float: vec![],
-//                     text: vec![],
-//                     bool: vec![],
-//                     datetime: vec![],
-//                     rename: None,
-//                 }),
-//                 force_ogr_time_filter: false,
-//                 force_ogr_spatial_filter: false,
-//                 on_error: OgrSourceErrorSpec::Ignore,
-//                 sql_query: None,
-//                 attribute_query: None,
-//             };
-
-//             let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
-//                 OgrSourceDataset,
-//                 VectorResultDescriptor,
-//                 VectorQueryRectangle,
-//             > {
-//                 loading_info: loading_info.clone(),
-//                 result_descriptor: VectorResultDescriptor {
-//                     data_type: VectorDataType::MultiPoint,
-//                     spatial_reference: SpatialReference::epsg_4326().into(),
-//                     columns: [(
-//                         "foo".to_owned(),
-//                         VectorColumnInfo {
-//                             data_type: FeatureDataType::Float,
-//                             measurement: Measurement::Unitless,
-//                         },
-//                     )]
-//                     .into_iter()
-//                     .collect(),
-//                     time: None,
-//                     bbox: None,
-//                 },
-//                 phantom: Default::default(),
-//             });
-
-//             let session = ctx.user_db_ref().anonymous().await.unwrap();
-
-//             let db = ctx.dataset_db_ref();
-//             let wrap = db.wrap_meta_data(meta_data);
-//             db.add_dataset(
-//                 &session,
-//                 AddDataset {
-//                     id: Some(dataset_id),
-//                     name: "Ogr Test".to_owned(),
-//                     description: "desc".to_owned(),
-//                     source_operator: "OgrSource".to_owned(),
-//                     symbology: None,
-//                     provenance: Some(vec![Provenance {
-//                         citation: "citation".to_owned(),
-//                         license: "license".to_owned(),
-//                         uri: "uri".to_owned(),
-//                     }]),
-//                 }
-//                 .validated()
-//                 .unwrap(),
-//                 wrap,
-//             )
-//             .await
-//             .unwrap();
-
-//             let datasets = db
-//                 .list(
-//                     &session,
-//                     DatasetListOptions {
-//                         filter: None,
-//                         order: crate::datasets::listing::OrderBy::NameAsc,
-//                         offset: 0,
-//                         limit: 10,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(datasets.len(), 1);
-
-//             assert_eq!(
-//                 datasets[0],
-//                 DatasetListing {
-//                     id: dataset_id,
-//                     name: "Ogr Test".to_owned(),
-//                     description: "desc".to_owned(),
-//                     source_operator: "OgrSource".to_owned(),
-//                     symbology: None,
-//                     tags: vec![],
-//                     result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
-//                         data_type: VectorDataType::MultiPoint,
-//                         spatial_reference: SpatialReference::epsg_4326().into(),
-//                         columns: [(
-//                             "foo".to_owned(),
-//                             VectorColumnInfo {
-//                                 data_type: FeatureDataType::Float,
-//                                 measurement: Measurement::Unitless
-//                             }
-//                         )]
-//                         .into_iter()
-//                         .collect(),
-//                         time: None,
-//                         bbox: None,
-//                     })
-//                     .into(),
-//                 },
-//             );
-
-//             let provenance = db.provenance(&session, &dataset_id).await.unwrap();
-
-//             assert_eq!(
-//                 provenance,
-//                 ProvenanceOutput {
-//                     data: dataset_id.into(),
-//                     provenance: Some(vec![Provenance {
-//                         citation: "citation".to_owned(),
-//                         license: "license".to_owned(),
-//                         uri: "uri".to_owned(),
-//                     }])
-//                 }
-//             );
-
-//             let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> = db
-//                 .session_meta_data(&session, &dataset_id.into())
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(
-//                 meta_data
-//                     .loading_info(VectorQueryRectangle {
-//                         spatial_bounds: BoundingBox2D::new_unchecked(
-//                             (-180., -90.).into(),
-//                             (180., 90.).into()
-//                         ),
-//                         time_interval: TimeInterval::default(),
-//                         spatial_resolution: SpatialResolution::zero_point_one(),
-//                     })
-//                     .await
-//                     .unwrap(),
-//                 loading_info
-//             );
-//         })
-//         .await;
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_persists_uploads() {
-//         with_temp_context(|ctx, _| async move {
-//             let db = ctx.dataset_db_ref();
-
-//             let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
-//             let input = Upload {
-//                 id,
-//                 files: vec![FileUpload {
-//                     id: FileId::from_str("e80afab0-831d-4d40-95d6-1e4dfd277e72").unwrap(),
-//                     name: "test.csv".to_owned(),
-//                     byte_size: 1337,
-//                 }],
-//             };
-
-//             let session = ctx.user_db_ref().anonymous().await.unwrap();
-//             db.create_upload(&session, input.clone()).await.unwrap();
-
-//             let upload = db.get_upload(&session, id).await.unwrap();
-
-//             assert_eq!(upload, input);
-//         })
-//         .await;
-//     }
-
-//     #[allow(clippy::too_many_lines)]
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_persists_layer_providers() {
-//         with_temp_context(|ctx, _| async move {
-//             let db = ctx.layer_provider_db_ref();
-
-//             let provider_id =
-//                 DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
-
-//             let loading_info = OgrSourceDataset {
-//                 file_name: PathBuf::from("test.csv"),
-//                 layer_name: "test.csv".to_owned(),
-//                 data_type: Some(VectorDataType::MultiPoint),
-//                 time: OgrSourceDatasetTimeType::Start {
-//                     start_field: "start".to_owned(),
-//                     start_format: OgrSourceTimeFormat::Auto,
-//                     duration: OgrSourceDurationSpec::Zero,
-//                 },
-//                 default_geometry: None,
-//                 columns: Some(OgrSourceColumnSpec {
-//                     format_specifics: Some(FormatSpecifics::Csv {
-//                         header: CsvHeader::Auto,
-//                     }),
-//                     x: "x".to_owned(),
-//                     y: None,
-//                     int: vec![],
-//                     float: vec![],
-//                     text: vec![],
-//                     bool: vec![],
-//                     datetime: vec![],
-//                     rename: None,
-//                 }),
-//                 force_ogr_time_filter: false,
-//                 force_ogr_spatial_filter: false,
-//                 on_error: OgrSourceErrorSpec::Ignore,
-//                 sql_query: None,
-//                 attribute_query: None,
-//             };
-
-//             let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
-//                 OgrSourceDataset,
-//                 VectorResultDescriptor,
-//                 VectorQueryRectangle,
-//             > {
-//                 loading_info: loading_info.clone(),
-//                 result_descriptor: VectorResultDescriptor {
-//                     data_type: VectorDataType::MultiPoint,
-//                     spatial_reference: SpatialReference::epsg_4326().into(),
-//                     columns: [(
-//                         "foo".to_owned(),
-//                         VectorColumnInfo {
-//                             data_type: FeatureDataType::Float,
-//                             measurement: Measurement::Unitless,
-//                         },
-//                     )]
-//                     .into_iter()
-//                     .collect(),
-//                     time: None,
-//                     bbox: None,
-//                 },
-//                 phantom: Default::default(),
-//             });
-
-//             let provider = MockExternalLayerProviderDefinition {
-//                 id: provider_id,
-//                 root_collection: MockCollection {
-//                     id: LayerCollectionId("b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_owned()),
-//                     name: "Mock Collection A".to_owned(),
-//                     description: "Some description".to_owned(),
-//                     collections: vec![MockCollection {
-//                         id: LayerCollectionId("21466897-37a1-4666-913a-50b5244699ad".to_owned()),
-//                         name: "Mock Collection B".to_owned(),
-//                         description: "Some description".to_owned(),
-//                         collections: vec![],
-//                         layers: vec![],
-//                     }],
-//                     layers: vec![],
-//                 },
-//                 data: [("myData".to_owned(), meta_data)].into_iter().collect(),
-//             };
-
-//             db.add_layer_provider(Box::new(provider)).await.unwrap();
-
-//             let providers = db
-//                 .list_layer_providers(
-//                     LayerProviderListingOptions {
-//                         offset: 0,
-//                         limit: 10,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(providers.len(), 1);
-
-//             assert_eq!(
-//                 providers[0],
-//                 LayerProviderListing {
-//                     id: provider_id,
-//                     name: "MockName".to_owned(),
-//                     description: "MockType".to_owned(),
-//                 }
-//             );
-
-//             let provider = db.load_layer_provider(provider_id).await.unwrap();
-
-//             let datasets = provider
-//                 .load_layer_collection(
-//                     &provider.get_root_layer_collection_id().await.unwrap(),
-//                     LayerCollectionListOptions {
-//                         offset: 0,
-//                         limit: 10,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(datasets.items.len(), 1);
-//         })
-//         .await;
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_lists_only_permitted_datasets() {
-//         with_temp_context(|ctx, _| async move {
-//             let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-//             let session2 = ctx.user_db_ref().anonymous().await.unwrap();
-
-//             let descriptor = VectorResultDescriptor {
-//                 data_type: VectorDataType::Data,
-//                 spatial_reference: SpatialReferenceOption::Unreferenced,
-//                 columns: Default::default(),
-//                 time: None,
-//                 bbox: None,
-//             };
-
-//             let ds = AddDataset {
-//                 id: None,
-//                 name: "OgrDataset".to_string(),
-//                 description: "My Ogr dataset".to_string(),
-//                 source_operator: "OgrSource".to_string(),
-//                 symbology: None,
-//                 provenance: None,
-//             };
-
-//             let meta = StaticMetaData {
-//                 loading_info: OgrSourceDataset {
-//                     file_name: Default::default(),
-//                     layer_name: String::new(),
-//                     data_type: None,
-//                     time: Default::default(),
-//                     default_geometry: None,
-//                     columns: None,
-//                     force_ogr_time_filter: false,
-//                     force_ogr_spatial_filter: false,
-//                     on_error: OgrSourceErrorSpec::Ignore,
-//                     sql_query: None,
-//                     attribute_query: None,
-//                 },
-//                 result_descriptor: descriptor.clone(),
-//                 phantom: Default::default(),
-//             };
-
-//             let meta = ctx
-//                 .dataset_db_ref()
-//                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-//             let _id = ctx
-//                 .dataset_db_ref()
-//                 .add_dataset(&session1, ds.validated().unwrap(), meta)
-//                 .await
-//                 .unwrap();
-
-//             let list1 = ctx
-//                 .dataset_db_ref()
-//                 .list(
-//                     &session1,
-//                     DatasetListOptions {
-//                         filter: None,
-//                         order: crate::datasets::listing::OrderBy::NameAsc,
-//                         offset: 0,
-//                         limit: 1,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(list1.len(), 1);
-
-//             let list2 = ctx
-//                 .dataset_db_ref()
-//                 .list(
-//                     &session2,
-//                     DatasetListOptions {
-//                         filter: None,
-//                         order: crate::datasets::listing::OrderBy::NameAsc,
-//                         offset: 0,
-//                         limit: 1,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(list2.len(), 0);
-//         })
-//         .await;
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_shows_only_permitted_provenance() {
-//         with_temp_context(|ctx, _| async move {
-//             let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-//             let session2 = ctx.user_db_ref().anonymous().await.unwrap();
-
-//             let descriptor = VectorResultDescriptor {
-//                 data_type: VectorDataType::Data,
-//                 spatial_reference: SpatialReferenceOption::Unreferenced,
-//                 columns: Default::default(),
-//                 time: None,
-//                 bbox: None,
-//             };
-
-//             let ds = AddDataset {
-//                 id: None,
-//                 name: "OgrDataset".to_string(),
-//                 description: "My Ogr dataset".to_string(),
-//                 source_operator: "OgrSource".to_string(),
-//                 symbology: None,
-//                 provenance: None,
-//             };
-
-//             let meta = StaticMetaData {
-//                 loading_info: OgrSourceDataset {
-//                     file_name: Default::default(),
-//                     layer_name: String::new(),
-//                     data_type: None,
-//                     time: Default::default(),
-//                     default_geometry: None,
-//                     columns: None,
-//                     force_ogr_time_filter: false,
-//                     force_ogr_spatial_filter: false,
-//                     on_error: OgrSourceErrorSpec::Ignore,
-//                     sql_query: None,
-//                     attribute_query: None,
-//                 },
-//                 result_descriptor: descriptor.clone(),
-//                 phantom: Default::default(),
-//             };
-
-//             let meta = ctx
-//                 .dataset_db_ref()
-//                 .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-//             let id = ctx
-//                 .dataset_db_ref()
-//                 .add_dataset(&session1, ds.validated().unwrap(), meta)
-//                 .await
-//                 .unwrap();
-
-//             assert!(ctx
-//                 .dataset_db_ref()
-//                 .provenance(&session1, &id)
-//                 .await
-//                 .is_ok());
-
-//             assert!(ctx
-//                 .dataset_db_ref()
-//                 .provenance(&session2, &id)
-//                 .await
-//                 .is_err());
-//         })
-//         .await;
-//     }
-
-//     // #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     // async fn it_updates_permissions() {
-//     //     with_temp_context(|ctx, _| async move {
-//     //         let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-//     //         let session2 = ctx.user_db_ref().anonymous().await.unwrap();
-
-//     //         let descriptor = VectorResultDescriptor {
-//     //             data_type: VectorDataType::Data,
-//     //             spatial_reference: SpatialReferenceOption::Unreferenced,
-//     //             columns: Default::default(),
-//     //             time: None,
-//     //             bbox: None,
-//     //         };
-
-//     //         let ds = AddDataset {
-//     //             id: None,
-//     //             name: "OgrDataset".to_string(),
-//     //             description: "My Ogr dataset".to_string(),
-//     //             source_operator: "OgrSource".to_string(),
-//     //             symbology: None,
-//     //             provenance: None,
-//     //         };
-
-//     //         let meta = StaticMetaData {
-//     //             loading_info: OgrSourceDataset {
-//     //                 file_name: Default::default(),
-//     //                 layer_name: String::new(),
-//     //                 data_type: None,
-//     //                 time: Default::default(),
-//     //                 default_geometry: None,
-//     //                 columns: None,
-//     //                 force_ogr_time_filter: false,
-//     //                 force_ogr_spatial_filter: false,
-//     //                 on_error: OgrSourceErrorSpec::Ignore,
-//     //                 sql_query: None,
-//     //                 attribute_query: None,
-//     //             },
-//     //             result_descriptor: descriptor.clone(),
-//     //             phantom: Default::default(),
-//     //         };
-
-//     //         let meta = ctx
-//     //             .dataset_db_ref()
-//     //             .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-//     //         let id = ctx
-//     //             .dataset_db_ref()
-//     //             .add_dataset(&session1, ds.validated().unwrap(), meta)
-//     //             .await
-//     //             .unwrap();
-
-//     //         assert!(ctx.dataset_db_ref().load(&session1, &id).await.is_ok());
-
-//     //         assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_err());
-
-//     //         ctx.dataset_db_ref()
-//     //             .add_dataset_permission(
-//     //                 &session1,
-//     //                 DatasetPermission {
-//     //                     role: session2.user.id.into(),
-//     //                     dataset: id,
-//     //                     permission: Permission::Read,
-//     //                 },
-//     //             )
-//     //             .await
-//     //             .unwrap();
-
-//     //         assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_ok());
-//     //     })
-//     //     .await;
-//     // }
-
-//     // #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     // async fn it_uses_roles_for_permissions() {
-//     //     with_temp_context(|ctx, _| async move {
-//     //         let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-//     //         let session2 = ctx.user_db_ref().anonymous().await.unwrap();
-
-//     //         let descriptor = VectorResultDescriptor {
-//     //             data_type: VectorDataType::Data,
-//     //             spatial_reference: SpatialReferenceOption::Unreferenced,
-//     //             columns: Default::default(),
-//     //             time: None,
-//     //             bbox: None,
-//     //         };
-
-//     //         let ds = AddDataset {
-//     //             id: None,
-//     //             name: "OgrDataset".to_string(),
-//     //             description: "My Ogr dataset".to_string(),
-//     //             source_operator: "OgrSource".to_string(),
-//     //             symbology: None,
-//     //             provenance: None,
-//     //         };
-
-//     //         let meta = StaticMetaData {
-//     //             loading_info: OgrSourceDataset {
-//     //                 file_name: Default::default(),
-//     //                 layer_name: String::new(),
-//     //                 data_type: None,
-//     //                 time: Default::default(),
-//     //                 default_geometry: None,
-//     //                 columns: None,
-//     //                 force_ogr_time_filter: false,
-//     //                 force_ogr_spatial_filter: false,
-//     //                 on_error: OgrSourceErrorSpec::Ignore,
-//     //                 sql_query: None,
-//     //                 attribute_query: None,
-//     //             },
-//     //             result_descriptor: descriptor.clone(),
-//     //             phantom: Default::default(),
-//     //         };
-
-//     //         let meta = ctx
-//     //             .dataset_db_ref()
-//     //             .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-//     //         let id = ctx
-//     //             .dataset_db_ref()
-//     //             .add_dataset(&session1, ds.validated().unwrap(), meta)
-//     //             .await
-//     //             .unwrap();
-
-//     //         assert!(ctx.dataset_db_ref().load(&session1, &id).await.is_ok());
-
-//     //         assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_err());
-
-//     //         ctx.dataset_db_ref()
-//     //             .add_dataset_permission(
-//     //                 &session1,
-//     //                 DatasetPermission {
-//     //                     role: session2.user.id.into(),
-//     //                     dataset: id,
-//     //                     permission: Permission::Read,
-//     //                 },
-//     //             )
-//     //             .await
-//     //             .unwrap();
-
-//     //         assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_ok());
-//     //     })
-//     //     .await;
-//     // }
-
-//     // #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     // async fn it_secures_meta_data() {
-//     //     with_temp_context(|ctx, _| async move {
-//     //         let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-//     //         let session2 = ctx.user_db_ref().anonymous().await.unwrap();
-
-//     //         let descriptor = VectorResultDescriptor {
-//     //             data_type: VectorDataType::Data,
-//     //             spatial_reference: SpatialReferenceOption::Unreferenced,
-//     //             columns: Default::default(),
-//     //             time: None,
-//     //             bbox: None,
-//     //         };
-
-//     //         let ds = AddDataset {
-//     //             id: None,
-//     //             name: "OgrDataset".to_string(),
-//     //             description: "My Ogr dataset".to_string(),
-//     //             source_operator: "OgrSource".to_string(),
-//     //             symbology: None,
-//     //             provenance: None,
-//     //         };
-
-//     //         let meta = StaticMetaData {
-//     //             loading_info: OgrSourceDataset {
-//     //                 file_name: Default::default(),
-//     //                 layer_name: String::new(),
-//     //                 data_type: None,
-//     //                 time: Default::default(),
-//     //                 default_geometry: None,
-//     //                 columns: None,
-//     //                 force_ogr_time_filter: false,
-//     //                 force_ogr_spatial_filter: false,
-//     //                 on_error: OgrSourceErrorSpec::Ignore,
-//     //                 sql_query: None,
-//     //                 attribute_query: None,
-//     //             },
-//     //             result_descriptor: descriptor.clone(),
-//     //             phantom: Default::default(),
-//     //         };
-
-//     //         let meta = ctx
-//     //             .dataset_db_ref()
-//     //             .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-//     //         let id = ctx
-//     //             .dataset_db_ref()
-//     //             .add_dataset(&session1, ds.validated().unwrap(), meta)
-//     //             .await
-//     //             .unwrap();
-
-//     //         let meta: Result<
-//     //             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-//     //         > = ctx
-//     //             .dataset_db_ref()
-//     //             .session_meta_data(&session1, &id.into())
-//     //             .await;
-
-//     //         assert!(meta.is_ok());
-
-//     //         let meta: Result<
-//     //             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-//     //         > = ctx
-//     //             .dataset_db_ref()
-//     //             .session_meta_data(&session2, &id.into())
-//     //             .await;
-
-//     //         assert!(meta.is_err());
-
-//     //         ctx.dataset_db_ref()
-//     //             .add_dataset_permission(
-//     //                 &session1,
-//     //                 DatasetPermission {
-//     //                     role: session2.user.id.into(),
-//     //                     dataset: id,
-//     //                     permission: Permission::Read,
-//     //                 },
-//     //             )
-//     //             .await
-//     //             .unwrap();
-
-//     //         let meta: Result<
-//     //             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-//     //         > = ctx
-//     //             .dataset_db_ref()
-//     //             .session_meta_data(&session2, &id.into())
-//     //             .await;
-
-//     //         assert!(meta.is_ok());
-//     //     })
-//     //     .await;
-//     // }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_secures_uploads() {
-//         with_temp_context(|ctx, _| async move {
-//             let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-//             let session2 = ctx.user_db_ref().anonymous().await.unwrap();
-
-//             let upload_id = UploadId::new();
-
-//             let upload = Upload {
-//                 id: upload_id,
-//                 files: vec![FileUpload {
-//                     id: FileId::new(),
-//                     name: "test.bin".to_owned(),
-//                     byte_size: 1024,
-//                 }],
-//             };
-
-//             ctx.dataset_db_ref()
-//                 .create_upload(&session1, upload)
-//                 .await
-//                 .unwrap();
-
-//             assert!(ctx
-//                 .dataset_db_ref()
-//                 .get_upload(&session1, upload_id)
-//                 .await
-//                 .is_ok());
-
-//             assert!(ctx
-//                 .dataset_db_ref()
-//                 .get_upload(&session2, upload_id)
-//                 .await
-//                 .is_err());
-//         })
-//         .await;
-//     }
-
-//     #[allow(clippy::too_many_lines)]
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_collects_layers() {
-//         with_temp_context(|ctx, _| async move {
-//             let session = AdminSession::default();
-
-//             let layer_db = ctx.db(session.into());
-
-//             let workflow = Workflow {
-//                 operator: TypedOperator::Vector(
-//                     MockPointSource {
-//                         params: MockPointSourceParams {
-//                             points: vec![Coordinate2D::new(1., 2.); 3],
-//                         },
-//                     }
-//                     .boxed(),
-//                 ),
-//             };
-
-//             let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
-
-//             let layer1 = layer_db
-//                 .add_layer(
-//                     AddLayer {
-//                         name: "Layer1".to_string(),
-//                         description: "Layer 1".to_string(),
-//                         symbology: None,
-//                         workflow: workflow.clone(),
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                     &root_collection_id,
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(
-//                 layer_db.load_layer(&layer1).await.unwrap(),
-//                 crate::layers::layer::Layer {
-//                     id: ProviderLayerId {
-//                         provider_id: INTERNAL_PROVIDER_ID,
-//                         layer_id: layer1.clone(),
-//                     },
-//                     name: "Layer1".to_string(),
-//                     description: "Layer 1".to_string(),
-//                     symbology: None,
-//                     workflow: workflow.clone(),
-//                     properties: vec![],
-//                     metadata: HashMap::new(),
-//                 }
-//             );
-
-//             let collection1_id = layer_db
-//                 .add_layer_collection(
-//                     AddLayerCollection {
-//                         name: "Collection1".to_string(),
-//                         description: "Collection 1".to_string(),
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                     &root_collection_id,
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             let layer2 = layer_db
-//                 .add_layer(
-//                     AddLayer {
-//                         name: "Layer2".to_string(),
-//                         description: "Layer 2".to_string(),
-//                         symbology: None,
-//                         workflow: workflow.clone(),
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                     &collection1_id,
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             let collection2_id = layer_db
-//                 .add_layer_collection(
-//                     AddLayerCollection {
-//                         name: "Collection2".to_string(),
-//                         description: "Collection 2".to_string(),
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                     &collection1_id,
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             layer_db
-//                 .add_collection_to_parent(&collection2_id, &collection1_id)
-//                 .await
-//                 .unwrap();
-
-//             let root_collection = layer_db
-//                 .load_layer_collection(
-//                     &root_collection_id,
-//                     LayerCollectionListOptions {
-//                         offset: 0,
-//                         limit: 20,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(
-//                 root_collection,
-//                 LayerCollection {
-//                     id: ProviderLayerCollectionId {
-//                         provider_id: INTERNAL_PROVIDER_ID,
-//                         collection_id: root_collection_id,
-//                     },
-//                     name: "Layers".to_string(),
-//                     description: "All available Geo Engine layers".to_string(),
-//                     items: vec![
-//                         CollectionItem::Collection(LayerCollectionListing {
-//                             id: ProviderLayerCollectionId {
-//                                 provider_id: INTERNAL_PROVIDER_ID,
-//                                 collection_id: collection1_id.clone(),
-//                             },
-//                             name: "Collection1".to_string(),
-//                             description: "Collection 1".to_string(),
-//                         }),
-//                         CollectionItem::Collection(LayerCollectionListing {
-//                             id: ProviderLayerCollectionId {
-//                                 provider_id: INTERNAL_PROVIDER_ID,
-//                                 collection_id: LayerCollectionId(
-//                                     UNSORTED_COLLECTION_ID.to_string()
-//                                 ),
-//                             },
-//                             name: "Unsorted".to_string(),
-//                             description: "Unsorted Layers".to_string(),
-//                         }),
-//                         CollectionItem::Layer(LayerListing {
-//                             id: ProviderLayerId {
-//                                 provider_id: INTERNAL_PROVIDER_ID,
-//                                 layer_id: layer1,
-//                             },
-//                             name: "Layer1".to_string(),
-//                             description: "Layer 1".to_string(),
-//                             properties: vec![],
-//                         })
-//                     ],
-//                     entry_label: None,
-//                     properties: vec![],
-//                 }
-//             );
-
-//             let collection1 = layer_db
-//                 .load_layer_collection(
-//                     &collection1_id,
-//                     LayerCollectionListOptions {
-//                         offset: 0,
-//                         limit: 20,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(
-//                 collection1,
-//                 LayerCollection {
-//                     id: ProviderLayerCollectionId {
-//                         provider_id: INTERNAL_PROVIDER_ID,
-//                         collection_id: collection1_id,
-//                     },
-//                     name: "Collection1".to_string(),
-//                     description: "Collection 1".to_string(),
-//                     items: vec![
-//                         CollectionItem::Collection(LayerCollectionListing {
-//                             id: ProviderLayerCollectionId {
-//                                 provider_id: INTERNAL_PROVIDER_ID,
-//                                 collection_id: collection2_id,
-//                             },
-//                             name: "Collection2".to_string(),
-//                             description: "Collection 2".to_string(),
-//                         }),
-//                         CollectionItem::Layer(LayerListing {
-//                             id: ProviderLayerId {
-//                                 provider_id: INTERNAL_PROVIDER_ID,
-//                                 layer_id: layer2,
-//                             },
-//                             name: "Layer2".to_string(),
-//                             description: "Layer 2".to_string(),
-//                             properties: vec![],
-//                         })
-//                     ],
-//                     entry_label: None,
-//                     properties: vec![],
-//                 }
-//             );
-//         })
-//         .await;
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_tracks_used_quota_in_postgres() {
-//         with_temp_context(|ctx, _| async move {
-//             let _user = ctx
-//                 .user_db_ref()
-//                 .register(
-//                     UserRegistration {
-//                         email: "foo@example.com".to_string(),
-//                         password: "secret1234".to_string(),
-//                         real_name: "Foo Bar".to_string(),
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             let session = ctx
-//                 .user_db_ref()
-//                 .login(UserCredentials {
-//                     email: "foo@example.com".to_string(),
-//                     password: "secret1234".to_string(),
-//                 })
-//                 .await
-//                 .unwrap();
-
-//             let quota = initialize_quota_tracking(ctx.user_db());
-
-//             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
-
-//             tracking.work_unit_done();
-//             tracking.work_unit_done();
-
-//             // wait for quota to be recorded
-//             let mut success = false;
-//             for _ in 0..10 {
-//                 let used = ctx.user_db_ref().quota_used(&session).await.unwrap();
-//                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-//                 if used == 2 {
-//                     success = true;
-//                     break;
-//                 }
-//             }
-
-//             assert!(success);
-//         })
-//         .await;
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_tracks_available_quota() {
-//         with_temp_context(|ctx, _| async move {
-//             let user = ctx
-//                 .user_db_ref()
-//                 .register(
-//                     UserRegistration {
-//                         email: "foo@example.com".to_string(),
-//                         password: "secret1234".to_string(),
-//                         real_name: "Foo Bar".to_string(),
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             let session = ctx
-//                 .user_db_ref()
-//                 .login(UserCredentials {
-//                     email: "foo@example.com".to_string(),
-//                     password: "secret1234".to_string(),
-//                 })
-//                 .await
-//                 .unwrap();
-
-//             ctx.user_db_ref()
-//                 .update_quota_available_by_user(&user, 1)
-//                 .await
-//                 .unwrap();
-
-//             let quota = initialize_quota_tracking(ctx.user_db());
-
-//             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
-
-//             tracking.work_unit_done();
-//             tracking.work_unit_done();
-
-//             // wait for quota to be recorded
-//             let mut success = false;
-//             for _ in 0..10 {
-//                 let available = ctx.user_db_ref().quota_available(&session).await.unwrap();
-//                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-//                 if available == -1 {
-//                     success = true;
-//                     break;
-//                 }
-//             }
-
-//             assert!(success);
-//         })
-//         .await;
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_updates_quota_in_postgres() {
-//         with_temp_context(|ctx, _| async move {
-//             let user = ctx
-//                 .user_db_ref()
-//                 .register(
-//                     UserRegistration {
-//                         email: "foo@example.com".to_string(),
-//                         password: "secret1234".to_string(),
-//                         real_name: "Foo Bar".to_string(),
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             let session = ctx
-//                 .user_db_ref()
-//                 .login(UserCredentials {
-//                     email: "foo@example.com".to_string(),
-//                     password: "secret1234".to_string(),
-//                 })
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(
-//                 ctx.user_db_ref().quota_available(&session).await.unwrap(),
-//                 crate::util::config::get_config_element::<crate::pro::util::config::User>()
-//                     .unwrap()
-//                     .default_available_quota
-//             );
-
-//             assert_eq!(
-//                 ctx.user_db_ref()
-//                     .quota_available_by_user(&user)
-//                     .await
-//                     .unwrap(),
-//                 crate::util::config::get_config_element::<crate::pro::util::config::User>()
-//                     .unwrap()
-//                     .default_available_quota
-//             );
-
-//             ctx.user_db_ref()
-//                 .update_quota_available_by_user(&user, 123)
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(
-//                 ctx.user_db_ref().quota_available(&session).await.unwrap(),
-//                 123
-//             );
-
-//             assert_eq!(
-//                 ctx.user_db_ref()
-//                     .quota_available_by_user(&user)
-//                     .await
-//                     .unwrap(),
-//                 123
-//             );
-//         })
-//         .await;
-//     }
-
-//     #[allow(clippy::too_many_lines)]
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn it_removes_layer_collections() {
-//         with_temp_context(|ctx, _| async move {
-//             let session = AdminSession::default();
-
-//             let layer_db = ctx.db(session.into());
-
-//             let layer = AddLayer {
-//                 name: "layer".to_string(),
-//                 description: "description".to_string(),
-//                 workflow: Workflow {
-//                     operator: TypedOperator::Vector(
-//                         MockPointSource {
-//                             params: MockPointSourceParams {
-//                                 points: vec![Coordinate2D::new(1., 2.); 3],
-//                             },
-//                         }
-//                         .boxed(),
-//                     ),
-//                 },
-//                 symbology: None,
-//             }
-//             .validated()
-//             .unwrap();
-
-//             let root_collection = &layer_db.get_root_layer_collection_id().await.unwrap();
-
-//             let collection = AddLayerCollection {
-//                 name: "top collection".to_string(),
-//                 description: "description".to_string(),
-//             }
-//             .validated()
-//             .unwrap();
-
-//             let top_c_id = layer_db
-//                 .add_layer_collection(collection, root_collection)
-//                 .await
-//                 .unwrap();
-
-//             let l_id = layer_db.add_layer(layer, &top_c_id).await.unwrap();
-
-//             let collection = AddLayerCollection {
-//                 name: "empty collection".to_string(),
-//                 description: "description".to_string(),
-//             }
-//             .validated()
-//             .unwrap();
-
-//             let empty_c_id = layer_db
-//                 .add_layer_collection(collection, &top_c_id)
-//                 .await
-//                 .unwrap();
-
-//             let items = layer_db
-//                 .load_layer_collection(
-//                     &top_c_id,
-//                     LayerCollectionListOptions {
-//                         offset: 0,
-//                         limit: 20,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(
-//                 items,
-//                 LayerCollection {
-//                     id: ProviderLayerCollectionId {
-//                         provider_id: INTERNAL_PROVIDER_ID,
-//                         collection_id: top_c_id.clone(),
-//                     },
-//                     name: "top collection".to_string(),
-//                     description: "description".to_string(),
-//                     items: vec![
-//                         CollectionItem::Collection(LayerCollectionListing {
-//                             id: ProviderLayerCollectionId {
-//                                 provider_id: INTERNAL_PROVIDER_ID,
-//                                 collection_id: empty_c_id.clone(),
-//                             },
-//                             name: "empty collection".to_string(),
-//                             description: "description".to_string(),
-//                         }),
-//                         CollectionItem::Layer(LayerListing {
-//                             id: ProviderLayerId {
-//                                 provider_id: INTERNAL_PROVIDER_ID,
-//                                 layer_id: l_id.clone(),
-//                             },
-//                             name: "layer".to_string(),
-//                             description: "description".to_string(),
-//                             properties: vec![],
-//                         })
-//                     ],
-//                     entry_label: None,
-//                     properties: vec![],
-//                 }
-//             );
-
-//             // remove empty collection
-//             layer_db.remove_collection(&empty_c_id).await.unwrap();
-
-//             let items = layer_db
-//                 .load_layer_collection(
-//                     &top_c_id,
-//                     LayerCollectionListOptions {
-//                         offset: 0,
-//                         limit: 20,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             assert_eq!(
-//                 items,
-//                 LayerCollection {
-//                     id: ProviderLayerCollectionId {
-//                         provider_id: INTERNAL_PROVIDER_ID,
-//                         collection_id: top_c_id.clone(),
-//                     },
-//                     name: "top collection".to_string(),
-//                     description: "description".to_string(),
-//                     items: vec![CollectionItem::Layer(LayerListing {
-//                         id: ProviderLayerId {
-//                             provider_id: INTERNAL_PROVIDER_ID,
-//                             layer_id: l_id.clone(),
-//                         },
-//                         name: "layer".to_string(),
-//                         description: "description".to_string(),
-//                         properties: vec![],
-//                     })],
-//                     entry_label: None,
-//                     properties: vec![],
-//                 }
-//             );
-
-//             // remove top (not root) collection
-//             layer_db.remove_collection(&top_c_id).await.unwrap();
-
-//             layer_db
-//                 .load_layer_collection(
-//                     &top_c_id,
-//                     LayerCollectionListOptions {
-//                         offset: 0,
-//                         limit: 20,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap_err();
-
-//             // should be deleted automatically
-//             layer_db.load_layer(&l_id).await.unwrap_err();
-
-//             // it is not allowed to remove the root collection
-//             layer_db
-//                 .remove_collection(root_collection)
-//                 .await
-//                 .unwrap_err();
-//             layer_db
-//                 .load_layer_collection(
-//                     root_collection,
-//                     LayerCollectionListOptions {
-//                         offset: 0,
-//                         limit: 20,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap();
-//         })
-//         .await;
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     #[allow(clippy::too_many_lines)]
-//     async fn it_removes_collections_from_collections() {
-//         with_temp_context(|ctx, _| async move {
-//             let session = AdminSession::default();
-
-//             let db = ctx.db(session.into());
-
-//             let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
-
-//             let mid_collection_id = db
-//                 .add_layer_collection(
-//                     AddLayerCollection {
-//                         name: "mid collection".to_string(),
-//                         description: "description".to_string(),
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                     root_collection_id,
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             let bottom_collection_id = db
-//                 .add_layer_collection(
-//                     AddLayerCollection {
-//                         name: "bottom collection".to_string(),
-//                         description: "description".to_string(),
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                     &mid_collection_id,
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             let layer_id = db
-//                 .add_layer(
-//                     AddLayer {
-//                         name: "layer".to_string(),
-//                         description: "description".to_string(),
-//                         workflow: Workflow {
-//                             operator: TypedOperator::Vector(
-//                                 MockPointSource {
-//                                     params: MockPointSourceParams {
-//                                         points: vec![Coordinate2D::new(1., 2.); 3],
-//                                     },
-//                                 }
-//                                 .boxed(),
-//                             ),
-//                         },
-//                         symbology: None,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                     &mid_collection_id,
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             // removing the mid collection…
-//             db.remove_layer_collection_from_parent(&mid_collection_id, root_collection_id)
-//                 .await
-//                 .unwrap();
-
-//             // …should remove itself
-//             db.load_layer_collection(
-//                 &mid_collection_id,
-//                 LayerCollectionListOptions::default().validated().unwrap(),
-//             )
-//             .await
-//             .unwrap_err();
-
-//             // …should remove the bottom collection
-//             db.load_layer_collection(
-//                 &bottom_collection_id,
-//                 LayerCollectionListOptions::default().validated().unwrap(),
-//             )
-//             .await
-//             .unwrap_err();
-
-//             // … and should remove the layer of the bottom collection
-//             db.load_layer(&layer_id).await.unwrap_err();
-
-//             // the root collection is still there
-//             db.load_layer_collection(
-//                 root_collection_id,
-//                 LayerCollectionListOptions::default().validated().unwrap(),
-//             )
-//             .await
-//             .unwrap();
-//         })
-//         .await;
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     #[allow(clippy::too_many_lines)]
-//     async fn it_removes_layers_from_collections() {
-//         with_temp_context(|ctx, _| async move {
-//             let session = AdminSession::default();
-
-//             let db = ctx.db(session.into());
-
-//             let root_collection = &db.get_root_layer_collection_id().await.unwrap();
-
-//             let another_collection = db
-//                 .add_layer_collection(
-//                     AddLayerCollection {
-//                         name: "top collection".to_string(),
-//                         description: "description".to_string(),
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                     root_collection,
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             let layer_in_one_collection = db
-//                 .add_layer(
-//                     AddLayer {
-//                         name: "layer 1".to_string(),
-//                         description: "description".to_string(),
-//                         workflow: Workflow {
-//                             operator: TypedOperator::Vector(
-//                                 MockPointSource {
-//                                     params: MockPointSourceParams {
-//                                         points: vec![Coordinate2D::new(1., 2.); 3],
-//                                     },
-//                                 }
-//                                 .boxed(),
-//                             ),
-//                         },
-//                         symbology: None,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                     &another_collection,
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             let layer_in_two_collections = db
-//                 .add_layer(
-//                     AddLayer {
-//                         name: "layer 2".to_string(),
-//                         description: "description".to_string(),
-//                         workflow: Workflow {
-//                             operator: TypedOperator::Vector(
-//                                 MockPointSource {
-//                                     params: MockPointSourceParams {
-//                                         points: vec![Coordinate2D::new(1., 2.); 3],
-//                                     },
-//                                 }
-//                                 .boxed(),
-//                             ),
-//                         },
-//                         symbology: None,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                     &another_collection,
-//                 )
-//                 .await
-//                 .unwrap();
-
-//             db.add_layer_to_collection(&layer_in_two_collections, root_collection)
-//                 .await
-//                 .unwrap();
-
-//             // remove first layer --> should be deleted entirely
-
-//             db.remove_layer_from_collection(&layer_in_one_collection, &another_collection)
-//                 .await
-//                 .unwrap();
-
-//             let number_of_layer_in_collection = db
-//                 .load_layer_collection(
-//                     &another_collection,
-//                     LayerCollectionListOptions {
-//                         offset: 0,
-//                         limit: 20,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap()
-//                 .items
-//                 .len();
-//             assert_eq!(
-//                 number_of_layer_in_collection,
-//                 1 /* only the other collection should be here */
-//             );
-
-//             db.load_layer(&layer_in_one_collection).await.unwrap_err();
-
-//             // remove second layer --> should only be gone in collection
-
-//             db.remove_layer_from_collection(&layer_in_two_collections, &another_collection)
-//                 .await
-//                 .unwrap();
-
-//             let number_of_layer_in_collection = db
-//                 .load_layer_collection(
-//                     &another_collection,
-//                     LayerCollectionListOptions {
-//                         offset: 0,
-//                         limit: 20,
-//                     }
-//                     .validated()
-//                     .unwrap(),
-//                 )
-//                 .await
-//                 .unwrap()
-//                 .items
-//                 .len();
-//             assert_eq!(
-//                 number_of_layer_in_collection,
-//                 0 /* both layers were deleted */
-//             );
-
-//             db.load_layer(&layer_in_two_collections).await.unwrap();
-//         })
-//         .await;
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     #[allow(clippy::too_many_lines)]
-//     async fn it_deletes_dataset() {
-//         with_temp_context(|ctx, _| async move {
-//             let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
-
-//             let loading_info = OgrSourceDataset {
-//                 file_name: PathBuf::from("test.csv"),
-//                 layer_name: "test.csv".to_owned(),
-//                 data_type: Some(VectorDataType::MultiPoint),
-//                 time: OgrSourceDatasetTimeType::Start {
-//                     start_field: "start".to_owned(),
-//                     start_format: OgrSourceTimeFormat::Auto,
-//                     duration: OgrSourceDurationSpec::Zero,
-//                 },
-//                 default_geometry: None,
-//                 columns: Some(OgrSourceColumnSpec {
-//                     format_specifics: Some(FormatSpecifics::Csv {
-//                         header: CsvHeader::Auto,
-//                     }),
-//                     x: "x".to_owned(),
-//                     y: None,
-//                     int: vec![],
-//                     float: vec![],
-//                     text: vec![],
-//                     bool: vec![],
-//                     datetime: vec![],
-//                     rename: None,
-//                 }),
-//                 force_ogr_time_filter: false,
-//                 force_ogr_spatial_filter: false,
-//                 on_error: OgrSourceErrorSpec::Ignore,
-//                 sql_query: None,
-//                 attribute_query: None,
-//             };
-
-//             let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
-//                 OgrSourceDataset,
-//                 VectorResultDescriptor,
-//                 VectorQueryRectangle,
-//             > {
-//                 loading_info: loading_info.clone(),
-//                 result_descriptor: VectorResultDescriptor {
-//                     data_type: VectorDataType::MultiPoint,
-//                     spatial_reference: SpatialReference::epsg_4326().into(),
-//                     columns: [(
-//                         "foo".to_owned(),
-//                         VectorColumnInfo {
-//                             data_type: FeatureDataType::Float,
-//                             measurement: Measurement::Unitless,
-//                         },
-//                     )]
-//                     .into_iter()
-//                     .collect(),
-//                     time: None,
-//                     bbox: None,
-//                 },
-//                 phantom: Default::default(),
-//             });
-
-//             let session = ctx.user_db_ref().anonymous().await.unwrap();
-
-//             let db = ctx.dataset_db_ref();
-//             let wrap = db.wrap_meta_data(meta_data);
-//             db.add_dataset(
-//                 &session,
-//                 AddDataset {
-//                     id: Some(dataset_id),
-//                     name: "Ogr Test".to_owned(),
-//                     description: "desc".to_owned(),
-//                     source_operator: "OgrSource".to_owned(),
-//                     symbology: None,
-//                     provenance: Some(vec![Provenance {
-//                         citation: "citation".to_owned(),
-//                         license: "license".to_owned(),
-//                         uri: "uri".to_owned(),
-//                     }]),
-//                 }
-//                 .validated()
-//                 .unwrap(),
-//                 wrap,
-//             )
-//             .await
-//             .unwrap();
-
-//             assert!(db.load(&session, &dataset_id).await.is_ok());
-
-//             db.delete_dataset(&session, dataset_id).await.unwrap();
-
-//             assert!(db.load(&session, &dataset_id).await.is_err());
-//         })
-//         .await;
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     #[allow(clippy::too_many_lines)]
-//     async fn it_deletes_admin_dataset() {
-//         with_temp_context(|ctx, _| async move {
-//             let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
-
-//             let loading_info = OgrSourceDataset {
-//                 file_name: PathBuf::from("test.csv"),
-//                 layer_name: "test.csv".to_owned(),
-//                 data_type: Some(VectorDataType::MultiPoint),
-//                 time: OgrSourceDatasetTimeType::Start {
-//                     start_field: "start".to_owned(),
-//                     start_format: OgrSourceTimeFormat::Auto,
-//                     duration: OgrSourceDurationSpec::Zero,
-//                 },
-//                 default_geometry: None,
-//                 columns: Some(OgrSourceColumnSpec {
-//                     format_specifics: Some(FormatSpecifics::Csv {
-//                         header: CsvHeader::Auto,
-//                     }),
-//                     x: "x".to_owned(),
-//                     y: None,
-//                     int: vec![],
-//                     float: vec![],
-//                     text: vec![],
-//                     bool: vec![],
-//                     datetime: vec![],
-//                     rename: None,
-//                 }),
-//                 force_ogr_time_filter: false,
-//                 force_ogr_spatial_filter: false,
-//                 on_error: OgrSourceErrorSpec::Ignore,
-//                 sql_query: None,
-//                 attribute_query: None,
-//             };
-
-//             let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
-//                 OgrSourceDataset,
-//                 VectorResultDescriptor,
-//                 VectorQueryRectangle,
-//             > {
-//                 loading_info: loading_info.clone(),
-//                 result_descriptor: VectorResultDescriptor {
-//                     data_type: VectorDataType::MultiPoint,
-//                     spatial_reference: SpatialReference::epsg_4326().into(),
-//                     columns: [(
-//                         "foo".to_owned(),
-//                         VectorColumnInfo {
-//                             data_type: FeatureDataType::Float,
-//                             measurement: Measurement::Unitless,
-//                         },
-//                     )]
-//                     .into_iter()
-//                     .collect(),
-//                     time: None,
-//                     bbox: None,
-//                 },
-//                 phantom: Default::default(),
-//             });
-
-//             let session: UserSession = AdminSession::default().into();
-
-//             let db = ctx.dataset_db_ref();
-//             let wrap = db.wrap_meta_data(meta_data);
-//             db.add_dataset(
-//                 &session,
-//                 AddDataset {
-//                     id: Some(dataset_id),
-//                     name: "Ogr Test".to_owned(),
-//                     description: "desc".to_owned(),
-//                     source_operator: "OgrSource".to_owned(),
-//                     symbology: None,
-//                     provenance: Some(vec![Provenance {
-//                         citation: "citation".to_owned(),
-//                         license: "license".to_owned(),
-//                         uri: "uri".to_owned(),
-//                     }]),
-//                 }
-//                 .validated()
-//                 .unwrap(),
-//                 wrap,
-//             )
-//             .await
-//             .unwrap();
-
-//             assert!(db.load(&session, &dataset_id).await.is_ok());
-
-//             db.delete_dataset(&session, dataset_id).await.unwrap();
-
-//             assert!(db.load(&session, &dataset_id).await.is_err());
-//         })
-//         .await;
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::str::FromStr;
+
+    use super::*;
+    use crate::api::model::datatypes::{DataProviderId, DatasetId};
+    use crate::api::model::services::AddDataset;
+    use crate::contexts::AdminSession;
+    use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
+    use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
+    use crate::datasets::listing::{DatasetProvider, Provenance};
+    use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
+    use crate::datasets::upload::{FileId, UploadId};
+    use crate::datasets::upload::{FileUpload, Upload, UploadDb};
+    use crate::layers::layer::{
+        AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
+        LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
+    };
+    use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+    use crate::layers::storage::{
+        LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
+        INTERNAL_PROVIDER_ID,
+    };
+    use crate::pro::permissions::{Permission, PermissionDb};
+    use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
+    use crate::pro::users::{ExternalUserClaims, UserCredentials, UserDb, UserRegistration};
+    use crate::projects::{
+        CreateProject, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
+        ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
+        UpdateProject,
+    };
+    use crate::util::config::{get_config_element, Postgres};
+    use crate::util::user_input::UserInput;
+    use crate::workflows::registry::WorkflowRegistry;
+    use crate::workflows::workflow::Workflow;
+    use bb8_postgres::bb8::ManageConnection;
+    use bb8_postgres::tokio_postgres::{self, NoTls};
+    use futures::Future;
+    use geoengine_datatypes::collections::VectorDataType;
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
+        SpatialResolution, TimeInterval, VectorQueryRectangle,
+    };
+    use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_datatypes::util::Identifier;
+    use geoengine_operators::engine::{
+        MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
+        StaticMetaData, TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
+        VectorResultDescriptor,
+    };
+    use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
+    use geoengine_operators::plot::{Statistics, StatisticsParams};
+    use geoengine_operators::source::{
+        CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset,
+        OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
+    };
+    use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
+    use openidconnect::SubjectIdentifier;
+    use rand::RngCore;
+    use tokio::runtime::Handle;
+
+    /// Setup database schema and return its name.
+    async fn setup_db() -> (tokio_postgres::Config, String) {
+        let mut db_config = get_config_element::<Postgres>().unwrap();
+        db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
+
+        let mut pg_config = tokio_postgres::Config::new();
+        pg_config
+            .user(&db_config.user)
+            .password(&db_config.password)
+            .host(&db_config.host)
+            .dbname(&db_config.database);
+
+        // generate schema with prior connection
+        PostgresConnectionManager::new(pg_config.clone(), NoTls)
+            .connect()
+            .await
+            .unwrap()
+            .batch_execute(&format!("CREATE SCHEMA {};", &db_config.schema))
+            .await
+            .unwrap();
+
+        // fix schema by providing `search_path` option
+        pg_config.options(&format!("-c search_path={}", db_config.schema));
+
+        (pg_config, db_config.schema)
+    }
+
+    /// Tear down database schema.
+    async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
+        // generate schema with prior connection
+        PostgresConnectionManager::new(pg_config, NoTls)
+            .connect()
+            .await
+            .unwrap()
+            .batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
+            .await
+            .unwrap();
+    }
+
+    async fn with_temp_context<F, Fut>(f: F)
+    where
+        F: FnOnce(PostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+            + std::panic::UnwindSafe
+            + Send
+            + 'static,
+        Fut: Future<Output = ()> + Send,
+    {
+        let (pg_config, schema) = setup_db().await;
+
+        // catch all panics and clean up first…
+        let executed_fn = {
+            let pg_config = pg_config.clone();
+            std::panic::catch_unwind(move || {
+                tokio::task::block_in_place(move || {
+                    Handle::current().block_on(async move {
+                        let ctx = PostgresContext::new_with_context_spec(
+                            pg_config.clone(),
+                            tokio_postgres::NoTls,
+                            TestDefault::test_default(),
+                            TestDefault::test_default(),
+                        )
+                        .await
+                        .unwrap();
+                        f(ctx, pg_config.clone()).await;
+                    });
+                });
+            })
+        };
+
+        tear_down_db(pg_config, &schema).await;
+
+        // then throw errors afterwards
+        if let Err(err) = executed_fn {
+            std::panic::resume_unwind(err);
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test() {
+        with_temp_context(|ctx, _| async move {
+            anonymous(&ctx).await;
+
+            let _user_id = user_reg_login(&ctx).await;
+
+            let session = ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".into(),
+                    password: "secret123".into(),
+                })
+                .await
+                .unwrap();
+
+            create_projects(&ctx, &session).await;
+
+            let projects = list_projects(&ctx, &session).await;
+
+            set_session(&ctx, &projects).await;
+
+            let project_id = projects[0].id;
+
+            update_projects(&ctx, &session, project_id).await;
+
+            add_permission(&ctx, &session, project_id).await;
+
+            delete_project(&ctx, &session, project_id).await;
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_external() {
+        with_temp_context(|ctx, _| async move {
+            anonymous(&ctx).await;
+
+            let session = external_user_login_twice(&ctx).await;
+
+            create_projects(&ctx, &session).await;
+
+            let projects = list_projects(&ctx, &session).await;
+
+            set_session_external(&ctx, &projects).await;
+
+            let project_id = projects[0].id;
+
+            update_projects(&ctx, &session, project_id).await;
+
+            add_permission(&ctx, &session, project_id).await;
+
+            delete_project(&ctx, &session, project_id).await;
+        })
+        .await;
+    }
+
+    async fn set_session(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+        let credentials = UserCredentials {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+        };
+
+        let session = ctx.login(credentials).await.unwrap();
+
+        set_session_in_database(ctx, projects, session).await;
+    }
+
+    async fn set_session_external(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+        let external_user_claims = ExternalUserClaims {
+            external_id: SubjectIdentifier::new("Foo bar Id".into()),
+            email: "foo@bar.de".into(),
+            real_name: "Foo Bar".into(),
+        };
+
+        let session = ctx
+            .login_external(external_user_claims, Duration::minutes(10))
+            .await
+            .unwrap();
+
+        set_session_in_database(&ctx, projects, session).await;
+    }
+
+    async fn set_session_in_database(
+        ctx: &PostgresContext<NoTls>,
+        projects: &[ProjectListing],
+        session: UserSession,
+    ) {
+        let db = ctx.db(session.clone());
+
+        db.set_session_project(projects[0].id).await.unwrap();
+
+        assert_eq!(
+            ctx.session(session.id).await.unwrap().project,
+            Some(projects[0].id)
+        );
+
+        let rect = STRectangle::new_unchecked(SpatialReference::epsg_4326(), 0., 1., 2., 3., 1, 2);
+        db.set_session_view(rect.clone()).await.unwrap();
+        assert_eq!(ctx.session(session.id).await.unwrap().view, Some(rect));
+    }
+
+    async fn delete_project(
+        ctx: &PostgresContext<NoTls>,
+        session: &UserSession,
+        project_id: ProjectId,
+    ) {
+        let db = ctx.db(session.clone());
+
+        db.delete_project(project_id).await.unwrap();
+
+        assert!(db.load_project(project_id).await.is_err());
+    }
+
+    async fn add_permission(
+        ctx: &PostgresContext<NoTls>,
+        session: &UserSession,
+        project_id: ProjectId,
+    ) {
+        let db = ctx.db(session.clone());
+
+        assert!(db
+            .has_permission(project_id, Permission::Owner)
+            .await
+            .unwrap());
+
+        let user2 = ctx
+            .register(
+                UserRegistration {
+                    email: "user2@example.com".into(),
+                    password: "12345678".into(),
+                    real_name: "User2".into(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session2 = ctx
+            .login(UserCredentials {
+                email: "user2@example.com".into(),
+                password: "12345678".into(),
+            })
+            .await
+            .unwrap();
+
+        let db2 = ctx.db(session2.clone());
+        assert!(!db2
+            .has_permission(project_id, Permission::Owner)
+            .await
+            .unwrap());
+
+        db.add_permission(user2.into(), project_id, Permission::Read)
+            .await
+            .unwrap();
+
+        assert!(db2
+            .has_permission(project_id, Permission::Read)
+            .await
+            .unwrap());
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn update_projects(
+        ctx: &PostgresContext<NoTls>,
+        session: &UserSession,
+        project_id: ProjectId,
+    ) {
+        let db = ctx.db(session.clone());
+
+        let project = db
+            .load_project_version(project_id, LoadVersion::Latest)
+            .await
+            .unwrap();
+
+        let layer_workflow_id = db
+            .register_workflow(Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            })
+            .await
+            .unwrap();
+
+        assert!(db.load_workflow(&layer_workflow_id).await.is_ok());
+
+        let plot_workflow_id = db
+            .register_workflow(Workflow {
+                operator: Statistics {
+                    params: StatisticsParams {
+                        column_names: vec![],
+                    },
+                    sources: MultipleRasterOrSingleVectorSource {
+                        source: Raster(vec![]),
+                    },
+                }
+                .boxed()
+                .into(),
+            })
+            .await
+            .unwrap();
+
+        assert!(db.load_workflow(&plot_workflow_id).await.is_ok());
+
+        // add a plot
+        let update = UpdateProject {
+            id: project.id,
+            name: Some("Test9 Updated".into()),
+            description: None,
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
+                workflow: layer_workflow_id,
+                name: "TestLayer".into(),
+                symbology: PointSymbology::default().into(),
+                visibility: Default::default(),
+            })]),
+            plots: Some(vec![PlotUpdate::UpdateOrInsert(Plot {
+                workflow: plot_workflow_id,
+                name: "Test Plot".into(),
+            })]),
+            bounds: None,
+            time_step: None,
+        };
+        db.update_project(update.validated().unwrap())
+            .await
+            .unwrap();
+
+        let versions = db.list_project_versions(project_id).await.unwrap();
+        assert_eq!(versions.len(), 2);
+
+        // add second plot
+        let update = UpdateProject {
+            id: project.id,
+            name: Some("Test9 Updated".into()),
+            description: None,
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
+                workflow: layer_workflow_id,
+                name: "TestLayer".into(),
+                symbology: PointSymbology::default().into(),
+                visibility: Default::default(),
+            })]),
+            plots: Some(vec![
+                PlotUpdate::UpdateOrInsert(Plot {
+                    workflow: plot_workflow_id,
+                    name: "Test Plot".into(),
+                }),
+                PlotUpdate::UpdateOrInsert(Plot {
+                    workflow: plot_workflow_id,
+                    name: "Test Plot".into(),
+                }),
+            ]),
+            bounds: None,
+            time_step: None,
+        };
+        db.update_project(update.validated().unwrap())
+            .await
+            .unwrap();
+
+        let versions = db.list_project_versions(project_id).await.unwrap();
+        assert_eq!(versions.len(), 3);
+
+        // delete plots
+        let update = UpdateProject {
+            id: project.id,
+            name: None,
+            description: None,
+            layers: None,
+            plots: Some(vec![]),
+            bounds: None,
+            time_step: None,
+        };
+        db.update_project(update.validated().unwrap())
+            .await
+            .unwrap();
+
+        let versions = db.list_project_versions(project_id).await.unwrap();
+        assert_eq!(versions.len(), 4);
+    }
+
+    async fn list_projects(
+        ctx: &PostgresContext<NoTls>,
+        session: &UserSession,
+    ) -> Vec<ProjectListing> {
+        let options = ProjectListOptions {
+            filter: ProjectFilter::None,
+            order: OrderBy::NameDesc,
+            offset: 0,
+            limit: 2,
+        }
+        .validated()
+        .unwrap();
+
+        let db = ctx.db(session.clone());
+
+        let projects = db.list_projects(options).await.unwrap();
+
+        assert_eq!(projects.len(), 2);
+        assert_eq!(projects[0].name, "Test9");
+        assert_eq!(projects[1].name, "Test8");
+        projects
+    }
+
+    async fn create_projects(ctx: &PostgresContext<NoTls>, session: &UserSession) {
+        let db = ctx.db(session.clone());
+
+        for i in 0..10 {
+            let create = CreateProject {
+                name: format!("Test{i}"),
+                description: format!("Test{}", 10 - i),
+                bounds: STRectangle::new(
+                    SpatialReferenceOption::Unreferenced,
+                    0.,
+                    0.,
+                    1.,
+                    1.,
+                    0,
+                    1,
+                )
+                .unwrap(),
+                time_step: None,
+            }
+            .validated()
+            .unwrap();
+            db.create_project(create).await.unwrap();
+        }
+    }
+
+    async fn user_reg_login(ctx: &PostgresContext<NoTls>) -> UserId {
+        let user_registration = UserRegistration {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+            real_name: "Foo Bar".into(),
+        }
+        .validated()
+        .unwrap();
+
+        let user_id = ctx.register(user_registration).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+        };
+
+        let session = ctx.login(credentials).await.unwrap();
+
+        let db = ctx.db(session.clone());
+
+        ctx.session(session.id).await.unwrap();
+
+        db.logout().await.unwrap();
+
+        assert!(ctx.session(session.id).await.is_err());
+
+        user_id
+    }
+
+    //TODO: No duplicate tests for postgres and hashmap implementation possible?
+    async fn external_user_login_twice(ctx: &PostgresContext<NoTls>) -> UserSession {
+        let external_user_claims = ExternalUserClaims {
+            external_id: SubjectIdentifier::new("Foo bar Id".into()),
+            email: "foo@bar.de".into(),
+            real_name: "Foo Bar".into(),
+        };
+        let duration = Duration::minutes(30);
+
+        //NEW
+        let login_result = ctx
+            .login_external(external_user_claims.clone(), duration)
+            .await;
+        assert!(login_result.is_ok());
+
+        let session_1 = login_result.unwrap();
+        let user_id = session_1.user.id; //TODO: Not a deterministic test.
+
+        let db1 = ctx.db(session_1.clone());
+
+        assert!(session_1.user.email.is_some());
+        assert_eq!(session_1.user.email.unwrap(), "foo@bar.de");
+        assert!(session_1.user.real_name.is_some());
+        assert_eq!(session_1.user.real_name.unwrap(), "Foo Bar");
+
+        let expected_duration = session_1.created + duration;
+        assert_eq!(session_1.valid_until, expected_duration);
+
+        assert!(ctx.session(session_1.id).await.is_ok());
+
+        assert!(db1.logout().await.is_ok());
+
+        assert!(ctx.session(session_1.id).await.is_err());
+
+        let duration = Duration::minutes(10);
+        let login_result = ctx
+            .login_external(external_user_claims.clone(), duration)
+            .await;
+        assert!(login_result.is_ok());
+
+        let session_2 = login_result.unwrap();
+        let result = session_2.clone();
+
+        let db2 = ctx.db(session_2.clone());
+
+        assert!(session_2.user.email.is_some()); //TODO: Technically, user details could change for each login. For simplicity, this is not covered yet.
+        assert_eq!(session_2.user.email.unwrap(), "foo@bar.de");
+        assert!(session_2.user.real_name.is_some());
+        assert_eq!(session_2.user.real_name.unwrap(), "Foo Bar");
+        assert_eq!(session_2.user.id, user_id);
+
+        let expected_duration = session_2.created + duration;
+        assert_eq!(session_2.valid_until, expected_duration);
+
+        assert!(ctx.session(session_2.id).await.is_ok());
+
+        result
+    }
+
+    async fn anonymous(ctx: &PostgresContext<NoTls>) {
+        let now: DateTime = chrono::offset::Utc::now().into();
+        let session = ctx.anonymous().await.unwrap();
+        let then: DateTime = chrono::offset::Utc::now().into();
+
+        assert!(session.created >= now && session.created <= then);
+        assert!(session.valid_until > session.created);
+
+        let session = ctx.session(session.id).await.unwrap();
+
+        let db = ctx.db(session.clone());
+
+        db.logout().await.unwrap();
+
+        assert!(ctx.session(session.id).await.is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_workflows() {
+        with_temp_context(|ctx, pg_config| async move {
+            let workflow = Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            };
+
+            let session = ctx.anonymous().await.unwrap();
+
+            let db = ctx
+                .db(session);
+            let id = db
+                .register_workflow(workflow)
+                .await
+                .unwrap();
+
+            drop(ctx);
+
+            let ctx = PostgresContext::new_with_context_spec(pg_config.clone(), tokio_postgres::NoTls, TestDefault::test_default(), TestDefault::test_default())
+                .await
+                .unwrap();
+
+            let workflow = db.load_workflow(&id).await.unwrap();
+
+            let json = serde_json::to_string(&workflow).unwrap();
+            assert_eq!(json, r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}]}}}"#);
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_datasets() {
+        with_temp_context(|ctx, _| async move {
+            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+                },
+                phantom: Default::default(),
+            });
+
+            let session = ctx.anonymous().await.unwrap();
+
+            let db = ctx.db(session.clone());
+            let wrap = db.wrap_meta_data(meta_data);
+            db.add_dataset(
+                AddDataset {
+                    id: Some(dataset_id),
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    provenance: Some(vec![Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }]),
+                }
+                .validated()
+                .unwrap(),
+                wrap,
+            )
+            .await
+            .unwrap();
+
+            let datasets = db
+                .list_datasets(
+                    DatasetListOptions {
+                        filter: None,
+                        order: crate::datasets::listing::OrderBy::NameAsc,
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(datasets.len(), 1);
+
+            assert_eq!(
+                datasets[0],
+                DatasetListing {
+                    id: dataset_id,
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    tags: vec![],
+                    result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        columns: [(
+                            "foo".to_owned(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Float,
+                                measurement: Measurement::Unitless
+                            }
+                        )]
+                        .into_iter()
+                        .collect(),
+                        time: None,
+                        bbox: None,
+                    })
+                    .into(),
+                },
+            );
+
+            let provenance = db.load_provenance(&dataset_id).await.unwrap();
+
+            assert_eq!(
+                provenance,
+                ProvenanceOutput {
+                    data: dataset_id.into(),
+                    provenance: Some(vec![Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }])
+                }
+            );
+
+            let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> =
+                db.meta_data(&&dataset_id.into()).await.unwrap();
+
+            assert_eq!(
+                meta_data
+                    .loading_info(VectorQueryRectangle {
+                        spatial_bounds: BoundingBox2D::new_unchecked(
+                            (-180., -90.).into(),
+                            (180., 90.).into()
+                        ),
+                        time_interval: TimeInterval::default(),
+                        spatial_resolution: SpatialResolution::zero_point_one(),
+                    })
+                    .await
+                    .unwrap(),
+                loading_info
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_uploads() {
+        with_temp_context(|ctx, _| async move {
+            let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
+            let input = Upload {
+                id,
+                files: vec![FileUpload {
+                    id: FileId::from_str("e80afab0-831d-4d40-95d6-1e4dfd277e72").unwrap(),
+                    name: "test.csv".to_owned(),
+                    byte_size: 1337,
+                }],
+            };
+
+            let session = ctx.anonymous().await.unwrap();
+
+            let db = ctx.db(session.clone());
+
+            db.create_upload(input.clone()).await.unwrap();
+
+            let upload = db.load_upload(id).await.unwrap();
+
+            assert_eq!(upload, input);
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_layer_providers() {
+        with_temp_context(|ctx, _| async move {
+            let db = ctx.db(UserSession::system_session());
+
+            let provider_id =
+                DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+                },
+                phantom: Default::default(),
+            });
+
+            let provider = MockExternalLayerProviderDefinition {
+                id: provider_id,
+                root_collection: MockCollection {
+                    id: LayerCollectionId("b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_owned()),
+                    name: "Mock Collection A".to_owned(),
+                    description: "Some description".to_owned(),
+                    collections: vec![MockCollection {
+                        id: LayerCollectionId("21466897-37a1-4666-913a-50b5244699ad".to_owned()),
+                        name: "Mock Collection B".to_owned(),
+                        description: "Some description".to_owned(),
+                        collections: vec![],
+                        layers: vec![],
+                    }],
+                    layers: vec![],
+                },
+                data: [("myData".to_owned(), meta_data)].into_iter().collect(),
+            };
+
+            db.add_layer_provider(Box::new(provider)).await.unwrap();
+
+            let providers = db
+                .list_layer_providers(
+                    LayerProviderListingOptions {
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(providers.len(), 1);
+
+            assert_eq!(
+                providers[0],
+                LayerProviderListing {
+                    id: provider_id,
+                    name: "MockName".to_owned(),
+                    description: "MockType".to_owned(),
+                }
+            );
+
+            let provider = db.load_layer_provider(provider_id).await.unwrap();
+
+            let datasets = provider
+                .load_layer_collection(
+                    &provider.get_root_layer_collection_id().await.unwrap(),
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(datasets.items.len(), 1);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_lists_only_permitted_datasets() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.anonymous().await.unwrap();
+            let session2 = ctx.anonymous().await.unwrap();
+
+            let db1 = ctx.db(session1.clone());
+            let db2 = ctx.db(session2.clone());
+
+            let descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+                time: None,
+                bbox: None,
+            };
+
+            let ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: String::new(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let _id = db1
+                .add_dataset(ds.validated().unwrap(), meta)
+                .await
+                .unwrap();
+
+            let list1 = db1
+                .list_datasets(
+                    DatasetListOptions {
+                        filter: None,
+                        order: crate::datasets::listing::OrderBy::NameAsc,
+                        offset: 0,
+                        limit: 1,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(list1.len(), 1);
+
+            let list2 = db2
+                .list_datasets(
+                    DatasetListOptions {
+                        filter: None,
+                        order: crate::datasets::listing::OrderBy::NameAsc,
+                        offset: 0,
+                        limit: 1,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(list2.len(), 0);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_shows_only_permitted_provenance() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.anonymous().await.unwrap();
+            let session2 = ctx.anonymous().await.unwrap();
+
+            let db1 = ctx.db(session1.clone());
+            let db2 = ctx.db(session2.clone());
+
+            let descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+                time: None,
+                bbox: None,
+            };
+
+            let ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: String::new(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let id = db1
+                .add_dataset(ds.validated().unwrap(), meta)
+                .await
+                .unwrap();
+
+            assert!(db1.load_provenance(&id).await.is_ok());
+
+            assert!(db2.load_provenance(&id).await.is_err());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_updates_permissions() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.anonymous().await.unwrap();
+            let session2 = ctx.anonymous().await.unwrap();
+
+            let db1 = ctx.db(session1.clone());
+            let db2 = ctx.db(session2.clone());
+
+            let descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+                time: None,
+                bbox: None,
+            };
+
+            let ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: String::new(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let id = db1
+                .add_dataset(ds.validated().unwrap(), meta)
+                .await
+                .unwrap();
+
+            assert!(db1.load_dataset(&id).await.is_ok());
+
+            assert!(db2.load_dataset(&id).await.is_err());
+
+            db1.add_permission(session2.user.id.into(), id, Permission::Read)
+                .await
+                .unwrap();
+
+            assert!(db2.load_dataset(&id).await.is_ok());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_uses_roles_for_permissions() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.anonymous().await.unwrap();
+            let session2 = ctx.anonymous().await.unwrap();
+
+            let db1 = ctx.db(session1.clone());
+            let db2 = ctx.db(session2.clone());
+
+            let descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+                time: None,
+                bbox: None,
+            };
+
+            let ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: String::new(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let id = db1
+                .add_dataset(ds.validated().unwrap(), meta)
+                .await
+                .unwrap();
+
+            assert!(db1.load_dataset(&id).await.is_ok());
+
+            assert!(db2.load_dataset(&id).await.is_err());
+
+            db1.add_permission(session2.user.id.into(), id, Permission::Read)
+                .await
+                .unwrap();
+
+            assert!(db2.load_dataset(&id).await.is_ok());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_secures_meta_data() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.anonymous().await.unwrap();
+            let session2 = ctx.anonymous().await.unwrap();
+
+            let db1 = ctx.db(session1.clone());
+            let db2 = ctx.db(session2.clone());
+
+            let descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+                time: None,
+                bbox: None,
+            };
+
+            let ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: String::new(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let id = db1
+                .add_dataset(ds.validated().unwrap(), meta)
+                .await
+                .unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+            > = db1.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+            > = db2.meta_data(&id.into()).await;
+
+            assert!(meta.is_err());
+
+            db1.add_permission(session2.user.id.into(), id, Permission::Read)
+                .await
+                .unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+            > = db2.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_secures_uploads() {
+        with_temp_context(|ctx, _| async move {
+            let session1 = ctx.anonymous().await.unwrap();
+            let session2 = ctx.anonymous().await.unwrap();
+
+            let db1 = ctx.db(session1.clone());
+            let db2 = ctx.db(session2.clone());
+
+            let upload_id = UploadId::new();
+
+            let upload = Upload {
+                id: upload_id,
+                files: vec![FileUpload {
+                    id: FileId::new(),
+                    name: "test.bin".to_owned(),
+                    byte_size: 1024,
+                }],
+            };
+
+            db1.create_upload(upload).await.unwrap();
+
+            assert!(db1.load_upload(upload_id).await.is_ok());
+
+            assert!(db2.load_upload(upload_id).await.is_err());
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_collects_layers() {
+        with_temp_context(|ctx, _| async move {
+            let session = AdminSession::default();
+
+            let layer_db = ctx.db(session.into());
+
+            let workflow = Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            };
+
+            let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
+
+            let layer1 = layer_db
+                .add_layer(
+                    AddLayer {
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        symbology: None,
+                        workflow: workflow.clone(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &root_collection_id,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                layer_db.load_layer(&layer1).await.unwrap(),
+                crate::layers::layer::Layer {
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer1.clone(),
+                    },
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    properties: vec![],
+                    metadata: HashMap::new(),
+                }
+            );
+
+            let collection1_id = layer_db
+                .add_layer_collection(
+                    AddLayerCollection {
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &root_collection_id,
+                )
+                .await
+                .unwrap();
+
+            let layer2 = layer_db
+                .add_layer(
+                    AddLayer {
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        symbology: None,
+                        workflow: workflow.clone(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &collection1_id,
+                )
+                .await
+                .unwrap();
+
+            let collection2_id = layer_db
+                .add_layer_collection(
+                    AddLayerCollection {
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &collection1_id,
+                )
+                .await
+                .unwrap();
+
+            layer_db
+                .add_collection_to_parent(&collection2_id, &collection1_id)
+                .await
+                .unwrap();
+
+            let root_collection = layer_db
+                .load_layer_collection(
+                    &root_collection_id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                root_collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        collection_id: root_collection_id,
+                    },
+                    name: "Layers".to_string(),
+                    description: "All available Geo Engine layers".to_string(),
+                    items: vec![
+                        CollectionItem::Collection(LayerCollectionListing {
+                            id: ProviderLayerCollectionId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                collection_id: collection1_id.clone(),
+                            },
+                            name: "Collection1".to_string(),
+                            description: "Collection 1".to_string(),
+                        }),
+                        CollectionItem::Collection(LayerCollectionListing {
+                            id: ProviderLayerCollectionId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                collection_id: LayerCollectionId(
+                                    UNSORTED_COLLECTION_ID.to_string()
+                                ),
+                            },
+                            name: "Unsorted".to_string(),
+                            description: "Unsorted Layers".to_string(),
+                        }),
+                        CollectionItem::Layer(LayerListing {
+                            id: ProviderLayerId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                layer_id: layer1,
+                            },
+                            name: "Layer1".to_string(),
+                            description: "Layer 1".to_string(),
+                            properties: vec![],
+                        })
+                    ],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            let collection1 = layer_db
+                .load_layer_collection(
+                    &collection1_id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection1,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        collection_id: collection1_id,
+                    },
+                    name: "Collection1".to_string(),
+                    description: "Collection 1".to_string(),
+                    items: vec![
+                        CollectionItem::Collection(LayerCollectionListing {
+                            id: ProviderLayerCollectionId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                collection_id: collection2_id,
+                            },
+                            name: "Collection2".to_string(),
+                            description: "Collection 2".to_string(),
+                        }),
+                        CollectionItem::Layer(LayerListing {
+                            id: ProviderLayerId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                layer_id: layer2,
+                            },
+                            name: "Layer2".to_string(),
+                            description: "Layer 2".to_string(),
+                            properties: vec![],
+                        })
+                    ],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_tracks_used_quota_in_postgres() {
+        with_temp_context(|ctx, _| async move {
+            let _user = ctx
+                .register(
+                    UserRegistration {
+                        email: "foo@example.com".to_string(),
+                        password: "secret1234".to_string(),
+                        real_name: "Foo Bar".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let session = ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
+
+            let quota = initialize_quota_tracking(ctx.db(session.clone()));
+
+            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+
+            tracking.work_unit_done();
+            tracking.work_unit_done();
+
+            let db = ctx.db(session);
+
+            // wait for quota to be recorded
+            let mut success = false;
+            for _ in 0..10 {
+                let used = db.quota_used().await.unwrap();
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+                if used == 2 {
+                    success = true;
+                    break;
+                }
+            }
+
+            assert!(success);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_tracks_available_quota() {
+        with_temp_context(|ctx, _| async move {
+            let user = ctx
+                .register(
+                    UserRegistration {
+                        email: "foo@example.com".to_string(),
+                        password: "secret1234".to_string(),
+                        real_name: "Foo Bar".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let session = ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
+
+            let db = ctx
+                .db(session.clone())
+                .update_quota_available_by_user(&user, 1)
+                .await
+                .unwrap();
+
+            let quota = initialize_quota_tracking(ctx.db(session.clone()));
+
+            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+
+            tracking.work_unit_done();
+            tracking.work_unit_done();
+
+            let db = ctx.db(session);
+
+            // wait for quota to be recorded
+            let mut success = false;
+            for _ in 0..10 {
+                let available = db.quota_available().await.unwrap();
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+                if available == -1 {
+                    success = true;
+                    break;
+                }
+            }
+
+            assert!(success);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_updates_quota_in_postgres() {
+        with_temp_context(|ctx, _| async move {
+            let user = ctx
+                .register(
+                    UserRegistration {
+                        email: "foo@example.com".to_string(),
+                        password: "secret1234".to_string(),
+                        real_name: "Foo Bar".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let session = ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
+
+            let db = ctx.db(session.clone());
+            let admin_db = ctx.db(UserSession::system_session());
+
+            assert_eq!(
+                db.quota_available().await.unwrap(),
+                crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                    .unwrap()
+                    .default_available_quota
+            );
+
+            assert_eq!(
+                admin_db.quota_available_by_user(&user).await.unwrap(),
+                crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                    .unwrap()
+                    .default_available_quota
+            );
+
+            admin_db
+                .update_quota_available_by_user(&user, 123)
+                .await
+                .unwrap();
+
+            assert_eq!(db.quota_available().await.unwrap(), 123);
+
+            assert_eq!(admin_db.quota_available_by_user(&user).await.unwrap(), 123);
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_removes_layer_collections() {
+        with_temp_context(|ctx, _| async move {
+            let session = AdminSession::default();
+
+            let layer_db = ctx.db(session.into());
+
+            let layer = AddLayer {
+                name: "layer".to_string(),
+                description: "description".to_string(),
+                workflow: Workflow {
+                    operator: TypedOperator::Vector(
+                        MockPointSource {
+                            params: MockPointSourceParams {
+                                points: vec![Coordinate2D::new(1., 2.); 3],
+                            },
+                        }
+                        .boxed(),
+                    ),
+                },
+                symbology: None,
+            }
+            .validated()
+            .unwrap();
+
+            let root_collection = &layer_db.get_root_layer_collection_id().await.unwrap();
+
+            let collection = AddLayerCollection {
+                name: "top collection".to_string(),
+                description: "description".to_string(),
+            }
+            .validated()
+            .unwrap();
+
+            let top_c_id = layer_db
+                .add_layer_collection(collection, root_collection)
+                .await
+                .unwrap();
+
+            let l_id = layer_db.add_layer(layer, &top_c_id).await.unwrap();
+
+            let collection = AddLayerCollection {
+                name: "empty collection".to_string(),
+                description: "description".to_string(),
+            }
+            .validated()
+            .unwrap();
+
+            let empty_c_id = layer_db
+                .add_layer_collection(collection, &top_c_id)
+                .await
+                .unwrap();
+
+            let items = layer_db
+                .load_layer_collection(
+                    &top_c_id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                items,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        collection_id: top_c_id.clone(),
+                    },
+                    name: "top collection".to_string(),
+                    description: "description".to_string(),
+                    items: vec![
+                        CollectionItem::Collection(LayerCollectionListing {
+                            id: ProviderLayerCollectionId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                collection_id: empty_c_id.clone(),
+                            },
+                            name: "empty collection".to_string(),
+                            description: "description".to_string(),
+                        }),
+                        CollectionItem::Layer(LayerListing {
+                            id: ProviderLayerId {
+                                provider_id: INTERNAL_PROVIDER_ID,
+                                layer_id: l_id.clone(),
+                            },
+                            name: "layer".to_string(),
+                            description: "description".to_string(),
+                            properties: vec![],
+                        })
+                    ],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            // remove empty collection
+            layer_db.remove_layer_collection(&empty_c_id).await.unwrap();
+
+            let items = layer_db
+                .load_layer_collection(
+                    &top_c_id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                items,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        collection_id: top_c_id.clone(),
+                    },
+                    name: "top collection".to_string(),
+                    description: "description".to_string(),
+                    items: vec![CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: l_id.clone(),
+                        },
+                        name: "layer".to_string(),
+                        description: "description".to_string(),
+                        properties: vec![],
+                    })],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            // remove top (not root) collection
+            layer_db.remove_layer_collection(&top_c_id).await.unwrap();
+
+            layer_db
+                .load_layer_collection(
+                    &top_c_id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap_err();
+
+            // should be deleted automatically
+            layer_db.load_layer(&l_id).await.unwrap_err();
+
+            // it is not allowed to remove the root collection
+            layer_db
+                .remove_layer_collection(root_collection)
+                .await
+                .unwrap_err();
+            layer_db
+                .load_layer_collection(
+                    root_collection,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_removes_collections_from_collections() {
+        with_temp_context(|ctx, _| async move {
+            let session = AdminSession::default();
+
+            let db = ctx.db(session.into());
+
+            let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
+
+            let mid_collection_id = db
+                .add_layer_collection(
+                    AddLayerCollection {
+                        name: "mid collection".to_string(),
+                        description: "description".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    root_collection_id,
+                )
+                .await
+                .unwrap();
+
+            let bottom_collection_id = db
+                .add_layer_collection(
+                    AddLayerCollection {
+                        name: "bottom collection".to_string(),
+                        description: "description".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &mid_collection_id,
+                )
+                .await
+                .unwrap();
+
+            let layer_id = db
+                .add_layer(
+                    AddLayer {
+                        name: "layer".to_string(),
+                        description: "description".to_string(),
+                        workflow: Workflow {
+                            operator: TypedOperator::Vector(
+                                MockPointSource {
+                                    params: MockPointSourceParams {
+                                        points: vec![Coordinate2D::new(1., 2.); 3],
+                                    },
+                                }
+                                .boxed(),
+                            ),
+                        },
+                        symbology: None,
+                    }
+                    .validated()
+                    .unwrap(),
+                    &mid_collection_id,
+                )
+                .await
+                .unwrap();
+
+            // removing the mid collection…
+            db.remove_layer_collection_from_parent(&mid_collection_id, root_collection_id)
+                .await
+                .unwrap();
+
+            // …should remove itself
+            db.load_layer_collection(
+                &mid_collection_id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+            // …should remove the bottom collection
+            db.load_layer_collection(
+                &bottom_collection_id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+            // … and should remove the layer of the bottom collection
+            db.load_layer(&layer_id).await.unwrap_err();
+
+            // the root collection is still there
+            db.load_layer_collection(
+                root_collection_id,
+                LayerCollectionListOptions::default().validated().unwrap(),
+            )
+            .await
+            .unwrap();
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_removes_layers_from_collections() {
+        with_temp_context(|ctx, _| async move {
+            let session = AdminSession::default();
+
+            let db = ctx.db(session.into());
+
+            let root_collection = &db.get_root_layer_collection_id().await.unwrap();
+
+            let another_collection = db
+                .add_layer_collection(
+                    AddLayerCollection {
+                        name: "top collection".to_string(),
+                        description: "description".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    root_collection,
+                )
+                .await
+                .unwrap();
+
+            let layer_in_one_collection = db
+                .add_layer(
+                    AddLayer {
+                        name: "layer 1".to_string(),
+                        description: "description".to_string(),
+                        workflow: Workflow {
+                            operator: TypedOperator::Vector(
+                                MockPointSource {
+                                    params: MockPointSourceParams {
+                                        points: vec![Coordinate2D::new(1., 2.); 3],
+                                    },
+                                }
+                                .boxed(),
+                            ),
+                        },
+                        symbology: None,
+                    }
+                    .validated()
+                    .unwrap(),
+                    &another_collection,
+                )
+                .await
+                .unwrap();
+
+            let layer_in_two_collections = db
+                .add_layer(
+                    AddLayer {
+                        name: "layer 2".to_string(),
+                        description: "description".to_string(),
+                        workflow: Workflow {
+                            operator: TypedOperator::Vector(
+                                MockPointSource {
+                                    params: MockPointSourceParams {
+                                        points: vec![Coordinate2D::new(1., 2.); 3],
+                                    },
+                                }
+                                .boxed(),
+                            ),
+                        },
+                        symbology: None,
+                    }
+                    .validated()
+                    .unwrap(),
+                    &another_collection,
+                )
+                .await
+                .unwrap();
+
+            db.add_layer_to_collection(&layer_in_two_collections, root_collection)
+                .await
+                .unwrap();
+
+            // remove first layer --> should be deleted entirely
+
+            db.remove_layer_from_collection(&layer_in_one_collection, &another_collection)
+                .await
+                .unwrap();
+
+            let number_of_layer_in_collection = db
+                .load_layer_collection(
+                    &another_collection,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap()
+                .items
+                .len();
+            assert_eq!(
+                number_of_layer_in_collection,
+                1 /* only the other collection should be here */
+            );
+
+            db.load_layer(&layer_in_one_collection).await.unwrap_err();
+
+            // remove second layer --> should only be gone in collection
+
+            db.remove_layer_from_collection(&layer_in_two_collections, &another_collection)
+                .await
+                .unwrap();
+
+            let number_of_layer_in_collection = db
+                .load_layer_collection(
+                    &another_collection,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap()
+                .items
+                .len();
+            assert_eq!(
+                number_of_layer_in_collection,
+                0 /* both layers were deleted */
+            );
+
+            db.load_layer(&layer_in_two_collections).await.unwrap();
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_deletes_dataset() {
+        with_temp_context(|ctx, _| async move {
+            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+                },
+                phantom: Default::default(),
+            });
+
+            let session = ctx.anonymous().await.unwrap();
+
+            let db = ctx.db(session.clone());
+            let wrap = db.wrap_meta_data(meta_data);
+            db.add_dataset(
+                AddDataset {
+                    id: Some(dataset_id),
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    provenance: Some(vec![Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }]),
+                }
+                .validated()
+                .unwrap(),
+                wrap,
+            )
+            .await
+            .unwrap();
+
+            assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+            db.delete_dataset(dataset_id).await.unwrap();
+
+            assert!(db.load_dataset(&dataset_id).await.is_err());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_deletes_admin_dataset() {
+        with_temp_context(|ctx, _| async move {
+            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+                },
+                phantom: Default::default(),
+            });
+
+            let session: UserSession = AdminSession::default().into();
+
+            let db = ctx.db(session);
+            let wrap = db.wrap_meta_data(meta_data);
+            db.add_dataset(
+                AddDataset {
+                    id: Some(dataset_id),
+                    name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    provenance: Some(vec![Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }]),
+                }
+                .validated()
+                .unwrap(),
+                wrap,
+            )
+            .await
+            .unwrap();
+
+            assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+            db.delete_dataset(dataset_id).await.unwrap();
+
+            assert!(db.load_dataset(&dataset_id).await.is_err());
+        })
+        .await;
+    }
+}

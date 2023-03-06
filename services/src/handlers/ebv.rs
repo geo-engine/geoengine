@@ -562,255 +562,255 @@ impl<C: Context> Task<C::TaskContext> for EvbRemoveOverviewTask<C> {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
+#[cfg(test)]
+mod tests {
 
-//     use super::*;
+    use super::*;
 
-//     use crate::{
-//         contexts::{InMemoryContext, Session, SimpleContext},
-//         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
-//         tasks::util::test::wait_for_task_to_finish,
-//         util::server::{configure_extractors, render_404, render_405},
-//         util::tests::read_body_string,
-//     };
-//     use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
-//     use actix_web_httpauth::headers::authorization::Bearer;
-//     use geoengine_datatypes::{test_data, util::test::TestDefault};
-//     use serde_json::json;
-//     use std::path::Path;
+    use crate::{
+        contexts::{InMemoryContext, Session, SimpleContext},
+        datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
+        tasks::util::test::wait_for_task_to_finish,
+        util::server::{configure_extractors, render_404, render_405},
+        util::tests::read_body_string,
+    };
+    use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
+    use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::{test_data, util::test::TestDefault};
+    use serde_json::json;
+    use std::path::Path;
 
-//     async fn send_test_request<C: SimpleContext>(
-//         req: test::TestRequest,
-//         ctx: C,
-//     ) -> ServiceResponse {
-//         let app = test::init_service({
-//             let app = App::new()
-//                 .app_data(web::Data::new(ctx))
-//                 .wrap(
-//                     middleware::ErrorHandlers::default()
-//                         .handler(http::StatusCode::NOT_FOUND, render_404)
-//                         .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
-//                 )
-//                 .wrap(middleware::NormalizePath::trim())
-//                 .configure(configure_extractors)
-//                 .service(web::scope("/ebv").configure(init_ebv_routes::<C>()));
+    async fn send_test_request<C: SimpleContext>(
+        req: test::TestRequest,
+        ctx: C,
+    ) -> ServiceResponse {
+        let app = test::init_service({
+            let app = App::new()
+                .app_data(web::Data::new(ctx))
+                .wrap(
+                    middleware::ErrorHandlers::default()
+                        .handler(http::StatusCode::NOT_FOUND, render_404)
+                        .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+                )
+                .wrap(middleware::NormalizePath::trim())
+                .configure(configure_extractors)
+                .service(web::scope("/ebv").configure(init_ebv_routes::<C>()));
 
-//             app
-//         })
-//         .await;
-//         test::call_service(&app, req.to_request())
-//             .await
-//             .map_into_boxed_body()
-//     }
+            app
+        })
+        .await;
+        test::call_service(&app, req.to_request())
+            .await
+            .map_into_boxed_body()
+    }
 
-//     #[tokio::test]
-//     async fn test_remove_overviews() {
-//         fn is_empty(directory: &Path) -> bool {
-//             directory.read_dir().unwrap().next().is_none()
-//         }
+    #[tokio::test]
+    async fn test_remove_overviews() {
+        fn is_empty(directory: &Path) -> bool {
+            directory.read_dir().unwrap().next().is_none()
+        }
 
-//         crate::util::config::set_config(
-//             "session.admin_session_token",
-//             "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
-//         )
-//         .unwrap();
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
 
-//         let ctx = InMemoryContext::test_default();
-//         let admin_session_id = AdminSession::default().id();
+        let ctx = InMemoryContext::test_default();
+        let admin_session_id = AdminSession::default().id();
 
-//         let overview_folder = tempfile::tempdir().unwrap();
+        let overview_folder = tempfile::tempdir().unwrap();
 
-//         ctx.layer_provider_db_ref()
-//             .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
-//                 name: "test".to_string(),
-//                 path: test_data!("netcdf4d").to_path_buf(),
-//                 overviews: overview_folder.path().to_path_buf(),
-//             }))
-//             .await
-//             .unwrap();
+        ctx.db(ctx.default_session_ref().await.clone())
+            .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
+                name: "test".to_string(),
+                path: test_data!("netcdf4d").to_path_buf(),
+                overviews: overview_folder.path().to_path_buf(),
+            }))
+            .await
+            .unwrap();
 
-//         let req = actix_web::test::TestRequest::put()
-//             .uri("/ebv/overviews/dataset_m.nc")
-//             .append_header((
-//                 header::AUTHORIZATION,
-//                 Bearer::new(admin_session_id.to_string()),
-//             ));
+        let req = actix_web::test::TestRequest::put()
+            .uri("/ebv/overviews/dataset_m.nc")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
 
-//         let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, ctx.clone()).await;
 
-//         assert_eq!(res.status(), 200, "{:?}", res.response());
+        assert_eq!(res.status(), 200, "{:?}", res.response());
 
-//         let task_response =
-//             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-//         wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
 
-//         let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
 
-//         let mut response = if let TaskStatus::Completed { info, .. } = status {
-//             info.as_any_arc()
-//                 .downcast::<NetCdfCfOverviewResponse>()
-//                 .unwrap()
-//                 .as_ref()
-//                 .clone()
-//         } else {
-//             panic!("Task must be completed");
-//         };
+        let mut response = if let TaskStatus::Completed { info, .. } = status {
+            info.as_any_arc()
+                .downcast::<NetCdfCfOverviewResponse>()
+                .unwrap()
+                .as_ref()
+                .clone()
+        } else {
+            panic!("Task must be completed");
+        };
 
-//         response.success.sort();
-//         assert_eq!(
-//             response,
-//             NetCdfCfOverviewResponse {
-//                 success: vec!["dataset_m.nc".into()],
-//                 skip: vec![],
-//                 error: vec![],
-//             }
-//         );
+        response.success.sort();
+        assert_eq!(
+            response,
+            NetCdfCfOverviewResponse {
+                success: vec!["dataset_m.nc".into()],
+                skip: vec![],
+                error: vec![],
+            }
+        );
 
-//         // Now, delete the overviews
+        // Now, delete the overviews
 
-//         let req = actix_web::test::TestRequest::delete()
-//             .uri("/ebv/overviews/dataset_m.nc")
-//             .append_header((
-//                 header::AUTHORIZATION,
-//                 Bearer::new(admin_session_id.to_string()),
-//             ));
+        let req = actix_web::test::TestRequest::delete()
+            .uri("/ebv/overviews/dataset_m.nc")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
 
-//         let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, ctx.clone()).await;
 
-//         assert_eq!(res.status(), 200, "{:?}", res.response());
+        assert_eq!(res.status(), 200, "{:?}", res.response());
 
-//         let task_response =
-//             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-//         wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
 
-//         let status = ctx.tasks().status(task_response.task_id).await.unwrap();
-//         let status = serde_json::to_value(status).unwrap();
+        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+        let status = serde_json::to_value(status).unwrap();
 
-//         assert_eq!(status["status"], json!("completed"));
-//         assert_eq!(status["info"], json!(null));
-//         assert_eq!(status["timeTotal"], json!("00:00:00"));
-//         assert!(status["timeStarted"].is_string());
+        assert_eq!(status["status"], json!("completed"));
+        assert_eq!(status["info"], json!(null));
+        assert_eq!(status["timeTotal"], json!("00:00:00"));
+        assert!(status["timeStarted"].is_string());
 
-//         assert!(is_empty(overview_folder.path()));
-//     }
+        assert!(is_empty(overview_folder.path()));
+    }
 
-//     #[tokio::test]
-//     async fn test_remove_overviews_non_existing() {
-//         // setup
+    #[tokio::test]
+    async fn test_remove_overviews_non_existing() {
+        // setup
 
-//         crate::util::config::set_config(
-//             "session.admin_session_token",
-//             "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
-//         )
-//         .unwrap();
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
 
-//         let ctx = InMemoryContext::test_default();
-//         let admin_session_id = AdminSession::default().id();
+        let ctx = InMemoryContext::test_default();
+        let admin_session_id = AdminSession::default().id();
 
-//         let overview_folder = tempfile::tempdir().unwrap();
+        let overview_folder = tempfile::tempdir().unwrap();
 
-//         ctx.layer_provider_db_ref()
-//             .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
-//                 name: "test".to_string(),
-//                 path: test_data!("netcdf4d").to_path_buf(),
-//                 overviews: overview_folder.path().to_path_buf(),
-//             }))
-//             .await
-//             .unwrap();
+        ctx.db(ctx.default_session_ref().await.clone())
+            .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
+                name: "test".to_string(),
+                path: test_data!("netcdf4d").to_path_buf(),
+                overviews: overview_folder.path().to_path_buf(),
+            }))
+            .await
+            .unwrap();
 
-//         // remove overviews that don't exist
+        // remove overviews that don't exist
 
-//         let req = actix_web::test::TestRequest::delete()
-//             .uri("/ebv/overviews/path%2Fto%2Fdataset.nc?force=true")
-//             .append_header((
-//                 header::AUTHORIZATION,
-//                 Bearer::new(admin_session_id.to_string()),
-//             ));
+        let req = actix_web::test::TestRequest::delete()
+            .uri("/ebv/overviews/path%2Fto%2Fdataset.nc?force=true")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
 
-//         let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, ctx.clone()).await;
 
-//         assert_eq!(res.status(), 200, "{:?}", res.response());
+        assert_eq!(res.status(), 200, "{:?}", res.response());
 
-//         let task_response =
-//             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-//         wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
 
-//         let status = ctx.tasks().status(task_response.task_id).await.unwrap();
-//         let status = serde_json::to_value(status).unwrap();
+        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+        let status = serde_json::to_value(status).unwrap();
 
-//         assert_eq!(status["status"], json!("completed"));
-//         assert_eq!(status["info"], json!(null));
-//         assert_eq!(status["timeTotal"], json!("00:00:00"));
-//         assert!(status["timeStarted"].is_string());
-//     }
+        assert_eq!(status["status"], json!("completed"));
+        assert_eq!(status["info"], json!(null));
+        assert_eq!(status["timeTotal"], json!("00:00:00"));
+        assert!(status["timeStarted"].is_string());
+    }
 
-//     #[tokio::test]
-//     async fn test_create_non_existing_overview() {
-//         fn is_empty(directory: &Path) -> bool {
-//             directory.read_dir().unwrap().next().is_none()
-//         }
+    #[tokio::test]
+    async fn test_create_non_existing_overview() {
+        fn is_empty(directory: &Path) -> bool {
+            directory.read_dir().unwrap().next().is_none()
+        }
 
-//         crate::util::config::set_config(
-//             "session.admin_session_token",
-//             "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
-//         )
-//         .unwrap();
+        crate::util::config::set_config(
+            "session.admin_session_token",
+            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
+        )
+        .unwrap();
 
-//         let ctx = InMemoryContext::test_default();
-//         let admin_session_id = AdminSession::default().id();
+        let ctx = InMemoryContext::test_default();
+        let admin_session_id = AdminSession::default().id();
 
-//         let overview_folder = tempfile::tempdir().unwrap();
+        let overview_folder = tempfile::tempdir().unwrap();
 
-//         ctx.layer_provider_db_ref()
-//             .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
-//                 name: "test".to_string(),
-//                 path: test_data!("netcdf4d").to_path_buf(),
-//                 overviews: overview_folder.path().to_path_buf(),
-//             }))
-//             .await
-//             .unwrap();
+        ctx.db(ctx.default_session_ref().await.clone())
+            .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
+                name: "test".to_string(),
+                path: test_data!("netcdf4d").to_path_buf(),
+                overviews: overview_folder.path().to_path_buf(),
+            }))
+            .await
+            .unwrap();
 
-//         let req = actix_web::test::TestRequest::put()
-//             .uri("/ebv/overviews/foo%2Fbar.nc")
-//             .append_header((
-//                 header::AUTHORIZATION,
-//                 Bearer::new(admin_session_id.to_string()),
-//             ));
+        let req = actix_web::test::TestRequest::put()
+            .uri("/ebv/overviews/foo%2Fbar.nc")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session_id.to_string()),
+            ));
 
-//         let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, ctx.clone()).await;
 
-//         assert_eq!(res.status(), 200, "{:?}", res.response());
+        assert_eq!(res.status(), 200, "{:?}", res.response());
 
-//         let task_response =
-//             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-//         wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
 
-//         let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
 
-//         let (error, clean_up) = if let TaskStatus::Failed { error, clean_up } = status {
-//             (error, serde_json::to_string(&clean_up).unwrap())
-//         } else {
-//             panic!("Task must be failed");
-//         };
+        let (error, clean_up) = if let TaskStatus::Failed { error, clean_up } = status {
+            (error, serde_json::to_string(&clean_up).unwrap())
+        } else {
+            panic!("Task must be failed");
+        };
 
-//         assert!(
-//             matches!(
-//                 error.clone().into_any_arc().downcast::<NetCdfCf4DProviderError>().unwrap().as_ref(),
-//                 NetCdfCf4DProviderError::CannotCreateOverview { dataset, source }
-//                 if dataset.to_string_lossy() == "foo/bar.nc" &&
-//                 // TODO: use matches clause `NetCdfCf4DProviderError::DatasetIsNotInProviderPath { .. }`
-//                 source.to_string().contains("DatasetIsNotInProviderPath")
-//             ),
-//             "{error:?}"
-//         );
+        assert!(
+            matches!(
+                error.clone().into_any_arc().downcast::<NetCdfCf4DProviderError>().unwrap().as_ref(),
+                NetCdfCf4DProviderError::CannotCreateOverview { dataset, source }
+                if dataset.to_string_lossy() == "foo/bar.nc" &&
+                // TODO: use matches clause `NetCdfCf4DProviderError::DatasetIsNotInProviderPath { .. }`
+                source.to_string().contains("DatasetIsNotInProviderPath")
+            ),
+            "{error:?}"
+        );
 
-//         assert_eq!(clean_up, r#"{"status":"completed","info":null}"#);
+        assert_eq!(clean_up, r#"{"status":"completed","info":null}"#);
 
-//         assert!(is_empty(overview_folder.path()));
-//     }
-// }
+        assert!(is_empty(overview_folder.path()));
+    }
+}

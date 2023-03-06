@@ -3,7 +3,6 @@ use crate::identifier;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
-use geoengine_datatypes::util::Identifier;
 use ordered_float::NotNan;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use snafu::ResultExt;

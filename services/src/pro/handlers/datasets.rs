@@ -136,432 +136,392 @@ async fn create_system_dataset<C: ProContext>(
     Ok(web::Json(IdResponse::from(dataset_id)))
 }
 
-// /// Add a new permission to a dataset and a role
-// #[utoipa::path(
-//     tag = "Datasets",
-//     get,
-//     path = "/datasets/permissions",
-//     responses(
-//         (status = 200, description = "OK", body = Dataset,
-//             example = json!({
-//                 "id": {
-//                     "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
-//                 },
-//                 "name": "Germany",
-//                 "description": "Boundaries of Germany",
-//                 "resultDescriptor": {
-//                     "vector": {
-//                         "dataType": "MultiPolygon",
-//                         "spatialReference": "EPSG:4326",
-//                         "columns": {}
-//                     }
-//                 },
-//                 "sourceOperator": "OgrSource"
-//             })
-//         )
-//     ),
-//     params(
-//         ("dataset" = DatasetId, description = "Dataset id")
-//     ),
-//     security(
-//         ("session_token" = [])
-//     )
-// )]
-// pub async fn add_dataset_permission_handler<C: Context>(
-//     dataset: web::Path<DatasetId>,
-//     session: C::Session,
-//     ctx: web::Data<C>,
-// ) -> Result<impl Responder> {
-//     // let dataset = ctx
-//     //     .dataset_db_ref()
-//     //     .load(&session, &dataset.into_inner())
-//     //     .await?;
-//     // Ok(web::Json(dataset))
-//     todo!()
-// }
+#[cfg(test)]
+mod tests {
+    use actix_http::header;
+    use actix_web_httpauth::headers::authorization::Bearer;
+    use futures::TryStreamExt;
+    use geoengine_datatypes::{
+        collections::{GeometryCollection, MultiPointCollection},
+        primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle},
+        raster::{GridShape2D, TilingSpecification},
+        test_data,
+        util::test::TestDefault,
+    };
+    use geoengine_operators::{
+        engine::{ExecutionContext, InitializedVectorOperator, QueryProcessor, VectorOperator},
+        source::{OgrSource, OgrSourceParameters},
+        util::gdal::create_ndvi_meta_data,
+    };
+    use serde_json::json;
 
-// #[cfg(test)]
-// mod tests {
-//     use actix_http::header;
-//     use actix_web_httpauth::headers::authorization::Bearer;
-//     use futures::TryStreamExt;
-//     use geoengine_datatypes::{
-//         collections::{GeometryCollection, MultiPointCollection},
-//         primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle},
-//         raster::{GridShape2D, TilingSpecification},
-//         test_data,
-//         util::test::TestDefault,
-//     };
-//     use geoengine_operators::{
-//         engine::{ExecutionContext, InitializedVectorOperator, QueryProcessor, VectorOperator},
-//         source::{OgrSource, OgrSourceParameters},
-//         util::gdal::create_ndvi_meta_data,
-//     };
-//     use serde_json::json;
+    use crate::{
+        api::model::services::{AddDataset, DatasetDefinition, MetaDataDefinition},
+        contexts::{AdminSession, Context, Session, SessionId},
+        datasets::{
+            listing::DatasetProvider,
+            upload::{UploadId, UploadRootPath, VolumeName},
+        },
+        pro::{
+            contexts::ProInMemoryContext,
+            users::{Auth, UserDb, UserSession},
+            util::tests::send_pro_test_request,
+        },
+        util::tests::{SetMultipartBody, TestDataUploads},
+    };
 
-//     use crate::{
-//         api::model::services::{AddDataset, DatasetDefinition, MetaDataDefinition},
-//         contexts::{AdminSession, Context, Session, SessionId},
-//         datasets::{
-//             listing::DatasetProvider,
-//             upload::{UploadId, UploadRootPath, VolumeName},
-//         },
-//         pro::{
-//             contexts::ProInMemoryContext,
-//             users::{UserDb, UserSession},
-//             util::tests::send_pro_test_request,
-//         },
-//         util::tests::{SetMultipartBody, TestDataUploads},
-//     };
+    use super::*;
 
-//     use super::*;
+    pub async fn upload_ne_10m_ports_files<C: ProContext>(
+        ctx: C,
+        session_id: SessionId,
+    ) -> Result<UploadId> {
+        let files = vec![
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.shx").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.prj").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.dbf").to_path_buf(),
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.cpg").to_path_buf(),
+        ];
 
-//     pub async fn upload_ne_10m_ports_files<C: ProContext>(
-//         ctx: C,
-//         session_id: SessionId,
-//     ) -> Result<UploadId> {
-//         let files = vec![
-//             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").to_path_buf(),
-//             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shx").to_path_buf(),
-//             test_data!("vector/data/ne_10m_ports/ne_10m_ports.prj").to_path_buf(),
-//             test_data!("vector/data/ne_10m_ports/ne_10m_ports.dbf").to_path_buf(),
-//             test_data!("vector/data/ne_10m_ports/ne_10m_ports.cpg").to_path_buf(),
-//         ];
+        let req = actix_web::test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_multipart_files(&files);
+        let res = send_pro_test_request(req, ctx).await;
+        assert_eq!(res.status(), 200);
 
-//         let req = actix_web::test::TestRequest::post()
-//             .uri("/upload")
-//             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-//             .set_multipart_files(&files);
-//         let res = send_pro_test_request(req, ctx).await;
-//         assert_eq!(res.status(), 200);
+        let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
+        let root = upload.id.root_path()?;
 
-//         let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
-//         let root = upload.id.root_path()?;
+        for file in files {
+            let file_name = file.file_name().unwrap();
+            assert!(root.join(file_name).exists());
+        }
 
-//         for file in files {
-//             let file_name = file.file_name().unwrap();
-//             assert!(root.join(file_name).exists());
-//         }
+        Ok(upload.id)
+    }
 
-//         Ok(upload.id)
-//     }
+    pub async fn construct_dataset_from_upload<C: ProContext>(
+        ctx: C,
+        upload_id: UploadId,
+        session_id: SessionId,
+    ) -> DatasetId {
+        let s = json!({
+            "dataPath": {
+                "upload": upload_id
+            },
+            "definition": {
+                "properties": {
+                    "id": null,
+                    "name": "Uploaded Natural Earth 10m Ports",
+                    "description": "Ports from Natural Earth",
+                    "sourceOperator": "OgrSource"
+                },
+                "metaData": {
+                    "type": "OgrMetaData",
+                    "loadingInfo": {
+                        "fileName": "ne_10m_ports.shp",
+                        "layerName": "ne_10m_ports",
+                        "dataType": "MultiPoint",
+                        "time": {
+                            "type": "none"
+                        },
+                        "columns": {
+                            "x": "",
+                            "y": null,
+                            "float": ["natlscale"],
+                            "int": ["scalerank"],
+                            "text": ["featurecla", "name", "website"],
+                            "bool": [],
+                            "datetime": []
+                        },
+                        "forceOgrTimeGilter": false,
+                        "onError": "ignore",
+                        "provenance": null
+                    },
+                    "resultDescriptor": {
+                        "dataType": "MultiPoint",
+                        "spatialReference": "EPSG:4326",
+                        "columns": {
+                            "website": {
+                                "dataType": "text",
+                                "measurement": {
+                                    "type": "unitless"
+                                }
+                            },
+                            "name": {
+                                "dataType": "text",
+                                "measurement": {
+                                    "type": "unitless"
+                                }
+                            },
+                            "natlscale": {
+                                "dataType": "float",
+                                "measurement": {
+                                    "type": "unitless"
+                                }
+                            },
+                            "scalerank": {
+                                "dataType": "int",
+                                "measurement": {
+                                    "type": "unitless"
+                                }
+                            },
+                            "featurecla": {
+                                "dataType": "text",
+                                "measurement": {
+                                    "type": "unitless"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
 
-//     pub async fn construct_dataset_from_upload<C: ProContext>(
-//         ctx: C,
-//         upload_id: UploadId,
-//         session_id: SessionId,
-//     ) -> DatasetId {
-//         let s = json!({
-//             "dataPath": {
-//                 "upload": upload_id
-//             },
-//             "definition": {
-//                 "properties": {
-//                     "id": null,
-//                     "name": "Uploaded Natural Earth 10m Ports",
-//                     "description": "Ports from Natural Earth",
-//                     "sourceOperator": "OgrSource"
-//                 },
-//                 "metaData": {
-//                     "type": "OgrMetaData",
-//                     "loadingInfo": {
-//                         "fileName": "ne_10m_ports.shp",
-//                         "layerName": "ne_10m_ports",
-//                         "dataType": "MultiPoint",
-//                         "time": {
-//                             "type": "none"
-//                         },
-//                         "columns": {
-//                             "x": "",
-//                             "y": null,
-//                             "float": ["natlscale"],
-//                             "int": ["scalerank"],
-//                             "text": ["featurecla", "name", "website"],
-//                             "bool": [],
-//                             "datetime": []
-//                         },
-//                         "forceOgrTimeGilter": false,
-//                         "onError": "ignore",
-//                         "provenance": null
-//                     },
-//                     "resultDescriptor": {
-//                         "dataType": "MultiPoint",
-//                         "spatialReference": "EPSG:4326",
-//                         "columns": {
-//                             "website": {
-//                                 "dataType": "text",
-//                                 "measurement": {
-//                                     "type": "unitless"
-//                                 }
-//                             },
-//                             "name": {
-//                                 "dataType": "text",
-//                                 "measurement": {
-//                                     "type": "unitless"
-//                                 }
-//                             },
-//                             "natlscale": {
-//                                 "dataType": "float",
-//                                 "measurement": {
-//                                     "type": "unitless"
-//                                 }
-//                             },
-//                             "scalerank": {
-//                                 "dataType": "int",
-//                                 "measurement": {
-//                                     "type": "unitless"
-//                                 }
-//                             },
-//                             "featurecla": {
-//                                 "dataType": "text",
-//                                 "measurement": {
-//                                     "type": "unitless"
-//                                 }
-//                             }
-//                         }
-//                     }
-//                 }
-//             }
-//         });
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(s);
+        let res = send_pro_test_request(req, ctx).await;
+        assert_eq!(res.status(), 200);
 
-//         let req = actix_web::test::TestRequest::post()
-//             .uri("/dataset")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-//             .set_json(s);
-//         let res = send_pro_test_request(req, ctx).await;
-//         assert_eq!(res.status(), 200);
+        let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
+        dataset.id
+    }
 
-//         let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-//         dataset.id
-//     }
+    pub async fn make_ogr_source<C: ExecutionContext>(
+        exe_ctx: &C,
+        dataset_id: DatasetId,
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
+        OgrSource {
+            params: OgrSourceParameters {
+                data: dataset_id.into(),
+                attribute_projection: None,
+                attribute_filters: None,
+            },
+        }
+        .boxed()
+        .initialize(exe_ctx)
+        .await
+        .map_err(Into::into)
+    }
 
-//     pub async fn make_ogr_source<C: ExecutionContext>(
-//         exe_ctx: &C,
-//         dataset_id: DatasetId,
-//     ) -> Result<Box<dyn InitializedVectorOperator>> {
-//         OgrSource {
-//             params: OgrSourceParameters {
-//                 data: dataset_id.into(),
-//                 attribute_projection: None,
-//                 attribute_filters: None,
-//             },
-//         }
-//         .boxed()
-//         .initialize(exe_ctx)
-//         .await
-//         .map_err(Into::into)
-//     }
+    #[tokio::test]
+    async fn create_dataset() -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-//     #[tokio::test]
-//     async fn create_dataset() -> Result<()> {
-//         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
 
-//         let exe_ctx_tiling_spec = TilingSpecification {
-//             origin_coordinate: (0., 0.).into(),
-//             tile_size_in_pixels: GridShape2D::new([600, 600]),
-//         };
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let ctx = ProInMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
 
-//         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-//         let ctx = ProInMemoryContext::new_with_context_spec(
-//             exe_ctx_tiling_spec,
-//             TestDefault::test_default(),
-//         );
+        let session = ctx.anonymous().await.unwrap();
 
-//         let session = ctx.user_db_ref().anonymous().await.unwrap();
+        let session_id = session.id();
 
-//         let session_id = session.id();
+        let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
 
-//         let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
-//         test_data.uploads.push(upload_id);
+        let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
+        let exe_ctx = ctx.execution_context(session.clone())?;
 
-//         let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
-//         let exe_ctx = ctx.execution_context(session.clone())?;
+        let source = make_ogr_source(&exe_ctx, dataset_id).await?;
 
-//         let source = make_ogr_source(&exe_ctx, dataset_id).await?;
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+        let query_ctx = ctx.query_context(session.clone())?;
 
-//         let query_processor = source.query_processor()?.multi_point().unwrap();
-//         let query_ctx = ctx.query_context(session.clone())?;
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &query_ctx,
+            )
+            .await
+            .unwrap();
 
-//         let query = query_processor
-//             .query(
-//                 VectorQueryRectangle {
-//                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
-//                     time_interval: Default::default(),
-//                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-//                 },
-//                 &query_ctx,
-//             )
-//             .await
-//             .unwrap();
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
 
-//         let result: Vec<MultiPointCollection> = query.try_collect().await?;
+        let coords = result[0].coordinates();
+        assert_eq!(coords.len(), 10);
+        assert_eq!(
+            coords,
+            &[
+                [2.933_686_69, 51.23].into(),
+                [3.204_593_64_f64, 51.336_388_89].into(),
+                [4.651_413_428, 51.805_833_33].into(),
+                [4.11, 51.95].into(),
+                [4.386_160_188, 50.886_111_11].into(),
+                [3.767_373_38, 51.114_444_44].into(),
+                [4.293_757_362, 51.297_777_78].into(),
+                [1.850_176_678, 50.965_833_33].into(),
+                [2.170_906_949, 51.021_666_67].into(),
+                [4.292_873_969, 51.927_222_22].into(),
+            ]
+        );
 
-//         let coords = result[0].coordinates();
-//         assert_eq!(coords.len(), 10);
-//         assert_eq!(
-//             coords,
-//             &[
-//                 [2.933_686_69, 51.23].into(),
-//                 [3.204_593_64_f64, 51.336_388_89].into(),
-//                 [4.651_413_428, 51.805_833_33].into(),
-//                 [4.11, 51.95].into(),
-//                 [4.386_160_188, 50.886_111_11].into(),
-//                 [3.767_373_38, 51.114_444_44].into(),
-//                 [4.293_757_362, 51.297_777_78].into(),
-//                 [1.850_176_678, 50.965_833_33].into(),
-//                 [2.170_906_949, 51.021_666_67].into(),
-//                 [4.292_873_969, 51.927_222_22].into(),
-//             ]
-//         );
+        Ok(())
+    }
 
-//         Ok(())
-//     }
+    #[tokio::test]
+    async fn it_creates_system_dataset() -> Result<()> {
+        let ctx = ProInMemoryContext::test_default();
 
-//     #[tokio::test]
-//     async fn it_creates_system_dataset() -> Result<()> {
-//         let ctx = ProInMemoryContext::test_default();
+        let volume = VolumeName("test_data".to_string());
 
-//         let volume = VolumeName("test_data".to_string());
+        let mut meta_data = create_ndvi_meta_data();
 
-//         let mut meta_data = create_ndvi_meta_data();
+        // make path relative to volume
+        meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
 
-//         // make path relative to volume
-//         meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    id: None,
+                    name: "ndvi".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                },
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
 
-//         let create = CreateDataset {
-//             data_path: DataPath::Volume(volume.clone()),
-//             definition: DatasetDefinition {
-//                 properties: AddDataset {
-//                     id: None,
-//                     name: "ndvi".to_string(),
-//                     description: "ndvi".to_string(),
-//                     source_operator: "GdalSource".to_string(),
-//                     symbology: None,
-//                     provenance: None,
-//                 },
-//                 meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
-//             },
-//         };
+        // create via admin session
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(
+                    get_config_element::<crate::util::config::Session>()?
+                        .admin_session_token
+                        .unwrap()
+                        .to_string(),
+                ),
+            ))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_json(create);
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        assert_eq!(res.status(), 200);
 
-//         // create via admin session
-//         let req = actix_web::test::TestRequest::post()
-//             .uri("/dataset")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .append_header((
-//                 header::AUTHORIZATION,
-//                 Bearer::new(
-//                     get_config_element::<crate::util::config::Session>()?
-//                         .admin_session_token
-//                         .unwrap()
-//                         .to_string(),
-//                 ),
-//             ))
-//             .append_header((header::CONTENT_TYPE, "application/json"))
-//             .set_json(create);
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-//         assert_eq!(res.status(), 200);
+        let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
+        let dataset_id = dataset_id.id;
 
-//         let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-//         let dataset_id = dataset_id.id;
+        // assert dataset is accessible via regular session
+        let session = ctx.anonymous().await.unwrap();
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_id}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
 
-//         // assert dataset is accessible via regular session
-//         let session = ctx.user_db_ref().anonymous().await.unwrap();
-//         let req = actix_web::test::TestRequest::get()
-//             .uri(&format!("/dataset/{dataset_id}"))
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        assert_eq!(res.status(), 200);
 
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-//         assert_eq!(res.status(), 200);
+        Ok(())
+    }
 
-//         Ok(())
-//     }
+    #[tokio::test]
+    async fn it_deletes_dataset() -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-//     #[tokio::test]
-//     async fn it_deletes_dataset() -> Result<()> {
-//         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+        let ctx = ProInMemoryContext::test_default();
 
-//         let ctx = ProInMemoryContext::test_default();
+        let session = ctx.anonymous().await.unwrap();
+        let session_id = session.id();
 
-//         let session = ctx.user_db_ref().anonymous().await.unwrap();
-//         let session_id = session.id();
+        let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
 
-//         let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
-//         test_data.uploads.push(upload_id);
+        let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
 
-//         let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
+        let db = ctx.db(session.clone());
 
-//         assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_ok());
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
 
-//         let req = actix_web::test::TestRequest::delete()
-//             .uri(&format!("/dataset/{dataset_id}"))
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-//             .append_header((header::CONTENT_TYPE, "application/json"));
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_id}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
 
-//         let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, ctx.clone()).await;
 
-//         assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-//         assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_err());
+        assert!(db.load_dataset(&dataset_id).await.is_err());
 
-//         Ok(())
-//     }
+        Ok(())
+    }
 
-//     #[tokio::test]
-//     async fn it_deletes_admin_dataset() -> Result<()> {
-//         let ctx = ProInMemoryContext::test_default();
+    #[tokio::test]
+    async fn it_deletes_admin_dataset() -> Result<()> {
+        let ctx = ProInMemoryContext::test_default();
 
-//         let volume = VolumeName("test_data".to_string());
+        let volume = VolumeName("test_data".to_string());
 
-//         let mut meta_data = create_ndvi_meta_data();
+        let mut meta_data = create_ndvi_meta_data();
 
-//         // make path relative to volume
-//         meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+        // make path relative to volume
+        meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
 
-//         let create = CreateDataset {
-//             data_path: DataPath::Volume(volume.clone()),
-//             definition: DatasetDefinition {
-//                 properties: AddDataset {
-//                     id: None,
-//                     name: "ndvi".to_string(),
-//                     description: "ndvi".to_string(),
-//                     source_operator: "GdalSource".to_string(),
-//                     symbology: None,
-//                     provenance: None,
-//                 },
-//                 meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
-//             },
-//         };
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    id: None,
+                    name: "ndvi".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                },
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
 
-//         let session: UserSession = AdminSession::default().into();
+        let session: UserSession = AdminSession::default().into();
 
-//         let req = actix_web::test::TestRequest::post()
-//             .uri("/dataset")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-//             .append_header((header::CONTENT_TYPE, "application/json"))
-//             .set_payload(serde_json::to_string(&create)?);
-//         let res = send_pro_test_request(req, ctx.clone()).await;
+        let db = ctx.db(session.clone());
 
-//         let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-//         let dataset_id = dataset_id.id;
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_pro_test_request(req, ctx.clone()).await;
 
-//         assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_ok());
+        let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
+        let dataset_id = dataset_id.id;
 
-//         let req = actix_web::test::TestRequest::delete()
-//             .uri(&format!("/dataset/{dataset_id}"))
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-//             .append_header((header::CONTENT_TYPE, "application/json"));
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
 
-//         let res = send_pro_test_request(req, ctx.clone()).await;
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_id}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
 
-//         assert_eq!(res.status(), 200);
+        let res = send_pro_test_request(req, ctx.clone()).await;
 
-//         assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_err());
+        assert_eq!(res.status(), 200);
 
-//         Ok(())
-//     }
-// }
+        assert!(db.load_dataset(&dataset_id).await.is_err());
+
+        Ok(())
+    }
+}

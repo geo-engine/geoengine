@@ -24,19 +24,6 @@ impl fmt::Display for LayerCollectionId {
     }
 }
 
-// // There are three kind of layer providers: LayerDb, DatasetDb and External
-// // as the GeoEngineDb has to provide all of them individually, we introduce a generic
-// // in the LayerCollectionProvider trait for distinction.
-// pub struct LayerDbSource;
-// pub struct DatasetDbSource;
-// pub struct ExternalSource;
-
-// pub trait LayerSource {}
-
-// impl LayerSource for LayerDbSource {}
-// impl LayerSource for DatasetDbSource {}
-// impl LayerSource for ExternalSource {}
-
 #[async_trait]
 /// Listing of layers and layer collections
 pub trait LayerCollectionProvider {

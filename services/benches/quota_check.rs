@@ -15,8 +15,8 @@ use geoengine_operators::{
 use geoengine_services::{
     contexts::Context,
     pro::{
-        contexts::{ProContext, ProInMemoryContext},
-        users::UserDb,
+        contexts::ProInMemoryContext,
+        users::{Auth, UserDb, UserSession},
         util::tests::{add_ndvi_to_datasets, send_pro_test_request},
     },
     util::config,
@@ -26,7 +26,7 @@ use geoengine_services::{
 async fn bench() {
     let ctx = ProInMemoryContext::test_default();
 
-    let session = ctx.user_db_ref().anonymous().await.unwrap();
+    let session = ctx.anonymous().await.unwrap();
 
     let dataset = add_ndvi_to_datasets(&ctx).await;
 
@@ -58,7 +58,7 @@ async fn bench() {
     };
 
     let id = ctx
-        .db(session)
+        .db(session.clone())
         .register_workflow(workflow.clone())
         .await
         .unwrap();
@@ -93,7 +93,7 @@ async fn bench() {
         ("time", "2014-04-01T12:00:00.0Z"),
         ("exceptions", "JSON"),
     ];
-    ctx.user_db_ref()
+    ctx.db(UserSession::system_session())
         .update_quota_available_by_user(&session.user.id, 9999)
         .await
         .unwrap();

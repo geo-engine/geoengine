@@ -40,8 +40,6 @@ pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: 
             )
             .await?;
 
-        // TODO: share with users role
-
         Ok(())
     }
 
