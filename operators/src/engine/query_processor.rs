@@ -53,7 +53,7 @@ pub trait QueryProcessorExt: QueryProcessor {
     /// Thus, it can be stored in a struct.
     async fn query_into_owned_stream(
         self,
-        query: QueryRectangle<Self::SpatialBounds>,
+        query: QueryRectangle<Self::SpatialQuery>,
         ctx: Box<dyn QueryContext>,
     ) -> Result<OwnedQueryResultStream<Self>>
     where

@@ -20,7 +20,9 @@ use geoengine_datatypes::primitives::{
     VectorQueryRectangle,
 };
 use geoengine_operators::call_on_typed_operator;
-use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor};
+use geoengine_operators::engine::{
+    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor,
+};
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;
 
@@ -516,11 +518,14 @@ async fn raster_stream_websocket<C: Context>(
         .get_raster()
         .boxed_context(error::WorkflowMustBeOfTypeRaster)?;
 
-    let query_rectangle = RasterQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
-        time_interval: query.time_interval.into(),
-        spatial_resolution: query.spatial_resolution,
-    };
+    let execution_context = ctx.execution_context(session.clone())?;
+
+    let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+        query.spatial_bounds,
+        query.spatial_resolution,
+        execution_context.tiling_specification().origin_coordinate,
+        query.time_interval.into(),
+    );
 
     // this is the only result type for now
     debug_assert!(matches!(
@@ -531,7 +536,7 @@ async fn raster_stream_websocket<C: Context>(
     let stream_handler = RasterWebsocketStreamHandler::new::<C>(
         operator,
         query_rectangle,
-        ctx.execution_context(session.clone())?,
+        execution_context,
         ctx.query_context(session.clone())?,
     )
     .await?;
@@ -595,11 +600,11 @@ async fn vector_stream_websocket<C: Context>(
         .get_vector()
         .boxed_context(error::WorkflowMustBeOfTypeVector)?;
 
-    let query_rectangle = VectorQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
-        time_interval: query.time_interval.into(),
-        spatial_resolution: query.spatial_resolution,
-    };
+    let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        query.spatial_bounds,
+        query.time_interval.into(),
+        query.spatial_resolution,
+    );
 
     // this is the only result type for now
     debug_assert!(matches!(

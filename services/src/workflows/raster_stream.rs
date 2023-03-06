@@ -195,16 +195,16 @@ mod tests {
 
         let ctx = InMemoryContext::test_default();
         let session = ctx.default_session_ref().await.clone();
+        let tiling_origin_coordinate = (0.0, 0.0).into();
 
         let (workflow, _workflow_id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let query_rectangle = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                .unwrap(),
-            time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
-                .unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+            SpatialResolution::one(),
+            tiling_origin_coordinate,
+            TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+        );
 
         let handler = RasterWebsocketStreamHandler::new::<InMemoryContext>(
             workflow.operator.get_raster().unwrap(),
