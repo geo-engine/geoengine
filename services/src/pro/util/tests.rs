@@ -9,7 +9,7 @@ use crate::{
     pro::{
         contexts::{ProContext, ProInMemoryContext},
         permissions::{Permission, PermissionDb, Role},
-        users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
+        users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
     util::server::{configure_extractors, render_404, render_405},

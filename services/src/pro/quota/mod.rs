@@ -1,6 +1,6 @@
 use geoengine_operators::pro::meta::quota::{ComputationContext, ComputationUnit, QuotaTracking};
 use snafu::Snafu;
-use std::sync::Arc;
+
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use geoengine_datatypes::util::test::TestDefault;
@@ -94,68 +94,69 @@ pub fn initialize_quota_tracking<U: UserDb + 'static>(user_db: U) -> QuotaTracki
     QuotaTrackingFactory::new(quota_sender)
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use geoengine_datatypes::util::Identifier;
+#[cfg(test)]
+mod tests {
+    use geoengine_datatypes::util::Identifier;
 
-//     use crate::{
-//         pro::{
-//             contexts::{ProContext, ProInMemoryContext},
-//             users::{UserCredentials, UserRegistration},
-//         },
-//         util::user_input::UserInput,
-//     };
+    use crate::{
+        contexts::Context,
+        pro::{
+            contexts::{ProContext, ProInMemoryContext},
+            users::{Auth, UserCredentials, UserRegistration},
+        },
+        util::user_input::UserInput,
+    };
 
-//     use super::*;
+    use super::*;
 
-//     #[tokio::test]
-//     async fn it_tracks_quota() {
-//         let ctx = ProInMemoryContext::test_default();
+    #[tokio::test]
+    async fn it_tracks_quota() {
+        let ctx = ProInMemoryContext::test_default();
 
-//         let _user = ctx
-//             .user_db_ref()
-//             .register(
-//                 UserRegistration {
-//                     email: "foo@example.com".to_string(),
-//                     password: "secret1234".to_string(),
-//                     real_name: "Foo Bar".to_string(),
-//                 }
-//                 .validated()
-//                 .unwrap(),
-//             )
-//             .await
-//             .unwrap();
+        let _user = ctx
+            .register(
+                UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
-//         let session = ctx
-//             .user_db_ref()
-//             .login(UserCredentials {
-//                 email: "foo@example.com".to_string(),
-//                 password: "secret1234".to_string(),
-//             })
-//             .await
-//             .unwrap();
+        let session = ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret1234".to_string(),
+            })
+            .await
+            .unwrap();
 
-//         let quota = initialize_quota_tracking(ctx.user_db());
+        let quota = initialize_quota_tracking(ctx.db(UserSession::system_session()));
 
-//         let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
-//         tracking.work_unit_done();
-//         tracking.work_unit_done();
+        tracking.work_unit_done();
+        tracking.work_unit_done();
 
-//         // wait for quota to be recorded
-//         let mut success = false;
-//         for _ in 0..10 {
-//             let used = ctx.user_db_ref().quota_used(&session).await.unwrap();
-//             let available = ctx.user_db_ref().quota_available(&session).await.unwrap();
+        let db = ctx.db(session);
 
-//             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        // wait for quota to be recorded
+        let mut success = false;
+        for _ in 0..10 {
+            let used = db.quota_used().await.unwrap();
+            let available = db.quota_available().await.unwrap();
 
-//             if used == 2 && available == 9997 {
-//                 success = true;
-//                 break;
-//             }
-//         }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-//         assert!(success);
-//     }
-// }
+            if used == 2 && available == 9997 {
+                success = true;
+                break;
+            }
+        }
+
+        assert!(success);
+    }
+}

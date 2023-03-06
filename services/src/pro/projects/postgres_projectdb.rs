@@ -1,9 +1,10 @@
-use crate::pro::contexts::PostgresContext;
+use crate::error::{self, Result};
+
 use crate::pro::contexts::PostgresDb;
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::PermissionDb;
 use crate::pro::users::UserId;
-use crate::pro::users::UserSession;
+
 use crate::projects::Plot;
 use crate::projects::ProjectLayer;
 use crate::projects::{
@@ -13,14 +14,10 @@ use crate::projects::{
 use crate::util::user_input::Validated;
 use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
-use crate::{
-    error::{self, Result},
-    pro::projects::projectdb::ProjectPermission,
-};
 use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{
-    bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
+    tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
     tokio_postgres::Socket,
 };
 use snafu::ResultExt;
@@ -31,7 +28,6 @@ use snafu::ensure;
 
 use super::LoadVersion;
 use super::ProProjectDb;
-use super::UserProjectPermission;
 
 async fn list_plots<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,

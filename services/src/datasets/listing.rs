@@ -10,7 +10,7 @@ use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};

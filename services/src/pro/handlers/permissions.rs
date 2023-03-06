@@ -1,14 +1,14 @@
-use actix_web::{web, FromRequest, HttpResponse, HttpResponseBuilder, Responder};
+use actix_web::{web, FromRequest, HttpResponse};
 use serde::Deserialize;
 use utoipa::ToSchema;
-use uuid::Uuid;
 
-use crate::api::model::datatypes::LayerId;
+
+
 use crate::error::Result;
-use crate::layers::listing::LayerCollectionId;
+
 use crate::pro::contexts::ProContext;
 use crate::pro::permissions::{PermissionDb, RoleId, ResourceId};
-use crate::{contexts::Context, pro::permissions::Permission};
+use crate::{pro::permissions::Permission};
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where

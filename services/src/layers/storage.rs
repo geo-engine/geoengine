@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::sync::Arc;
+
 
 use super::add_from_directory::UNSORTED_COLLECTION_ID;
 use super::external::{DataProvider, DataProviderDefinition};
@@ -14,9 +14,9 @@ use super::LayerDbError;
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::contexts::InMemoryDb;
 use crate::error::{Error, Result};
-use crate::handlers::layers::ROOT_PROVIDER_ID;
+
 use crate::util::user_input::UserInput;
-use crate::{contexts::Db, util::user_input::Validated};
+use crate::{util::user_input::Validated};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, RwLockWriteGuard};

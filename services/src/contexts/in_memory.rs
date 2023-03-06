@@ -10,7 +10,7 @@ use crate::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
 };
 use crate::layers::storage::{
-    HashMapLayerDb, HashMapLayerDbBackend, HashMapLayerProviderDbBackend,
+    HashMapLayerDb, HashMapLayerProviderDbBackend,
 };
 use crate::projects::hashmap_projectdb::HashMapProjectDbBackend;
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};

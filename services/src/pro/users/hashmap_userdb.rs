@@ -1,14 +1,14 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+
 
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{DateTime, Duration};
 use openidconnect::SubjectIdentifier;
 use pwhash::bcrypt;
 use snafu::ensure;
-use tokio::sync::RwLock;
 
-use crate::contexts::{Db, SessionId};
+
+use crate::contexts::{SessionId};
 use crate::error::{self, Result};
 use crate::pro::contexts::{ProInMemoryContext, ProInMemoryDb};
 use crate::pro::permissions::Role;
@@ -68,7 +68,7 @@ impl Auth for ProInMemoryContext {
 
         let mut backend = self.db.user_db.write().await;
 
-        let mut users = &mut backend.users;
+        let users = &mut backend.users;
         ensure!(
             !users.contains_key(&user_registration.email),
             error::Duplicate {
@@ -362,149 +362,157 @@ impl UserDb for ProInMemoryDb {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::util::user_input::UserInput;
+#[cfg(test)]
+mod tests {
+    use geoengine_datatypes::util::test::TestDefault;
 
-//     #[tokio::test]
-//     async fn register() {
-//         let user_db = ProInMemoryDb::default(); // TODO: test_default?
+    use super::*;
+    use crate::{contexts::Context, util::user_input::UserInput};
 
-//         let user_registration = UserRegistration {
-//             email: "foo@example.com".into(),
-//             password: "secret123".into(),
-//             real_name: "Foo Bar".into(),
-//         }
-//         .validated()
-//         .unwrap();
+    #[tokio::test]
+    async fn register() {
+        let ctx = ProInMemoryContext::test_default();
 
-//         assert!(user_db.register(user_registration).await.is_ok());
-//     }
+        let user_registration = UserRegistration {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+            real_name: "Foo Bar".into(),
+        }
+        .validated()
+        .unwrap();
 
-//     #[tokio::test]
-//     async fn login() {
-//         let user_db = ProInMemoryDb::default();
+        assert!(ctx.register(user_registration).await.is_ok());
+    }
 
-//         let user_registration = UserRegistration {
-//             email: "foo@example.com".into(),
-//             password: "secret123".into(),
-//             real_name: "Foo Bar".into(),
-//         }
-//         .validated()
-//         .unwrap();
+    #[tokio::test]
+    async fn login() {
+        let ctx = ProInMemoryContext::test_default();
 
-//         assert!(user_db.register(user_registration).await.is_ok());
+        let user_registration = UserRegistration {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+            real_name: "Foo Bar".into(),
+        }
+        .validated()
+        .unwrap();
 
-//         let user_credentials = UserCredentials {
-//             email: "foo@example.com".into(),
-//             password: "secret123".into(),
-//         };
+        assert!(ctx.register(user_registration).await.is_ok());
 
-//         assert!(user_db.login(user_credentials).await.is_ok());
-//     }
+        let user_credentials = UserCredentials {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+        };
 
-//     #[tokio::test]
-//     async fn logout() {
-//         let user_db = ProInMemoryDb::default();
+        assert!(ctx.login(user_credentials).await.is_ok());
+    }
 
-//         let user_registration = UserRegistration {
-//             email: "foo@example.com".into(),
-//             password: "secret123".into(),
-//             real_name: "Foo Bar".into(),
-//         }
-//         .validated()
-//         .unwrap();
+    #[tokio::test]
+    async fn logout() {
+        let ctx = ProInMemoryContext::test_default();
 
-//         assert!(user_db.register(user_registration).await.is_ok());
+        let user_registration = UserRegistration {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+            real_name: "Foo Bar".into(),
+        }
+        .validated()
+        .unwrap();
 
-//         let user_credentials = UserCredentials {
-//             email: "foo@example.com".into(),
-//             password: "secret123".into(),
-//         };
+        assert!(ctx.register(user_registration).await.is_ok());
 
-//         let session = user_db.login(user_credentials).await.unwrap();
+        let user_credentials = UserCredentials {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+        };
 
-//         assert!(user_db.logout(session.id).await.is_ok());
-//     }
+        let session = ctx.login(user_credentials).await.unwrap();
 
-//     #[tokio::test]
-//     async fn session() {
-//         let user_db = ProInMemoryDb::default();
+        let db = ctx.db(session.clone());
 
-//         let user_registration = UserRegistration {
-//             email: "foo@example.com".into(),
-//             password: "secret123".into(),
-//             real_name: "Foo Bar".into(),
-//         }
-//         .validated()
-//         .unwrap();
+        assert!(db.logout().await.is_ok());
+    }
 
-//         assert!(user_db.register(user_registration).await.is_ok());
+    #[tokio::test]
+    async fn session() {
+        let ctx = ProInMemoryContext::test_default();
 
-//         let user_credentials = UserCredentials {
-//             email: "foo@example.com".into(),
-//             password: "secret123".into(),
-//         };
+        let user_registration = UserRegistration {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+            real_name: "Foo Bar".into(),
+        }
+        .validated()
+        .unwrap();
 
-//         let session = user_db.login(user_credentials).await.unwrap();
+        assert!(ctx.register(user_registration).await.is_ok());
 
-//         assert!(user_db.session(session.id).await.is_ok());
-//     }
+        let user_credentials = UserCredentials {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+        };
 
-//     #[tokio::test]
-//     async fn login_external() {
-//         let db = ProInMemoryDb::default();
+        let session = ctx.login(user_credentials).await.unwrap();
 
-//         let external_user_claims = ExternalUserClaims {
-//             external_id: SubjectIdentifier::new("Foo bar Id".into()),
-//             email: "foo@bar.de".into(),
-//             real_name: "Foo Bar".into(),
-//         };
-//         let duration = Duration::minutes(30);
-//         let login_result = db
-//             .login_external(external_user_claims.clone(), duration)
-//             .await;
-//         assert!(login_result.is_ok());
+        assert!(ctx.session(session.id).await.is_ok());
+    }
 
-//         let session_1 = login_result.unwrap();
-//         let previous_user_id = session_1.user.id; //TODO: Not a deterministic test.
+    #[tokio::test]
+    async fn login_external() {
+        let ctx = ProInMemoryContext::test_default();
 
-//         assert!(session_1.user.email.is_some());
-//         assert_eq!(session_1.user.email.unwrap(), "foo@bar.de");
-//         assert!(session_1.user.real_name.is_some());
-//         assert_eq!(session_1.user.real_name.unwrap(), "Foo Bar");
+        let external_user_claims = ExternalUserClaims {
+            external_id: SubjectIdentifier::new("Foo bar Id".into()),
+            email: "foo@bar.de".into(),
+            real_name: "Foo Bar".into(),
+        };
+        let duration = Duration::minutes(30);
+        let login_result = ctx
+            .login_external(external_user_claims.clone(), duration)
+            .await;
+        assert!(login_result.is_ok());
 
-//         let expected_duration = session_1.created + duration;
-//         assert_eq!(session_1.valid_until, expected_duration);
+        let session_1 = login_result.unwrap();
+        let db = ctx.db(session_1.clone());
 
-//         assert!(db.session(session_1.id).await.is_ok());
+        let previous_user_id = session_1.user.id; //TODO: Not a deterministic test.
 
-//         assert!(db.logout(session_1.id).await.is_ok());
+        assert!(session_1.user.email.is_some());
+        assert_eq!(session_1.user.email.unwrap(), "foo@bar.de");
+        assert!(session_1.user.real_name.is_some());
+        assert_eq!(session_1.user.real_name.unwrap(), "Foo Bar");
 
-//         assert!(db.session(session_1.id).await.is_err());
+        let expected_duration = session_1.created + duration;
+        assert_eq!(session_1.valid_until, expected_duration);
 
-//         let duration = Duration::minutes(10);
-//         let login_result = db
-//             .login_external(external_user_claims.clone(), duration)
-//             .await;
-//         assert!(login_result.is_ok());
+        assert!(ctx.session(session_1.id).await.is_ok());
 
-//         let session_2 = login_result.unwrap();
+        assert!(db.logout().await.is_ok());
 
-//         assert!(session_2.user.email.is_some()); //TODO: Technically, user details could change for each login. For simplicity, this is not covered yet.
-//         assert_eq!(session_2.user.email.unwrap(), "foo@bar.de");
-//         assert!(session_2.user.real_name.is_some());
-//         assert_eq!(session_2.user.real_name.unwrap(), "Foo Bar");
-//         assert_eq!(session_2.user.id, previous_user_id);
+        assert!(ctx.session(session_1.id).await.is_err());
 
-//         let expected_duration = session_2.created + duration;
-//         assert_eq!(session_2.valid_until, expected_duration);
+        let duration = Duration::minutes(10);
+        let login_result = ctx
+            .login_external(external_user_claims.clone(), duration)
+            .await;
+        assert!(login_result.is_ok());
 
-//         assert!(db.session(session_2.id).await.is_ok());
+        let session_2 = login_result.unwrap();
 
-//         assert!(db.logout(session_2.id).await.is_ok());
+        let db2 = ctx.db(session_2.clone());
 
-//         assert!(db.session(session_2.id).await.is_err());
-//     }
-// }
+        assert!(session_2.user.email.is_some()); //TODO: Technically, user details could change for each login. For simplicity, this is not covered yet.
+        assert_eq!(session_2.user.email.unwrap(), "foo@bar.de");
+        assert!(session_2.user.real_name.is_some());
+        assert_eq!(session_2.user.real_name.unwrap(), "Foo Bar");
+        assert_eq!(session_2.user.id, previous_user_id);
+
+        let expected_duration = session_2.created + duration;
+        assert_eq!(session_2.valid_until, expected_duration);
+
+        assert!(ctx.session(session_2.id).await.is_ok());
+
+        assert!(db2.logout().await.is_ok());
+
+        assert!(ctx.session(session_2.id).await.is_err());
+    }
+}

@@ -23,11 +23,11 @@ pub use postgres::PostgresContext;
 use rayon::ThreadPool;
 use tokio::io::AsyncWriteExt;
 
-use crate::api::model::datatypes::LayerId;
+
 use crate::contexts::{Context, GeoEngineDb};
 use crate::datasets::storage::DatasetDb;
-use crate::layers::listing::LayerCollectionId;
-use crate::layers::storage::{LayerDb, LayerProviderDb};
+
+use crate::layers::storage::{LayerProviderDb};
 use crate::pro::users::{OidcRequestDb, UserDb, UserSession};
 use crate::util::config::get_config_element;
 use crate::util::path_with_base_path;

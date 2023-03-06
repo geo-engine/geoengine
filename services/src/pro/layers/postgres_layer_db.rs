@@ -1,8 +1,8 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
-use crate::error::Error;
+
 use crate::pro::contexts::PostgresDb;
-use crate::pro::permissions::{Permission, PermissionDb, RoleId};
-use crate::pro::users::UserSession;
+use crate::pro::permissions::{Permission, RoleId};
+
 use crate::{
     error::Result,
     layers::{
@@ -23,15 +23,13 @@ use crate::{
 };
 use async_trait::async_trait;
 use bb8_postgres::{
-    bb8::Pool,
     tokio_postgres::{
         tls::{MakeTlsConnect, TlsConnect},
         Socket,
     },
-    PostgresConnectionManager,
 };
-use log::debug;
-use postgres_types::{FromSql, ToSql};
+
+
 use snafu::ResultExt;
 use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;

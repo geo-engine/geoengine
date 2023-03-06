@@ -1,16 +1,16 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+
+
 
 use async_trait::async_trait;
 use futures::{stream, StreamExt};
-use geoengine_datatypes::primitives::{DateTime, Duration};
-use openidconnect::SubjectIdentifier;
-use pwhash::bcrypt;
+
+
+
 use snafu::ensure;
 
-use crate::contexts::{Db, SessionId};
+
 use crate::error::{self, Error, Result};
-use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
+
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection,
@@ -18,25 +18,23 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::layers::storage::{
-    HashMapLayerDb, HashMapLayerDbBackend, LayerDb, LayerProviderDb, LayerProviderListing,
-    LayerProviderListingOptions, INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+    LayerDb, LayerProviderDb, LayerProviderListing,
+    LayerProviderListingOptions,
 };
 use crate::pro::contexts::ProInMemoryDb;
-use crate::pro::permissions::{Permission, PermissionDb, Role, RoleId};
-use crate::pro::users::{
-    User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
-};
-use crate::projects::{ProjectId, STRectangle};
-use crate::util::user_input::Validated;
-use geoengine_datatypes::util::Identifier;
+use crate::pro::permissions::{Permission, PermissionDb};
 
-use std::cmp::Ordering;
+
+use crate::util::user_input::Validated;
+
+
+
 
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::util::user_input::UserInput;
-use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, RwLockWriteGuard};
-use uuid::Uuid;
+
+
+
 
 #[async_trait]
 impl LayerDb for ProInMemoryDb {

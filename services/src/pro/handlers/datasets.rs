@@ -1,19 +1,18 @@
-use actix_web::{web, FromRequest, Responder};
+use actix_web::{web, FromRequest};
 
 use crate::{
     api::model::{
         datatypes::DatasetId,
-        services::{CreateDataset, DataPath, DatasetDefinition},
+        services::{CreateDataset, DatasetDefinition},
     },
-    contexts::Context,
     datasets::{
         storage::DatasetStore,
         upload::{Volume, VolumeName},
     },
     error::{self, Result},
     handlers::datasets::{
-        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
-        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
+        adjust_meta_data_path, auto_create_dataset_handler, delete_dataset_handler,
+        get_dataset_handler, list_datasets_handler, list_volumes_handler,
         suggest_meta_data_handler, AdminOrSession,
     },
     pro::{
@@ -75,9 +74,9 @@ where
     )
 )]
 async fn create_dataset_handler<C: ProContext>(
-    session: AdminOrSession<C>,
-    ctx: web::Data<C>,
-    create: web::Json<CreateDataset>,
+    _session: AdminOrSession<C>,
+    _ctx: web::Data<C>,
+    _create: web::Json<CreateDataset>,
 ) -> Result<web::Json<IdResponse<DatasetId>>> {
     todo!()
     // let create = create.into_inner();
@@ -121,7 +120,7 @@ async fn create_system_dataset<C: ProContext>(
     let db = ctx.pro_db(session);
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
-    let system_session = C::Session::system_session();
+    let _system_session = C::Session::system_session();
 
     let dataset_id = db
         .add_dataset(definition.properties.validated()?, meta_data)
@@ -156,7 +155,7 @@ mod tests {
     use serde_json::json;
 
     use crate::{
-        api::model::services::{AddDataset, DatasetDefinition, MetaDataDefinition},
+        api::model::services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
         contexts::{AdminSession, Context, Session, SessionId},
         datasets::{
             listing::DatasetProvider,

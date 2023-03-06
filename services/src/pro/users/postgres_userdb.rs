@@ -2,7 +2,6 @@ use crate::contexts::SessionId;
 use crate::error::Result;
 use crate::pro::contexts::PostgresDb;
 use crate::pro::permissions::Role;
-use crate::pro::projects::ProjectPermission;
 use crate::pro::users::oidc::ExternalUserClaims;
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
@@ -12,9 +11,9 @@ use crate::util::user_input::Validated;
 use crate::util::Identifier;
 use crate::{error, pro::contexts::PostgresContext};
 use async_trait::async_trait;
-use bb8_postgres::PostgresConnectionManager;
+
 use bb8_postgres::{
-    bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
+    tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
     tokio_postgres::Socket,
 };
 use geoengine_datatypes::primitives::Duration;

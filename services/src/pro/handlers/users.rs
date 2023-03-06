@@ -457,1034 +457,1034 @@ pub(crate) async fn oidc_login<C: ProContext>(
     Ok(web::Json(session))
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     use crate::contexts::Session;
-//     use crate::handlers::ErrorResponse;
-//     use crate::pro::util::tests::mock_oidc::{
-//         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
-//     };
-//     use crate::pro::util::tests::{
-//         create_project_helper, create_session_helper, register_ndvi_workflow_helper,
-//         send_pro_test_request,
-//     };
-//     use crate::pro::{contexts::ProInMemoryContext, users::UserId};
-//     use crate::util::tests::{check_allowed_http_methods, read_body_string};
-//     use crate::util::user_input::Validated;
-
-//     use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb};
-//     use crate::pro::util::config::Oidc;
-//     use actix_http::header::CONTENT_TYPE;
-//     use actix_web::dev::ServiceResponse;
-//     use actix_web::{http::header, http::Method, test};
-//     use actix_web_httpauth::headers::authorization::Bearer;
-//     use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
-//     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-//     use geoengine_datatypes::util::test::TestDefault;
-//     use httptest::matchers::request;
-//     use httptest::responders::status_code;
-//     use httptest::{Expectation, Server};
-//     use serde_json::json;
-//     use serial_test::serial;
-
-//     async fn register_test_helper<C: ProContext>(
-//         ctx: C,
-//         method: Method,
-//         email: &str,
-//     ) -> ServiceResponse {
-//         let user = UserRegistration {
-//             email: email.to_string(),
-//             password: "secret123".to_string(),
-//             real_name: " Foo Bar".to_string(),
-//         };
-
-//         // register user
-//         let req = test::TestRequest::default()
-//             .method(method)
-//             .uri("/user")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .set_json(&user);
-//         send_pro_test_request(req, ctx).await
-//     }
-
-//     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//     async fn register() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let res = register_test_helper(ctx, Method::POST, "foo@example.com").await;
-
-//         assert_eq!(res.status(), 200);
-
-//         let _user: IdResponse<UserId> = test::read_body_json(res).await;
-//     }
-
-//     #[tokio::test]
-//     async fn register_fail() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let res = register_test_helper(ctx, Method::POST, "notanemail").await;
-
-//         ErrorResponse::assert(
-//             res,
-//             400,
-//             "RegistrationFailed",
-//             "Registration failed: Invalid e-mail address",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn register_duplicate_email() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         register_test_helper(ctx.clone(), Method::POST, "foo@example.com").await;
-
-//         // register user
-//         let res = register_test_helper(ctx, Method::POST, "foo@example.com").await;
-
-//         ErrorResponse::assert(
-//             res,
-//             409,
-//             "Duplicate",
-//             "Tried to create duplicate: E-mail already exists",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn register_invalid_method() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         check_allowed_http_methods(
-//             |method| register_test_helper(ctx.clone(), method, "foo@example.com"),
-//             &[Method::POST],
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn register_invalid_body() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         // register user
-//         let req = test::TestRequest::post()
-//             .uri("/user")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .set_payload("no json");
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             415,
-//             "UnsupportedMediaType",
-//             "Unsupported content type header.",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn register_missing_fields() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let user = json!({
-//             "password": "secret123",
-//             "real_name": " Foo Bar",
-//         });
-
-//         // register user
-//         let req = test::TestRequest::post()
-//             .uri("/user")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .set_json(&user);
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             400,
-//             "BodyDeserializeError",
-//             "missing field `email` at line 1 column 47",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn register_invalid_type() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         // register user
-//         let req = test::TestRequest::post()
-//             .uri("/user")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .append_header((header::CONTENT_TYPE, "text/html"));
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             415,
-//             "UnsupportedMediaType",
-//             "Unsupported content type header.",
-//         )
-//         .await;
-//     }
-
-//     async fn login_test_helper(method: Method, password: &str) -> ServiceResponse {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let user = Validated {
-//             user_input: UserRegistration {
-//                 email: "foo@example.com".to_string(),
-//                 password: "secret123".to_string(),
-//                 real_name: " Foo Bar".to_string(),
-//             },
-//         };
-
-//         ctx.user_db_ref().register(user).await.unwrap();
-
-//         let credentials = UserCredentials {
-//             email: "foo@example.com".to_string(),
-//             password: password.to_string(),
-//         };
-
-//         let req = test::TestRequest::default()
-//             .method(method)
-//             .uri("/login")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .set_json(&credentials);
-//         send_pro_test_request(req, ctx).await
-//     }
-
-//     #[tokio::test]
-//     async fn login() {
-//         let res = login_test_helper(Method::POST, "secret123").await;
-
-//         assert_eq!(res.status(), 200);
-
-//         let _id: UserSession = test::read_body_json(res).await;
-//     }
-
-//     #[tokio::test]
-//     async fn login_fail() {
-//         let res = login_test_helper(Method::POST, "wrong").await;
-
-//         ErrorResponse::assert(
-//             res,
-//             401,
-//             "LoginFailed",
-//             "User does not exist or password is wrong.",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn login_invalid_method() {
-//         check_allowed_http_methods(
-//             |method| login_test_helper(method, "secret123"),
-//             &[Method::POST],
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn login_invalid_body() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let req = test::TestRequest::post()
-//             .uri("/login")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
-//             .set_payload("no json");
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             400,
-//             "BodyDeserializeError",
-//             "expected ident at line 1 column 2",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn login_missing_fields() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let user = Validated {
-//             user_input: UserRegistration {
-//                 email: "foo@example.com".to_string(),
-//                 password: "secret123".to_string(),
-//                 real_name: " Foo Bar".to_string(),
-//             },
-//         };
-
-//         ctx.user_db_ref().register(user).await.unwrap();
-
-//         let credentials = json!({
-//             "email": "foo@example.com",
-//         });
-
-//         let req = test::TestRequest::post()
-//             .uri("/login")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .set_json(&credentials);
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             400,
-//             "BodyDeserializeError",
-//             "missing field `password` at line 1 column 27",
-//         )
-//         .await;
-//     }
-
-//     async fn logout_test_helper(method: Method) -> ServiceResponse {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let user = Validated {
-//             user_input: UserRegistration {
-//                 email: "foo@example.com".to_string(),
-//                 password: "secret123".to_string(),
-//                 real_name: " Foo Bar".to_string(),
-//             },
-//         };
-
-//         ctx.user_db_ref().register(user).await.unwrap();
-
-//         let credentials = UserCredentials {
-//             email: "foo@example.com".to_string(),
-//             password: "secret123".to_string(),
-//         };
-
-//         let session = ctx.user_db_ref().login(credentials).await.unwrap();
-
-//         let req = test::TestRequest::default()
-//             .method(method)
-//             .uri("/logout")
-//             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-//             .set_payload("no json");
-//         send_pro_test_request(req, ctx).await
-//     }
-
-//     #[tokio::test]
-//     async fn logout() {
-//         let res = logout_test_helper(Method::POST).await;
-
-//         assert_eq!(res.status(), 200);
-//         assert_eq!(read_body_string(res).await, "");
-//     }
-
-//     #[tokio::test]
-//     async fn logout_missing_header() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let req = test::TestRequest::post().uri("/logout");
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             401,
-//             "MissingAuthorizationHeader",
-//             "Header with authorization token not provided.",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn logout_wrong_token() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let req = test::TestRequest::post().uri("/logout").append_header((
-//             header::AUTHORIZATION,
-//             Bearer::new("6ecff667-258e-4108-9dc9-93cb8c64793c"),
-//         ));
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(res, 401, "InvalidSession", "The session id is invalid.").await;
-//     }
-
-//     #[tokio::test]
-//     async fn logout_wrong_scheme() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let req = test::TestRequest::post()
-//             .uri("/logout")
-//             .append_header((header::AUTHORIZATION, "7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5"));
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             401,
-//             "InvalidAuthorizationScheme",
-//             "Authentication scheme must be Bearer.",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn logout_invalid_token() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let req = test::TestRequest::post()
-//             .uri("/logout")
-//             .append_header((header::AUTHORIZATION, format!("Bearer {}", "no uuid")));
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             401,
-//             "InvalidUuid",
-//             "Identifier does not have the right format.",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn logout_invalid_method() {
-//         check_allowed_http_methods(logout_test_helper, &[Method::POST]).await;
-//     }
-
-//     #[tokio::test]
-//     async fn session() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let session = create_session_helper(&ctx).await;
-
-//         let req = test::TestRequest::get()
-//             .uri("/session")
-//             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-
-//         let session: UserSession = test::read_body_json(res).await;
-
-//         ctx.user_db_ref().logout(session.id).await.unwrap();
-
-//         let req = test::TestRequest::get()
-//             .uri("/session")
-//             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(res, 401, "InvalidSession", "The session id is invalid.").await;
-//     }
-
-//     #[tokio::test]
-//     async fn session_view_project() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let (session, project) = create_project_helper(&ctx).await;
-
-//         let req = test::TestRequest::post()
-//             .uri(&format!("/session/project/{project}"))
-//             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-
-//         assert_eq!(res.status(), 200);
-
-//         assert_eq!(
-//             ctx.user_db_ref().session(session.id).await.unwrap().project,
-//             Some(project)
-//         );
-
-//         let rect =
-//             STRectangle::new_unchecked(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1);
-//         let req = test::TestRequest::post()
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .uri("/session/view")
-//             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-//             .set_json(&rect);
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-
-//         assert_eq!(res.status(), 200);
-
-//         assert_eq!(
-//             ctx.user_db_ref().session(session.id()).await.unwrap().view,
-//             Some(rect)
-//         );
-//     }
-
-//     #[tokio::test]
-//     #[serial]
-//     async fn it_disables_anonymous_access() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let req = test::TestRequest::post().uri("/anonymous");
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-
-//         assert_eq!(res.status(), 200);
-
-//         config::set_config("session.anonymous_access", false).unwrap();
-
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let req = test::TestRequest::post().uri("/anonymous");
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-
-//         config::set_config("session.anonymous_access", true).unwrap();
-
-//         ErrorResponse::assert(
-//             res,
-//             401,
-//             "AnonymousAccessDisabled",
-//             "Anonymous access is disabled, please log in",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     #[serial]
-//     async fn it_disables_user_registration() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let user_reg = UserRegistration {
-//             email: "foo@example.com".to_owned(),
-//             password: "secret123".to_owned(),
-//             real_name: "Foo Bar".to_owned(),
-//         };
-
-//         let req = test::TestRequest::post()
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .uri("/user")
-//             .set_json(&user_reg);
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-
-//         assert_eq!(res.status(), 200);
-
-//         config::set_config("user.user_registration", false).unwrap();
-
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let req = test::TestRequest::post()
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .uri("/user")
-//             .set_json(&user_reg);
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-
-//         config::set_config("user.user_registration", true).unwrap();
-
-//         ErrorResponse::assert(
-//             res,
-//             400,
-//             "UserRegistrationDisabled",
-//             "User registration is disabled",
-//         )
-//         .await;
-//     }
-
-//     const MOCK_CLIENT_ID: &str = "";
-
-//     fn single_state_nonce_request_db(issuer: String) -> OidcRequestDb {
-//         let oidc_config = Oidc {
-//             enabled: true,
-//             issuer,
-//             client_id: MOCK_CLIENT_ID.to_string(),
-//             client_secret: None,
-//             redirect_uri: "https://dummy-redirect.com/".into(),
-//             scopes: vec!["profile".to_string(), "email".to_string()],
-//         };
-
-//         OidcRequestDb::from_oidc_with_static_tokens(oidc_config)
-//     }
-
-//     fn mock_valid_provider_discovery(expected_discoveries: usize) -> Server {
-//         let server = Server::run();
-//         let server_url = format!("http://{}", server.addr());
-
-//         let provider_metadata = mock_provider_metadata(server_url.as_str());
-//         let jwks = mock_jwks();
-
-//         server.expect(
-//             Expectation::matching(request::method_path(
-//                 "GET",
-//                 "/.well-known/openid-configuration",
-//             ))
-//             .times(expected_discoveries)
-//             .respond_with(
-//                 status_code(200)
-//                     .insert_header("content-type", "application/json")
-//                     .body(serde_json::to_string(&provider_metadata).unwrap()),
-//             ),
-//         );
-//         server.expect(
-//             Expectation::matching(request::method_path("GET", "/jwk"))
-//                 .times(expected_discoveries)
-//                 .respond_with(
-//                     status_code(200)
-//                         .insert_header("content-type", "application/json")
-//                         .body(serde_json::to_string(&jwks).unwrap()),
-//                 ),
-//         );
-//         server
-//     }
-
-//     async fn oidc_init_test_helper(method: Method, ctx: ProInMemoryContext) -> ServiceResponse {
-//         let req = test::TestRequest::default()
-//             .method(method)
-//             .uri("/oidcInit")
-//             .append_header((header::CONTENT_LENGTH, 0));
-//         send_pro_test_request(req, ctx).await
-//     }
-
-//     async fn oidc_login_test_helper(
-//         method: Method,
-//         ctx: ProInMemoryContext,
-//         auth_code_response: AuthCodeResponse,
-//     ) -> ServiceResponse {
-//         let req = test::TestRequest::default()
-//             .method(method)
-//             .uri("/oidcLogin")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .set_json(&auth_code_response);
-//         send_pro_test_request(req, ctx).await
-//     }
-
-//     #[tokio::test]
-//     async fn oidc_init() {
-//         let server = mock_valid_provider_discovery(1);
-//         let server_url = format!("http://{}", server.addr());
-//         let request_db = single_state_nonce_request_db(server_url);
-
-//         let ctx = ProInMemoryContext::new_with_oidc(request_db);
-//         let res = oidc_init_test_helper(Method::POST, ctx).await;
-
-//         assert_eq!(res.status(), 200);
-//         let _auth_code_url: AuthCodeRequestURL = test::read_body_json(res).await;
-//     }
-
-//     #[tokio::test]
-//     async fn oidc_illegal_provider() {
-//         let server = Server::run();
-//         let server_url = format!("http://{}", server.addr());
-//         let request_db = single_state_nonce_request_db(server_url);
-
-//         let error_message = serde_json::to_string(&json!({
-//             "error_description": "Dummy bad request",
-//             "error": "catch_all_error"
-//         }))
-//         .expect("Serde Json unsuccessful");
-
-//         server.expect(
-//             Expectation::matching(request::method_path(
-//                 "GET",
-//                 "/.well-known/openid-configuration",
-//             ))
-//             .respond_with(
-//                 status_code(404)
-//                     .insert_header("content-type", "application/json")
-//                     .body(error_message),
-//             ),
-//         );
-
-//         let ctx = ProInMemoryContext::new_with_oidc(request_db);
-//         let res = oidc_init_test_helper(Method::POST, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             400,
-//             "OidcError",
-//             "OidcError: ProviderDiscoveryError: Server returned invalid response: HTTP status code 404 Not Found",
-//         ).await;
-//     }
-
-//     #[tokio::test]
-//     async fn oidc_init_invalid_method() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         check_allowed_http_methods(
-//             |method| oidc_init_test_helper(method, ctx.clone()),
-//             &[Method::POST],
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn oidc_login() {
-//         let server = mock_valid_provider_discovery(2);
-//         let server_url = format!("http://{}", server.addr());
-//         let request_db = single_state_nonce_request_db(server_url.clone());
-
-//         let client = request_db.get_client().await.unwrap();
-//         let request = request_db.generate_request(client).await;
-
-//         assert!(request.is_ok());
-
-//         let mock_token_config =
-//             MockTokenConfig::create_from_issuer_and_client(server_url, MOCK_CLIENT_ID.to_string());
-//         let token_response = mock_token_response(mock_token_config);
-//         server.expect(
-//             Expectation::matching(request::method_path("POST", "/token")).respond_with(
-//                 status_code(200)
-//                     .insert_header("content-type", "application/json")
-//                     .body(serde_json::to_string(&token_response).unwrap()),
-//             ),
-//         );
-
-//         let auth_code_response = AuthCodeResponse {
-//             session_state: String::new(),
-//             code: String::new(),
-//             state: SINGLE_STATE.to_string(),
-//         };
-
-//         let ctx = ProInMemoryContext::new_with_oidc(request_db);
-//         let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
-
-//         assert_eq!(res.status(), 200);
-
-//         let _id: UserSession = test::read_body_json(res).await;
-//     }
-
-//     #[tokio::test]
-//     async fn oidc_login_illegal_request() {
-//         let server = mock_valid_provider_discovery(1);
-//         let server_url = format!("http://{}", server.addr());
-//         let request_db = single_state_nonce_request_db(server_url.clone());
-
-//         let auth_code_response = AuthCodeResponse {
-//             session_state: String::new(),
-//             code: String::new(),
-//             state: SINGLE_STATE.to_string(),
-//         };
-
-//         let ctx = ProInMemoryContext::new_with_oidc(request_db);
-//         let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             400,
-//             "OidcError",
-//             "OidcError: Login failed: Request unknown",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn oidc_login_fail() {
-//         let server = mock_valid_provider_discovery(2);
-//         let server_url = format!("http://{}", server.addr());
-//         let request_db = single_state_nonce_request_db(server_url);
-
-//         let client = request_db.get_client().await.unwrap();
-//         let request = request_db.generate_request(client).await;
-
-//         assert!(request.is_ok());
-
-//         let error_message = serde_json::to_string(&json!({
-//             "error_description": "Dummy bad request",
-//             "error": "catch_all_error"
-//         }))
-//         .expect("Serde Json unsuccessful");
-
-//         server.expect(
-//             Expectation::matching(request::method_path("POST", "/token")).respond_with(
-//                 status_code(404)
-//                     .insert_header("content-type", "application/json")
-//                     .body(error_message),
-//             ),
-//         );
-
-//         let auth_code_response = AuthCodeResponse {
-//             session_state: String::new(),
-//             code: String::new(),
-//             state: SINGLE_STATE.to_string(),
-//         };
-
-//         let ctx = ProInMemoryContext::new_with_oidc(request_db);
-//         let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             400,
-//             "OidcError",
-//             "OidcError: Verification failed: Request for code to token exchange failed",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn oidc_login_invalid_method() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let auth_code_response = AuthCodeResponse {
-//             session_state: String::new(),
-//             code: String::new(),
-//             state: String::new(),
-//         };
-
-//         check_allowed_http_methods(
-//             |method| oidc_login_test_helper(method, ctx.clone(), auth_code_response.clone()),
-//             &[Method::POST],
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn oidc_login_invalid_body() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let req = test::TestRequest::post()
-//             .uri("/oidcLogin")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .set_payload("no json");
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             415,
-//             "UnsupportedMediaType",
-//             "Unsupported content type header.",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn oidc_login_missing_fields() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let auth_code_response = json!({
-//             "sessionState": "",
-//             "code": "",
-//         });
-
-//         // register user
-//         let req = test::TestRequest::post()
-//             .uri("/oidcLogin")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .set_json(&auth_code_response);
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             400,
-//             "BodyDeserializeError",
-//             "missing field `state` at line 1 column 29",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn oidc_login_invalid_type() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         // register user
-//         let req = test::TestRequest::post()
-//             .uri("/oidcLogin")
-//             .append_header((header::CONTENT_LENGTH, 0))
-//             .append_header((header::CONTENT_TYPE, "text/html"));
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             415,
-//             "UnsupportedMediaType",
-//             "Unsupported content type header.",
-//         )
-//         .await;
-//     }
-
-//     #[tokio::test]
-//     async fn it_gets_quota() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let user = Validated {
-//             user_input: UserRegistration {
-//                 email: "foo@example.com".to_string(),
-//                 password: "secret123".to_string(),
-//                 real_name: "Foo Bar".to_string(),
-//             },
-//         };
-
-//         ctx.user_db_ref().register(user).await.unwrap();
-
-//         let credentials = UserCredentials {
-//             email: "foo@example.com".to_string(),
-//             password: "secret123".to_string(),
-//         };
-
-//         let session = ctx.user_db_ref().login(credentials).await.unwrap();
-
-//         ctx.user_db_ref()
-//             .increment_quota_used(&session.user.id, 111)
-//             .await
-//             .unwrap();
-
-//         // current user quota
-//         let req = test::TestRequest::get()
-//             .uri("/quota")
-//             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-//         let quota: Quota = test::read_body_json(res).await;
-//         assert_eq!(quota.used, 111);
-
-//         // specific user quota (self)
-//         let req = test::TestRequest::get()
-//             .uri(&format!("/quotas/{}", session.user.id))
-//             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-//         let quota: Quota = test::read_body_json(res).await;
-//         assert_eq!(quota.used, 111);
-
-//         // specific user quota (other)
-//         let req = test::TestRequest::get()
-//             .uri(&format!("/quotas/{}", uuid::Uuid::new_v4()))
-//             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-//         assert_eq!(res.status(), 401);
-
-//         // specific user quota as admin
-//         let req = test::TestRequest::get()
-//             .uri(&format!("/quotas/{}", session.user.id))
-//             .append_header((
-//                 header::AUTHORIZATION,
-//                 format!(
-//                     "Bearer {}",
-//                     config::get_config_element::<config::Session>()
-//                         .unwrap()
-//                         .admin_session_token
-//                         .unwrap()
-//                 ),
-//             ));
-//         let res = send_pro_test_request(req, ctx).await;
-//         let quota: Quota = test::read_body_json(res).await;
-//         assert_eq!(quota.used, 111);
-//     }
-
-//     #[tokio::test]
-//     async fn it_updates_quota() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let user = Validated {
-//             user_input: UserRegistration {
-//                 email: "foo@example.com".to_string(),
-//                 password: "secret123".to_string(),
-//                 real_name: "Foo Bar".to_string(),
-//             },
-//         };
-
-//         let user_id = ctx.user_db_ref().register(user).await.unwrap();
-
-//         let admin_session: UserSession = AdminSession::default().into();
-
-//         let req = test::TestRequest::get()
-//             .uri(&format!("/quotas/{user_id}"))
-//             .append_header((
-//                 header::AUTHORIZATION,
-//                 format!("Bearer {}", admin_session.id),
-//             ));
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-//         let quota: Quota = test::read_body_json(res).await;
-//         assert_eq!(
-//             quota.available,
-//             crate::util::config::get_config_element::<crate::pro::util::config::User>()
-//                 .unwrap()
-//                 .default_available_quota
-//         );
-
-//         let update = UpdateQuota { available: 123 };
-
-//         let req = test::TestRequest::post()
-//             .uri(&format!("/quotas/{user_id}"))
-//             .append_header((
-//                 header::AUTHORIZATION,
-//                 format!("Bearer {}", admin_session.id),
-//             ))
-//             .set_json(update);
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-
-//         assert_eq!(res.status(), 200);
-
-//         let req = test::TestRequest::get()
-//             .uri(&format!("/quotas/{user_id}"))
-//             .append_header((
-//                 header::AUTHORIZATION,
-//                 format!("Bearer {}", admin_session.id),
-//             ));
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-//         let quota: Quota = test::read_body_json(res).await;
-//         assert_eq!(quota.available, 123);
-//     }
-
-//     #[tokio::test]
-//     async fn it_checks_quota_before_querying() {
-//         let ctx = ProInMemoryContext::test_default();
-
-//         let session = ctx.user_db_ref().anonymous().await.unwrap();
-
-//         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
-
-//         let colorizer = Colorizer::linear_gradient(
-//             vec![
-//                 (0.0, RgbaColor::white()).try_into().unwrap(),
-//                 (255.0, RgbaColor::black()).try_into().unwrap(),
-//             ],
-//             RgbaColor::transparent(),
-//             DefaultColors::OverUnder {
-//                 over_color: RgbaColor::white(),
-//                 under_color: RgbaColor::black(),
-//             },
-//         )
-//         .unwrap();
-
-//         let params = &[
-//             ("request", "GetMap"),
-//             ("service", "WMS"),
-//             ("version", "1.3.0"),
-//             ("layers", &id.to_string()),
-//             (
-//                 "bbox",
-//                 "1.95556640625,0.90087890625,1.9775390625,0.9228515625",
-//             ),
-//             ("width", "256"),
-//             ("height", "256"),
-//             ("crs", "EPSG:4326"),
-//             (
-//                 "styles",
-//                 &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
-//             ),
-//             ("format", "image/png"),
-//             ("time", "2014-04-01T12:00:00.0Z"),
-//             ("exceptions", "JSON"),
-//         ];
-
-//         ctx.user_db_ref()
-//             .update_quota_available_by_user(&session.user.id, 0)
-//             .await
-//             .unwrap();
-
-//         let req = actix_web::test::TestRequest::get()
-//             .uri(&format!(
-//                 "/wms/{}?{}",
-//                 id,
-//                 serde_urlencoded::to_string(params).unwrap()
-//             ))
-//             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-//         let res = send_pro_test_request(req, ctx.clone()).await;
-
-//         ErrorResponse::assert(
-//             res,
-//             200,
-//             "Operator",
-//             "Operator: CreatingProcessorFailed: QuotaExhausted",
-//         )
-//         .await;
-
-//         ctx.user_db_ref()
-//             .update_quota_available_by_user(&session.user.id, 9999)
-//             .await
-//             .unwrap();
-
-//         let req = actix_web::test::TestRequest::get()
-//             .uri(&format!(
-//                 "/wms/{}?{}",
-//                 id,
-//                 serde_urlencoded::to_string(params).unwrap()
-//             ))
-//             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-//         let res = send_pro_test_request(req, ctx).await;
-
-//         assert_eq!(res.status(), 200);
-//         assert_eq!(
-//             res.headers().get(&CONTENT_TYPE),
-//             Some(&header::HeaderValue::from_static("image/png"))
-//         );
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::contexts::{Context, Session};
+    use crate::handlers::ErrorResponse;
+    use crate::pro::util::tests::mock_oidc::{
+        mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
+    };
+    use crate::pro::util::tests::{
+        create_project_helper, create_session_helper, register_ndvi_workflow_helper,
+        send_pro_test_request,
+    };
+    use crate::pro::{contexts::ProInMemoryContext, users::UserId};
+    use crate::util::tests::{check_allowed_http_methods, read_body_string};
+    use crate::util::user_input::Validated;
+
+    use crate::pro::users::{Auth, AuthCodeRequestURL, OidcRequestDb};
+    use crate::pro::util::config::Oidc;
+    use actix_http::header::CONTENT_TYPE;
+    use actix_web::dev::ServiceResponse;
+    use actix_web::{http::header, http::Method, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
+    use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use geoengine_datatypes::util::test::TestDefault;
+    use httptest::matchers::request;
+    use httptest::responders::status_code;
+    use httptest::{Expectation, Server};
+    use serde_json::json;
+    use serial_test::serial;
+
+    async fn register_test_helper<C: ProContext>(
+        ctx: C,
+        method: Method,
+        email: &str,
+    ) -> ServiceResponse {
+        let user = UserRegistration {
+            email: email.to_string(),
+            password: "secret123".to_string(),
+            real_name: " Foo Bar".to_string(),
+        };
+
+        // register user
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/user")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&user);
+        send_pro_test_request(req, ctx).await
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn register() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let res = register_test_helper(ctx, Method::POST, "foo@example.com").await;
+
+        assert_eq!(res.status(), 200);
+
+        let _user: IdResponse<UserId> = test::read_body_json(res).await;
+    }
+
+    #[tokio::test]
+    async fn register_fail() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let res = register_test_helper(ctx, Method::POST, "notanemail").await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "RegistrationFailed",
+            "Registration failed: Invalid e-mail address",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn register_duplicate_email() {
+        let ctx = ProInMemoryContext::test_default();
+
+        register_test_helper(ctx.clone(), Method::POST, "foo@example.com").await;
+
+        // register user
+        let res = register_test_helper(ctx, Method::POST, "foo@example.com").await;
+
+        ErrorResponse::assert(
+            res,
+            409,
+            "Duplicate",
+            "Tried to create duplicate: E-mail already exists",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn register_invalid_method() {
+        let ctx = ProInMemoryContext::test_default();
+
+        check_allowed_http_methods(
+            |method| register_test_helper(ctx.clone(), method, "foo@example.com"),
+            &[Method::POST],
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn register_invalid_body() {
+        let ctx = ProInMemoryContext::test_default();
+
+        // register user
+        let req = test::TestRequest::post()
+            .uri("/user")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_payload("no json");
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn register_missing_fields() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let user = json!({
+            "password": "secret123",
+            "real_name": " Foo Bar",
+        });
+
+        // register user
+        let req = test::TestRequest::post()
+            .uri("/user")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&user);
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "BodyDeserializeError",
+            "missing field `email` at line 1 column 47",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn register_invalid_type() {
+        let ctx = ProInMemoryContext::test_default();
+
+        // register user
+        let req = test::TestRequest::post()
+            .uri("/user")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::CONTENT_TYPE, "text/html"));
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
+        )
+        .await;
+    }
+
+    async fn login_test_helper(method: Method, password: &str) -> ServiceResponse {
+        let ctx = ProInMemoryContext::test_default();
+
+        let user = Validated {
+            user_input: UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+                real_name: " Foo Bar".to_string(),
+            },
+        };
+
+        ctx.register(user).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@example.com".to_string(),
+            password: password.to_string(),
+        };
+
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/login")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&credentials);
+        send_pro_test_request(req, ctx).await
+    }
+
+    #[tokio::test]
+    async fn login() {
+        let res = login_test_helper(Method::POST, "secret123").await;
+
+        assert_eq!(res.status(), 200);
+
+        let _id: UserSession = test::read_body_json(res).await;
+    }
+
+    #[tokio::test]
+    async fn login_fail() {
+        let res = login_test_helper(Method::POST, "wrong").await;
+
+        ErrorResponse::assert(
+            res,
+            401,
+            "LoginFailed",
+            "User does not exist or password is wrong.",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn login_invalid_method() {
+        check_allowed_http_methods(
+            |method| login_test_helper(method, "secret123"),
+            &[Method::POST],
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn login_invalid_body() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let req = test::TestRequest::post()
+            .uri("/login")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
+            .set_payload("no json");
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "BodyDeserializeError",
+            "expected ident at line 1 column 2",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn login_missing_fields() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let user = Validated {
+            user_input: UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+                real_name: " Foo Bar".to_string(),
+            },
+        };
+
+        ctx.register(user).await.unwrap();
+
+        let credentials = json!({
+            "email": "foo@example.com",
+        });
+
+        let req = test::TestRequest::post()
+            .uri("/login")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&credentials);
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "BodyDeserializeError",
+            "missing field `password` at line 1 column 27",
+        )
+        .await;
+    }
+
+    async fn logout_test_helper(method: Method) -> ServiceResponse {
+        let ctx = ProInMemoryContext::test_default();
+
+        let user = Validated {
+            user_input: UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+                real_name: " Foo Bar".to_string(),
+            },
+        };
+
+        ctx.register(user).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+        };
+
+        let session = ctx.login(credentials).await.unwrap();
+
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/logout")
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_payload("no json");
+        send_pro_test_request(req, ctx).await
+    }
+
+    #[tokio::test]
+    async fn logout() {
+        let res = logout_test_helper(Method::POST).await;
+
+        assert_eq!(res.status(), 200);
+        assert_eq!(read_body_string(res).await, "");
+    }
+
+    #[tokio::test]
+    async fn logout_missing_header() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let req = test::TestRequest::post().uri("/logout");
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn logout_wrong_token() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let req = test::TestRequest::post().uri("/logout").append_header((
+            header::AUTHORIZATION,
+            Bearer::new("6ecff667-258e-4108-9dc9-93cb8c64793c"),
+        ));
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(res, 401, "InvalidSession", "The session id is invalid.").await;
+    }
+
+    #[tokio::test]
+    async fn logout_wrong_scheme() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let req = test::TestRequest::post()
+            .uri("/logout")
+            .append_header((header::AUTHORIZATION, "7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5"));
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            401,
+            "InvalidAuthorizationScheme",
+            "Authentication scheme must be Bearer.",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn logout_invalid_token() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let req = test::TestRequest::post()
+            .uri("/logout")
+            .append_header((header::AUTHORIZATION, format!("Bearer {}", "no uuid")));
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            401,
+            "InvalidUuid",
+            "Identifier does not have the right format.",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn logout_invalid_method() {
+        check_allowed_http_methods(logout_test_helper, &[Method::POST]).await;
+    }
+
+    #[tokio::test]
+    async fn session() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let session = create_session_helper(&ctx).await;
+
+        let req = test::TestRequest::get()
+            .uri("/session")
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        let session: UserSession = test::read_body_json(res).await;
+        let db = ctx.db(session.clone());
+
+        db.logout().await.unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/session")
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(res, 401, "InvalidSession", "The session id is invalid.").await;
+    }
+
+    #[tokio::test]
+    async fn session_view_project() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let (session, project) = create_project_helper(&ctx).await;
+
+        let req = test::TestRequest::post()
+            .uri(&format!("/session/project/{project}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        assert_eq!(
+            ctx.session(session.id).await.unwrap().project,
+            Some(project)
+        );
+
+        let rect =
+            STRectangle::new_unchecked(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1);
+        let req = test::TestRequest::post()
+            .append_header((header::CONTENT_LENGTH, 0))
+            .uri("/session/view")
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_json(&rect);
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        assert_eq!(ctx.session(session.id()).await.unwrap().view, Some(rect));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn it_disables_anonymous_access() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let req = test::TestRequest::post().uri("/anonymous");
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        config::set_config("session.anonymous_access", false).unwrap();
+
+        let ctx = ProInMemoryContext::test_default();
+
+        let req = test::TestRequest::post().uri("/anonymous");
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        config::set_config("session.anonymous_access", true).unwrap();
+
+        ErrorResponse::assert(
+            res,
+            401,
+            "AnonymousAccessDisabled",
+            "Anonymous access is disabled, please log in",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn it_disables_user_registration() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let user_reg = UserRegistration {
+            email: "foo@example.com".to_owned(),
+            password: "secret123".to_owned(),
+            real_name: "Foo Bar".to_owned(),
+        };
+
+        let req = test::TestRequest::post()
+            .append_header((header::CONTENT_LENGTH, 0))
+            .uri("/user")
+            .set_json(&user_reg);
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        config::set_config("user.user_registration", false).unwrap();
+
+        let ctx = ProInMemoryContext::test_default();
+
+        let req = test::TestRequest::post()
+            .append_header((header::CONTENT_LENGTH, 0))
+            .uri("/user")
+            .set_json(&user_reg);
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        config::set_config("user.user_registration", true).unwrap();
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "UserRegistrationDisabled",
+            "User registration is disabled",
+        )
+        .await;
+    }
+
+    const MOCK_CLIENT_ID: &str = "";
+
+    fn single_state_nonce_request_db(issuer: String) -> OidcRequestDb {
+        let oidc_config = Oidc {
+            enabled: true,
+            issuer,
+            client_id: MOCK_CLIENT_ID.to_string(),
+            client_secret: None,
+            redirect_uri: "https://dummy-redirect.com/".into(),
+            scopes: vec!["profile".to_string(), "email".to_string()],
+        };
+
+        OidcRequestDb::from_oidc_with_static_tokens(oidc_config)
+    }
+
+    fn mock_valid_provider_discovery(expected_discoveries: usize) -> Server {
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+
+        let provider_metadata = mock_provider_metadata(server_url.as_str());
+        let jwks = mock_jwks();
+
+        server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/.well-known/openid-configuration",
+            ))
+            .times(expected_discoveries)
+            .respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(serde_json::to_string(&provider_metadata).unwrap()),
+            ),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/jwk"))
+                .times(expected_discoveries)
+                .respond_with(
+                    status_code(200)
+                        .insert_header("content-type", "application/json")
+                        .body(serde_json::to_string(&jwks).unwrap()),
+                ),
+        );
+        server
+    }
+
+    async fn oidc_init_test_helper(method: Method, ctx: ProInMemoryContext) -> ServiceResponse {
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/oidcInit")
+            .append_header((header::CONTENT_LENGTH, 0));
+        send_pro_test_request(req, ctx).await
+    }
+
+    async fn oidc_login_test_helper(
+        method: Method,
+        ctx: ProInMemoryContext,
+        auth_code_response: AuthCodeResponse,
+    ) -> ServiceResponse {
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/oidcLogin")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&auth_code_response);
+        send_pro_test_request(req, ctx).await
+    }
+
+    #[tokio::test]
+    async fn oidc_init() {
+        let server = mock_valid_provider_discovery(1);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url);
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_init_test_helper(Method::POST, ctx).await;
+
+        assert_eq!(res.status(), 200);
+        let _auth_code_url: AuthCodeRequestURL = test::read_body_json(res).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_illegal_provider() {
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url);
+
+        let error_message = serde_json::to_string(&json!({
+            "error_description": "Dummy bad request",
+            "error": "catch_all_error"
+        }))
+        .expect("Serde Json unsuccessful");
+
+        server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/.well-known/openid-configuration",
+            ))
+            .respond_with(
+                status_code(404)
+                    .insert_header("content-type", "application/json")
+                    .body(error_message),
+            ),
+        );
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_init_test_helper(Method::POST, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "OidcError",
+            "OidcError: ProviderDiscoveryError: Server returned invalid response: HTTP status code 404 Not Found",
+        ).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_init_invalid_method() {
+        let ctx = ProInMemoryContext::test_default();
+
+        check_allowed_http_methods(
+            |method| oidc_init_test_helper(method, ctx.clone()),
+            &[Method::POST],
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login() {
+        let server = mock_valid_provider_discovery(2);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url.clone());
+
+        let client = request_db.get_client().await.unwrap();
+        let request = request_db.generate_request(client).await;
+
+        assert!(request.is_ok());
+
+        let mock_token_config =
+            MockTokenConfig::create_from_issuer_and_client(server_url, MOCK_CLIENT_ID.to_string());
+        let token_response = mock_token_response(mock_token_config);
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token")).respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(serde_json::to_string(&token_response).unwrap()),
+            ),
+        );
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: String::new(),
+            code: String::new(),
+            state: SINGLE_STATE.to_string(),
+        };
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+
+        assert_eq!(res.status(), 200);
+
+        let _id: UserSession = test::read_body_json(res).await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_illegal_request() {
+        let server = mock_valid_provider_discovery(1);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url.clone());
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: String::new(),
+            code: String::new(),
+            state: SINGLE_STATE.to_string(),
+        };
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "OidcError",
+            "OidcError: Login failed: Request unknown",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_fail() {
+        let server = mock_valid_provider_discovery(2);
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_request_db(server_url);
+
+        let client = request_db.get_client().await.unwrap();
+        let request = request_db.generate_request(client).await;
+
+        assert!(request.is_ok());
+
+        let error_message = serde_json::to_string(&json!({
+            "error_description": "Dummy bad request",
+            "error": "catch_all_error"
+        }))
+        .expect("Serde Json unsuccessful");
+
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token")).respond_with(
+                status_code(404)
+                    .insert_header("content-type", "application/json")
+                    .body(error_message),
+            ),
+        );
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: String::new(),
+            code: String::new(),
+            state: SINGLE_STATE.to_string(),
+        };
+
+        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "OidcError",
+            "OidcError: Verification failed: Request for code to token exchange failed",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_invalid_method() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let auth_code_response = AuthCodeResponse {
+            session_state: String::new(),
+            code: String::new(),
+            state: String::new(),
+        };
+
+        check_allowed_http_methods(
+            |method| oidc_login_test_helper(method, ctx.clone(), auth_code_response.clone()),
+            &[Method::POST],
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_invalid_body() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let req = test::TestRequest::post()
+            .uri("/oidcLogin")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_payload("no json");
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_missing_fields() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let auth_code_response = json!({
+            "sessionState": "",
+            "code": "",
+        });
+
+        // register user
+        let req = test::TestRequest::post()
+            .uri("/oidcLogin")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&auth_code_response);
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "BodyDeserializeError",
+            "missing field `state` at line 1 column 29",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn oidc_login_invalid_type() {
+        let ctx = ProInMemoryContext::test_default();
+
+        // register user
+        let req = test::TestRequest::post()
+            .uri("/oidcLogin")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::CONTENT_TYPE, "text/html"));
+        let res = send_pro_test_request(req, ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn it_gets_quota() {
+        let ctx = ProInMemoryContext::test_default();
+        let admin_db = ctx.pro_db(UserSession::system_session());
+
+        let user = Validated {
+            user_input: UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+                real_name: "Foo Bar".to_string(),
+            },
+        };
+
+        ctx.register(user).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+        };
+
+        let session = ctx.login(credentials).await.unwrap();
+
+        admin_db
+            .increment_quota_used(&session.user.id, 111)
+            .await
+            .unwrap();
+
+        // current user quota
+        let req = test::TestRequest::get()
+            .uri("/quota")
+            .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        let quota: Quota = test::read_body_json(res).await;
+        assert_eq!(quota.used, 111);
+
+        // specific user quota (self)
+        let req = test::TestRequest::get()
+            .uri(&format!("/quotas/{}", session.user.id))
+            .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        let quota: Quota = test::read_body_json(res).await;
+        assert_eq!(quota.used, 111);
+
+        // specific user quota (other)
+        let req = test::TestRequest::get()
+            .uri(&format!("/quotas/{}", uuid::Uuid::new_v4()))
+            .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        assert_eq!(res.status(), 401);
+
+        // specific user quota as admin
+        let req = test::TestRequest::get()
+            .uri(&format!("/quotas/{}", session.user.id))
+            .append_header((
+                header::AUTHORIZATION,
+                format!(
+                    "Bearer {}",
+                    config::get_config_element::<config::Session>()
+                        .unwrap()
+                        .admin_session_token
+                        .unwrap()
+                ),
+            ));
+        let res = send_pro_test_request(req, ctx).await;
+        let quota: Quota = test::read_body_json(res).await;
+        assert_eq!(quota.used, 111);
+    }
+
+    #[tokio::test]
+    async fn it_updates_quota() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let user = Validated {
+            user_input: UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+                real_name: "Foo Bar".to_string(),
+            },
+        };
+
+        let user_id = ctx.register(user).await.unwrap();
+
+        let admin_session: UserSession = AdminSession::default().into();
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/quotas/{user_id}"))
+            .append_header((
+                header::AUTHORIZATION,
+                format!("Bearer {}", admin_session.id),
+            ));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        let quota: Quota = test::read_body_json(res).await;
+        assert_eq!(
+            quota.available,
+            crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                .unwrap()
+                .default_available_quota
+        );
+
+        let update = UpdateQuota { available: 123 };
+
+        let req = test::TestRequest::post()
+            .uri(&format!("/quotas/{user_id}"))
+            .append_header((
+                header::AUTHORIZATION,
+                format!("Bearer {}", admin_session.id),
+            ))
+            .set_json(update);
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/quotas/{user_id}"))
+            .append_header((
+                header::AUTHORIZATION,
+                format!("Bearer {}", admin_session.id),
+            ));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+        let quota: Quota = test::read_body_json(res).await;
+        assert_eq!(quota.available, 123);
+    }
+
+    #[tokio::test]
+    async fn it_checks_quota_before_querying() {
+        let ctx = ProInMemoryContext::test_default();
+        let admin_db = ctx.db(UserSession::system_session());
+
+        let session = ctx.anonymous().await.unwrap();
+
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::white()).try_into().unwrap(),
+                (255.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            DefaultColors::OverUnder {
+                over_color: RgbaColor::white(),
+                under_color: RgbaColor::black(),
+            },
+        )
+        .unwrap();
+
+        let params = &[
+            ("request", "GetMap"),
+            ("service", "WMS"),
+            ("version", "1.3.0"),
+            ("layers", &id.to_string()),
+            (
+                "bbox",
+                "1.95556640625,0.90087890625,1.9775390625,0.9228515625",
+            ),
+            ("width", "256"),
+            ("height", "256"),
+            ("crs", "EPSG:4326"),
+            (
+                "styles",
+                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+            ),
+            ("format", "image/png"),
+            ("time", "2014-04-01T12:00:00.0Z"),
+            ("exceptions", "JSON"),
+        ];
+
+        admin_db
+            .update_quota_available_by_user(&session.user.id, 0)
+            .await
+            .unwrap();
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/wms/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        ErrorResponse::assert(
+            res,
+            200,
+            "Operator",
+            "Operator: CreatingProcessorFailed: QuotaExhausted",
+        )
+        .await;
+
+        admin_db
+            .update_quota_available_by_user(&session.user.id, 9999)
+            .await
+            .unwrap();
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/wms/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
+        let res = send_pro_test_request(req, ctx).await;
+
+        assert_eq!(res.status(), 200);
+        assert_eq!(
+            res.headers().get(&CONTENT_TYPE),
+            Some(&header::HeaderValue::from_static("image/png"))
+        );
+    }
+}

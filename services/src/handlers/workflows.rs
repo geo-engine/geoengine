@@ -951,7 +951,6 @@ mod tests {
         };
 
         let session = ctx.default_session_ref().await.clone();
-        let session_id = session.id();
 
         let id = ctx
             .db(session)

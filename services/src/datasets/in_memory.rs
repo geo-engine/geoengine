@@ -1,6 +1,6 @@
 use crate::api::model::datatypes::{DatasetId, LayerId};
 use crate::api::model::services::AddDataset;
-use crate::contexts::{Db, InMemoryDb, SimpleSession};
+use crate::contexts::InMemoryDb;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
 use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, DatasetStorer};
 use crate::error::Result;
@@ -9,9 +9,7 @@ use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::{
-    DatasetLayerCollectionProvider, LayerCollectionId, LayerCollectionProvider,
-};
+use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
@@ -510,7 +508,7 @@ impl DatasetLayerCollectionProvider for InMemoryDb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{Context, InMemoryContext};
+    use crate::contexts::{Context, InMemoryContext, SimpleSession};
     use crate::datasets::listing::OrderBy;
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;

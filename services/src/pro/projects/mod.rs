@@ -4,7 +4,7 @@ mod postgres_projectdb;
 mod projectdb;
 
 pub use hashmap_projectdb::ProHashMapProjectDbBackend;
-pub use projectdb::{ProProjectDb, ProjectListOptions, ProjectPermission, UserProjectPermission};
+pub use projectdb::{ProProjectDb, ProjectListOptions};
 
 use crate::projects::ProjectVersionId;
 use uuid::Uuid;

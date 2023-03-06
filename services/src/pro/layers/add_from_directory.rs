@@ -7,7 +7,6 @@ use std::{
 };
 
 use crate::{
-    api::model::datatypes::LayerId,
     layers::{
         add_from_directory::UNSORTED_COLLECTION_ID,
         layer::{AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerDefinition},

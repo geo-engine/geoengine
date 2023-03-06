@@ -1,6 +1,6 @@
 use crate::api::model::datatypes::{DatasetId, LayerId};
 use crate::api::model::services::AddDataset;
-use crate::contexts::Db;
+
 use crate::datasets::listing::{
     DatasetListOptions, DatasetListing, DatasetProvider, OrderBy, ProvenanceOutput,
 };
@@ -16,12 +16,12 @@ use crate::layers::layer::{
     ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{
-    DatasetLayerCollectionProvider, LayerCollectionId, LayerCollectionProvider,
+    DatasetLayerCollectionProvider, LayerCollectionId,
 };
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::pro::contexts::ProInMemoryDb;
 use crate::pro::permissions::{Permission, PermissionDb};
-use crate::pro::users::{UserId, UserSession};
+use crate::pro::users::{UserId};
 use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
@@ -40,7 +40,7 @@ use geoengine_operators::source::{
     OgrSource, OgrSourceDataset,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
-use log::{info, warn};
+use log::{info};
 use snafu::ensure;
 use std::collections::HashMap;
 use std::str::FromStr;

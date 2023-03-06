@@ -2,7 +2,7 @@ use crate::projects::project::{
     CreateProject, Project, ProjectId, ProjectListOptions, ProjectListing, UpdateProject,
 };
 use crate::util::user_input::Validated;
-use crate::{contexts::Session, error::Result};
+use crate::{error::Result};
 use async_trait::async_trait;
 
 /// Storage of user projects

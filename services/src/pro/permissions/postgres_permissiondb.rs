@@ -171,7 +171,7 @@ where
 
     async fn remove_permissions<R: Into<ResourceId> + Send + Sync>(
         &self,
-        resource: R,
+        _resource: R,
     ) -> Result<()> {
         todo!()
     }

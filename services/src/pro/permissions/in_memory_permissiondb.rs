@@ -1,10 +1,10 @@
-use crate::contexts::{Db, InMemoryDb};
-use crate::error::{self, Error, Result};
+
+use crate::error::{self, Result};
 use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::contexts::ProInMemoryDb;
-use crate::pro::users::UserSession;
-use crate::{api::model::datatypes::LayerId, layers::listing::LayerCollectionId};
+
+use crate::{layers::listing::LayerCollectionId};
 
 use super::{Permission, PermissionDb, ResourceId, Role, RoleId};
 

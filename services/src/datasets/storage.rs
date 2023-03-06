@@ -7,7 +7,7 @@ use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
 use crate::error;
 use crate::error::Result;
-use crate::layers::listing::LayerCollectionProvider;
+
 use crate::projects::Symbology;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;

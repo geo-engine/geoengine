@@ -1,8 +1,8 @@
-use crate::contexts::{Db, GeoEngineDb, QueryContextImpl};
+use crate::contexts::{GeoEngineDb, QueryContextImpl};
 use crate::error;
 
 use crate::layers::storage::{
-    HashMapLayerDb, HashMapLayerDbBackend, HashMapLayerProviderDbBackend,
+    HashMapLayerDb, HashMapLayerProviderDbBackend,
 };
 use crate::pro::contexts::{Context, ProContext};
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDbBackend};
@@ -10,10 +10,10 @@ use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
 };
 use crate::pro::permissions::in_memory_permissiondb::InMemoryPermissionDbBackend;
-use crate::pro::permissions::PermissionDb;
+
 use crate::pro::projects::ProHashMapProjectDbBackend;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
-use crate::pro::users::{Auth, HashMapUserDbBackend, OidcRequestDb, UserDb, UserSession};
+use crate::pro::users::{Auth, HashMapUserDbBackend, OidcRequestDb, UserSession};
 use crate::pro::util::config::Oidc;
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use crate::workflows::registry::HashMapRegistryBackend;
@@ -23,7 +23,7 @@ use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
-use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker, QuotaTracking};
+use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
 use snafu::ResultExt;
@@ -122,7 +122,7 @@ impl ProInMemoryContext {
             quota,
         };
 
-        let quota = initialize_quota_tracking(ctx.db(UserSession::system_session()));
+        let _quota = initialize_quota_tracking(ctx.db(UserSession::system_session()));
 
         ctx
     }

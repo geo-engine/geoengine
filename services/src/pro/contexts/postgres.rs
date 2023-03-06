@@ -9,11 +9,10 @@ use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
 };
 use crate::pro::permissions::Role;
-use crate::pro::projects::ProjectPermission;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
-use crate::pro::users::{Auth, OidcRequestDb, UserDb, UserId, UserSession};
+use crate::pro::users::{Auth, OidcRequestDb, UserSession};
 use crate::pro::util::config::Oidc;
-use crate::projects::ProjectId;
+
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
 use async_trait::async_trait;
 use bb8_postgres::{
@@ -657,8 +656,10 @@ mod tests {
         INTERNAL_PROVIDER_ID,
     };
     use crate::pro::permissions::{Permission, PermissionDb};
-    use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
-    use crate::pro::users::{ExternalUserClaims, UserCredentials, UserDb, UserRegistration};
+    use crate::pro::projects::{LoadVersion, ProProjectDb};
+    use crate::pro::users::{
+        ExternalUserClaims, UserCredentials, UserDb, UserId, UserRegistration,
+    };
     use crate::projects::{
         CreateProject, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
         ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,

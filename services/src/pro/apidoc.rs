@@ -42,7 +42,6 @@ use crate::ogc::util::OgcBoundingBox;
 use crate::ogc::{wcs, wfs, wms};
 use crate::pro;
 use crate::pro::handlers::users::{Quota, UpdateQuota};
-use crate::pro::projects::{ProjectPermission, UserProjectPermission};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
@@ -309,12 +308,10 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             WrappedPlotOutput,
 
             CreateProject,
-            UserProjectPermission,
             Project,
             UpdateProject,
             ProjectFilter,
             ProjectListing,
-            ProjectPermission,
             ProjectVersion,
             LayerUpdate,
             PlotUpdate,

@@ -9,7 +9,7 @@ use crate::{
     pro::permissions::{Permission, Role},
 };
 use crate::{
-    datasets::storage::DatasetDefinition, pro::users::UserSession, util::user_input::UserInput,
+    datasets::storage::DatasetDefinition, util::user_input::UserInput,
 };
 use crate::{error::Result, pro::permissions::PermissionDb};
 

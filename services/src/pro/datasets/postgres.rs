@@ -19,7 +19,7 @@ use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
-use crate::layers::listing::LayerCollectionProvider;
+
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::pro::contexts::PostgresDb;
@@ -30,13 +30,12 @@ use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use crate::{
     datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider},
-    pro::users::UserSession,
 };
 use async_trait::async_trait;
-use bb8_postgres::bb8::Pool;
+
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
-use bb8_postgres::PostgresConnectionManager;
+
 use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
@@ -49,7 +48,7 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
-use log::info;
+
 use postgres_types::{FromSql, ToSql};
 use snafu::{ensure, ResultExt};
 use uuid::Uuid;

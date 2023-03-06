@@ -1,11 +1,11 @@
-use crate::contexts::{Db, InMemoryDb};
+use crate::contexts::InMemoryDb;
+use crate::error;
 use crate::error::Result;
 use crate::projects::{
     CreateProject, OrderBy, Project, ProjectDb, ProjectFilter, ProjectId, ProjectListOptions,
     ProjectListing, UpdateProject,
 };
 use crate::util::user_input::Validated;
-use crate::{contexts::SimpleSession, error};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
@@ -116,7 +116,7 @@ impl ProjectDb for InMemoryDb {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::contexts::MockableSession;
+    use crate::contexts::{MockableSession, SimpleSession};
     use crate::projects::project::STRectangle;
     use crate::util::user_input::UserInput;
     use crate::util::Identifier;
@@ -125,7 +125,6 @@ mod test {
     #[tokio::test]
     async fn list() {
         let project_db = InMemoryDb::default();
-        let session = SimpleSession::mock();
 
         for i in 0..10 {
             let create = CreateProject {
@@ -165,7 +164,6 @@ mod test {
     #[tokio::test]
     async fn load() {
         let project_db = InMemoryDb::default();
-        let session = SimpleSession::default();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -186,7 +184,6 @@ mod test {
     #[tokio::test]
     async fn create() {
         let project_db = InMemoryDb::default();
-        let session = SimpleSession::default();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -206,7 +203,6 @@ mod test {
     #[tokio::test]
     async fn update() {
         let project_db = InMemoryDb::default();
-        let session = SimpleSession::default();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -240,7 +236,6 @@ mod test {
     #[tokio::test]
     async fn delete() {
         let project_db = InMemoryDb::default();
-        let session = SimpleSession::default();
 
         let create = CreateProject {
             name: "Test".into(),
