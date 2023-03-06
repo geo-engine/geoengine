@@ -345,8 +345,11 @@ where
     }
 
     async fn session(&self, session: SessionId) -> Result<UserSession> {
-        let conn = self.pool.get().await?;
-        let stmt = conn
+        let mut conn = self.pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
             .prepare(
                 "
             SELECT 
@@ -356,18 +359,18 @@ where
                 s.created, 
                 s.valid_until, 
                 s.project_id,
-                s.view           
+                s.view
             FROM sessions s JOIN users u ON (s.user_id = u.id)
             WHERE s.id = $1 AND CURRENT_TIMESTAMP < s.valid_until;",
             )
             .await?;
 
-        let row = conn
+        let row = tx
             .query_one(&stmt, &[&session])
             .await
             .map_err(|_error| error::Error::InvalidSession)?;
 
-        Ok(UserSession {
+        let mut session = UserSession {
             id: session,
             user: UserInfo {
                 id: row.get(0),
@@ -378,8 +381,22 @@ where
             valid_until: row.get(4),
             project: row.get::<usize, Option<Uuid>>(5).map(ProjectId),
             view: row.get(6),
-            roles: vec![], // TODO
-        })
+            roles: vec![],
+        };
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT role_id FROM user_roles WHERE user_id = $1;
+            ",
+            )
+            .await?;
+
+        let rows = tx.query(&stmt, &[&session.user.id]).await?;
+
+        session.roles = rows.into_iter().map(|row| row.get(0)).collect();
+
+        Ok(session)
     }
 }
 
@@ -406,18 +423,7 @@ where
     }
 
     async fn set_session_project(&self, project: ProjectId) -> Result<()> {
-        let conn = self.conn_pool.get().await?;
-        PostgresContext::check_user_project_permission(
-            &conn,
-            self.session.user.id,
-            project,
-            &[
-                ProjectPermission::Read,
-                ProjectPermission::Write,
-                ProjectPermission::Owner,
-            ],
-        )
-        .await?;
+        // TODO: check permission
 
         let conn = self.conn_pool.get().await?;
         let stmt = conn

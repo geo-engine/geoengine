@@ -18,7 +18,7 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::layers::storage::{
-    HashMapLayerDbBackend, LayerDb, LayerProviderDb, LayerProviderListing,
+    HashMapLayerDb, HashMapLayerDbBackend, LayerDb, LayerProviderDb, LayerProviderListing,
     LayerProviderListingOptions, INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
 };
 use crate::pro::contexts::ProInMemoryDb;
@@ -38,66 +38,6 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, RwLockWriteGuard};
 use uuid::Uuid;
 
-// pub struct ProHashMapLayerDbBackend {
-//     layer_db: HashMapLayerDb,
-//     layer_permissions: Vec<LayerPermission>,
-//     // collection_permissions: Vec<LayerCollectionPermission>,
-// }
-
-// impl Default for ProHashMapLayerDbBackend {
-//     fn default() -> Self {
-//         Self {
-//             layer_db: HashMapLayerDb::default(),
-//             layer_permissions: vec![],
-//             // collection_permissions: vec![
-//             //     LayerCollectionPermission {
-//             //         collection: LayerCollectionId(INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
-//             //         role: Role::system_role_id(),
-//             //         permission: Permission::Owner,
-//             //     },
-//             //     LayerCollectionPermission {
-//             //         collection: LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
-//             //         role: Role::system_role_id(),
-//             //         permission: Permission::Owner,
-//             //     },
-//             // ],
-//         }
-//     }
-// }
-
-// // TODO: generify over id?
-// #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-// struct LayerPermission {
-//     layer: LayerId,
-//     role: RoleId,
-//     permission: Permission,
-// }
-
-// #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-// struct LayerCollectionPermission {
-//     collection: LayerCollectionId,
-//     role: RoleId,
-//     permission: Permission,
-// }
-
-// pub struct ProHashMapLayerDb {
-//     backend: Db<ProHashMapLayerDbBackend>,
-//     session: UserSession,
-// }
-
-// impl ProHashMapLayerDb {
-//     pub fn new(backend: Db<ProHashMapLayerDbBackend>, session: UserSession) -> Self {
-//         Self { backend, session }
-//     }
-
-//     pub fn system(backend: Db<ProHashMapLayerDbBackend>) -> Self {
-//         Self {
-//             backend,
-//             session: UserSession::system_session(),
-//         }
-//     }
-// }
-
 #[async_trait]
 impl LayerDb for ProInMemoryDb {
     async fn add_layer(
@@ -115,12 +55,7 @@ impl LayerDb for ProInMemoryDb {
 
         let layer_id = backend.add_layer(layer, collection).await?;
 
-        self.add_permission(
-            self.session.user.id.into(),
-            layer_id.clone(),
-            Permission::Owner,
-        )
-        .await?;
+        self.create_resource(layer_id.clone()).await?;
 
         Ok(layer_id)
     }
@@ -137,12 +72,11 @@ impl LayerDb for ProInMemoryDb {
             error::PermissionDenied
         );
 
-        let mut backend = &self.backend.layer_db;
+        let backend = &self.backend.layer_db;
 
         backend.add_layer_with_id(id, layer, collection).await?;
 
-        self.add_permission(self.session.user.id.into(), id.clone(), Permission::Owner)
-            .await?;
+        self.create_resource(id.clone()).await?;
 
         Ok(())
     }
@@ -160,14 +94,7 @@ impl LayerDb for ProInMemoryDb {
 
         let backend = &self.backend.layer_db;
 
-        backend.add_layer_to_collection(layer, collection).await;
-
-        self.add_permission(
-            self.session.user.id.into(),
-            layer.clone(),
-            Permission::Owner,
-        )
-        .await?;
+        backend.add_layer_to_collection(layer, collection).await?;
 
         Ok(())
     }
@@ -189,17 +116,12 @@ impl LayerDb for ProInMemoryDb {
             .add_layer_collection(collection.clone(), parent)
             .await?;
 
-        self.add_permission(
-            self.session.user.id.into(),
-            collection_id.clone(),
-            Permission::Owner,
-        )
-        .await?;
+        self.create_resource(collection_id.clone()).await?;
 
         Ok(collection_id)
     }
 
-    async fn add_collection_with_id(
+    async fn add_layer_collection_with_id(
         &self,
         id: &LayerCollectionId,
         collection: Validated<AddLayerCollection>,
@@ -211,14 +133,13 @@ impl LayerDb for ProInMemoryDb {
             error::PermissionDenied
         );
 
-        let mut backend = &self.backend.layer_db;
+        let backend = &self.backend.layer_db;
 
         backend
-            .add_collection_with_id(id, collection, parent)
+            .add_layer_collection_with_id(id, collection, parent)
             .await?;
 
-        self.add_permission(self.session.user.id.into(), id.clone(), Permission::Owner)
-            .await?;
+        self.create_resource(id.clone()).await?;
 
         Ok(())
     }
@@ -234,9 +155,9 @@ impl LayerDb for ProInMemoryDb {
             error::PermissionDenied
         );
 
-        let mut backend = &self.backend.layer_db;
+        let backend = &self.backend.layer_db;
 
-        backend.add_collection_to_parent(collection, parent).await;
+        backend.add_collection_to_parent(collection, parent).await?;
 
         Ok(())
     }
@@ -248,7 +169,7 @@ impl LayerDb for ProInMemoryDb {
             error::PermissionDenied
         );
 
-        let mut backend = &self.backend.layer_db;
+        let backend = &self.backend.layer_db;
 
         backend.remove_layer_collection(collection).await?;
 
@@ -274,7 +195,7 @@ impl LayerDb for ProInMemoryDb {
             error::PermissionDenied
         );
 
-        let mut backend = &self.backend.layer_db;
+        let backend = &self.backend.layer_db;
 
         backend
             .remove_layer_collection_from_parent(collection, parent)
@@ -302,7 +223,7 @@ impl LayerDb for ProInMemoryDb {
             error::PermissionDenied
         );
 
-        let mut backend = &self.backend.layer_db;
+        let backend = &self.backend.layer_db;
 
         backend
             .remove_layer_from_collection(layer_id, collection_id)
@@ -321,13 +242,16 @@ impl LayerCollectionProvider for ProInMemoryDb {
         collection_id: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
-        // TODO: permissions
+        ensure!(
+            self.has_permission(collection_id.clone(), Permission::Read)
+                .await?,
+            error::PermissionDenied
+        );
 
         let backend = &self.backend.layer_db;
 
         let options = options.user_input;
 
-        // filter collection items by read/owner permissions
         let mut collection = backend
             .load_layer_collection(
                 collection_id,
@@ -444,137 +368,3 @@ impl LayerProviderDb for ProInMemoryDb {
             .await
     }
 }
-
-// #[async_trait]
-// impl PermissionDb<LayerId> for ProHashMapLayerDb {
-//     async fn add_permission(
-//         &self,
-//         role: &RoleId,
-//         resource: &LayerId,
-//         permission: Permission,
-//     ) -> Result<()> {
-//         let mut backend = self.backend.write().await;
-
-//         // check owner permission on layer
-//         ensure!(
-//             backend
-//                 .layer_permissions
-//                 .iter()
-//                 .any(|p| p.layer == *resource
-//                     && self.session.roles.iter().any(|r| r == &p.role)
-//                     && p.permission == Permission::Owner),
-//             error::PermissionDenied
-//         );
-
-//         // TODO: check if permission already exists
-
-//         backend.layer_permissions.push(LayerPermission {
-//             layer: resource.clone(),
-//             role: *role,
-//             permission,
-//         });
-
-//         Ok(())
-//     }
-
-//     async fn remove_permission(
-//         &self,
-//         role: &RoleId,
-//         resource: &LayerId,
-//         permission: Permission,
-//     ) -> Result<()> {
-//         let mut backend = self.backend.write().await;
-
-//         // check owner permission on layer
-//         ensure!(
-//             backend
-//                 .layer_permissions
-//                 .iter()
-//                 .any(|p| p.layer == *resource
-//                     && self.session.roles.iter().any(|r| r == &p.role)
-//                     && p.permission == Permission::Owner),
-//             error::PermissionDenied
-//         );
-
-//         // TODO: check if permission already exists
-
-//         let layer_permission = LayerPermission {
-//             layer: resource.clone(),
-//             role: *role,
-//             permission,
-//         };
-
-//         backend.layer_permissions.retain(|p| p != &layer_permission);
-
-//         Ok(())
-//     }
-// }
-
-// #[async_trait]
-// impl PermissionDb<LayerCollectionId> for ProHashMapLayerDb {
-//     async fn add_permission(
-//         &self,
-//         role: &RoleId,
-//         resource: &LayerCollectionId,
-//         permission: Permission,
-//     ) -> Result<()> {
-//         let mut backend = self.backend.write().await;
-
-//         // check owner permission on collection
-//         ensure!(
-//             backend
-//                 .collection_permissions
-//                 .iter()
-//                 .any(|p| p.collection == *resource
-//                     && self.session.roles.iter().any(|r| r == &p.role)
-//                     && p.permission == Permission::Owner),
-//             error::PermissionDenied
-//         );
-
-//         // TODO: check if permission exists
-
-//         backend
-//             .collection_permissions
-//             .push(LayerCollectionPermission {
-//                 collection: resource.clone(),
-//                 role: *role,
-//                 permission,
-//             });
-
-//         Ok(())
-//     }
-
-//     async fn remove_permission(
-//         &self,
-//         role: &RoleId,
-//         resource: &LayerCollectionId,
-//         permission: Permission,
-//     ) -> Result<()> {
-//         let mut backend = self.backend.write().await;
-
-//         // check owner permission on collection
-//         ensure!(
-//             backend
-//                 .collection_permissions
-//                 .iter()
-//                 .any(|p| p.collection == *resource
-//                     && self.session.roles.iter().any(|r| r == &p.role)
-//                     && p.permission == Permission::Owner),
-//             error::PermissionDenied
-//         );
-
-//         // TODO: check if permission exists
-
-//         let collection_permission = LayerCollectionPermission {
-//             collection: resource.clone(),
-//             role: *role,
-//             permission,
-//         };
-
-//         backend
-//             .collection_permissions
-//             .retain(|p| p != &collection_permission);
-
-//         Ok(())
-//     }
-// }

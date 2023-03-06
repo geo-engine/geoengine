@@ -351,7 +351,7 @@ where
         Ok(LayerCollectionId(collection_id.to_string()))
     }
 
-    async fn add_collection_with_id(
+    async fn add_layer_collection_with_id(
         &self,
         id: &LayerCollectionId,
         collection: Validated<AddLayerCollection>,

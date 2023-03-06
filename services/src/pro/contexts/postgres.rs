@@ -113,7 +113,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            oidc_request_db: Arc::new(None),
+            oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
             quota,
             pool,
         };
@@ -507,28 +507,6 @@ where
             }
             version += 1;
         }
-    }
-
-    pub(crate) async fn check_user_project_permission(
-        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
-        user: UserId,
-        project: ProjectId,
-        permissions: &[ProjectPermission],
-    ) -> Result<()> {
-        let stmt = conn
-            .prepare(
-                "
-                SELECT TRUE
-                FROM user_project_permissions
-                WHERE user_id = $1 AND project_id = $2 AND permission = ANY ($3);",
-            )
-            .await?;
-
-        conn.query_one(&stmt, &[&user, &project, &permissions])
-            .await
-            .map_err(|_error| error::Error::ProjectDbUnauthorized)?;
-
-        Ok(())
     }
 }
 

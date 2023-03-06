@@ -88,7 +88,7 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         }
         .validated()?;
 
-        db.add_collection_with_id(
+        db.add_layer_collection_with_id(
             &def.id,
             collection,
             &LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),

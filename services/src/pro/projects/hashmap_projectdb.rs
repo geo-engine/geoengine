@@ -29,48 +29,51 @@ impl ProjectDb for ProInMemoryDb {
         &self,
         options: Validated<ProjectListOptions>,
     ) -> Result<Vec<ProjectListing>> {
-        // let ProjectListOptions {
-        //     filter,
-        //     order,
-        //     offset,
-        //     limit,
-        // } = options.user_input;
+        let ProjectListOptions {
+            filter,
+            order,
+            offset,
+            limit,
+        } = options.user_input;
 
-        // let backend = self.backend.project_db.read().await;
-        // let all_projects = &backend.projects;
+        let backend = self.backend.project_db.read().await;
 
-        // // TODO: filter by permission
-        // let mut projects = stream::iter(all_projects)
-        //     // .filter(|(id, p)| async move {
-        //     //     self.has_permission(**id, Permission::Read)
-        //     //         .await
-        //     //         .unwrap_or(false)
-        //     // })
-        //     .filter_map(|(_, v)| async { v.last() })
-        //     .map(ProjectListing::from)
-        //     .filter(|p| async {
-        //         match &filter {
-        //             ProjectFilter::Name { term } => p.name == *term,
-        //             ProjectFilter::Description { term } => p.description == *term,
-        //             ProjectFilter::None => true,
-        //         }
-        //     })
-        //     .collect::<Vec<_>>()
-        //     .await;
+        let mut projects = stream::iter(&backend.projects)
+            .filter(|(id, _)| async {
+                self.has_permission(**id, Permission::Read)
+                    .await
+                    .unwrap_or(false)
+            })
+            .filter_map(|(_, v)| async { v.last() })
+            .map(ProjectListing::from)
+            .filter_map(|p| async {
+                let m = match &filter {
+                    ProjectFilter::Name { term } => &p.name == term,
+                    ProjectFilter::Description { term } => &p.description == term,
+                    ProjectFilter::None => true,
+                };
 
-        // match order {
-        //     OrderBy::DateAsc => projects.sort_by(|a, b| a.changed.cmp(&b.changed)),
-        //     OrderBy::DateDesc => projects.sort_by(|a, b| b.changed.cmp(&a.changed)),
-        //     OrderBy::NameAsc => projects.sort_by(|a, b| a.name.cmp(&b.name)),
-        //     OrderBy::NameDesc => projects.sort_by(|a, b| b.name.cmp(&a.name)),
-        // }
+                if m {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .await;
 
-        // Ok(projects
-        //     .into_iter()
-        //     .skip(offset as usize)
-        //     .take(limit as usize)
-        //     .collect())
-        todo!()
+        match order {
+            OrderBy::DateAsc => projects.sort_by(|a, b| a.changed.cmp(&b.changed)),
+            OrderBy::DateDesc => projects.sort_by(|a, b| b.changed.cmp(&a.changed)),
+            OrderBy::NameAsc => projects.sort_by(|a, b| a.name.cmp(&b.name)),
+            OrderBy::NameDesc => projects.sort_by(|a, b| b.name.cmp(&a.name)),
+        }
+
+        Ok(projects
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect())
     }
 
     /// Create a project
@@ -82,8 +85,7 @@ impl ProjectDb for ProInMemoryDb {
         backend.projects.insert(id, vec![project]);
 
         // TODO: delete project if this fails:
-        self.add_permission(self.session.user.id.into(), id, Permission::Owner)
-            .await?;
+        self.create_resource(id).await?;
 
         Ok(id)
     }
@@ -98,7 +100,7 @@ impl ProjectDb for ProInMemoryDb {
         );
 
         let mut backend = self.backend.project_db.write().await;
-        let mut projects = &mut backend.projects;
+        let projects = &mut backend.projects;
 
         let project_versions = projects
             .get_mut(&update.id)

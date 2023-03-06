@@ -11,6 +11,8 @@ use crate::pro::contexts::PostgresDb;
 
 use super::{Permission, PermissionDb, ResourceId, RoleId};
 
+// TODO: a postgres specific permission db implementation that allows re-using connections and transaction
+
 trait ResourceTypeName {
     fn resource_type_name(&self) -> &'static str;
 
@@ -47,6 +49,33 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    async fn create_resource<R: Into<ResourceId> + Send + Sync>(&self, resource: R) -> Result<()> {
+        let resource: ResourceId = resource.into();
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(&format!(
+                "
+            INSERT INTO permissions (role_id, permission, {resource_type})
+            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
+                resource_type = resource.resource_type_name()
+            ))
+            .await?;
+
+        conn.execute(
+            &stmt,
+            &[
+                &RoleId::from(self.session.user.id),
+                &Permission::Owner,
+                &resource.uuid()?,
+            ],
+        )
+        .await?;
+
+        Ok(())
+    }
+
     async fn has_permission<R: Into<ResourceId> + Send + Sync>(
         &self,
         resource: R,
@@ -60,7 +89,7 @@ where
         let stmt = conn
             .prepare(&format!(
                 "
-            SELECT COUNT(*) FROM permissions WHERE role_id = ANY($1) AND permission = $2 AND {resource_type} = $3;",
+            SELECT COUNT(*) FROM permissions WHERE role_id = ANY($1) AND permission = ANY($2) AND {resource_type} = $3;",
                 resource_type = resource.resource_type_name()
             ))
             .await?;
@@ -68,11 +97,15 @@ where
         let row = conn
             .query_one(
                 &stmt,
-                &[&self.session.roles, &permission, &resource.uuid()?],
+                &[
+                    &self.session.roles,
+                    &permission.required_permissions(),
+                    &resource.uuid()?,
+                ],
             )
             .await?;
 
-        Ok(row.get(0))
+        Ok(row.get::<usize, i64>(0) > 0)
     }
 
     async fn add_permission<R: Into<ResourceId> + Send + Sync>(

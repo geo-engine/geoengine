@@ -1,17 +1,70 @@
 use crate::contexts::{Db, InMemoryDb};
 use crate::error::{self, Error, Result};
+use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
+use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::contexts::ProInMemoryDb;
 use crate::pro::users::UserSession;
 use crate::{api::model::datatypes::LayerId, layers::listing::LayerCollectionId};
 
-use super::{Permission, PermissionDb, ResourceId, RoleId};
+use super::{Permission, PermissionDb, ResourceId, Role, RoleId};
 
 use async_trait::async_trait;
 use snafu::ensure;
 
-#[derive(Default)]
 pub struct InMemoryPermissionDbBackend {
     permissions: Vec<InMemoryPermission>,
+}
+
+impl Default for InMemoryPermissionDbBackend {
+    fn default() -> Self {
+        // create the default permissions
+        Self {
+            permissions: vec![
+                InMemoryPermission {
+                    role: Role::system_role_id(),
+                    resource: ResourceId::LayerCollection(LayerCollectionId(
+                        INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
+                    )),
+                    permission: Permission::Owner,
+                },
+                InMemoryPermission {
+                    role: Role::system_role_id(),
+                    resource: ResourceId::LayerCollection(LayerCollectionId(
+                        UNSORTED_COLLECTION_ID.to_string(),
+                    )),
+                    permission: Permission::Owner,
+                },
+                InMemoryPermission {
+                    role: Role::user_role_id(),
+                    resource: ResourceId::LayerCollection(LayerCollectionId(
+                        INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
+                    )),
+                    permission: Permission::Read,
+                },
+                InMemoryPermission {
+                    role: Role::user_role_id(),
+                    resource: ResourceId::LayerCollection(LayerCollectionId(
+                        UNSORTED_COLLECTION_ID.to_string(),
+                    )),
+                    permission: Permission::Read,
+                },
+                InMemoryPermission {
+                    role: Role::anonymous_role_id(),
+                    resource: ResourceId::LayerCollection(LayerCollectionId(
+                        INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
+                    )),
+                    permission: Permission::Read,
+                },
+                InMemoryPermission {
+                    role: Role::anonymous_role_id(),
+                    resource: ResourceId::LayerCollection(LayerCollectionId(
+                        UNSORTED_COLLECTION_ID.to_string(),
+                    )),
+                    permission: Permission::Read,
+                },
+            ],
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -23,6 +76,25 @@ pub struct InMemoryPermission {
 
 #[async_trait]
 impl PermissionDb for ProInMemoryDb {
+    async fn create_resource<R: Into<ResourceId> + Send + Sync>(&self, resource: R) -> Result<()> {
+        let mut backend = self.backend.permission_db.write().await;
+
+        let resource: ResourceId = resource.into();
+
+        ensure!(
+            !backend.permissions.iter().any(|p| p.resource == resource),
+            error::PermissionDenied,
+        );
+
+        backend.permissions.push(InMemoryPermission {
+            role: self.session.user.id.into(),
+            resource,
+            permission: Permission::Owner,
+        });
+
+        Ok(())
+    }
+
     async fn has_permission<R: Into<ResourceId> + Send + Sync>(
         &self,
         resource: R,
@@ -32,10 +104,15 @@ impl PermissionDb for ProInMemoryDb {
 
         let resource: ResourceId = resource.into();
 
-        Ok(backend
-            .permissions
-            .iter()
-            .any(|p| p.resource == resource && p.permission.allows(&permission)))
+        // dbg!(&backend.permissions);
+        // dbg!(&self.session);
+        // dbg!(&resource, &permission);
+
+        Ok(backend.permissions.iter().any(|p| {
+            self.session.roles.iter().any(|r| r == &p.role)
+                && p.resource == resource
+                && p.permission.allows(&permission)
+        }))
     }
 
     async fn add_permission<R: Into<ResourceId> + Send + Sync>(
@@ -46,6 +123,8 @@ impl PermissionDb for ProInMemoryDb {
     ) -> Result<()> {
         let resource: ResourceId = resource.into();
 
+        // TODO: if the resource does not exist yet, the user has to become the initial owner, or: set the owner
+        // either check here that the resource is new, or create a new separate register resource method
         ensure!(
             self.has_permission(resource.clone(), Permission::Owner)
                 .await?,
@@ -94,6 +173,18 @@ impl PermissionDb for ProInMemoryDb {
         &self,
         resource: R,
     ) -> Result<()> {
-        todo!()
+        let resource: ResourceId = resource.into();
+
+        ensure!(
+            self.has_permission(resource.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
+
+        let mut backend = self.backend.permission_db.write().await;
+
+        backend.permissions.retain(|p| p.r != resource);
+
+        Ok(())
     }
 }

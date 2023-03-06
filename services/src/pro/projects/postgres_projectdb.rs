@@ -159,7 +159,7 @@ where
             .prepare(&format!(
                 "
         SELECT p.id, p.project_id, p.name, p.description, p.changed 
-        FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
+        FROM user_permitted_projects u JOIN project_versions p ON (u.project_id = p.project_id)
         WHERE
             u.user_id = $1
             AND latest IS TRUE
@@ -259,7 +259,7 @@ where
 
         let stmt = trans
             .prepare(
-                " INSERT INTO permissions (role_id, permission, project_id) VALUES ($1, $2, $3);",
+                "INSERT INTO permissions (role_id, permission, project_id) VALUES ($1, $2, $3);",
             )
             .await?;
 
@@ -444,7 +444,7 @@ where
                 p.time_step,
                 p.changed,
                 p.author_user_id
-            FROM project_versions
+            FROM project_versions p
             WHERE project_id = $1 AND latest IS TRUE",
                 )
                 .await?;

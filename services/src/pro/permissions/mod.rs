@@ -59,13 +59,23 @@ pub enum Permission {
 impl Permission {
     /// Return true if this permission includes the given permission.
     pub fn allows(&self, permission: &Permission) -> bool {
-        if self == permission {
-            true
-        } else {
-            match self {
-                Permission::Owner => true,
-                _ => false,
-            }
+        self == permission || (self == &Permission::Owner)
+    }
+
+    /// Return the implied permissions for the given permission.
+    pub fn implied_permissions(&self) -> Vec<Permission> {
+        match self {
+            Permission::Read => vec![Permission::Read],
+            Permission::Owner => vec![Permission::Owner, Permission::Read],
+        }
+    }
+
+    /// Return the required permissions for the given permission.
+    /// One of the returned permissions must be granted to the user.
+    pub fn required_permissions(&self) -> Vec<Permission> {
+        match self {
+            Permission::Read => vec![Permission::Owner, Permission::Read],
+            Permission::Owner => vec![Permission::Owner],
         }
     }
 }
@@ -106,6 +116,9 @@ impl From<DatasetId> for ResourceId {
 // TODO: accept references of things that are Into<ResourceId> as well
 #[async_trait]
 pub trait PermissionDb {
+    /// Create a new resource. Gives the current user the owner permission.
+    async fn create_resource<R: Into<ResourceId> + Send + Sync>(&self, resource: R) -> Result<()>;
+
     /// Check `permission` for `resource`.
     async fn has_permission<R: Into<ResourceId> + Send + Sync>(
         &self,
@@ -133,6 +146,7 @@ pub trait PermissionDb {
 
     /// Remove all `permission` for `resource`.
     /// Requires `Owner` permission for `resource`.
+    // TODO: rename to delete_resource for consistency with create_resource?
     async fn remove_permissions<R: Into<ResourceId> + Send + Sync>(
         &self,
         resource: R,

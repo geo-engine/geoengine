@@ -64,7 +64,7 @@ pub trait LayerDb: /*LayerCollectionProvider + */ Send + Sync {
 
     /// add new `collection` with fixex `id` to the given `parent`
     // TODO: remove once stable names are available
-    async fn add_collection_with_id(
+    async fn add_layer_collection_with_id(
         &self,
         id: &LayerCollectionId,
         collection: Validated<AddLayerCollection>,
@@ -318,7 +318,7 @@ impl LayerDb for HashMapLayerDb {
         Ok(id)
     }
 
-    async fn add_collection_with_id(
+    async fn add_layer_collection_with_id(
         &self,
         id: &LayerCollectionId,
         collection: Validated<AddLayerCollection>,
@@ -710,7 +710,7 @@ impl LayerDb for InMemoryDb {
             .await
     }
 
-    async fn add_collection_with_id(
+    async fn add_layer_collection_with_id(
         &self,
         id: &LayerCollectionId,
         collection: Validated<AddLayerCollection>,
@@ -718,7 +718,7 @@ impl LayerDb for InMemoryDb {
     ) -> Result<()> {
         self.backend
             .layer_db
-            .add_collection_with_id(id, collection, parent)
+            .add_layer_collection_with_id(id, collection, parent)
             .await
     }
 

@@ -202,8 +202,7 @@ impl DatasetStore for ProInMemoryDb {
         };
         self.backend.dataset_db.write().await.datasets.insert(id, d);
 
-        self.add_permission(self.session.user.id.into(), id, Permission::Owner)
-            .await?;
+        self.create_resource(id).await?;
 
         Ok(id)
     }
