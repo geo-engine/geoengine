@@ -349,3 +349,13 @@ impl Modify for ApiDocInfo {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn find_missing_schemata() {
+        crate::api::find_missing_schemata(ApiDoc::openapi());
+    }
+}
