@@ -20,6 +20,7 @@ use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
 
+use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::pro::contexts::PostgresDb;
@@ -28,9 +29,6 @@ use crate::projects::Symbology;
 use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
-use crate::{
-    datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider},
-};
 use async_trait::async_trait;
 
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
@@ -227,25 +225,39 @@ where
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?
             .into();
 
+        if !self
+            .has_permission(id, Permission::Read)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+        {
+            return Err(geoengine_operators::error::Error::PermissionDenied);
+        };
+
         let conn = self.conn_pool.get().await.unwrap(); // TODO
         let stmt = conn
             .prepare(
                 "
-        SELECT 
+        SELECT
             d.meta_data
-        FROM 
-            user_permitted_datasets p JOIN datasets d 
+        FROM
+            user_permitted_datasets p JOIN datasets d
                 ON (p.dataset_id = d.id)
-        WHERE 
+        WHERE
             d.id = $1 AND p.user_id = $2",
             )
             .await
-            .unwrap(); // TODO
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
 
         let row = conn
             .query_one(&stmt, &[&id, &self.session.user.id])
             .await
-            .unwrap(); // TODO
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
 
         let meta_data: StaticMetaData<
             OgrSourceDataset,
@@ -277,25 +289,39 @@ where
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?
             .into();
 
+        if !self
+            .has_permission(id, Permission::Read)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+        {
+            return Err(geoengine_operators::error::Error::PermissionDenied);
+        };
+
         let conn = self.conn_pool.get().await.unwrap(); // TODO
         let stmt = conn
             .prepare(
                 "
-        SELECT 
+        SELECT
             d.meta_data
-        FROM 
-            user_permitted_datasets p JOIN datasets d 
+        FROM
+            user_permitted_datasets p JOIN datasets d
                 ON (p.dataset_id = d.id)
-        WHERE 
+        WHERE
             d.id = $1 AND p.user_id = $2",
             )
             .await
-            .unwrap(); // TODO
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
 
         let row = conn
             .query_one(&stmt, &[&id, &self.session.user.id])
             .await
-            .unwrap(); // TODO
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
 
         let meta_data: MetaDataDefinition = serde_json::from_value(row.get(0))?;
 

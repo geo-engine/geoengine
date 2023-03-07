@@ -178,6 +178,10 @@ pub enum Error {
 
     UnknownDatasetId,
 
+    MetaData {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
     // TODO: this error should not be propagated to user
     #[snafu(display("Could not open gdal dataset for file path {:?}", file_path))]
     CouldNotOpenGdalDataset {

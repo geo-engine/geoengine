@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
-use geoengine_datatypes::util::Identifier;
 use utoipa::ToSchema;
 
 use crate::api::model::datatypes::{DatasetId, LayerId};

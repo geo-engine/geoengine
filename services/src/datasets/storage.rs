@@ -1,7 +1,6 @@
 use crate::api::model::datatypes::{DataProviderId, DatasetId};
 use crate::api::model::operators::TypedResultDescriptor;
 use crate::api::model::services::AddDataset;
-use crate::contexts::Session;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;

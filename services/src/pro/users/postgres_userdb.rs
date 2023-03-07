@@ -13,8 +13,7 @@ use crate::{error, pro::contexts::PostgresContext};
 use async_trait::async_trait;
 
 use bb8_postgres::{
-    tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
-    tokio_postgres::Socket,
+    tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
 use geoengine_datatypes::primitives::Duration;
 use pwhash::bcrypt;

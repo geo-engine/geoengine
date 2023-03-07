@@ -17,8 +17,7 @@ use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{
-    tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
-    tokio_postgres::Socket,
+    tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
 use snafu::ResultExt;
 

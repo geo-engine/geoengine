@@ -59,7 +59,6 @@ pub struct HashMapDatasetDbBackend {
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     >,
     uploads: HashMap<UploadId, Upload>,
-    admin_datasets: Vec<DatasetId>,
 }
 
 impl DatasetDb for InMemoryDb {}

@@ -1,9 +1,7 @@
 use crate::contexts::{GeoEngineDb, QueryContextImpl};
 use crate::error;
 
-use crate::layers::storage::{
-    HashMapLayerDb, HashMapLayerProviderDbBackend,
-};
+use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDbBackend};
 use crate::pro::contexts::{Context, ProContext};
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDbBackend};
 use crate::pro::layers::add_from_directory::{
@@ -198,7 +196,7 @@ impl Context for ProInMemoryContext {
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<Self::GeoEngineDB>::new(
-            self.db(session.clone()),
+            self.db(session),
             self.thread_pool.clone(),
             self.exe_ctx_tiling_spec,
         ))

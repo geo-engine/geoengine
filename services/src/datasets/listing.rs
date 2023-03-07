@@ -1,6 +1,5 @@
 use crate::api::model::datatypes::{DataId, DatasetId};
 use crate::api::model::operators::TypedResultDescriptor;
-use crate::contexts::Session;
 use crate::datasets::storage::Dataset;
 use crate::error;
 use crate::error::Result;
@@ -10,7 +9,7 @@ use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
+    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};

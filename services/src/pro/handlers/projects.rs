@@ -211,13 +211,10 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::util::test::TestDefault;
 
-    use crate::pro::users::Auth;
     use crate::{
-        contexts::Context,
         handlers::ErrorResponse,
         pro::{
             contexts::ProInMemoryContext,
-            users::{UserCredentials, UserDb, UserRegistration},
             util::tests::{create_project_helper, send_pro_test_request},
         },
         projects::{Project, ProjectDb, ProjectVersion},

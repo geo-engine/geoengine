@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 
-
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{DateTime, Duration};
 use openidconnect::SubjectIdentifier;
 use pwhash::bcrypt;
 use snafu::ensure;
 
-
-use crate::contexts::{SessionId};
+use crate::contexts::SessionId;
 use crate::error::{self, Result};
 use crate::pro::contexts::{ProInMemoryContext, ProInMemoryDb};
 use crate::pro::permissions::Role;
@@ -129,14 +127,9 @@ impl Auth for ProInMemoryContext {
 
     /// Log user in
     async fn login(&self, user_credentials: UserCredentials) -> Result<UserSession> {
-        match self
-            .db
-            .user_db
-            .read()
-            .await
-            .users
-            .get(&user_credentials.email)
-        {
+        let mut backend = self.db.user_db.write().await;
+
+        match backend.users.get(&user_credentials.email) {
             Some(user) if bcrypt::verify(user_credentials.password, &user.password_hash) => {
                 let session = UserSession {
                     id: SessionId::new(),
@@ -153,12 +146,7 @@ impl Auth for ProInMemoryContext {
                     roles: vec![user.id.into(), Role::user_role_id()],
                 };
 
-                self.db
-                    .user_db
-                    .write()
-                    .await
-                    .sessions
-                    .insert(session.id, session.clone());
+                backend.sessions.insert(session.id, session.clone());
                 Ok(session)
             }
             _ => Err(error::Error::LoginFailed),

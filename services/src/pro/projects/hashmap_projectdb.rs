@@ -1,4 +1,3 @@
-
 use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::ProInMemoryDb;
@@ -199,7 +198,6 @@ mod test {
     use super::*;
     use crate::contexts::Context;
     use crate::pro::contexts::ProInMemoryContext;
-    use crate::pro::users::UserId;
     use crate::pro::util::tests::create_random_user_session_helper;
     use crate::projects::STRectangle;
     use crate::util::user_input::UserInput;
@@ -226,7 +224,7 @@ mod test {
         let session2 = create_random_user_session_helper();
         let session3 = create_random_user_session_helper();
 
-        let db1 = ctx.db(session1);
+        let db1 = ctx.db(session1.clone());
         let db2 = ctx.db(session2);
         let db3 = ctx.db(session3);
 
@@ -527,7 +525,9 @@ mod test {
         assert!(db2.has_permission(project, Permission::Read).await.unwrap());
         assert!(db3.has_permission(project, Permission::Read).await.unwrap());
 
-        db1.remove_permission(session2.user.id.into(), project, Permission::Read);
+        db1.remove_permission(session2.user.id.into(), project, Permission::Read)
+            .await
+            .unwrap();
 
         assert!(!db2.has_permission(project, Permission::Read).await.unwrap());
     }

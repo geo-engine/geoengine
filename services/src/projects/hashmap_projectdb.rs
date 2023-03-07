@@ -116,7 +116,6 @@ impl ProjectDb for InMemoryDb {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::contexts::{MockableSession, SimpleSession};
     use crate::projects::project::STRectangle;
     use crate::util::user_input::UserInput;
     use crate::util::Identifier;

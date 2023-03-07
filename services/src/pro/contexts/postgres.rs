@@ -852,7 +852,7 @@ mod tests {
             .await
             .unwrap();
 
-        set_session_in_database(&ctx, projects, session).await;
+        set_session_in_database(ctx, projects, session).await;
     }
 
     async fn set_session_in_database(
@@ -1176,8 +1176,6 @@ mod tests {
         let session_2 = login_result.unwrap();
         let result = session_2.clone();
 
-        let db2 = ctx.db(session_2.clone());
-
         assert!(session_2.user.email.is_some()); //TODO: Technically, user details could change for each login. For simplicity, this is not covered yet.
         assert_eq!(session_2.user.email.unwrap(), "foo@bar.de");
         assert!(session_2.user.real_name.is_some());
@@ -1211,7 +1209,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_workflows() {
-        with_temp_context(|ctx, pg_config| async move {
+        with_temp_context(|ctx, _pg_config| async move {
             let workflow = Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
@@ -1233,10 +1231,6 @@ mod tests {
                 .unwrap();
 
             drop(ctx);
-
-            let ctx = PostgresContext::new_with_context_spec(pg_config.clone(), tokio_postgres::NoTls, TestDefault::test_default(), TestDefault::test_default())
-                .await
-                .unwrap();
 
             let workflow = db.load_workflow(&id).await.unwrap();
 
@@ -1389,7 +1383,7 @@ mod tests {
             );
 
             let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> =
-                db.meta_data(&&dataset_id.into()).await.unwrap();
+                db.meta_data(&dataset_id.into()).await.unwrap();
 
             assert_eq!(
                 meta_data
@@ -2215,8 +2209,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let db = ctx
-                .db(session.clone())
+            ctx.db(UserSession::system_session())
                 .update_quota_available_by_user(&user, 1)
                 .await
                 .unwrap();

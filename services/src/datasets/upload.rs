@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 
-use crate::contexts::Session;
 use crate::error::Result;
 use crate::identifier;
 use crate::util::path_with_base_path;

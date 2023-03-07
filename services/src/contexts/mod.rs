@@ -277,13 +277,13 @@ where
         geoengine_operators::error::Error,
     > {
         match data_id {
-            DataId::Internal { dataset_id: _ } => self
-                .db
-                .meta_data(&data_id.clone().into())
-                .await
-                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(e),
-                }),
+            DataId::Internal { dataset_id: _ } => {
+                self.db.meta_data(&data_id.clone()).await.map_err(|e| {
+                    geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    }
+                })
+            }
             DataId::External(external) => {
                 self.db
                     .load_layer_provider(external.provider_id.into())
@@ -315,13 +315,13 @@ where
         geoengine_operators::error::Error,
     > {
         match data_id {
-            DataId::Internal { dataset_id: _ } => self
-                .db
-                .meta_data(&data_id.clone().into())
-                .await
-                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(e),
-                }),
+            DataId::Internal { dataset_id: _ } => {
+                self.db.meta_data(&data_id.clone()).await.map_err(|e| {
+                    geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    }
+                })
+            }
             DataId::External(external) => {
                 self.db
                     .load_layer_provider(external.provider_id.into())
@@ -353,13 +353,13 @@ where
         geoengine_operators::error::Error,
     > {
         match data_id {
-            DataId::Internal { dataset_id: _ } => self
-                .db
-                .meta_data(&data_id.clone().into())
-                .await
-                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(e),
-                }),
+            DataId::Internal { dataset_id: _ } => {
+                self.db.meta_data(&data_id.clone()).await.map_err(|e| {
+                    geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    }
+                })
+            }
             DataId::External(external) => {
                 self.db
                     .load_layer_provider(external.provider_id.into())

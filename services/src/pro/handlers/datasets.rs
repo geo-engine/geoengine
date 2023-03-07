@@ -3,7 +3,7 @@ use actix_web::{web, FromRequest};
 use crate::{
     api::model::{
         datatypes::DatasetId,
-        services::{CreateDataset, DatasetDefinition},
+        services::{CreateDataset, DataPath, DatasetDefinition},
     },
     datasets::{
         storage::DatasetStore,
@@ -11,13 +11,14 @@ use crate::{
     },
     error::{self, Result},
     handlers::datasets::{
-        adjust_meta_data_path, auto_create_dataset_handler, delete_dataset_handler,
-        get_dataset_handler, list_datasets_handler, list_volumes_handler,
+        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
+        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
         suggest_meta_data_handler, AdminOrSession,
     },
     pro::{
         contexts::ProContext,
         permissions::{Permission, PermissionDb, Role},
+        users::UserSession,
     },
     util::{
         config::{get_config_element, Data},
@@ -74,30 +75,29 @@ where
     )
 )]
 async fn create_dataset_handler<C: ProContext>(
-    _session: AdminOrSession<C>,
-    _ctx: web::Data<C>,
-    _create: web::Json<CreateDataset>,
+    session: AdminOrSession<C>,
+    ctx: web::Data<C>,
+    create: web::Json<CreateDataset>,
 ) -> Result<web::Json<IdResponse<DatasetId>>> {
-    todo!()
-    // let create = create.into_inner();
-    // match (session, create) {
-    //     (
-    //         AdminOrSession::Admin,
-    //         CreateDataset {
-    //             data_path: DataPath::Volume(upload),
-    //             definition,
-    //         },
-    //     ) => create_system_dataset(session, ctx, upload, definition).await,
-    //     (
-    //         AdminOrSession::Session(session),
-    //         CreateDataset {
-    //             data_path: DataPath::Upload(volume),
-    //             definition,
-    //         },
-    //     ) => create_upload_dataset(session, ctx, volume, definition).await,
-    //     (AdminOrSession::Admin, _) => Err(error::Error::AdminsCannotCreateDatasetFromUpload),
-    //     (AdminOrSession::Session(_), _) => Err(error::Error::OnlyAdminsCanCreateDatasetFromVolume),
-    // }
+    let create = create.into_inner();
+    match (session, create) {
+        (
+            AdminOrSession::Admin,
+            CreateDataset {
+                data_path: DataPath::Volume(upload),
+                definition,
+            },
+        ) => create_system_dataset(UserSession::system_session(), ctx, upload, definition).await,
+        (
+            AdminOrSession::Session(session),
+            CreateDataset {
+                data_path: DataPath::Upload(volume),
+                definition,
+            },
+        ) => create_upload_dataset(session, ctx, volume, definition).await,
+        (AdminOrSession::Admin, _) => Err(error::Error::AdminsCannotCreateDatasetFromUpload),
+        (AdminOrSession::Session(_), _) => Err(error::Error::OnlyAdminsCanCreateDatasetFromVolume),
+    }
 }
 
 async fn create_system_dataset<C: ProContext>(
@@ -163,7 +163,7 @@ mod tests {
         },
         pro::{
             contexts::ProInMemoryContext,
-            users::{Auth, UserDb, UserSession},
+            users::{Auth, UserSession},
             util::tests::send_pro_test_request,
         },
         util::tests::{SetMultipartBody, TestDataUploads},

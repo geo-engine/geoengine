@@ -101,7 +101,7 @@ mod tests {
     use crate::{
         contexts::Context,
         pro::{
-            contexts::{ProContext, ProInMemoryContext},
+            contexts::ProInMemoryContext,
             users::{Auth, UserCredentials, UserRegistration},
         },
         util::user_input::UserInput,

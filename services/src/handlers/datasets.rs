@@ -952,17 +952,12 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
 )]
 pub async fn delete_dataset_handler<C: Context>(
     dataset: web::Path<DatasetId>,
-    session: AdminOrSession<C>,
+    session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<HttpResponse>
 where
     C::Session: MockableSession,
 {
-    let session = match session {
-        AdminOrSession::Admin => AdminSession::default().into(),
-        AdminOrSession::Session(s) => s,
-    };
-
     ctx.db(session).delete_dataset(dataset.into_inner()).await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
@@ -1362,6 +1357,8 @@ mod tests {
     async fn it_creates_system_dataset() -> Result<()> {
         let ctx = InMemoryContext::test_default();
 
+        let session_id = ctx.default_session_ref().await.id();
+
         let volume = VolumeName("test_data".to_string());
 
         let mut meta_data = create_ndvi_meta_data();
@@ -1388,15 +1385,7 @@ mod tests {
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(
-                    get_config_element::<crate::util::config::Session>()?
-                        .admin_session_token
-                        .unwrap()
-                        .to_string(),
-                ),
-            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
         let res = send_test_request(req, ctx.clone()).await;
@@ -1406,11 +1395,10 @@ mod tests {
         let dataset_id = dataset_id.id;
 
         // assert dataset is accessible via regular session
-        let session = ctx.default_session_ref().await.clone();
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{dataset_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
 
@@ -2128,7 +2116,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_deletes_admin_dataset() -> Result<()> {
+    async fn it_deletes_system_dataset() -> Result<()> {
         let ctx = InMemoryContext::test_default();
 
         let volume = VolumeName("test_data".to_string());
@@ -2153,7 +2141,7 @@ mod tests {
             },
         };
 
-        let session: SimpleSession = AdminSession::default().into();
+        let session = ctx.default_session_ref().await;
 
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")

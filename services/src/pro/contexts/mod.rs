@@ -23,11 +23,10 @@ pub use postgres::PostgresContext;
 use rayon::ThreadPool;
 use tokio::io::AsyncWriteExt;
 
-
 use crate::contexts::{Context, GeoEngineDb};
 use crate::datasets::storage::DatasetDb;
 
-use crate::layers::storage::{LayerProviderDb};
+use crate::layers::storage::LayerProviderDb;
 use crate::pro::users::{OidcRequestDb, UserDb, UserSession};
 use crate::util::config::get_config_element;
 use crate::util::path_with_base_path;
@@ -199,13 +198,13 @@ where
         geoengine_operators::error::Error,
     > {
         match data_id {
-            DataId::Internal { dataset_id: _ } => self
-                .db
-                .meta_data(&data_id.clone().into())
-                .await
-                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(e),
-                }),
+            DataId::Internal { dataset_id: _ } => {
+                self.db.meta_data(&data_id.clone()).await.map_err(|e| {
+                    geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    }
+                })
+            }
             DataId::External(external) => {
                 self.db
                     .load_layer_provider(external.provider_id.into())
@@ -237,13 +236,13 @@ where
         geoengine_operators::error::Error,
     > {
         match data_id {
-            DataId::Internal { dataset_id: _ } => self
-                .db
-                .meta_data(&data_id.clone().into())
-                .await
-                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(e),
-                }),
+            DataId::Internal { dataset_id: _ } => {
+                self.db.meta_data(&data_id.clone()).await.map_err(|e| {
+                    geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    }
+                })
+            }
             DataId::External(external) => {
                 self.db
                     .load_layer_provider(external.provider_id.into())
@@ -275,13 +274,13 @@ where
         geoengine_operators::error::Error,
     > {
         match data_id {
-            DataId::Internal { dataset_id: _ } => self
-                .db
-                .meta_data(&data_id.clone().into())
-                .await
-                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(e),
-                }),
+            DataId::Internal { dataset_id: _ } => {
+                self.db.meta_data(&data_id.clone()).await.map_err(|e| {
+                    geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    }
+                })
+            }
             DataId::External(external) => {
                 self.db
                     .load_layer_provider(external.provider_id.into())

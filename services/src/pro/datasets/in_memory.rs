@@ -15,17 +15,16 @@ use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::{
-    DatasetLayerCollectionProvider, LayerCollectionId,
-};
+use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::pro::contexts::ProInMemoryDb;
 use crate::pro::permissions::{Permission, PermissionDb};
-use crate::pro::users::{UserId};
+use crate::pro::users::UserId;
 use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+use futures::{stream, StreamExt};
 use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::util::Identifier;
@@ -40,7 +39,7 @@ use geoengine_operators::source::{
     OgrSource, OgrSourceDataset,
 };
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
-use log::{info};
+use log::info;
 use snafu::ensure;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -257,15 +256,20 @@ impl DatasetProvider for ProInMemoryDb {
 
         let backend = self.backend.dataset_db.read().await;
 
-        // TODO: filter by Read permission
-        let iter = backend.datasets.values();
+        let mut list = stream::iter(backend.datasets.values())
+            .filter(|d| async {
+                if let Some(filter) = &options.filter {
+                    if !(d.name.contains(filter) || d.description.contains(filter)) {
+                        return false;
+                    }
+                }
 
-        let mut list: Vec<_> = if let Some(filter) = &options.filter {
-            iter.filter(|d| d.name.contains(filter) || d.description.contains(filter))
-                .collect()
-        } else {
-            iter.collect()
-        };
+                self.has_permission(d.id, Permission::Read)
+                    .await
+                    .unwrap_or(false)
+            })
+            .collect::<Vec<_>>()
+            .await;
 
         match options.order {
             OrderBy::NameAsc => list.sort_by(|a, b| a.name.cmp(&b.name)),
@@ -371,11 +375,15 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?
             .into();
 
-        // TODO: how to use ensure with error from geoengine_operators?
-        // ensure!(
-        //     self.has_permission(*id, Permission::Read).await?,
-        //     error::PermissionDenied
-        // );
+        if !self
+            .has_permission(id, Permission::Read)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+        {
+            return Err(geoengine_operators::error::Error::PermissionDenied);
+        };
 
         let backend = self.backend.dataset_db.read().await;
 
@@ -404,11 +412,15 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?
             .into();
 
-        // TODO: how to use ensure with error from geoengine_operators?
-        // ensure!(
-        //     self.has_permission(*id, Permission::Read).await?,
-        //     error::PermissionDenied
-        // );
+        if !self
+            .has_permission(id, Permission::Read)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+        {
+            return Err(geoengine_operators::error::Error::PermissionDenied);
+        };
 
         let backend = self.backend.dataset_db.read().await;
 
@@ -539,8 +551,7 @@ mod tests {
     use crate::datasets::upload::{FileId, FileUpload};
     use crate::pro::contexts::ProInMemoryContext;
     use crate::pro::permissions::Role;
-    use crate::pro::users::Auth;
-    use crate::projects::ProjectDb;
+    use crate::pro::users::UserSession;
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;

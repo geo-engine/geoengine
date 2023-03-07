@@ -22,13 +22,10 @@ use crate::{
     util::user_input::Validated,
 };
 use async_trait::async_trait;
-use bb8_postgres::{
-    tokio_postgres::{
-        tls::{MakeTlsConnect, TlsConnect},
-        Socket,
-    },
+use bb8_postgres::tokio_postgres::{
+    tls::{MakeTlsConnect, TlsConnect},
+    Socket,
 };
-
 
 use snafu::ResultExt;
 use std::{collections::HashMap, str::FromStr};
