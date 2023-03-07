@@ -220,7 +220,7 @@ impl NFDIDataProvider {
             .ok_or(NFDIProviderError::MissingObjectGroup)?
             .object_group_overviews;
 
-        if aruna_object_group_overview.len() == 0 {
+        if aruna_object_group_overview.is_empty() {
             return Err(NFDIProviderError::MissingObjectGroup);
         }
 
