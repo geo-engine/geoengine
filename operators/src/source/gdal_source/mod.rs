@@ -1041,9 +1041,11 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
 
     let mut properties = RasterProperties::default();
 
+    // always read the scale and offset values from the rasterband
+    properties_from_band(&mut properties, &rasterband);
+
+    // read the properties from the dataset and rasterband metadata
     if let Some(properties_mapping) = dataset_params.properties_mapping.as_ref() {
-        let rasterband = dataset.rasterband(dataset_params.rasterband_channel as isize)?;
-        properties_from_band(&mut properties, &rasterband);
         properties_from_gdal_metadata(&mut properties, dataset, properties_mapping);
         properties_from_gdal_metadata(&mut properties, &rasterband, properties_mapping);
     }
