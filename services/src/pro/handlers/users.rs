@@ -1,4 +1,3 @@
-use crate::contexts::AdminSession;
 use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::ProContext;
@@ -14,7 +13,6 @@ use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
 use crate::pro::users::OidcError::OidcDisabled;
-use actix_web::Either;
 use actix_web::{web, HttpResponse, Responder};
 use serde::Deserialize;
 use serde::Serialize;
@@ -310,19 +308,17 @@ pub(crate) async fn quota_handler<C: ProContext>(
 )]
 pub(crate) async fn get_user_quota_handler<C: ProContext>(
     ctx: web::Data<C>,
-    session: Either<AdminSession, C::Session>,
+    session: C::Session,
     user: web::Path<UserId>,
 ) -> Result<web::Json<Quota>> {
     let user = user.into_inner();
 
-    if let Either::Right(session) = session {
-        if session.user.id != user {
-            return Err(error::Error::Authorization {
-                source: Box::new(error::Error::OperationRequiresAdminPrivilige),
-            });
-        }
+    if session.user.id != user && !session.is_admin() {
+        return Err(error::Error::Authorization {
+            source: Box::new(error::Error::OperationRequiresAdminPrivilige),
+        });
     }
-    let db = ctx.pro_db(UserSession::system_session());
+    let db = ctx.pro_db(UserSession::admin_session());
     let available = db.quota_available_by_user(&user).await?;
     let used = db.quota_used_by_user(&user).await?;
     Ok(web::Json(Quota { available, used }))
@@ -351,7 +347,7 @@ pub struct UpdateQuota {
 )]
 pub(crate) async fn update_user_quota_handler<C: ProContext>(
     ctx: web::Data<C>,
-    session: AdminSession,
+    session: C::Session,
     user: web::Path<UserId>,
     update: web::Json<UpdateQuota>,
 ) -> Result<HttpResponse> {
@@ -359,7 +355,7 @@ pub(crate) async fn update_user_quota_handler<C: ProContext>(
 
     let update = update.into_inner();
 
-    ctx.pro_db(session.into())
+    ctx.pro_db(session)
         .update_quota_available_by_user(&user, update.available)
         .await?;
 
@@ -467,7 +463,7 @@ mod tests {
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
     };
     use crate::pro::util::tests::{
-        create_project_helper, create_session_helper, register_ndvi_workflow_helper,
+        admin_login, create_project_helper, create_session_helper, register_ndvi_workflow_helper,
         send_pro_test_request,
     };
     use crate::pro::{contexts::ProInMemoryContext, users::UserId};
@@ -1282,7 +1278,6 @@ mod tests {
     #[tokio::test]
     async fn it_gets_quota() {
         let ctx = ProInMemoryContext::test_default();
-        let admin_db = ctx.pro_db(UserSession::system_session());
 
         let user = Validated {
             user_input: UserRegistration {
@@ -1300,6 +1295,9 @@ mod tests {
         };
 
         let session = ctx.login(credentials).await.unwrap();
+
+        let admin_session = admin_login(&ctx).await;
+        let admin_db = ctx.pro_db(admin_session.clone());
 
         admin_db
             .increment_quota_used(&session.user.id, 111)
@@ -1334,13 +1332,7 @@ mod tests {
             .uri(&format!("/quotas/{}", session.user.id))
             .append_header((
                 header::AUTHORIZATION,
-                format!(
-                    "Bearer {}",
-                    config::get_config_element::<config::Session>()
-                        .unwrap()
-                        .admin_session_token
-                        .unwrap()
-                ),
+                format!("Bearer {}", admin_session.id()),
             ));
         let res = send_pro_test_request(req, ctx).await;
         let quota: Quota = test::read_body_json(res).await;
@@ -1361,7 +1353,7 @@ mod tests {
 
         let user_id = ctx.register(user).await.unwrap();
 
-        let admin_session: UserSession = AdminSession::default().into();
+        let admin_session = admin_login(&ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!("/quotas/{user_id}"))
@@ -1405,7 +1397,7 @@ mod tests {
     #[tokio::test]
     async fn it_checks_quota_before_querying() {
         let ctx = ProInMemoryContext::test_default();
-        let admin_db = ctx.db(UserSession::system_session());
+        let admin_db = ctx.db(UserSession::admin_session());
 
         let session = ctx.anonymous().await.unwrap();
 

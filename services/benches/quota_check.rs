@@ -93,7 +93,7 @@ async fn bench() {
         ("time", "2014-04-01T12:00:00.0Z"),
         ("exceptions", "JSON"),
     ];
-    ctx.db(UserSession::system_session())
+    ctx.db(UserSession::admin_session())
         .update_quota_available_by_user(&session.user.id, 9999)
         .await
         .unwrap();

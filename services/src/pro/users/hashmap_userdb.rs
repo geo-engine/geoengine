@@ -26,6 +26,7 @@ pub struct HashMapUserDbBackend {
     sessions: HashMap<SessionId, UserSession>,
     quota_used: HashMap<UserId, u64>,
     quota_available: HashMap<UserId, i64>,
+    // TODO: roles
 }
 
 impl Default for HashMapUserDbBackend {
@@ -39,12 +40,13 @@ impl Default for HashMapUserDbBackend {
         users.insert(
             user_config.admin_email.clone(),
             User {
-                id: UserId::new(),
+                id: UserId(*Role::admin_role_id().uuid()),
                 email: user_config.admin_email,
                 password_hash: bcrypt::hash(user_config.admin_password)
                     .expect("Admin password hash should be valid"),
                 real_name: "Admin".to_string(),
                 active: true,
+                roles: vec![Role::admin_role_id()],
             },
         );
 
@@ -95,6 +97,7 @@ impl Auth for ProInMemoryContext {
             password_hash: String::new(),
             real_name: String::new(),
             active: true,
+            roles: vec![Role::anonymous_role_id()],
         };
 
         let mut backend = self.db.user_db.write().await;
@@ -143,7 +146,7 @@ impl Auth for ProInMemoryContext {
                     valid_until: DateTime::now() + Duration::minutes(60),
                     project: None,
                     view: None,
-                    roles: vec![user.id.into(), Role::user_role_id()],
+                    roles: user.roles.clone(),
                 };
 
                 backend.sessions.insert(session.id, session.clone());
@@ -197,7 +200,7 @@ impl Auth for ProInMemoryContext {
             valid_until: session_created + duration,
             project: None,
             view: None,
-            roles: vec![internal_id.into(), Role::user_role_id()],
+            roles: vec![internal_id.into(), Role::registered_user_role_id()],
         };
 
         backend.sessions.insert(session.id, session.clone());
@@ -265,6 +268,8 @@ impl UserDb for ProInMemoryDb {
     }
 
     async fn increment_quota_used(&self, user: &UserId, quota_used: u64) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
         *self
             .backend
             .user_db
@@ -273,6 +278,7 @@ impl UserDb for ProInMemoryDb {
             .quota_used
             .entry(*user)
             .or_default() += quota_used;
+
         *self
             .backend
             .user_db
@@ -297,6 +303,8 @@ impl UserDb for ProInMemoryDb {
     }
 
     async fn quota_used_by_user(&self, user: &UserId) -> Result<u64> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
         Ok(self
             .backend
             .user_db
@@ -321,6 +329,11 @@ impl UserDb for ProInMemoryDb {
     }
 
     async fn quota_available_by_user(&self, user: &UserId) -> Result<i64> {
+        ensure!(
+            self.session.user.id == *user || self.session.is_admin(),
+            error::PermissionDenied
+        );
+
         Ok(self
             .backend
             .user_db
@@ -337,6 +350,8 @@ impl UserDb for ProInMemoryDb {
         user: &UserId,
         new_available_quota: i64,
     ) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
         *self
             .backend
             .user_db

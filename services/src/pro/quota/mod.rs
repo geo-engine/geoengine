@@ -103,6 +103,7 @@ mod tests {
         pro::{
             contexts::ProInMemoryContext,
             users::{Auth, UserCredentials, UserRegistration},
+            util::tests::admin_login,
         },
         util::user_input::UserInput,
     };
@@ -134,7 +135,9 @@ mod tests {
             .await
             .unwrap();
 
-        let quota = initialize_quota_tracking(ctx.db(UserSession::system_session()));
+        let admin_session = admin_login(&ctx).await;
+
+        let quota = initialize_quota_tracking(ctx.db(admin_session.clone()));
 
         let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 

@@ -4,8 +4,8 @@ use std::{
     path::Path,
 };
 
+use crate::api::model::datatypes::DatasetId;
 use crate::util::user_input::UserInput;
-use crate::{api::model::datatypes::DatasetId, contexts::AdminSession};
 use crate::{
     api::model::services::DataPath,
     datasets::{
@@ -28,8 +28,7 @@ use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
-use futures::{future::LocalBoxFuture, FutureExt};
+use actix_web::{web, FromRequest, HttpResponse, Responder};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use gdal::{
     vector::{Layer, LayerAccess},
@@ -50,7 +49,6 @@ use geoengine_operators::{
 };
 use snafu::ResultExt;
 
-use super::get_token;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -61,7 +59,7 @@ where
         web::scope("/dataset")
             .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
-            .service(web::resource("/volumes").route(web::get().to(list_volumes_handler)))
+            .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
                 web::resource("/{dataset}")
                     .route(web::get().to(get_dataset_handler::<C>))
@@ -92,12 +90,11 @@ where
     )
 )]
 #[allow(clippy::unused_async)]
-pub async fn list_volumes_handler(_session: AdminSession) -> Result<impl Responder> {
-    let volumes = get_config_element::<Data>()?
-        .volumes
-        .into_iter()
-        .map(|(name, path)| Volume { name, path })
-        .collect::<Vec<_>>();
+pub async fn list_volumes_handler<C: Context>(
+    ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<impl Responder> {
+    let volumes = ctx.volumes(session)?;
     Ok(web::Json(volumes))
 }
 
@@ -183,49 +180,6 @@ pub async fn get_dataset_handler<C: Context>(
 ) -> Result<impl Responder> {
     let dataset = ctx.db(session).load_dataset(&dataset.into_inner()).await?;
     Ok(web::Json(dataset))
-}
-
-pub enum AdminOrSession<C: Context> {
-    Admin,
-    Session(C::Session),
-}
-
-impl<C: Context> FromRequest for AdminOrSession<C> {
-    type Error = crate::error::Error;
-    type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
-
-    fn from_request(req: &HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
-        let header_token = match get_token(req) {
-            Ok(s) => s,
-            Err(e) => return async { Err(e) }.boxed_local(),
-        };
-
-        let admin_session_token =
-            crate::util::config::get_config_element::<crate::util::config::Session>()
-                .ok()
-                .and_then(|session| session.admin_session_token);
-
-        match admin_session_token {
-            Some(admin_session_token) if header_token == admin_session_token => {
-                async { Ok(AdminOrSession::Admin) }.boxed_local()
-            }
-            _ => {
-                let ctx = req
-                    .app_data::<web::Data<C>>()
-                    .expect("InMemoryContext must be available")
-                    .get_ref()
-                    .clone();
-
-                async move {
-                    ctx.session_by_id(header_token)
-                        .await
-                        .map(|s| AdminOrSession::Session(s))
-                        .map_err(Into::into)
-                }
-                .boxed_local()
-            }
-        }
-    }
 }
 
 /// Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.

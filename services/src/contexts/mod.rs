@@ -1,3 +1,4 @@
+use crate::datasets::upload::Volume;
 use crate::error::Result;
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionProvider};
 use crate::layers::storage::{LayerDb, LayerProviderDb};
@@ -33,7 +34,7 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 pub use in_memory::{InMemoryContext, InMemoryDb};
-pub use session::{AdminSession, MockableSession, Session, SessionId, SimpleSession};
+pub use session::{MockableSession, Session, SessionId, SimpleSession};
 pub use simple_context::SimpleContext;
 
 pub type Db<T> = Arc<RwLock<T>>;
@@ -42,7 +43,7 @@ pub type Db<T> = Arc<RwLock<T>>;
 /// about the user to pass to the services handlers.
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
-    type Session: MockableSession + Clone + From<AdminSession>; // TODO: change to `[Session]` when workarounds are gone
+    type Session: MockableSession + Clone;
     type GeoEngineDB: GeoEngineDb;
     type QueryContext: QueryContext;
     type ExecutionContext: ExecutionContext;
@@ -52,14 +53,15 @@ pub trait Context: 'static + Send + Sync + Clone {
     // TODO: move session into Context itself
     fn db(&self, session: Self::Session) -> Self::GeoEngineDB;
 
-    fn tasks(&self) -> Arc<Self::TaskManager>;
-    fn tasks_ref(&self) -> &Self::TaskManager;
+    fn tasks(&self, session: Self::Session) -> Self::TaskManager;
 
     fn query_context(&self, session: Self::Session) -> Result<Self::QueryContext>;
 
     fn execution_context(&self, session: Self::Session) -> Result<Self::ExecutionContext>;
 
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session>;
+
+    fn volumes(&self, session: Self::Session) -> Result<Vec<Volume>>;
 }
 
 pub trait GeoEngineDb:

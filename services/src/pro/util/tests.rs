@@ -13,7 +13,7 @@ use crate::{
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
     util::server::{configure_extractors, render_404, render_405},
-    util::user_input::UserInput,
+    util::{config::get_config_element, user_input::UserInput},
     workflows::{
         registry::WorkflowRegistry,
         workflow::{Workflow, WorkflowId},
@@ -66,7 +66,7 @@ pub fn create_random_user_session_helper() -> UserSession {
         valid_until: DateTime::MAX,
         project: None,
         view: None,
-        roles: vec![user_id.into(), Role::user_role_id()],
+        roles: vec![user_id.into(), Role::registered_user_role_id()],
     }
 }
 
@@ -354,7 +354,7 @@ pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
 
-    let system_session = UserSession::system_session();
+    let system_session = UserSession::admin_session();
 
     let db = ctx.db(system_session);
 
@@ -368,13 +368,29 @@ pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
         .await
         .expect("dataset db access");
 
-    db.add_permission(Role::user_role_id(), dataset_id, Permission::Read)
-        .await
-        .unwrap();
+    db.add_permission(
+        Role::registered_user_role_id(),
+        dataset_id,
+        Permission::Read,
+    )
+    .await
+    .unwrap();
 
     db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
         .await
         .unwrap();
 
     dataset_id
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn admin_login<C: ProContext>(ctx: &C) -> UserSession {
+    let user_config = get_config_element::<super::config::User>().unwrap();
+
+    ctx.login(UserCredentials {
+        email: user_config.admin_email.clone(),
+        password: user_config.admin_password.clone(),
+    })
+    .await
+    .unwrap()
 }

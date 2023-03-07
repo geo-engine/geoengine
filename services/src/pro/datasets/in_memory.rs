@@ -893,7 +893,7 @@ mod tests {
 
         assert!(db2.load_dataset(&id).await.is_err());
 
-        db1.add_permission(Role::user_role_id(), id, Permission::Read)
+        db1.add_permission(Role::registered_user_role_id(), id, Permission::Read)
             .await?;
 
         assert!(db2.load_dataset(&id).await.is_ok());
@@ -960,7 +960,7 @@ mod tests {
 
         assert!(meta.is_err());
 
-        db1.add_permission(Role::user_role_id(), id, Permission::Read)
+        db1.add_permission(Role::registered_user_role_id(), id, Permission::Read)
             .await?;
 
         let meta: geoengine_operators::util::Result<

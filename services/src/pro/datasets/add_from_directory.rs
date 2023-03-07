@@ -8,9 +8,7 @@ use crate::{
     datasets::storage::DatasetDb,
     pro::permissions::{Permission, Role},
 };
-use crate::{
-    datasets::storage::DatasetDefinition, util::user_input::UserInput,
-};
+use crate::{datasets::storage::DatasetDefinition, util::user_input::UserInput};
 use crate::{error::Result, pro::permissions::PermissionDb};
 
 use log::warn;
@@ -33,8 +31,12 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
             )
             .await?;
 
-        db.add_permission(Role::user_role_id(), dataset_id, Permission::Read)
-            .await?;
+        db.add_permission(
+            Role::registered_user_role_id(),
+            dataset_id,
+            Permission::Read,
+        )
+        .await?;
 
         db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
             .await?;

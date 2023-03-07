@@ -189,7 +189,7 @@ mod tests {
         send_test_request(req, ctx).await
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[serial]
     async fn anonymous() {
         let res = anonymous_test_helper(Method::POST).await;
 

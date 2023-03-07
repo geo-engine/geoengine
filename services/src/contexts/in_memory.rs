@@ -5,15 +5,14 @@ use super::{Context, Db, GeoEngineDb, SimpleSession};
 use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDbBackend;
+use crate::datasets::upload::Volume;
 use crate::error::Error;
 use crate::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
 };
-use crate::layers::storage::{
-    HashMapLayerDb, HashMapLayerProviderDbBackend,
-};
+use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDbBackend};
 use crate::projects::hashmap_projectdb::HashMapProjectDbBackend;
-use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
+use crate::tasks::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
 use crate::workflows::registry::HashMapRegistryBackend;
 use crate::{
     datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
@@ -31,7 +30,7 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 #[derive(Clone)]
 pub struct InMemoryContext {
     db: Arc<InMemoryDbBackend>,
-    task_manager: Arc<SimpleTaskManager>,
+    pub(crate) task_manager: Arc<SimpleTaskManagerBackend>,
     session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
@@ -108,11 +107,8 @@ impl Context for InMemoryContext {
         InMemoryDb::new(self.db.clone())
     }
 
-    fn tasks(&self) -> Arc<Self::TaskManager> {
-        self.task_manager.clone()
-    }
-    fn tasks_ref(&self) -> &Self::TaskManager {
-        &self.task_manager
+    fn tasks(&self, _session: SimpleSession) -> Self::TaskManager {
+        SimpleTaskManager::new(self.task_manager.clone())
     }
 
     fn query_context(&self, _session: SimpleSession) -> Result<Self::QueryContext> {
@@ -140,6 +136,16 @@ impl Context for InMemoryContext {
         }
 
         Ok(default_session.clone())
+    }
+
+    fn volumes(&self, _session: SimpleSession) -> Result<Vec<Volume>> {
+        Ok(
+            crate::util::config::get_config_element::<crate::util::config::Data>()?
+                .volumes
+                .into_iter()
+                .map(|(name, path)| Volume { name, path })
+                .collect::<Vec<_>>(),
+        )
     }
 }
 

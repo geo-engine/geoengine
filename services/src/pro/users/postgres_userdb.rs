@@ -17,6 +17,7 @@ use bb8_postgres::{
 };
 use geoengine_datatypes::primitives::Duration;
 use pwhash::bcrypt;
+use snafu::ensure;
 use uuid::Uuid;
 
 use super::userdb::Auth;
@@ -74,7 +75,7 @@ where
         let stmt = tx
             .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
             .await?;
-        tx.execute(&stmt, &[&user.id, &Role::user_role_id()])
+        tx.execute(&stmt, &[&user.id, &Role::registered_user_role_id()])
             .await?;
 
         tx.commit().await?;
@@ -290,7 +291,7 @@ where
                 let stmt = tx
                     .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
                     .await?;
-                tx.execute(&stmt, &[&user_id, &Role::user_role_id()])
+                tx.execute(&stmt, &[&user_id, &Role::registered_user_role_id()])
                     .await?;
 
                 tx.commit().await?;
@@ -445,6 +446,8 @@ where
     }
 
     async fn increment_quota_used(&self, user: &UserId, quota_used: u64) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
@@ -476,6 +479,11 @@ where
     }
 
     async fn quota_used_by_user(&self, user: &UserId) -> Result<u64> {
+        ensure!(
+            self.session.user.id == *user || self.session.is_admin(),
+            error::PermissionDenied
+        );
+
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT quota_used FROM users WHERE id = $1;")
@@ -504,6 +512,11 @@ where
     }
 
     async fn quota_available_by_user(&self, user: &UserId) -> Result<i64> {
+        ensure!(
+            self.session.user.id == *user || self.session.is_admin(),
+            error::PermissionDenied
+        );
+
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT quota_available FROM users WHERE id = $1;")
@@ -522,6 +535,8 @@ where
         user: &UserId,
         new_available_quota: i64,
     ) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(

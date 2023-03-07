@@ -33,13 +33,11 @@ pub struct Role {
 }
 
 impl Role {
-    // TODO: rename to admin role?
-    pub fn system_role_id() -> RoleId {
+    pub fn admin_role_id() -> RoleId {
         RoleId::from_str("d5328854-6190-4af9-ad69-4e74b0961ac9").expect("valid")
     }
 
-    // TODO: rename to register role?
-    pub fn user_role_id() -> RoleId {
+    pub fn registered_user_role_id() -> RoleId {
         RoleId::from_str("4e8081b6-8aa6-4275-af0c-2fa2da557d28").expect("valid")
     }
 

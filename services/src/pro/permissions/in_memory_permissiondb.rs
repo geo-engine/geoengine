@@ -1,10 +1,9 @@
-
 use crate::error::{self, Result};
 use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::contexts::ProInMemoryDb;
 
-use crate::{layers::listing::LayerCollectionId};
+use crate::layers::listing::LayerCollectionId;
 
 use super::{Permission, PermissionDb, ResourceId, Role, RoleId};
 
@@ -21,28 +20,28 @@ impl Default for InMemoryPermissionDbBackend {
         Self {
             permissions: vec![
                 InMemoryPermission {
-                    role: Role::system_role_id(),
+                    role: Role::admin_role_id(),
                     resource: ResourceId::LayerCollection(LayerCollectionId(
                         INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
                     )),
                     permission: Permission::Owner,
                 },
                 InMemoryPermission {
-                    role: Role::system_role_id(),
+                    role: Role::admin_role_id(),
                     resource: ResourceId::LayerCollection(LayerCollectionId(
                         UNSORTED_COLLECTION_ID.to_string(),
                     )),
                     permission: Permission::Owner,
                 },
                 InMemoryPermission {
-                    role: Role::user_role_id(),
+                    role: Role::registered_user_role_id(),
                     resource: ResourceId::LayerCollection(LayerCollectionId(
                         INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
                     )),
                     permission: Permission::Read,
                 },
                 InMemoryPermission {
-                    role: Role::user_role_id(),
+                    role: Role::registered_user_role_id(),
                     resource: ResourceId::LayerCollection(LayerCollectionId(
                         UNSORTED_COLLECTION_ID.to_string(),
                     )),

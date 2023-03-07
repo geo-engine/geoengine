@@ -1,6 +1,7 @@
 use crate::contexts::QueryContextImpl;
 use crate::contexts::{Context, GeoEngineDb};
 use crate::datasets::add_from_directory::add_providers_from_directory;
+use crate::datasets::upload::Volume;
 use crate::error::{self, Result};
 use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
@@ -10,10 +11,12 @@ use crate::pro::layers::add_from_directory::{
 };
 use crate::pro::permissions::Role;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
+use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::{Auth, OidcRequestDb, UserSession};
 use crate::pro::util::config::Oidc;
 
-use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
+use crate::tasks::SimpleTaskManagerContext;
+use crate::util::config::get_config_element;
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -27,8 +30,9 @@ use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, warn};
+use pwhash::bcrypt;
 use rayon::ThreadPool;
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -48,7 +52,7 @@ where
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
-    task_manager: Arc<SimpleTaskManager>,
+    task_manager: Arc<ProTaskManagerBackend>,
     oidc_request_db: Arc<Option<OidcRequestDb>>,
     quota: QuotaTrackingFactory,
     pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
@@ -72,7 +76,7 @@ where
         let pool = Pool::builder().build(pg_mgr).await?;
         Self::update_schema(pool.get().await?).await?;
 
-        let db = PostgresDb::new(pool.clone(), UserSession::system_session());
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
 
         Ok(PostgresContext {
@@ -104,7 +108,7 @@ where
         let pool = Pool::builder().build(pg_mgr).await?;
         Self::update_schema(pool.get().await?).await?;
 
-        let db = PostgresDb::new(pool.clone(), UserSession::system_session());
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
 
         let ctx = PostgresContext {
@@ -117,7 +121,7 @@ where
             pool,
         };
 
-        let mut db = ctx.db(UserSession::system_session());
+        let mut db = ctx.db(UserSession::admin_session());
 
         add_layers_from_directory(&mut db, layer_defs_path).await;
         add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
@@ -177,7 +181,7 @@ where
                         );
 
                         INSERT INTO roles (id, name) VALUES
-                            ('{system_role_id}', 'system'),
+                            ('{admin_role_id}', 'admin'),
                             ('{user_role_id}', 'user'),
                             ('{anonymous_role_id}', 'anonymous');
 
@@ -197,7 +201,6 @@ where
                             CONSTRAINT users_quota_used_ck CHECK (quota_used >= 0)
                         );
 
-                        -- TODO: add admin user. Get rid of system user? Why do we need it, doesn't an admin role suffice to own all the stuff?
                         INSERT INTO users (
                             id, 
                             email,
@@ -205,10 +208,10 @@ where
                             real_name,
                             active)
                         VALUES (
-                            '{system_role_id}', 
-                            'system@geoengine.io',
-                            '',
-                            'system',
+                            '{admin_role_id}', 
+                            '{admin_email}',
+                            '{admin_password}',
+                            'admin',
                             true
                         );
 
@@ -220,12 +223,12 @@ where
                             PRIMARY KEY (user_id, role_id)
                         );
 
-                        -- system user role
+                        -- admin user role
                         INSERT INTO user_roles 
                             (user_id, role_id)
                         VALUES 
-                            ('{system_role_id}', 
-                            '{system_role_id}');
+                            ('{admin_role_id}', 
+                            '{admin_role_id}');
 
                         CREATE TYPE "SpatialReferenceAuthority" AS ENUM (
                             'Epsg', 'SrOrg', 'Iau2000', 'Esri'
@@ -482,8 +485,10 @@ where
                                 user_roles r JOIN permissions p ON (r.role_id = p.role_id AND project_id IS NOT NULL); 
                         "#
                     ,
-                    system_role_id = Role::system_role_id(),
-                    user_role_id = Role::user_role_id(),
+                    admin_role_id = Role::admin_role_id(),
+                    admin_email = get_config_element::<crate::pro::util::config::User>()?.admin_email,
+                    admin_password = bcrypt::hash(get_config_element::<crate::pro::util::config::User>()?.admin_password).expect("Admin password hash should be valid"),
+                    user_role_id = Role::registered_user_role_id(),
                     anonymous_role_id = Role::anonymous_role_id(),
                     root_layer_collection_id = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
                     unsorted_layer_collection_id = UNSORTED_COLLECTION_ID))
@@ -540,7 +545,7 @@ where
     type GeoEngineDB = PostgresDb<Tls>;
 
     type TaskContext = SimpleTaskManagerContext;
-    type TaskManager = SimpleTaskManager; // this does not persist across restarts
+    type TaskManager = ProTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
@@ -548,11 +553,8 @@ where
         PostgresDb::new(self.pool.clone(), session)
     }
 
-    fn tasks(&self) -> Arc<Self::TaskManager> {
-        self.task_manager.clone()
-    }
-    fn tasks_ref(&self) -> &Self::TaskManager {
-        &self.task_manager
+    fn tasks(&self, session: UserSession) -> Self::TaskManager {
+        ProTaskManager::new(self.task_manager.clone(), session)
     }
 
     fn query_context(&self, session: UserSession) -> Result<Self::QueryContext> {
@@ -587,6 +589,18 @@ where
             .await
             .map_err(Box::new)
             .context(error::Authorization)
+    }
+
+    fn volumes(&self, session: UserSession) -> Result<Vec<Volume>> {
+        ensure!(session.is_admin(), error::PermissionDenied);
+
+        Ok(
+            crate::util::config::get_config_element::<crate::util::config::Data>()?
+                .volumes
+                .into_iter()
+                .map(|(name, path)| Volume { name, path })
+                .collect::<Vec<_>>(),
+        )
     }
 }
 
@@ -639,7 +653,6 @@ mod tests {
     use super::*;
     use crate::api::model::datatypes::{DataProviderId, DatasetId};
     use crate::api::model::services::AddDataset;
-    use crate::contexts::AdminSession;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
@@ -660,6 +673,7 @@ mod tests {
     use crate::pro::users::{
         ExternalUserClaims, UserCredentials, UserDb, UserId, UserRegistration,
     };
+    use crate::pro::util::tests::admin_login;
     use crate::projects::{
         CreateProject, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
         ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
@@ -1433,7 +1447,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_layer_providers() {
         with_temp_context(|ctx, _| async move {
-            let db = ctx.db(UserSession::system_session());
+            let db = ctx.db(UserSession::admin_session());
 
             let provider_id =
                 DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
@@ -1936,9 +1950,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_collects_layers() {
         with_temp_context(|ctx, _| async move {
-            let session = AdminSession::default();
+            let session = admin_login(&ctx).await;
 
-            let layer_db = ctx.db(session.into());
+            let layer_db = ctx.db(session);
 
             let workflow = Workflow {
                 operator: TypedOperator::Vector(
@@ -2159,7 +2173,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            let quota = initialize_quota_tracking(ctx.db(session.clone()));
+            let admin_session = admin_login(&ctx).await;
+
+            let quota = initialize_quota_tracking(ctx.db(admin_session));
 
             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
@@ -2209,12 +2225,14 @@ mod tests {
                 .await
                 .unwrap();
 
-            ctx.db(UserSession::system_session())
+            let admin_session = admin_login(&ctx).await;
+
+            ctx.db(admin_session.clone())
                 .update_quota_available_by_user(&user, 1)
                 .await
                 .unwrap();
 
-            let quota = initialize_quota_tracking(ctx.db(session.clone()));
+            let quota = initialize_quota_tracking(ctx.db(admin_session));
 
             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
@@ -2265,7 +2283,7 @@ mod tests {
                 .unwrap();
 
             let db = ctx.db(session.clone());
-            let admin_db = ctx.db(UserSession::system_session());
+            let admin_db = ctx.db(UserSession::admin_session());
 
             assert_eq!(
                 db.quota_available().await.unwrap(),
@@ -2297,9 +2315,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_removes_layer_collections() {
         with_temp_context(|ctx, _| async move {
-            let session = AdminSession::default();
+            let session = admin_login(&ctx).await;
 
-            let layer_db = ctx.db(session.into());
+            let layer_db = ctx.db(session);
 
             let layer = AddLayer {
                 name: "layer".to_string(),
@@ -2476,9 +2494,9 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn it_removes_collections_from_collections() {
         with_temp_context(|ctx, _| async move {
-            let session = AdminSession::default();
+            let session = admin_login(&ctx).await;
 
-            let db = ctx.db(session.into());
+            let db = ctx.db(session);
 
             let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
 
@@ -2571,9 +2589,9 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn it_removes_layers_from_collections() {
         with_temp_context(|ctx, _| async move {
-            let session = AdminSession::default();
+            let session = admin_login(&ctx).await;
 
-            let db = ctx.db(session.into());
+            let db = ctx.db(session);
 
             let root_collection = &db.get_root_layer_collection_id().await.unwrap();
 
@@ -2852,7 +2870,7 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let session: UserSession = AdminSession::default().into();
+            let session = admin_login(&ctx).await;
 
             let db = ctx.db(session);
             let wrap = db.wrap_meta_data(meta_data);

@@ -183,7 +183,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
 
     let task = RasterDatasetFromWorkflowTask {
         workflow,
-        session,
+        session: session.clone(),
         ctx: ctx.clone(),
         info,
         upload,
@@ -192,7 +192,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
     }
     .boxed();
 
-    let task_id = ctx.tasks_ref().schedule(task, None).await?;
+    let task_id = ctx.tasks(session).schedule_task(task, None).await?;
 
     Ok(task_id)
 }

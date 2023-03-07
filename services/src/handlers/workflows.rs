@@ -604,6 +604,7 @@ mod tests {
     };
     use serde_json::json;
     use std::io::Read;
+    use std::sync::Arc;
     use zip::read::ZipFile;
     use zip::ZipArchive;
 
@@ -1261,7 +1262,11 @@ mod tests {
             ),
         };
 
-        let workflow_id = ctx.db(session).register_workflow(workflow).await.unwrap();
+        let workflow_id = ctx
+            .db(session.clone())
+            .register_workflow(workflow)
+            .await
+            .unwrap();
 
         // create dataset from workflow
         let req = test::TestRequest::post()
@@ -1301,9 +1306,11 @@ mod tests {
         let task_response =
             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+        let tasks = Arc::new(ctx.tasks(session.clone()));
 
-        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+        wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
+
+        let status = tasks.get_task_status(task_response.task_id).await.unwrap();
 
         let response = if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()

@@ -1,4 +1,5 @@
 use crate::contexts::{GeoEngineDb, QueryContextImpl};
+use crate::datasets::upload::Volume;
 use crate::error;
 
 use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDbBackend};
@@ -11,9 +12,10 @@ use crate::pro::permissions::in_memory_permissiondb::InMemoryPermissionDbBackend
 
 use crate::pro::projects::ProHashMapProjectDbBackend;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
+use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::{Auth, HashMapUserDbBackend, OidcRequestDb, UserSession};
 use crate::pro::util::config::Oidc;
-use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
+use crate::tasks::SimpleTaskManagerContext;
 use crate::workflows::registry::HashMapRegistryBackend;
 use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
 use async_trait::async_trait;
@@ -24,7 +26,7 @@ use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -39,7 +41,7 @@ pub struct ProInMemoryContext {
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
-    task_manager: Arc<SimpleTaskManager>,
+    task_manager: Arc<ProTaskManagerBackend>,
     quota: QuotaTrackingFactory,
 }
 
@@ -70,7 +72,7 @@ impl ProInMemoryContext {
     ) -> Self {
         let db_backend = Arc::new(ProInMemoryDbBackend::default());
 
-        let session = UserSession::system_session();
+        let session = UserSession::admin_session();
         let db = ProInMemoryDb::new(db_backend.clone(), session.clone());
         let quota = initialize_quota_tracking(db);
 
@@ -107,7 +109,7 @@ impl ProInMemoryContext {
     ) -> Self {
         let db_backend = Arc::new(ProInMemoryDbBackend::default());
 
-        let db = ProInMemoryDb::new(db_backend.clone(), UserSession::system_session());
+        let db = ProInMemoryDb::new(db_backend.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
 
         let ctx = Self {
@@ -120,7 +122,7 @@ impl ProInMemoryContext {
             quota,
         };
 
-        let _quota = initialize_quota_tracking(ctx.db(UserSession::system_session()));
+        let _quota = initialize_quota_tracking(ctx.db(UserSession::admin_session()));
 
         ctx
     }
@@ -128,7 +130,7 @@ impl ProInMemoryContext {
     pub fn new_with_oidc(oidc_db: OidcRequestDb) -> Self {
         let db_backend = Arc::new(ProInMemoryDbBackend::default());
 
-        let db = ProInMemoryDb::new(db_backend.clone(), UserSession::system_session());
+        let db = ProInMemoryDb::new(db_backend.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
 
         Self {
@@ -164,17 +166,14 @@ impl Context for ProInMemoryContext {
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
     type TaskContext = SimpleTaskManagerContext;
-    type TaskManager = SimpleTaskManager;
+    type TaskManager = ProTaskManager;
 
     fn db(&self, session: Self::Session) -> Self::GeoEngineDB {
         ProInMemoryDb::new(self.db.clone(), session)
     }
 
-    fn tasks(&self) -> Arc<Self::TaskManager> {
-        self.task_manager.clone()
-    }
-    fn tasks_ref(&self) -> &Self::TaskManager {
-        &self.task_manager
+    fn tasks(&self, session: UserSession) -> Self::TaskManager {
+        ProTaskManager::new(self.task_manager.clone(), session)
     }
 
     fn query_context(&self, session: UserSession) -> Result<Self::QueryContext> {
@@ -202,12 +201,24 @@ impl Context for ProInMemoryContext {
         ))
     }
 
-    // TODO: remove this method?!
+    // TODO: remove this method?! it is replaced by the session() method
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
         self.session(session_id)
             .await
             .map_err(Box::new)
             .context(error::Authorization)
+    }
+
+    fn volumes(&self, session: UserSession) -> Result<Vec<Volume>> {
+        ensure!(session.is_admin(), error::PermissionDenied);
+
+        Ok(
+            crate::util::config::get_config_element::<crate::util::config::Data>()?
+                .volumes
+                .into_iter()
+                .map(|(name, path)| Volume { name, path })
+                .collect::<Vec<_>>(),
+        )
     }
 }
 

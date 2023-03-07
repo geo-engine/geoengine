@@ -1,4 +1,4 @@
-use crate::contexts::{AdminSession, Context, MockableSession, Session, SessionId};
+use crate::contexts::{Context, MockableSession, Session, SessionId};
 use crate::error;
 use crate::handlers::get_token;
 use crate::pro::contexts::{PostgresContext, ProInMemoryContext};
@@ -37,8 +37,8 @@ pub struct UserSession {
 }
 
 impl UserSession {
-    pub fn system_session() -> UserSession {
-        let role = Role::system_role_id();
+    pub fn admin_session() -> UserSession {
+        let role = Role::admin_role_id();
         let user_id = UserId(role.0);
         Self {
             id: SessionId::new(),
@@ -53,6 +53,10 @@ impl UserSession {
             view: None,
             roles: vec![role],
         }
+    }
+
+    pub fn is_admin(&self) -> bool {
+        self.roles.contains(&Role::admin_role_id())
     }
 }
 
@@ -70,7 +74,7 @@ impl MockableSession for UserSession {
             valid_until: DateTime::now(),
             project: None,
             view: None,
-            roles: vec![user_id.into(), Role::user_role_id()],
+            roles: vec![user_id.into(), Role::registered_user_role_id()],
         }
     }
 }
@@ -120,15 +124,6 @@ impl FromRequest for UserSession {
             .expect("ProInMemoryContext will be registered because Postgres was not activated");
         let mem_ctx = mem_ctx.get_ref().clone();
         async move { mem_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
-    }
-}
-
-impl From<AdminSession> for UserSession {
-    fn from(admin_session: AdminSession) -> Self {
-        let mut system_session = Self::system_session();
-        system_session.id = admin_session.id();
-
-        system_session
     }
 }
 

@@ -6,6 +6,8 @@ use std::{
     path::PathBuf,
 };
 
+use crate::{error::Result, layers::listing::LayerCollectionId};
+use crate::{layers::storage::LayerDb, util::user_input::UserInput};
 use crate::{
     layers::{
         add_from_directory::UNSORTED_COLLECTION_ID,
@@ -14,8 +16,6 @@ use crate::{
     },
     pro::permissions::{Permission, PermissionDb, Role},
 };
-use crate::{error::Result, layers::listing::LayerCollectionId};
-use crate::{layers::storage::LayerDb, util::user_input::UserInput};
 
 use log::{debug, info, warn};
 
@@ -41,8 +41,12 @@ pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, fi
         .await?;
 
         // share with users
-        db.add_permission(Role::user_role_id(), def.id.clone(), Permission::Read)
-            .await?;
+        db.add_permission(
+            Role::registered_user_role_id(),
+            def.id.clone(),
+            Permission::Read,
+        )
+        .await?;
         db.add_permission(Role::anonymous_role_id(), def.id.clone(), Permission::Read)
             .await?;
 
@@ -106,8 +110,12 @@ pub async fn add_layer_collections_from_directory<
 
         // share with users
         debug!("sharing collection");
-        db.add_permission(Role::user_role_id(), def.id.clone(), Permission::Read)
-            .await?;
+        db.add_permission(
+            Role::registered_user_role_id(),
+            def.id.clone(),
+            Permission::Read,
+        )
+        .await?;
         db.add_permission(Role::anonymous_role_id(), def.id.clone(), Permission::Read)
             .await?;
 
