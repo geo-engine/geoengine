@@ -1,7 +1,7 @@
+pub use self::error::NFDIProviderError;
 use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::external::nfdi::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
 use crate::datasets::listing::ProvenanceOutput;
-use crate::error::{self, Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
@@ -49,10 +49,13 @@ use tonic::service::Interceptor;
 use tonic::transport::{Channel, Endpoint};
 use tonic::{Request, Status};
 
+pub mod error;
 pub mod metadata;
 #[cfg(test)]
 #[macro_use]
 mod mock_grpc_server;
+
+type Result<T, E = NFDIProviderError> = std::result::Result<T, E>;
 
 const URL_REPLACEMENT: &str = "%URL%";
 
@@ -70,7 +73,7 @@ pub struct NFDIDataProviderDefinition {
 #[typetag::serde]
 #[async_trait::async_trait]
 impl DataProviderDefinition for NFDIDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
+    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(NFDIDataProvider::new(self).await?))
     }
 
@@ -96,12 +99,10 @@ struct APITokenInterceptor {
 
 impl APITokenInterceptor {
     fn new(token: &str) -> Result<APITokenInterceptor> {
-        let key = AsciiMetadataKey::from_bytes("Authorization".as_bytes()).unwrap();
-        let value = AsciiMetadataValue::try_from(format!("Bearer {token}")).map_err(|_| {
-            Error::InvalidAPIToken {
-                message: "Could not encode configured token as ASCII.".to_owned(),
-            }
-        })?;
+        let key = AsciiMetadataKey::from_bytes("Authorization".as_bytes())
+            .expect("Key should be convertable to bytes");
+        let value = AsciiMetadataValue::try_from(format!("Bearer {token}"))
+            .map_err(|source| NFDIProviderError::InvalidAPIToken { source })?;
 
         Ok(APITokenInterceptor { key, token: value })
     }
@@ -149,7 +150,7 @@ impl NFDIDataProvider {
     async fn new(def: Box<NFDIDataProviderDefinition>) -> Result<NFDIDataProvider> {
         let url = def.api_url;
         let channel = Endpoint::from_str(url.as_str())
-            .map_err(|_| Error::InvalidUri { uri_string: url })?
+            .map_err(|_| NFDIProviderError::InvalidUri { uri_string: url })?
             .connect()
             .await?;
 
@@ -189,7 +190,7 @@ impl NFDIDataProvider {
     fn dataset_nfdi_id(id: &DataId) -> Result<String> {
         match id {
             DataId::External(id) => Ok(id.layer_id.0.clone()),
-            DataId::Internal { .. } => Err(Error::InvalidDataId),
+            DataId::Internal { .. } => Err(NFDIProviderError::InvalidDataId),
         }
     }
 
@@ -213,24 +214,18 @@ impl NFDIDataProvider {
                 page_request: None,
                 label_id_filter: self.label_filter.clone(),
             })
-            .await
-            .map_err( |_err|Error::NFDIProviderError {
-                cause: "Aruna Object Storage does not have an object group for the requested collection"
-                    .to_string(),
-            })?
+            .await?
             .into_inner()
             .object_groups
-            .ok_or(Error::NFDIProviderError {
-                cause: "Aruna Object Storage does not have an object group for the requested collection"
-                    .to_string(),
-            })?
+            .ok_or(NFDIProviderError::MissingObjectGroup)?
             .object_group_overviews;
 
+        if aruna_object_group_overview.len() == 0 {
+            return Err(NFDIProviderError::MissingObjectGroup);
+        }
+
         if aruna_object_group_overview.len() != 1 {
-            return Err(Error::NFDIProviderError {
-                cause: "Aruna Object Storage should have exactly one object group per collection"
-                    .to_string(),
-            });
+            return Err(NFDIProviderError::UnexpectedObjectHierarchy);
         }
         let object_group_id = aruna_object_group_overview
             .pop()
@@ -244,54 +239,29 @@ impl NFDIDataProvider {
                 page_request: None,
                 meta_only: false,
             })
-            .await
-            .map_err( |_err| Error::NFDIProviderError {
-                cause: "Aruna Object Storage does not have an object group for the requested collection"
-                    .to_string(),
-            })?
+            .await?
             .into_inner()
             .object_group_objects;
 
-        if aruna_objects.len() != 2 {
-            return Err(Error::NFDIProviderError {
-                cause: "Aruna Object Storage should have exactly two objects per object group"
-                    .to_string(),
-            });
+        if aruna_objects.len() > 2 {
+            return Err(NFDIProviderError::UnexpectedObjectHierarchy);
         }
 
         let mut meta_object_id = None;
         let mut data_object_id = None;
         for i in aruna_objects {
             if i.is_metadata {
-                meta_object_id = Some(
-                    i.object
-                        .ok_or(Error::NFDIProviderError {
-                            cause: "Aruna Object Storage meta object does not exist".to_string(),
-                        })?
-                        .id,
-                );
+                meta_object_id = Some(i.object.ok_or(NFDIProviderError::MissingMetaObject)?.id);
             } else {
-                data_object_id = Some(
-                    i.object
-                        .ok_or(Error::NFDIProviderError {
-                            cause: "Aruna Object Storage data object does not exist".to_string(),
-                        })?
-                        .id,
-                );
+                data_object_id = Some(i.object.ok_or(NFDIProviderError::MissingDataObject)?.id);
             }
         }
 
         Ok(ArunaDatasetIds {
             collection_id,
             _object_group_id: object_group_id,
-            meta_object_id: meta_object_id.ok_or(Error::NFDIProviderError {
-                cause: "Aruna Object Storage should have exactly one meta object per object group"
-                    .to_string(),
-            })?,
-            data_object_id: data_object_id.ok_or(Error::NFDIProviderError {
-                cause: "Aruna Object Storage should have exactly one data object per object group"
-                    .to_string(),
-            })?,
+            meta_object_id: meta_object_id.ok_or(NFDIProviderError::MissingMetaObject)?,
+            data_object_id: data_object_id.ok_or(NFDIProviderError::MissingDataObject)?,
         })
     }
 
@@ -308,7 +278,7 @@ impl NFDIDataProvider {
             .await?
             .into_inner()
             .collection
-            .ok_or(Error::InvalidDataId)?;
+            .ok_or(NFDIProviderError::InvalidDataId)?;
 
         Ok(collection_overview)
     }
@@ -334,7 +304,7 @@ impl NFDIDataProvider {
             let json = data_get_response.json::<GEMetadata>().await?;
             Ok(json)
         } else {
-            Err(Error::MissingNFDIMetaData)
+            Err(NFDIProviderError::MissingNFDIMetaData)
         };
     }
 
@@ -398,11 +368,9 @@ impl NFDIDataProvider {
             .await?
             .into_inner()
             .object
-            .ok_or(Error::NoMainFileCandidateFound)
+            .ok_or(NFDIProviderError::MissingDataObject)
             .map(|x| x.object)?
-            .ok_or(Error::NFDIProviderError {
-                cause: "Aruna Object Storage data object does not exist".to_string(),
-            })
+            .ok_or(NFDIProviderError::MissingDataObject)
     }
 
     /// Creates the loading template for vector files. This is basically a loading
@@ -656,7 +624,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
 #[async_trait::async_trait]
 impl DataProvider for NFDIDataProvider {
-    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
+    async fn provenance(&self, id: &DataId) -> crate::error::Result<ProvenanceOutput> {
         let aruna_dataset_ids = self.get_dataset_info(id).await?;
         let metadata = self.get_metadata(&aruna_dataset_ids).await?;
 
@@ -673,10 +641,10 @@ impl LayerCollectionProvider for NFDIDataProvider {
         &self,
         collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
-    ) -> Result<LayerCollection> {
+    ) -> crate::error::Result<LayerCollection> {
         ensure!(
             *collection == self.root_collection_id().await?,
-            error::UnknownLayerCollectionId {
+            crate::error::UnknownLayerCollectionId {
                 id: collection.clone()
             }
         );
@@ -686,20 +654,14 @@ impl LayerCollectionProvider for NFDIDataProvider {
         let items = collection_stub
             .get_collections(GetCollectionsRequest {
                 project_id: self.project_id.to_string(),
-                label_or_id_filter: None,
+                label_or_id_filter: self.label_filter.clone(),
                 page_request: None,
             })
             .await
-            .map_err(|_err| Error::NFDIProviderError {
-                cause: "Aruna Object Storage does not have any collections for the project"
-                    .to_string(),
-            })?
+            .map_err(|source| NFDIProviderError::TonicStatus { source })?
             .into_inner()
             .collections
-            .ok_or(Error::NFDIProviderError {
-                cause: "Aruna Object Storage does not have any collections for the project"
-                    .to_string(),
-            })?
+            .ok_or(NFDIProviderError::MissingCollection)?
             .collection_overviews
             .into_iter()
             .map(|col| {
@@ -728,11 +690,11 @@ impl LayerCollectionProvider for NFDIDataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
         Ok(LayerCollectionId("root".to_string()))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn get_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
         let aruna_dataset_ids = self.get_dataset_info_from_layer(id).await?;
 
         let dataset = self.get_collection_overview(&aruna_dataset_ids).await?;
@@ -904,15 +866,13 @@ where
                 object_id: self.object_id.clone(),
             })
             .await
+            .map_err(|source| NFDIProviderError::TonicStatus { source })
             .map_err(|source| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(source),
             })?
             .into_inner()
             .url
-            .ok_or(Error::NFDIProviderError {
-                cause: "Aruna Object Storage does not have a url for the requested object"
-                    .to_string(),
-            })
+            .ok_or(NFDIProviderError::MissingURL)
             .map_err(|source| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(source),
             })?;
@@ -938,8 +898,8 @@ mod tests {
     };
     use crate::datasets::external::nfdi::{
         ArunaDatasetIds, ExpiringDownloadLink, NFDIDataProvider, NFDIDataProviderDefinition,
+        NFDIProviderError,
     };
-    use crate::error::Error::{MissingNFDIMetaData, NFDIProviderError};
     use crate::layers::external::DataProvider;
     use crate::layers::layer::LayerCollectionListOptions;
     use crate::layers::listing::LayerCollectionProvider;
@@ -1420,7 +1380,10 @@ mod tests {
             .get_collection_info(COLLECTION_ID.to_string())
             .await;
 
-        assert!(matches!(result, Err(NFDIProviderError { cause: _ })));
+        assert!(matches!(
+            result,
+            Err(NFDIProviderError::TonicStatus { source: _ })
+        ));
     }
 
     #[tokio::test]
@@ -1446,7 +1409,7 @@ mod tests {
             .get_collection_info(COLLECTION_ID.to_string())
             .await;
 
-        assert!(matches!(result, Err(NFDIProviderError { cause: _ })));
+        assert!(matches!(result, Err(NFDIProviderError::MissingMetaObject)));
     }
 
     #[tokio::test]
@@ -1472,7 +1435,7 @@ mod tests {
             .get_collection_info(COLLECTION_ID.to_string())
             .await;
 
-        assert!(matches!(result, Err(NFDIProviderError { cause: _ })));
+        assert!(matches!(result, Err(NFDIProviderError::MissingDataObject)));
     }
 
     #[tokio::test]
@@ -1521,7 +1484,10 @@ mod tests {
             .get_metadata(&aruna_mock_server.dataset_ids)
             .await;
 
-        assert!(matches!(result, Err(MissingNFDIMetaData)));
+        assert!(matches!(
+            result,
+            Err(NFDIProviderError::MissingNFDIMetaData)
+        ));
     }
 
     #[tokio::test]

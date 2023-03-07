@@ -3,6 +3,7 @@ use crate::api::model::datatypes::{
 };
 #[cfg(feature = "ebv")]
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
+use crate::datasets::external::nfdi::error::NFDIProviderError;
 use crate::handlers::ErrorResponse;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::http::StatusCode;
@@ -10,7 +11,6 @@ use actix_web::HttpResponse;
 use snafu::prelude::*;
 use std::path::PathBuf;
 use strum::IntoStaticStr;
-use tonic::Status;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -312,25 +312,10 @@ pub enum Error {
         type_names: WorkflowId,
     },
 
-    Tonic {
-        source: tonic::Status,
-    },
-
-    TonicTransport {
-        source: tonic::transport::Error,
-    },
-
-    InvalidUri {
-        uri_string: String,
-    },
-
-    InvalidAPIToken {
-        message: String,
-    },
-    MissingNFDIMetaData,
-
-    NFDIProviderError {
-        cause: String,
+    #[cfg(feature = "nfdi")]
+    #[snafu(context(false))]
+    NFDIProvider {
+        source: NFDIProviderError,
     },
 
     #[cfg(feature = "ebv")]
@@ -538,18 +523,6 @@ impl From<flexi_logger::FlexiLoggerError> for Error {
 impl From<proj::ProjError> for Error {
     fn from(source: proj::ProjError) -> Self {
         Self::Proj { source }
-    }
-}
-
-impl From<tonic::Status> for Error {
-    fn from(source: Status) -> Self {
-        Self::Tonic { source }
-    }
-}
-
-impl From<tonic::transport::Error> for Error {
-    fn from(source: tonic::transport::Error) -> Self {
-        Self::TonicTransport { source }
     }
 }
 
