@@ -2089,7 +2089,7 @@ mod tests {
             grid_array: grid,
             tile_position: _,
             time: _,
-            properties: _,
+            properties,
         } = GdalRasterLoader::load_tile_data::<u8>(
             &up_side_down_params,
             tile_information,
@@ -2114,6 +2114,78 @@ mod tests {
 
         assert_eq!(grid.validity_mask.data.len(), 64);
         assert_eq!(grid.validity_mask.data, &[true; 64]);
+
+        assert!(properties.offset_option().is_none());
+        assert!(properties.scale_option().is_none());
+    }
+
+    #[test]
+    fn read_raster_and_offset_scale() {
+        let output_shape: GridShape2D = [8, 8].into();
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
+
+        let up_side_down_params = GdalDatasetParameters {
+            file_path: test_data!(
+                "raster/modis_ndvi/with_offset_scale/MOD13A2_M_NDVI_2014-01-01.TIFF"
+            )
+            .into(),
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (-180., -90.).into(),
+                x_pixel_size: 0.1,
+                y_pixel_size: 0.1,
+            },
+            width: 3600,
+            height: 1800,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(0.),
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+
+        let tile_information =
+            TileInformation::with_partition_and_shape(output_bounds, output_shape);
+
+        let RasterTile2D {
+            global_geo_transform: _,
+            grid_array: grid,
+            tile_position: _,
+            time: _,
+            properties,
+        } = GdalRasterLoader::load_tile_data::<u8>(
+            &up_side_down_params,
+            tile_information,
+            TimeInterval::default(),
+        )
+        .unwrap();
+
+        assert!(!grid.is_empty());
+
+        let grid = grid.into_materialized_masked_grid();
+
+        assert_eq!(grid.inner_grid.data.len(), 64);
+        assert_eq!(
+            grid.inner_grid.data,
+            &[
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 75, 37, 255, 44, 34, 39, 32, 255, 86,
+                255, 255, 255, 30, 96, 255, 255, 255, 255, 255, 90, 255, 255, 255, 255, 255, 202,
+                255, 193, 255, 255, 255, 255, 255, 89, 255, 111, 255, 255, 255, 255, 255, 255, 255,
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
+            ]
+        );
+
+        assert_eq!(grid.validity_mask.data.len(), 64);
+        assert_eq!(grid.validity_mask.data, &[true; 64]);
+
+        assert_eq!(properties.offset_option(), Some(37.));
+        assert_eq!(properties.scale_option(), Some(3.7));
+
+        assert_eq!(properties.offset(), 37.);
+        assert_eq!(properties.scale(), 3.7);
     }
 
     #[test]
