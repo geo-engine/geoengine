@@ -12,7 +12,7 @@ pub use self::class_histogram::{
     ClassHistogramVectorQueryProcessor, InitializedClassHistogram,
 };
 pub use self::histogram::{
-    Histogram, HistogramBounds, HistogramParams, HistogramRasterQueryProcessor,
+    Histogram, HistogramBounds, HistogramBuckets, HistogramParams, HistogramRasterQueryProcessor,
     HistogramVectorQueryProcessor, InitializedHistogram,
 };
 pub use self::pie_chart::{
