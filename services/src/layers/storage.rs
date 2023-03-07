@@ -286,6 +286,12 @@ impl LayerDb for HashMapLayerDb {
         collection: &LayerCollectionId,
     ) -> Result<()> {
         let mut backend = self.backend.write().await;
+
+        // check that layer exists
+        if backend.layers.get(layer).is_none() {
+            return Err(LayerDbError::NoLayerForGivenId { id: layer.clone() }.into());
+        }
+
         let layers = backend
             .collection_layers
             .entry(collection.clone())
@@ -637,15 +643,13 @@ impl LayerProviderDb for HashMapLayerProviderDb {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{util::user_input::UserInput, workflows::workflow::Workflow};
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_operators::{
         engine::{TypedOperator, VectorOperator},
         mock::{MockPointSource, MockPointSourceParams},
     };
-
-    use crate::{util::user_input::UserInput, workflows::workflow::Workflow};
-
-    use super::*;
 
     #[tokio::test]
     async fn it_stores_layers() -> Result<()> {
@@ -1117,5 +1121,62 @@ mod tests {
         );
 
         db.get_layer(&layer_in_two_collections).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_missing_layer_dataset_in_collection_listing() {
+        let db = HashMapLayerDb::default();
+
+        let root_collection_id = &db.root_collection_id().await.unwrap();
+
+        let top_collection_id = db
+            .add_collection(
+                AddLayerCollection {
+                    name: "top collection".to_string(),
+                    description: "description".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let faux_layer = LayerId("faux".to_string());
+
+        // this should fail
+        db.add_layer_to_collection(&faux_layer, &top_collection_id)
+            .await
+            .unwrap_err();
+
+        let root_collection_layers = db
+            .collection(
+                &top_collection_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_layers,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: DataProviderId(
+                        "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74".try_into().unwrap()
+                    ),
+                    collection_id: top_collection_id.clone(),
+                },
+                name: "top collection".to_string(),
+                description: "description".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
     }
 }
