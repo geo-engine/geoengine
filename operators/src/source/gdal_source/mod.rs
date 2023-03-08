@@ -2184,8 +2184,8 @@ mod tests {
         assert_eq!(properties.offset_option(), Some(37.));
         assert_eq!(properties.scale_option(), Some(3.7));
 
-        assert_eq!(properties.offset(), 37.);
-        assert_eq!(properties.scale(), 3.7);
+        assert!(approx_eq!(f64, properties.offset(), 37.));
+        assert!(approx_eq!(f64, properties.scale(), 3.7));
     }
 
     #[test]
