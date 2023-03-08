@@ -12,7 +12,7 @@ use crate::pro::layers::add_from_directory::{
 use crate::pro::permissions::Role;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
-use crate::pro::users::{Auth, OidcRequestDb, UserSession};
+use crate::pro::users::{OidcRequestDb, UserAuth, UserSession};
 use crate::pro::util::config::Oidc;
 
 use crate::tasks::SimpleTaskManagerContext;
@@ -585,7 +585,7 @@ where
     }
 
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
-        self.session(session_id)
+        self.user_session_by_id(session_id)
             .await
             .map_err(Box::new)
             .context(error::Authorization)
@@ -879,13 +879,16 @@ mod tests {
         db.set_session_project(projects[0].id).await.unwrap();
 
         assert_eq!(
-            ctx.session(session.id).await.unwrap().project,
+            ctx.session_by_id(session.id).await.unwrap().project,
             Some(projects[0].id)
         );
 
         let rect = STRectangle::new_unchecked(SpatialReference::epsg_4326(), 0., 1., 2., 3., 1, 2);
         db.set_session_view(rect.clone()).await.unwrap();
-        assert_eq!(ctx.session(session.id).await.unwrap().view, Some(rect));
+        assert_eq!(
+            ctx.session_by_id(session.id).await.unwrap().view,
+            Some(rect)
+        );
     }
 
     async fn delete_project(
@@ -913,7 +916,7 @@ mod tests {
             .unwrap());
 
         let user2 = ctx
-            .register(
+            .register_user(
                 UserRegistration {
                     email: "user2@example.com".into(),
                     password: "12345678".into(),
@@ -1127,7 +1130,7 @@ mod tests {
         .validated()
         .unwrap();
 
-        let user_id = ctx.register(user_registration).await.unwrap();
+        let user_id = ctx.register_user(user_registration).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".into(),
@@ -1138,11 +1141,11 @@ mod tests {
 
         let db = ctx.db(session.clone());
 
-        ctx.session(session.id).await.unwrap();
+        ctx.session_by_id(session.id).await.unwrap();
 
         db.logout().await.unwrap();
 
-        assert!(ctx.session(session.id).await.is_err());
+        assert!(ctx.session_by_id(session.id).await.is_err());
 
         user_id
     }
@@ -1175,11 +1178,11 @@ mod tests {
         let expected_duration = session_1.created + duration;
         assert_eq!(session_1.valid_until, expected_duration);
 
-        assert!(ctx.session(session_1.id).await.is_ok());
+        assert!(ctx.session_by_id(session_1.id).await.is_ok());
 
         assert!(db1.logout().await.is_ok());
 
-        assert!(ctx.session(session_1.id).await.is_err());
+        assert!(ctx.session_by_id(session_1.id).await.is_err());
 
         let duration = Duration::minutes(10);
         let login_result = ctx
@@ -1199,26 +1202,26 @@ mod tests {
         let expected_duration = session_2.created + duration;
         assert_eq!(session_2.valid_until, expected_duration);
 
-        assert!(ctx.session(session_2.id).await.is_ok());
+        assert!(ctx.session_by_id(session_2.id).await.is_ok());
 
         result
     }
 
     async fn anonymous(ctx: &PostgresContext<NoTls>) {
         let now: DateTime = chrono::offset::Utc::now().into();
-        let session = ctx.anonymous().await.unwrap();
+        let session = ctx.create_anonymous_session().await.unwrap();
         let then: DateTime = chrono::offset::Utc::now().into();
 
         assert!(session.created >= now && session.created <= then);
         assert!(session.valid_until > session.created);
 
-        let session = ctx.session(session.id).await.unwrap();
+        let session = ctx.session_by_id(session.id).await.unwrap();
 
         let db = ctx.db(session.clone());
 
         db.logout().await.unwrap();
 
-        assert!(ctx.session(session.id).await.is_err());
+        assert!(ctx.session_by_id(session.id).await.is_err());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -1235,7 +1238,7 @@ mod tests {
                 ),
             };
 
-            let session = ctx.anonymous().await.unwrap();
+            let session = ctx.create_anonymous_session().await.unwrap();
 
             let db = ctx
                 .db(session);
@@ -1314,7 +1317,7 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let session = ctx.anonymous().await.unwrap();
+            let session = ctx.create_anonymous_session().await.unwrap();
 
             let db = ctx.db(session.clone());
             let wrap = db.wrap_meta_data(meta_data);
@@ -1430,7 +1433,7 @@ mod tests {
                 }],
             };
 
-            let session = ctx.anonymous().await.unwrap();
+            let session = ctx.create_anonymous_session().await.unwrap();
 
             let db = ctx.db(session.clone());
 
@@ -1572,8 +1575,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_only_permitted_datasets() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.anonymous().await.unwrap();
-            let session2 = ctx.anonymous().await.unwrap();
+            let session1 = ctx.create_anonymous_session().await.unwrap();
+            let session2 = ctx.create_anonymous_session().await.unwrap();
 
             let db1 = ctx.db(session1.clone());
             let db2 = ctx.db(session2.clone());
@@ -1658,8 +1661,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_shows_only_permitted_provenance() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.anonymous().await.unwrap();
-            let session2 = ctx.anonymous().await.unwrap();
+            let session1 = ctx.create_anonymous_session().await.unwrap();
+            let session2 = ctx.create_anonymous_session().await.unwrap();
 
             let db1 = ctx.db(session1.clone());
             let db2 = ctx.db(session2.clone());
@@ -1716,8 +1719,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_updates_permissions() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.anonymous().await.unwrap();
-            let session2 = ctx.anonymous().await.unwrap();
+            let session1 = ctx.create_anonymous_session().await.unwrap();
+            let session2 = ctx.create_anonymous_session().await.unwrap();
 
             let db1 = ctx.db(session1.clone());
             let db2 = ctx.db(session2.clone());
@@ -1780,8 +1783,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_uses_roles_for_permissions() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.anonymous().await.unwrap();
-            let session2 = ctx.anonymous().await.unwrap();
+            let session1 = ctx.create_anonymous_session().await.unwrap();
+            let session2 = ctx.create_anonymous_session().await.unwrap();
 
             let db1 = ctx.db(session1.clone());
             let db2 = ctx.db(session2.clone());
@@ -1844,8 +1847,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_meta_data() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.anonymous().await.unwrap();
-            let session2 = ctx.anonymous().await.unwrap();
+            let session1 = ctx.create_anonymous_session().await.unwrap();
+            let session2 = ctx.create_anonymous_session().await.unwrap();
 
             let db1 = ctx.db(session1.clone());
             let db2 = ctx.db(session2.clone());
@@ -1920,8 +1923,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_uploads() {
         with_temp_context(|ctx, _| async move {
-            let session1 = ctx.anonymous().await.unwrap();
-            let session2 = ctx.anonymous().await.unwrap();
+            let session1 = ctx.create_anonymous_session().await.unwrap();
+            let session2 = ctx.create_anonymous_session().await.unwrap();
 
             let db1 = ctx.db(session1.clone());
             let db2 = ctx.db(session2.clone());
@@ -2153,7 +2156,7 @@ mod tests {
     async fn it_tracks_used_quota_in_postgres() {
         with_temp_context(|ctx, _| async move {
             let _user = ctx
-                .register(
+                .register_user(
                     UserRegistration {
                         email: "foo@example.com".to_string(),
                         password: "secret1234".to_string(),
@@ -2205,7 +2208,7 @@ mod tests {
     async fn it_tracks_available_quota() {
         with_temp_context(|ctx, _| async move {
             let user = ctx
-                .register(
+                .register_user(
                     UserRegistration {
                         email: "foo@example.com".to_string(),
                         password: "secret1234".to_string(),
@@ -2262,7 +2265,7 @@ mod tests {
     async fn it_updates_quota_in_postgres() {
         with_temp_context(|ctx, _| async move {
             let user = ctx
-                .register(
+                .register_user(
                     UserRegistration {
                         email: "foo@example.com".to_string(),
                         password: "secret1234".to_string(),
@@ -2777,7 +2780,7 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let session = ctx.anonymous().await.unwrap();
+            let session = ctx.create_anonymous_session().await.unwrap();
 
             let db = ctx.db(session.clone());
             let wrap = db.wrap_meta_data(meta_data);

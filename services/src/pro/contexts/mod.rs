@@ -36,7 +36,7 @@ use async_trait::async_trait;
 
 use super::permissions::PermissionDb;
 use super::projects::ProProjectDb;
-use super::users::Auth;
+use super::users::UserAuth;
 
 pub use in_memory::ProInMemoryDb;
 pub use postgres::PostgresDb;
@@ -44,7 +44,7 @@ pub use postgres::PostgresDb;
 /// A pro contexts that extends the default context.
 // TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
 #[async_trait]
-pub trait ProContext: Context<Session = UserSession> + Auth {
+pub trait ProContext: Context<Session = UserSession> + UserAuth {
     type ProGeoEngineDB: ProGeoEngineDb;
 
     fn pro_db(&self, session: UserSession) -> Self::ProGeoEngineDB;

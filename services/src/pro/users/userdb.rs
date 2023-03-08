@@ -8,14 +8,14 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::Duration;
 
 #[async_trait]
-pub trait Auth {
+pub trait UserAuth {
     /// Registers a user by providing `UserRegistration` parameters
     ///
     /// # Errors
     ///
     /// This call fails if the `UserRegistration` is invalid.
     ///
-    async fn register(&self, user: Validated<UserRegistration>) -> Result<UserId>;
+    async fn register_user(&self, user: Validated<UserRegistration>) -> Result<UserId>;
 
     /// Creates session for anonymous user
     ///
@@ -23,7 +23,7 @@ pub trait Auth {
     ///
     /// This call fails if the `UserRegistration` is invalid.
     ///
-    async fn anonymous(&self) -> Result<UserSession>;
+    async fn create_anonymous_session(&self) -> Result<UserSession>;
 
     /// Creates a `Session` by providing `UserCredentials`
     ///
@@ -52,7 +52,7 @@ pub trait Auth {
     ///
     /// This call fails if the session is invalid.
     ///
-    async fn session(&self, session: SessionId) -> Result<UserSession>;
+    async fn user_session_by_id(&self, session: SessionId) -> Result<UserSession>;
 }
 
 #[async_trait]

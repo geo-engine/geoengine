@@ -16,7 +16,7 @@ use geoengine_services::{
     contexts::Context,
     pro::{
         contexts::ProInMemoryContext,
-        users::{Auth, UserDb, UserSession},
+        users::{UserAuth, UserDb, UserSession},
         util::tests::{add_ndvi_to_datasets, send_pro_test_request},
     },
     util::config,
@@ -26,7 +26,7 @@ use geoengine_services::{
 async fn bench() {
     let ctx = ProInMemoryContext::test_default();
 
-    let session = ctx.anonymous().await.unwrap();
+    let session = ctx.create_anonymous_session().await.unwrap();
 
     let dataset = add_ndvi_to_datasets(&ctx).await;
 

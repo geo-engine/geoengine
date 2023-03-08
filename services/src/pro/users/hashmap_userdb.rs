@@ -18,7 +18,7 @@ use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::Validated;
 use geoengine_datatypes::util::Identifier;
 
-use super::userdb::Auth;
+use super::userdb::UserAuth;
 
 pub struct HashMapUserDbBackend {
     users: HashMap<String, User>,
@@ -61,9 +61,12 @@ impl Default for HashMapUserDbBackend {
 }
 
 #[async_trait]
-impl Auth for ProInMemoryContext {
+impl UserAuth for ProInMemoryContext {
     /// Register a user
-    async fn register(&self, user_registration: Validated<UserRegistration>) -> Result<UserId> {
+    async fn register_user(
+        &self,
+        user_registration: Validated<UserRegistration>,
+    ) -> Result<UserId> {
         let user_registration = user_registration.user_input;
 
         let mut backend = self.db.user_db.write().await;
@@ -89,7 +92,7 @@ impl Auth for ProInMemoryContext {
         Ok(id)
     }
 
-    async fn anonymous(&self) -> Result<UserSession> {
+    async fn create_anonymous_session(&self) -> Result<UserSession> {
         let id = UserId::new();
         let user = User {
             id,
@@ -207,7 +210,7 @@ impl Auth for ProInMemoryContext {
         Ok(session)
     }
 
-    async fn session(&self, session: SessionId) -> Result<UserSession> {
+    async fn user_session_by_id(&self, session: SessionId) -> Result<UserSession> {
         match self.db.user_db.read().await.sessions.get(&session) {
             Some(session) => Ok(session.clone()), //TODO: Session validity is not checked.
             None => Err(error::Error::InvalidSession),
@@ -384,7 +387,7 @@ mod tests {
         .validated()
         .unwrap();
 
-        assert!(ctx.register(user_registration).await.is_ok());
+        assert!(ctx.register_user(user_registration).await.is_ok());
     }
 
     #[tokio::test]
@@ -399,7 +402,7 @@ mod tests {
         .validated()
         .unwrap();
 
-        assert!(ctx.register(user_registration).await.is_ok());
+        assert!(ctx.register_user(user_registration).await.is_ok());
 
         let user_credentials = UserCredentials {
             email: "foo@example.com".into(),
@@ -421,7 +424,7 @@ mod tests {
         .validated()
         .unwrap();
 
-        assert!(ctx.register(user_registration).await.is_ok());
+        assert!(ctx.register_user(user_registration).await.is_ok());
 
         let user_credentials = UserCredentials {
             email: "foo@example.com".into(),
@@ -447,7 +450,7 @@ mod tests {
         .validated()
         .unwrap();
 
-        assert!(ctx.register(user_registration).await.is_ok());
+        assert!(ctx.register_user(user_registration).await.is_ok());
 
         let user_credentials = UserCredentials {
             email: "foo@example.com".into(),
@@ -456,7 +459,7 @@ mod tests {
 
         let session = ctx.login(user_credentials).await.unwrap();
 
-        assert!(ctx.session(session.id).await.is_ok());
+        assert!(ctx.user_session_by_id(session.id).await.is_ok());
     }
 
     #[tokio::test]
@@ -487,11 +490,11 @@ mod tests {
         let expected_duration = session_1.created + duration;
         assert_eq!(session_1.valid_until, expected_duration);
 
-        assert!(ctx.session(session_1.id).await.is_ok());
+        assert!(ctx.user_session_by_id(session_1.id).await.is_ok());
 
         assert!(db.logout().await.is_ok());
 
-        assert!(ctx.session(session_1.id).await.is_err());
+        assert!(ctx.user_session_by_id(session_1.id).await.is_err());
 
         let duration = Duration::minutes(10);
         let login_result = ctx
@@ -512,10 +515,10 @@ mod tests {
         let expected_duration = session_2.created + duration;
         assert_eq!(session_2.valid_until, expected_duration);
 
-        assert!(ctx.session(session_2.id).await.is_ok());
+        assert!(ctx.user_session_by_id(session_2.id).await.is_ok());
 
         assert!(db2.logout().await.is_ok());
 
-        assert!(ctx.session(session_2.id).await.is_err());
+        assert!(ctx.user_session_by_id(session_2.id).await.is_err());
     }
 }

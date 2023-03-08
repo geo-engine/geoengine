@@ -102,7 +102,7 @@ mod tests {
         contexts::Context,
         pro::{
             contexts::ProInMemoryContext,
-            users::{Auth, UserCredentials, UserRegistration},
+            users::{UserAuth, UserCredentials, UserRegistration},
             util::tests::admin_login,
         },
         util::user_input::UserInput,
@@ -115,7 +115,7 @@ mod tests {
         let ctx = ProInMemoryContext::test_default();
 
         let _user = ctx
-            .register(
+            .register_user(
                 UserRegistration {
                     email: "foo@example.com".to_string(),
                     password: "secret1234".to_string(),

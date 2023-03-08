@@ -32,7 +32,7 @@ use geoengine_operators::{
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
-    ctx.register(
+    ctx.register_user(
         UserRegistration {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),

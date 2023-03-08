@@ -20,10 +20,10 @@ use pwhash::bcrypt;
 use snafu::ensure;
 use uuid::Uuid;
 
-use super::userdb::Auth;
+use super::userdb::UserAuth;
 
 #[async_trait]
-impl<Tls> Auth for PostgresContext<Tls>
+impl<Tls> UserAuth for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -32,7 +32,7 @@ where
 {
     // TODO: clean up expired sessions?
 
-    async fn register(&self, user: Validated<UserRegistration>) -> Result<UserId> {
+    async fn register_user(&self, user: Validated<UserRegistration>) -> Result<UserId> {
         let mut conn = self.pool.get().await?;
 
         let tx = conn.build_transaction().start().await?;
@@ -83,7 +83,7 @@ where
         Ok(user.id)
     }
 
-    async fn anonymous(&self) -> Result<UserSession> {
+    async fn create_anonymous_session(&self) -> Result<UserSession> {
         let mut conn = self.pool.get().await?;
 
         let tx = conn.build_transaction().start().await?;
@@ -343,7 +343,7 @@ where
         })
     }
 
-    async fn session(&self, session: SessionId) -> Result<UserSession> {
+    async fn user_session_by_id(&self, session: SessionId) -> Result<UserSession> {
         let mut conn = self.pool.get().await?;
 
         let tx = conn.build_transaction().start().await?;

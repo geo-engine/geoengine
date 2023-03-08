@@ -13,7 +13,7 @@ use crate::pro::permissions::in_memory_permissiondb::InMemoryPermissionDbBackend
 use crate::pro::projects::ProHashMapProjectDbBackend;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
-use crate::pro::users::{Auth, HashMapUserDbBackend, OidcRequestDb, UserSession};
+use crate::pro::users::{HashMapUserDbBackend, OidcRequestDb, UserAuth, UserSession};
 use crate::pro::util::config::Oidc;
 use crate::tasks::SimpleTaskManagerContext;
 use crate::workflows::registry::HashMapRegistryBackend;
@@ -203,7 +203,7 @@ impl Context for ProInMemoryContext {
 
     // TODO: remove this method?! it is replaced by the session() method
     async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
-        self.session(session_id)
+        self.user_session_by_id(session_id)
             .await
             .map_err(Box::new)
             .context(error::Authorization)

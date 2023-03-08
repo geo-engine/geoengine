@@ -67,7 +67,7 @@ pub(crate) async fn register_user_handler<C: ProContext>(
     );
 
     let user = user.into_inner().validated()?;
-    let id = ctx.register(user).await?;
+    let id = ctx.register_user(user).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -196,7 +196,7 @@ pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Resul
         });
     }
 
-    let session = ctx.anonymous().await?;
+    let session = ctx.create_anonymous_session().await?;
     Ok(web::Json(session))
 }
 
@@ -470,7 +470,7 @@ mod tests {
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
     use crate::util::user_input::Validated;
 
-    use crate::pro::users::{Auth, AuthCodeRequestURL, OidcRequestDb};
+    use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb, UserAuth};
     use crate::pro::util::config::Oidc;
     use actix_http::header::CONTENT_TYPE;
     use actix_web::dev::ServiceResponse;
@@ -636,7 +636,7 @@ mod tests {
             },
         };
 
-        ctx.register(user).await.unwrap();
+        ctx.register_user(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".to_string(),
@@ -714,7 +714,7 @@ mod tests {
             },
         };
 
-        ctx.register(user).await.unwrap();
+        ctx.register_user(user).await.unwrap();
 
         let credentials = json!({
             "email": "foo@example.com",
@@ -746,7 +746,7 @@ mod tests {
             },
         };
 
-        ctx.register(user).await.unwrap();
+        ctx.register_user(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".to_string(),
@@ -879,7 +879,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            ctx.session(session.id).await.unwrap().project,
+            ctx.user_session_by_id(session.id).await.unwrap().project,
             Some(project)
         );
 
@@ -894,7 +894,10 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert_eq!(ctx.session(session.id()).await.unwrap().view, Some(rect));
+        assert_eq!(
+            ctx.user_session_by_id(session.id()).await.unwrap().view,
+            Some(rect)
+        );
     }
 
     #[tokio::test]
@@ -1287,7 +1290,7 @@ mod tests {
             },
         };
 
-        ctx.register(user).await.unwrap();
+        ctx.register_user(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".to_string(),
@@ -1351,7 +1354,7 @@ mod tests {
             },
         };
 
-        let user_id = ctx.register(user).await.unwrap();
+        let user_id = ctx.register_user(user).await.unwrap();
 
         let admin_session = admin_login(&ctx).await;
 
@@ -1399,7 +1402,7 @@ mod tests {
         let ctx = ProInMemoryContext::test_default();
         let admin_db = ctx.db(UserSession::admin_session());
 
-        let session = ctx.anonymous().await.unwrap();
+        let session = ctx.create_anonymous_session().await.unwrap();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
