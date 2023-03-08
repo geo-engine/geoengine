@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-
 use super::add_from_directory::UNSORTED_COLLECTION_ID;
 use super::external::{DataProvider, DataProviderDefinition};
 use super::layer::{
@@ -16,7 +15,7 @@ use crate::contexts::InMemoryDb;
 use crate::error::{Error, Result};
 
 use crate::util::user_input::UserInput;
-use crate::{util::user_input::Validated};
+use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, RwLockWriteGuard};
@@ -286,6 +285,12 @@ impl LayerDb for HashMapLayerDb {
         collection: &LayerCollectionId,
     ) -> Result<()> {
         let mut backend = self.backend.write().await;
+
+        // check that layer exists
+        if backend.layers.get(layer).is_none() {
+            return Err(LayerDbError::NoLayerForGivenId { id: layer.clone() }.into());
+        }
+
         let layers = backend
             .collection_layers
             .entry(collection.clone())
@@ -765,15 +770,13 @@ impl LayerDb for InMemoryDb {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{util::user_input::UserInput, workflows::workflow::Workflow};
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_operators::{
         engine::{TypedOperator, VectorOperator},
         mock::{MockPointSource, MockPointSourceParams},
     };
-
-    use crate::{util::user_input::UserInput, workflows::workflow::Workflow};
-
-    use super::*;
 
     #[tokio::test]
     async fn it_stores_layers() -> Result<()> {
@@ -1250,5 +1253,62 @@ mod tests {
         );
 
         db.load_layer(&layer_in_two_collections).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_missing_layer_dataset_in_collection_listing() {
+        let db = HashMapLayerDb::default();
+
+        let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
+
+        let top_collection_id = db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "top collection".to_string(),
+                    description: "description".to_string(),
+                }
+                .validated()
+                .unwrap(),
+                root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let faux_layer = LayerId("faux".to_string());
+
+        // this should fail
+        db.add_layer_to_collection(&faux_layer, &top_collection_id)
+            .await
+            .unwrap_err();
+
+        let root_collection_layers = db
+            .load_layer_collection(
+                &top_collection_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_layers,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: DataProviderId(
+                        "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74".try_into().unwrap()
+                    ),
+                    collection_id: top_collection_id.clone(),
+                },
+                name: "top collection".to_string(),
+                description: "description".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
     }
 }

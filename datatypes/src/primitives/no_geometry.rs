@@ -5,6 +5,7 @@ use arrow::array::{Array, ArrayBuilder, ArrayData, ArrayRef, BooleanArray};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
+use wkt::{ToWkt, Wkt};
 
 use crate::collections::VectorDataType;
 use crate::error::Error;
@@ -80,6 +81,12 @@ impl ArrowTyped for NoGeometry {
 impl From<NoGeometry> for geojson::Geometry {
     fn from(_: NoGeometry) -> geojson::Geometry {
         unreachable!("There is no geometry since there is no geometry")
+    }
+}
+
+impl ToWkt<f64> for NoGeometry {
+    fn to_wkt(&self) -> Wkt<f64> {
+        unreachable!("There is no WKT since there is no geometry")
     }
 }
 
