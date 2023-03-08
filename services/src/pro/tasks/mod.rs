@@ -13,11 +13,16 @@ use crate::{
 
 use super::users::UserSession;
 
+// TODO: implement real permissions on task types
+#[cfg(feature = "ebv")]
 const ADMIN_ONLY_TASKS: [&str; 3] = [
     crate::handlers::ebv::EBV_OVERVIEW_TASK_TYPE,
     crate::handlers::ebv::EBV_MULTI_OVERVIEW_TASK_TYPE,
     crate::handlers::ebv::EBV_REMOVE_OVERVIEW_TASK_TYPE,
 ];
+
+#[cfg(not(feature = "ebv"))]
+const ADMIN_ONLY_TASKS: [&str; 0] = [];
 
 #[derive(Default)]
 pub struct ProTaskManagerBackend {
