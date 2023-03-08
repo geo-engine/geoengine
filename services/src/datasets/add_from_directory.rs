@@ -6,11 +6,11 @@ use std::{
     path::PathBuf,
 };
 
+use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 use crate::layers::external::DataProviderDefinition;
 use crate::layers::storage::LayerProviderDb;
 use crate::util::user_input::UserInput;
-use crate::{datasets::storage::DatasetDb};
 
 use super::storage::DatasetDefinition;
 

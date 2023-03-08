@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::workflow::{Workflow, WorkflowId};
-use crate::contexts::{InMemoryDb};
+use crate::contexts::InMemoryDb;
 use crate::error;
 use crate::error::Result;
 use async_trait::async_trait;

@@ -1,12 +1,9 @@
 use crate::error::Result;
+use crate::projects::{OrderBy, ProjectFilter};
 use crate::projects::{Project, ProjectDb, ProjectId, ProjectVersion};
-use crate::{
-    projects::{OrderBy, ProjectFilter},
-};
 use async_trait::async_trait;
 
 use serde::{Deserialize, Serialize};
-
 
 use super::LoadVersion;
 

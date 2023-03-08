@@ -1,13 +1,7 @@
-
-
-
 use async_trait::async_trait;
 use futures::{stream, StreamExt};
 
-
-
 use snafu::ensure;
-
 
 use crate::error::{self, Error, Result};
 
@@ -18,23 +12,15 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::layers::storage::{
-    LayerDb, LayerProviderDb, LayerProviderListing,
-    LayerProviderListingOptions,
+    LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
 };
 use crate::pro::contexts::ProInMemoryDb;
 use crate::pro::permissions::{Permission, PermissionDb};
 
-
 use crate::util::user_input::Validated;
-
-
-
 
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::util::user_input::UserInput;
-
-
-
 
 #[async_trait]
 impl LayerDb for ProInMemoryDb {

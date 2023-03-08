@@ -2,13 +2,11 @@ use actix_web::{web, FromRequest, HttpResponse};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-
-
 use crate::error::Result;
 
 use crate::pro::contexts::ProContext;
-use crate::pro::permissions::{PermissionDb, RoleId, ResourceId};
-use crate::{pro::permissions::Permission};
+use crate::pro::permissions::Permission;
+use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -44,7 +42,7 @@ pub struct PermissionRequest {
     put,
     path = "/permissions",
     request_body(content = PermissionRequest, example =
-        json!({ 
+        json!({
             "resource_type": "Layer",
             "resource_id": "00000000-0000-0000-0000-000000000000",
             "role": "00000000-0000-0000-0000-000000000000",
@@ -66,7 +64,11 @@ async fn add_permissions_handler<C: ProContext>(
     let permission = permission.into_inner();
 
     ctx.pro_db(session)
-        .add_permission(permission.role, permission.resource_id, permission.permission)
+        .add_permission(
+            permission.role,
+            permission.resource_id,
+            permission.permission,
+        )
         .await?;
 
     Ok(HttpResponse::Ok().finish())

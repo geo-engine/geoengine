@@ -49,7 +49,6 @@ use geoengine_operators::{
 };
 use snafu::ResultExt;
 
-
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: Context,
