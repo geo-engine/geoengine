@@ -35,8 +35,8 @@ pub struct RasterScalingParams {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum ScalingMode {
-    CheckedMulThenAdd,
-    CheckedSubThenDiv,
+    MulSlopeAddOffset,
+    SubOffsetDivSlope,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -132,10 +132,10 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
         let scaling_mode = self.scaling_mode;
 
         let res = match scaling_mode {
-            ScalingMode::CheckedSubThenDiv => {
+            ScalingMode::SubOffsetDivSlope => {
                 call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedSubThenDivTransformation>(slope, offset,  source_proc)) })
             }
-            ScalingMode::CheckedMulThenAdd => {
+            ScalingMode::MulSlopeAddOffset => {
                 call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedMulThenAddTransformation>(slope, offset,  source_proc)) })
             }
         };
@@ -306,7 +306,7 @@ mod tests {
         }
         .boxed();
 
-        let scaling_mode = ScalingMode::CheckedMulThenAdd;
+        let scaling_mode = ScalingMode::MulSlopeAddOffset;
 
         let output_measurement = None;
 
@@ -411,7 +411,7 @@ mod tests {
         }
         .boxed();
 
-        let scaling_mode = ScalingMode::CheckedSubThenDiv;
+        let scaling_mode = ScalingMode::SubOffsetDivSlope;
 
         let output_measurement = None;
 
