@@ -234,7 +234,9 @@ pub struct ProInMemoryDbBackend {
 }
 
 pub struct ProInMemoryDb {
+    // TODO: limit visibility
     pub(crate) backend: Arc<ProInMemoryDbBackend>,
+    // TODO: limit visibility
     pub(crate) session: UserSession,
 }
 

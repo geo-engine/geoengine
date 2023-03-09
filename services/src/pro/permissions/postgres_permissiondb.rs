@@ -171,8 +171,28 @@ where
 
     async fn remove_permissions<R: Into<ResourceId> + Send + Sync>(
         &self,
-        _resource: R,
+        resource: R,
     ) -> Result<()> {
-        todo!()
+        let resource: ResourceId = resource.into();
+
+        ensure!(
+            self.has_permission(resource.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(&format!(
+                "
+            DELETE FROM permissions WHERE {resource_type} = $3;",
+                resource_type = resource.resource_type_name()
+            ))
+            .await?;
+
+        conn.execute(&stmt, &[&resource.uuid()?]).await?;
+
+        Ok(())
     }
 }

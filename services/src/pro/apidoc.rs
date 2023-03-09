@@ -118,7 +118,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::projects::delete_project_handler,
         pro::handlers::projects::load_project_version_handler,
         handlers::upload::upload_handler,
-        pro::handlers::permissions::add_permissions_handler
+        pro::handlers::permissions::add_permission_handler,
+        pro::handlers::permissions::remove_permission_handler
     ),
     components(
         schemas(

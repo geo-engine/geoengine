@@ -14,8 +14,11 @@ where
     C::Session: FromRequest,
 {
     cfg.service(
-        web::scope("/permissions")
-            .service(web::resource("").route(web::put().to(add_permissions_handler::<C>))), // .service(web::resource("").route(web::delete().to(remove_permission_handler::<C>))),
+        web::scope("/permissions").service(
+            web::resource("")
+                .route(web::put().to(add_permission_handler::<C>))
+                .route(web::delete().to(remove_permission_handler::<C>)),
+        ),
     );
 }
 
@@ -30,22 +33,25 @@ pub enum ResourceType {
 
 /// Request for adding a new permission to the given role on the given resource
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct PermissionRequest {
     resource_id: ResourceId,
-    role: RoleId,
+    role_id: RoleId,
     permission: Permission,
 }
 
-/// Registers a new Workflow.
+/// Adds a new permission.
 #[utoipa::path(
     tag = "Permissions",
     put,
     path = "/permissions",
     request_body(content = PermissionRequest, example =
         json!({
-            "resource_type": "Layer",
-            "resource_id": "00000000-0000-0000-0000-000000000000",
-            "role": "00000000-0000-0000-0000-000000000000",
+            "resourceId": {
+                "type": "Layer",
+                "id": "00000000-0000-0000-0000-000000000000",
+            },
+            "roleId": "00000000-0000-0000-0000-000000000000",
             "permission": "Read"
         })
     ),
@@ -56,7 +62,7 @@ pub struct PermissionRequest {
         ("session_token" = [])
     )
 )]
-async fn add_permissions_handler<C: ProContext>(
+async fn add_permission_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     permission: web::Json<PermissionRequest>,
@@ -65,7 +71,47 @@ async fn add_permissions_handler<C: ProContext>(
 
     ctx.pro_db(session)
         .add_permission(
-            permission.role,
+            permission.role_id,
+            permission.resource_id,
+            permission.permission,
+        )
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+/// Removes an existing permission.
+#[utoipa::path(
+    tag = "Permissions",
+    delete,
+    path = "/permissions",
+    request_body(content = PermissionRequest, example =
+        json!({
+            "resourceId": {
+                "type": "Layer",
+                "id": "00000000-0000-0000-0000-000000000000",
+            },
+            "roleId": "00000000-0000-0000-0000-000000000000",
+            "permission": "Read"
+        })
+    ),
+    responses(
+        (status = 200, description = "OK"),        
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn remove_permission_handler<C: ProContext>(
+    session: C::Session,
+    ctx: web::Data<C>,
+    permission: web::Json<PermissionRequest>,
+) -> Result<HttpResponse> {
+    let permission = permission.into_inner();
+
+    ctx.pro_db(session)
+        .remove_permission(
+            permission.role_id,
             permission.resource_id,
             permission.permission,
         )
