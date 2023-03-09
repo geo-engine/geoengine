@@ -143,7 +143,6 @@ pub trait PermissionDb {
 
     /// Remove all `permission` for `resource`.
     /// Requires `Owner` permission for `resource`.
-    // TODO: rename to delete_resource for consistency with create_resource?
     async fn remove_permissions<R: Into<ResourceId> + Send + Sync>(
         &self,
         resource: R,

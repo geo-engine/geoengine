@@ -1,7 +1,8 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 
+use crate::error;
 use crate::pro::contexts::PostgresDb;
-use crate::pro::permissions::{Permission, RoleId};
+use crate::pro::permissions::{Permission, PermissionDb, RoleId};
 
 use crate::{
     error::Result,
@@ -27,7 +28,7 @@ use bb8_postgres::tokio_postgres::{
     Socket,
 };
 
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
 use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
 
@@ -93,7 +94,11 @@ where
         layer: Validated<AddLayer>,
         collection: &LayerCollectionId,
     ) -> Result<LayerId> {
-        // TODO: check owner permission on collection
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
 
         let collection_id =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -170,7 +175,11 @@ where
         layer: Validated<AddLayer>,
         collection: &LayerCollectionId,
     ) -> Result<()> {
-        // TODO: check owner permission on collection
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
 
         let layer_id =
             Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -250,7 +259,11 @@ where
         layer: &LayerId,
         collection: &LayerCollectionId,
     ) -> Result<()> {
-        // TODO: check owner permission on collection
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
 
         let layer_id =
             Uuid::from_str(&layer.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -282,7 +295,11 @@ where
         collection: Validated<AddLayerCollection>,
         parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId> {
-        // TODO: check owner permission on parent
+        ensure!(
+            self.has_permission(parent.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
 
         let parent =
             Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -352,7 +369,11 @@ where
         collection: Validated<AddLayerCollection>,
         parent: &LayerCollectionId,
     ) -> Result<()> {
-        // TODO: check owner permission on parent
+        ensure!(
+            self.has_permission(parent.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
 
         let collection_id =
             Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -424,7 +445,11 @@ where
         collection: &LayerCollectionId,
         parent: &LayerCollectionId,
     ) -> Result<()> {
-        // TODO: check owner permission on parent
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
 
         let collection =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -452,7 +477,11 @@ where
     }
 
     async fn remove_layer_collection(&self, collection: &LayerCollectionId) -> Result<()> {
-        // TODO: check owner permission on collection
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
 
         let collection =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -491,7 +520,11 @@ where
         layer: &LayerId,
         collection: &LayerCollectionId,
     ) -> Result<()> {
-        // TODO: check owner permission on layer
+        ensure!(
+            self.has_permission(layer.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
 
         let collection_uuid =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -538,7 +571,11 @@ where
         collection: &LayerCollectionId,
         parent: &LayerCollectionId,
     ) -> Result<()> {
-        // TODO: check owner permission on collection
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
 
         let collection_uuid =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -591,14 +628,17 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    #[allow(clippy::too_many_lines)]
     async fn load_layer_collection(
         &self,
         collection_id: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
-        // TODO: check read permission on collection
-        // TODO: filter items in collection based on read/owner
-
+        ensure!(
+            self.has_permission(collection_id.clone(), Permission::Read)
+                .await?,
+            error::PermissionDenied
+        );
         let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
             crate::error::Error::IdStringMustBeUuid {
                 found: collection_id.0.clone(),
@@ -612,12 +652,16 @@ where
         let stmt = conn
             .prepare(
                 "
-        SELECT name, description
-        FROM layer_collections WHERE id = $1;",
+        SELECT DISTINCT name, description
+        FROM user_permitted_layer_collections p 
+            JOIN layer_collections c ON (p.layer_collection_id = c.id) 
+        WHERE p.user_id = $1 AND layer_collection_id = $2;",
             )
             .await?;
 
-        let row = conn.query_one(&stmt, &[&collection]).await?;
+        let row = conn
+            .query_one(&stmt, &[&self.session.user.id, &collection])
+            .await?;
 
         let name: String = row.get(0);
         let description: String = row.get(1);
@@ -625,23 +669,27 @@ where
         let stmt = conn
             .prepare(
                 "
-        SELECT id, name, description, is_layer
+        SELECT DISTINCT id, name, description, is_layer
         FROM (
             SELECT 
                 concat(id, '') AS id, 
                 name, 
                 description, 
                 FALSE AS is_layer
-            FROM layer_collections c JOIN collection_children cc ON (c.id = cc.child)
-            WHERE cc.parent = $1
+            FROM user_permitted_layer_collections u 
+                JOIN layer_collections lc ON (u.layer_collection_id = lc.id)
+                JOIN collection_children cc ON (layer_collection_id = cc.child)
+            WHERE u.user_id = $4 AND cc.parent = $1
         ) u UNION (
             SELECT 
                 concat(id, '') AS id, 
                 name, 
                 description, 
                 TRUE As is_layer
-            FROM layers l JOIN collection_layers cl ON (l.id = cl.layer)
-            WHERE cl.collection = $1
+            FROM user_permitted_layers ul
+                JOIN layers uc ON (ul.layer_id = uc.id) 
+                JOIN collection_layers cl ON (layer_id = cl.layer)
+            WHERE ul.user_id = $4 AND cl.collection = $1
         )
         ORDER BY is_layer ASC, name ASC
         LIMIT $2 
@@ -657,6 +705,7 @@ where
                     &collection,
                     &i64::from(options.limit),
                     &i64::from(options.offset),
+                    &self.session.user.id,
                 ],
             )
             .await?;
@@ -709,7 +758,10 @@ where
     }
 
     async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
-        // TODO: check read/owner permission on layer
+        ensure!(
+            self.has_permission(id.clone(), Permission::Read).await?,
+            error::PermissionDenied
+        );
 
         let layer_id =
             Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -763,7 +815,8 @@ where
         &self,
         provider: Box<dyn DataProviderDefinition>,
     ) -> Result<DataProviderId> {
-        // TODO: permissions
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn

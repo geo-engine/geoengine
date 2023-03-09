@@ -32,7 +32,6 @@ pub struct DatasetListing {
 
 #[derive(Debug, Serialize, Deserialize, Clone, IntoParams)]
 pub struct DatasetListOptions {
-    // TODO: permissions
     #[param(example = "Germany")]
     pub filter: Option<String>,
     #[param(example = "NameAsc")]

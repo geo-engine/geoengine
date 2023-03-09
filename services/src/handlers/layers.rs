@@ -278,8 +278,6 @@ async fn list_collection_handler<C: Context>(
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();
 
-    let _db = ctx.db(session.clone());
-
     if provider == ROOT_PROVIDER_ID && item == LayerCollectionId(ROOT_COLLECTION_ID.to_string()) {
         let collection = get_layer_providers(session.clone(), options, ctx).await?;
         return Ok(web::Json(collection));

@@ -103,10 +103,6 @@ impl PermissionDb for ProInMemoryDb {
 
         let resource: ResourceId = resource.into();
 
-        // dbg!(&backend.permissions);
-        // dbg!(&self.session);
-        // dbg!(&resource, &permission);
-
         Ok(backend.permissions.iter().any(|p| {
             self.session.roles.iter().any(|r| r == &p.role)
                 && p.resource == resource
@@ -122,8 +118,6 @@ impl PermissionDb for ProInMemoryDb {
     ) -> Result<()> {
         let resource: ResourceId = resource.into();
 
-        // TODO: if the resource does not exist yet, the user has to become the initial owner, or: set the owner
-        // either check here that the resource is new, or create a new separate register resource method
         ensure!(
             self.has_permission(resource.clone(), Permission::Owner)
                 .await?,

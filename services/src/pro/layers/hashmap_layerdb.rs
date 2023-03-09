@@ -168,12 +168,6 @@ impl LayerDb for ProInMemoryDb {
         parent: &LayerCollectionId,
     ) -> Result<()> {
         ensure!(
-            self.has_permission(parent.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
-        ensure!(
             self.has_permission(collection.clone(), Permission::Owner)
                 .await?,
             error::PermissionDenied
@@ -197,12 +191,6 @@ impl LayerDb for ProInMemoryDb {
     ) -> Result<()> {
         ensure!(
             self.has_permission(layer_id.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
-        ensure!(
-            self.has_permission(collection_id.clone(), Permission::Owner)
                 .await?,
             error::PermissionDenied
         );
@@ -297,6 +285,8 @@ impl LayerProviderDb for ProInMemoryDb {
         &self,
         provider: Box<dyn DataProviderDefinition>,
     ) -> Result<DataProviderId> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
         let id = provider.id();
 
         self.backend

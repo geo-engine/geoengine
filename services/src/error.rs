@@ -181,6 +181,7 @@ pub enum Error {
         permission: String,
     },
 
+    // TODO: move to pro folder, because permissions are pro only
     PermissionDenied,
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]

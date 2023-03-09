@@ -11,7 +11,7 @@ use crate::pro::contexts::PostgresDb;
 
 use super::{Permission, PermissionDb, ResourceId, RoleId};
 
-// TODO: a postgres specific permission db implementation that allows re-using connections and transaction
+// TODO: a postgres specific permission db trait that allows re-using connections and transactions
 
 trait ResourceTypeName {
     fn resource_type_name(&self) -> &'static str;

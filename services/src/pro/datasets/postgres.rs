@@ -539,6 +539,8 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn load_upload(&self, upload: UploadId) -> Result<Upload> {
+        // TODO: check permissions
+
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
@@ -596,18 +598,10 @@ where
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
-        ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
         let conn = self.conn_pool.get().await?;
 
         let options = options.user_input;
 
-        // TODO: only list datasets that are accessible to the user as layer
-        // for now they are listed, but cannot be accessed
         let stmt = conn
             .prepare(
                 "
@@ -616,17 +610,24 @@ where
                     d.name, 
                     d.description
                 FROM 
-                    datasets d
+                    user_permitted_datasets p JOIN datasets d 
+                        ON (p.dataset_id = d.id)
+                WHERE 
+                    p.user_id = $1
                 ORDER BY d.name ASC
-                LIMIT $1
-                OFFSET $2;",
+                LIMIT $2
+                OFFSET $3;",
             )
             .await?;
 
         let rows = conn
             .query(
                 &stmt,
-                &[&i64::from(options.limit), &i64::from(options.offset)],
+                &[
+                    &self.session.user.id,
+                    &i64::from(options.limit),
+                    &i64::from(options.offset),
+                ],
             )
             .await?;
 
@@ -667,7 +668,7 @@ where
         let dataset_id = DatasetId::from_str(&id.0)?;
 
         ensure!(
-            self.has_permission(dataset_id, Permission::Owner).await?,
+            self.has_permission(dataset_id, Permission::Read).await?,
             error::PermissionDenied
         );
 

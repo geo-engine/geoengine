@@ -112,7 +112,7 @@ impl ProInMemoryContext {
         let db = ProInMemoryDb::new(db_backend.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
 
-        let ctx = Self {
+        Self {
             db: db_backend,
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -120,11 +120,7 @@ impl ProInMemoryContext {
             query_ctx_chunk_size,
             oidc_request_db: Arc::new(None),
             quota,
-        };
-
-        let _quota = initialize_quota_tracking(ctx.db(UserSession::admin_session()));
-
-        ctx
+        }
     }
 
     pub fn new_with_oidc(oidc_db: OidcRequestDb) -> Self {

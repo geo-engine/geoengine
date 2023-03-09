@@ -439,12 +439,6 @@ where
                             active boolean NOT NULL
                         );
 
-
-
-                        -- CREATE TYPE "ResourceType" AS ENUM (
-                        --     'layer', 'layer collection'
-                        -- );
-
                         CREATE TABLE permissions (
                             -- resource_type "ResourceType" NOT NULL,
                             role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
@@ -483,6 +477,33 @@ where
                                 p.permission
                             FROM 
                                 user_roles r JOIN permissions p ON (r.role_id = p.role_id AND project_id IS NOT NULL); 
+
+                        CREATE VIEW user_permitted_layer_collections AS
+                            SELECT 
+                                r.user_id,
+                                p.layer_collection_id,
+                                p.permission
+                            FROM 
+                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_collection_id IS NOT NULL); 
+
+                        CREATE VIEW user_permitted_layers AS
+                            SELECT 
+                                r.user_id,
+                                p.layer_id,
+                                p.permission
+                            FROM 
+                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_id IS NOT NULL); 
+
+                        --- permission for unsorted layers and root layer collection
+                        INSERT INTO permissions
+                            (role_id, layer_collection_id, permission)  
+                        VALUES 
+                            ('{admin_role_id}', '{root_layer_collection_id}', 'Owner'),
+                            ('{admin_role_id}', '{unsorted_layer_collection_id}', 'Owner'),
+                            ('{user_role_id}', '{root_layer_collection_id}', 'Read'),
+                            ('{user_role_id}', '{unsorted_layer_collection_id}', 'Read'),
+                            ('{anonymous_role_id}', '{root_layer_collection_id}', 'Read'),
+                            ('{anonymous_role_id}', '{unsorted_layer_collection_id}', 'Read');
                         "#
                     ,
                     admin_role_id = Role::admin_role_id(),

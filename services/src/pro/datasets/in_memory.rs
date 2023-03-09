@@ -342,11 +342,15 @@ impl
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?
             .into();
 
-        // TODO: how to use ensure with error from geoengine_operators?
-        // ensure!(
-        //     self.has_permission(*id, Permission::Read).await?,
-        //     error::PermissionDenied
-        // );
+        if !self
+            .has_permission(id, Permission::Read)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+        {
+            return Err(geoengine_operators::error::Error::PermissionDenied);
+        };
 
         let backend = self.backend.dataset_db.read().await;
 

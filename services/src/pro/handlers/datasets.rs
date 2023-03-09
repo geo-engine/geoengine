@@ -45,10 +45,7 @@ where
     )
     .service(
         web::scope("/dataset")
-            .service(web::resource("").route(web::get().to(list_datasets_handler::<C>))), // .service(
-                                                                                          //     web::resource("permissions")
-                                                                                          //         .route(web::put().to(add_dataset_permission_handler::<C>)),
-                                                                                          // ),
+            .service(web::resource("").route(web::get().to(list_datasets_handler::<C>))),
     );
 }
 

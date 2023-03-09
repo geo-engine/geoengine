@@ -242,9 +242,6 @@ impl DatasetProvider for InMemoryDb {
         &self,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
-        // TODO: permissions
-
-        // TODO: include datasets from external dataset providers
         let options = options.user_input;
 
         let backend = self.backend.dataset_db.read().await;
@@ -275,8 +272,6 @@ impl DatasetProvider for InMemoryDb {
     }
 
     async fn load_dataset(&self, dataset: &DatasetId) -> Result<Dataset> {
-        // TODO: permissions
-
         self.backend
             .dataset_db
             .read()
@@ -289,8 +284,6 @@ impl DatasetProvider for InMemoryDb {
     }
 
     async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        // TODO: permissions
-
         self.backend
             .dataset_db
             .read()
