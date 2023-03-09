@@ -42,14 +42,14 @@ pub enum ScalingMode {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase", tag = "type")]
 enum PropertiesKeyOrValue {
-    DeriveFromData,
+    Auto,
     MetadataKey(RasterPropertiesKey),
     Constant { value: f64 },
 }
 
 impl Default for PropertiesKeyOrValue {
     fn default() -> Self {
-        Self::DeriveFromData
+        Self::Auto
     }
 }
 
@@ -197,13 +197,13 @@ where
         let offset = match &self.offset {
             PropertiesKeyOrValue::MetadataKey(key) => tile.properties.number_property::<P>(key)?,
             PropertiesKeyOrValue::Constant { value } => value.as_(),
-            PropertiesKeyOrValue::DeriveFromData => tile.properties.offset().as_(),
+            PropertiesKeyOrValue::Auto => tile.properties.offset().as_(),
         };
 
         let slope = match &self.slope {
             PropertiesKeyOrValue::MetadataKey(key) => tile.properties.number_property::<P>(key)?,
             PropertiesKeyOrValue::Constant { value } => value.as_(),
-            PropertiesKeyOrValue::DeriveFromData => tile.properties.scale().as_(),
+            PropertiesKeyOrValue::Auto => tile.properties.scale().as_(),
         };
 
         let res_tile =
@@ -312,8 +312,8 @@ mod tests {
 
         let op = RasterScaling {
             params: RasterScalingParams {
-                slope: PropertiesKeyOrValue::DeriveFromData,
-                offset: PropertiesKeyOrValue::DeriveFromData,
+                slope: PropertiesKeyOrValue::Auto,
+                offset: PropertiesKeyOrValue::Auto,
                 output_measurement,
                 scaling_mode,
             },
@@ -416,8 +416,8 @@ mod tests {
         let output_measurement = None;
 
         let params = RasterScalingParams {
-            slope: PropertiesKeyOrValue::DeriveFromData,
-            offset: PropertiesKeyOrValue::DeriveFromData,
+            slope: PropertiesKeyOrValue::Auto,
+            offset: PropertiesKeyOrValue::Auto,
             output_measurement,
             scaling_mode,
         };
