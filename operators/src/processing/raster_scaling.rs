@@ -26,8 +26,8 @@ use tracing::{span, Level};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterScalingParams {
-    slope: PropertiesKeyOrValue,
-    offset: PropertiesKeyOrValue,
+    slope: ScaleOffsetSelection,
+    offset: ScaleOffsetSelection,
     output_measurement: Option<Measurement>,
     scaling_mode: ScalingMode,
 }
@@ -41,13 +41,13 @@ pub enum ScalingMode {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase", tag = "type")]
-enum PropertiesKeyOrValue {
+enum ScaleOffsetSelection {
     Auto,
     MetadataKey(RasterPropertiesKey),
     Constant { value: f64 },
 }
 
-impl Default for PropertiesKeyOrValue {
+impl Default for ScaleOffsetSelection {
     fn default() -> Self {
         Self::Auto
     }
@@ -77,8 +77,8 @@ impl OperatorName for RasterScaling {
 }
 
 pub struct InitializedRasterScalingOperator {
-    slope: PropertiesKeyOrValue,
-    offset: PropertiesKeyOrValue,
+    slope: ScaleOffsetSelection,
+    offset: ScaleOffsetSelection,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     scaling_mode: ScalingMode,
@@ -149,14 +149,14 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
-    slope: PropertiesKeyOrValue,
-    offset: PropertiesKeyOrValue,
+    slope: ScaleOffsetSelection,
+    offset: ScaleOffsetSelection,
     _transformation: PhantomData<S>,
 }
 
 fn create_boxed_processor<Q, P, S>(
-    slope: PropertiesKeyOrValue,
-    offset: PropertiesKeyOrValue,
+    slope: ScaleOffsetSelection,
+    offset: ScaleOffsetSelection,
     source: Q,
 ) -> Box<dyn RasterQueryProcessor<RasterType = P>>
 where
@@ -176,8 +176,8 @@ where
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
     pub fn create(
-        slope: PropertiesKeyOrValue,
-        offset: PropertiesKeyOrValue,
+        slope: ScaleOffsetSelection,
+        offset: ScaleOffsetSelection,
         source: Q,
     ) -> RasterTransformationProcessor<Q, P, S> {
         RasterTransformationProcessor {
@@ -195,15 +195,15 @@ where
     ) -> Result<RasterTile2D<P>> {
         // either use the provided metadata/constant or the default values from the properties
         let offset = match &self.offset {
-            PropertiesKeyOrValue::MetadataKey(key) => tile.properties.number_property::<P>(key)?,
-            PropertiesKeyOrValue::Constant { value } => value.as_(),
-            PropertiesKeyOrValue::Auto => tile.properties.offset().as_(),
+            ScaleOffsetSelection::MetadataKey(key) => tile.properties.number_property::<P>(key)?,
+            ScaleOffsetSelection::Constant { value } => value.as_(),
+            ScaleOffsetSelection::Auto => tile.properties.offset().as_(),
         };
 
         let slope = match &self.slope {
-            PropertiesKeyOrValue::MetadataKey(key) => tile.properties.number_property::<P>(key)?,
-            PropertiesKeyOrValue::Constant { value } => value.as_(),
-            PropertiesKeyOrValue::Auto => tile.properties.scale().as_(),
+            ScaleOffsetSelection::MetadataKey(key) => tile.properties.number_property::<P>(key)?,
+            ScaleOffsetSelection::Constant { value } => value.as_(),
+            ScaleOffsetSelection::Auto => tile.properties.scale().as_(),
         };
 
         let res_tile =
@@ -312,8 +312,8 @@ mod tests {
 
         let op = RasterScaling {
             params: RasterScalingParams {
-                slope: PropertiesKeyOrValue::Auto,
-                offset: PropertiesKeyOrValue::Auto,
+                slope: ScaleOffsetSelection::Auto,
+                offset: ScaleOffsetSelection::Auto,
                 output_measurement,
                 scaling_mode,
             },
@@ -416,8 +416,8 @@ mod tests {
         let output_measurement = None;
 
         let params = RasterScalingParams {
-            slope: PropertiesKeyOrValue::Auto,
-            offset: PropertiesKeyOrValue::Auto,
+            slope: ScaleOffsetSelection::Auto,
+            offset: ScaleOffsetSelection::Auto,
             output_measurement,
             scaling_mode,
         };
