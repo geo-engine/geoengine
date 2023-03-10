@@ -287,18 +287,18 @@ impl NFDIDataProvider {
     async fn get_metadata(&self, aruna_dataset_ids: &ArunaDatasetIds) -> Result<GEMetadata> {
         let mut object_stub = self.object_stub.clone();
 
-        let get_download_url_response = object_stub
+        let download_url = object_stub
             .get_download_url(GetDownloadUrlRequest {
                 collection_id: aruna_dataset_ids.collection_id.clone(),
                 object_id: aruna_dataset_ids.meta_object_id.clone(),
             })
             .await?
-            .into_inner();
+            .into_inner()
+            .url
+            .ok_or(NFDIProviderError::MissingURL)?
+            .url;
 
-        let data_get_response = reqwest::Client::new()
-            .get(get_download_url_response.url.unwrap().url)
-            .send()
-            .await?;
+        let data_get_response = reqwest::Client::new().get(download_url).send().await?;
 
         return if let reqwest::StatusCode::OK = data_get_response.status() {
             let json = data_get_response.json::<GEMetadata>().await?;
@@ -1156,11 +1156,11 @@ mod tests {
             status: 0,
             origin: None,
             data_class: 0,
-            hash: None,
             rev_number: 0,
             source: None,
             latest: true,
             auto_update: false,
+            hashes: vec![],
         }
     }
 
@@ -1259,6 +1259,7 @@ mod tests {
                     object: Some(ObjectWithUrl {
                         object: Some(create_object(i.id, i.filename)),
                         url,
+                        paths: vec![],
                     }),
                 },
             );

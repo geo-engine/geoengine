@@ -30,7 +30,7 @@ actix-rt = "2.6"
 actix-web = "4.2"
 actix-web-actors = "4.2"
 actix-web-httpauth = "0.8"
-aruna-rust-api = { version = "0.5.0", optional = true }
+aruna-rust-api = { version = "1.0.0-rc.6", optional = true }
 async-trait = "0.1"
 base64 = "0.21"
 bb8-postgres = { version = "0.8", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"], optional = true }
