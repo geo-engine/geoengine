@@ -578,7 +578,9 @@ async fn layer_to_dataset<C: Context>(
     let db = ctx.db(session.clone());
 
     let layer = match provider {
-        crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID => db.load_layer(&item).await?,
+        crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID => {
+            db.load_dataset_layer(&item).await?
+        }
         crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item).await?,
         _ => {
             db.load_layer_provider(provider)

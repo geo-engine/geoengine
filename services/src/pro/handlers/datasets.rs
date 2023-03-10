@@ -108,8 +108,6 @@ async fn create_system_dataset<C: ProContext>(
     let db = ctx.pro_db(session);
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
-    let _system_session = C::Session::admin_session();
-
     let dataset_id = db
         .add_dataset(definition.properties.validated()?, meta_data)
         .await?;

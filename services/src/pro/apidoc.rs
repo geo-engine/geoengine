@@ -56,7 +56,7 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
 use super::handlers::permissions::{PermissionRequest, ResourceType};
-use super::permissions::{Permission, RoleId};
+use super::permissions::{Permission, ResourceId, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 
 #[derive(OpenApi)]
@@ -323,6 +323,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
 
             PermissionRequest,
             ResourceType,
+            ResourceId,
             Permission
         ),
     ),

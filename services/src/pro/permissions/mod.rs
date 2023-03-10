@@ -77,8 +77,8 @@ impl Permission {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
-#[serde(tag = "type")]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, ToSchema)]
+#[serde(tag = "type", content = "id")]
 pub enum ResourceId {
     Layer(LayerId),                     // TODO: UUID?
     LayerCollection(LayerCollectionId), // TODO: UUID?
