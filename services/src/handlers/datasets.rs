@@ -262,6 +262,7 @@ impl<C: Context> FromRequest for AdminOrSession<C> {
 
 #[derive(Debug, Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum CreateDatasetError {
     UploadNotFound { source: error::Error },
     OnlyAdminsCanCreateDatasetFromVolume,
@@ -466,10 +467,10 @@ pub async fn create_user_dataset<C: Context>(
         .dataset_db_ref()
         .get_upload(&session, upload_id)
         .await
-        .context(UploadNotFoundSnafu)?;
+        .context(UploadNotFound)?;
 
     adjust_meta_data_path(&mut definition.meta_data, &upload)
-        .context(CannotResolveUploadFilePathSnafu)?;
+        .context(CannotResolveUploadFilePath)?;
 
     let db = ctx.dataset_db_ref();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
@@ -479,11 +480,11 @@ pub async fn create_user_dataset<C: Context>(
             definition
                 .properties
                 .validated()
-                .context(JsonValidationFailedSnafu)?,
+                .context(JsonValidationFailed)?,
             meta_data,
         )
         .await
-        .context(FailedToWriteToDatabaseSnafu)?;
+        .context(FailedToWriteToDatabase)?;
 
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -497,7 +498,7 @@ where
     C::Session: MockableSession,
 {
     let volumes = get_config_element::<Data>()
-        .context(CannotAccessConfigSnafu)?
+        .context(CannotAccessConfig)?
         .volumes;
     let volume_path = volumes
         .get(&volume_name)
@@ -508,7 +509,7 @@ where
     };
 
     adjust_meta_data_path(&mut definition.meta_data, &volume)
-        .context(CannotResolveUploadFilePathSnafu)?;
+        .context(CannotResolveUploadFilePath)?;
 
     let db = ctx.dataset_db_ref();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
@@ -519,11 +520,11 @@ where
             definition
                 .properties
                 .validated()
-                .context(JsonValidationFailedSnafu)?,
+                .context(JsonValidationFailed)?,
             meta_data,
         )
         .await
-        .context(FailedToWriteToDatabaseSnafu)?;
+        .context(FailedToWriteToDatabase)?;
 
     Ok(web::Json(IdResponse::from(id)))
 }

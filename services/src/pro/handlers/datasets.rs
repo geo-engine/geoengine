@@ -96,7 +96,7 @@ async fn create_system_dataset<C: ProContext>(
     mut definition: DatasetDefinition,
 ) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
     let volumes = get_config_element::<Data>()
-        .context(datasets::CannotAccessConfigSnafu)?
+        .context(datasets::CannotAccessConfig)?
         .volumes;
     let volume_path = volumes
         .get(&volume_name)
@@ -107,7 +107,7 @@ async fn create_system_dataset<C: ProContext>(
     };
 
     adjust_meta_data_path(&mut definition.meta_data, &volume)
-        .context(datasets::CannotResolveUploadFilePathSnafu)?;
+        .context(datasets::CannotResolveUploadFilePath)?;
 
     let dataset_db = ctx.pro_dataset_db_ref();
     let meta_data = dataset_db.wrap_meta_data(definition.meta_data.into());
@@ -120,11 +120,11 @@ async fn create_system_dataset<C: ProContext>(
             definition
                 .properties
                 .validated()
-                .context(datasets::JsonValidationFailedSnafu)?,
+                .context(datasets::JsonValidationFailed)?,
             meta_data,
         )
         .await
-        .context(datasets::FailedToWriteToDatabaseSnafu)?;
+        .context(datasets::FailedToWriteToDatabase)?;
 
     dataset_db
         .add_dataset_permission(
@@ -136,7 +136,7 @@ async fn create_system_dataset<C: ProContext>(
             },
         )
         .await
-        .context(datasets::FailedToWriteToDatabaseSnafu)?;
+        .context(datasets::FailedToWriteToDatabase)?;
 
     dataset_db
         .add_dataset_permission(
@@ -148,7 +148,7 @@ async fn create_system_dataset<C: ProContext>(
             },
         )
         .await
-        .context(datasets::FailedToWriteToDatabaseSnafu)?;
+        .context(datasets::FailedToWriteToDatabase)?;
 
     Ok(web::Json(IdResponse::from(dataset_id)))
 }
