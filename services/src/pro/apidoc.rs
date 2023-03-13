@@ -371,3 +371,31 @@ impl Modify for ApiDocInfo {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pro::contexts::{ProContext, ProInMemoryContext};
+    use crate::pro::users::UserDb;
+    use crate::pro::util::tests::send_pro_test_request;
+    use geoengine_datatypes::util::test::TestDefault;
+
+    #[test]
+    fn can_resolve_api() {
+        crate::api::can_resolve_api(ApiDoc::openapi());
+    }
+
+    #[tokio::test]
+    async fn can_run_examples() {
+        crate::api::can_run_examples(
+            ApiDoc::openapi(),
+            move || async move {
+                let ctx = ProInMemoryContext::test_default();
+                let session_id = ctx.user_db_ref().anonymous().await.unwrap().id;
+                (ctx, session_id)
+            },
+            send_pro_test_request,
+        )
+        .await;
+    }
+}

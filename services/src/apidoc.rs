@@ -353,9 +353,26 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::util::tests::send_test_request;
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
-    fn find_missing_schemata() {
-        crate::api::find_missing_schemata(ApiDoc::openapi());
+    fn can_resolve_api() {
+        crate::api::can_resolve_api(ApiDoc::openapi());
+    }
+
+    #[tokio::test]
+    async fn can_run_examples() {
+        crate::api::can_run_examples(
+            ApiDoc::openapi(),
+            move || async move {
+                let ctx = InMemoryContext::test_default();
+                let session_id = ctx.default_session_ref().await.id();
+                (ctx, session_id)
+            },
+            send_test_request,
+        )
+        .await;
     }
 }
