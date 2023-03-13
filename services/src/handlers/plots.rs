@@ -226,7 +226,7 @@ mod tests {
     };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::plot::{
-        Histogram, HistogramBounds, HistogramParams, Statistics, StatisticsParams,
+        Histogram, HistogramBounds, HistogramBuckets, HistogramParams, Statistics, StatisticsParams,
     };
     use serde_json::{json, Value};
 
@@ -336,7 +336,7 @@ mod tests {
                         min: 0.0,
                         max: 10.0,
                     },
-                    buckets: Some(4),
+                    buckets: HistogramBuckets::Number { value: 4 },
                     interactive: false,
                 },
                 sources: example_raster_source().into(),
