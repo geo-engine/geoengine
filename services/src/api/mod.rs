@@ -4,22 +4,23 @@ use actix_web::dev::ServiceResponse;
 use actix_web::http::{header, Method};
 use actix_web::test::TestRequest;
 use actix_web_httpauth::headers::authorization::Bearer;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
-use opentelemetry::sdk::metrics::registry::unique_instrument_meter_core;
-use utoipa::openapi::path::Parameter;
-use utoipa::openapi::{KnownFormat, OpenApi, PathItemType, Ref, RefOr, Schema, SchemaFormat, SchemaType};
+use utoipa::openapi::path::{Parameter, ParameterIn};
+use utoipa::openapi::{
+    KnownFormat, OpenApi, PathItemType, Ref, RefOr, Schema, SchemaFormat, SchemaType,
+};
 use uuid::Uuid;
 
 pub mod model;
 
-fn get_schema_name_from_ref(reference: Ref) -> &str {
+fn get_schema_name_from_ref(reference: &Ref) -> &str {
     &reference.ref_location[21..]
 }
 
-fn throw_if_invalid_ref(reference: Ref, schemas: &BTreeMap<String, RefOr<Schema>>) {
+fn throw_if_invalid_ref(reference: &Ref, schemas: &BTreeMap<String, RefOr<Schema>>) {
     assert!(
-        schemas.contains_key(get_schema_name_from_ref(reference)),
+        schemas.contains_key(get_schema_name_from_ref(&reference)),
         "Referenced the unknown schema `{}`",
         reference.ref_location
     );
@@ -97,9 +98,10 @@ pub fn can_resolve_api(api: OpenApi) {
 
 pub struct RunnableExample<'a, C, F, Fut>
 where
-    F: Fn(actix_web::test::TestRequest, C) -> Fut,
+    F: Fn(TestRequest, C) -> Fut,
     Fut: Future<Output = ServiceResponse>,
 {
+    pub schemas: &'a BTreeMap<String, RefOr<Schema>>,
     pub http_method: &'a PathItemType,
     pub uri: &'a str,
     pub parameters: &'a Option<Vec<Parameter>>,
@@ -131,58 +133,93 @@ where
 
     fn get_default_parameter_value(schema: &Schema) -> String {
         match schema {
-            Schema::Object(obj) => {
-                match obj.schema_type {
-                    SchemaType::String => {
-                        match obj.format {
-                            Some(SchemaFormat::KnownFormat(format)) => {
-                                match format {
-                                    KnownFormat::Uuid => Uuid::new_v4().to_string(),
-                                    _ => unimplemented!()
-                                }
-                            },
-                            None => "asdf".to_string(),
-                            _ => unimplemented!()
-                        }
-                    }
-                    SchemaType::Integer | SchemaType::Number => "42".to_string(),
-                    SchemaType::Boolean => "false".to_string,
-                    _ => unimplemented!()
-                }
-            }
-            _ => unimplemented!()
+            Schema::Object(obj) => match obj.schema_type {
+                SchemaType::String => match &obj.format {
+                    Some(SchemaFormat::KnownFormat(format)) => match format {
+                        KnownFormat::Uuid => Uuid::new_v4().to_string(),
+                        _ => unimplemented!(),
+                    },
+                    None => "asdf".to_string(),
+                    _ => unimplemented!(),
+                },
+                SchemaType::Integer | SchemaType::Number => "42".to_string(),
+                SchemaType::Boolean => "false".to_string(),
+                _ => unimplemented!(),
+            },
+            _ => unimplemented!(),
         }
     }
 
-    fn resolve_schema(ref_or: RefOr<Schema>, schemas: &BTreeMap<String, RefOr<Schema>>) -> &Schema {
+    fn resolve_schema(&'a self, ref_or: &'a RefOr<Schema>) -> &Schema {
         match ref_or {
             RefOr::Ref(reference) => {
-                let schema_name = get_schema_name_from_ref(reference);
-                match schemas.get(schema_name).expect("presence of schema is checked in other test") {
-                    RefOr::Ref(_) => panic!("recursive refs are not supported for parameters"),
-                    RefOr::T(concrete) => concrete,
-                }
+                throw_if_invalid_ref(reference, self.schemas);
+                let schema_name = get_schema_name_from_ref(&reference);
+                self.resolve_schema(self.schemas.get(schema_name).expect("checked before"))
             }
-            RefOr::T(concrete) => &concrete
+            RefOr::T(concrete) => concrete,
         }
     }
 
-    fn insert_parameters(uri: &str, parameters: &Vec<Parameter>, schemas: &BTreeMap<String, RefOr<Schema>>, req: &mut TestRequest) {
+    fn insert_parameters(&self, parameters: &Vec<Parameter>) -> TestRequest {
+        let mut req = TestRequest::default();
+        let mut uri = self.uri.to_string();
+        let mut query_params = HashMap::new();
+        let mut cookies = HashMap::new();
+
         for parameter in parameters {
-            let schema = Self::resolve_schema(parameter.schema.expect("utoipa adds schema everytime"));
+            let schema = self.resolve_schema(
+                parameter
+                    .schema
+                    .as_ref()
+                    .expect("utoipa adds schema everytime"),
+            );
             let value = Self::get_default_parameter_value(schema);
+
+            match parameter.parameter_in {
+                ParameterIn::Query => {
+                    query_params.insert(parameter.name.as_str(), value);
+                }
+                ParameterIn::Path => {
+                    uri = uri.replace(&format!("{{{}}}", parameter.name), value.as_str());
+                }
+                ParameterIn::Header => {
+                    req = req.append_header((parameter.name.as_str(), value));
+                }
+                ParameterIn::Cookie => {
+                    cookies.insert(parameter.name.as_str(), value);
+                }
+            }
         }
+        if cookies.len() > 0 {
+            req = req.append_header((
+                header::COOKIE,
+                serde_urlencoded::to_string(cookies)
+                    .unwrap()
+                    .replace("&", "; "),
+            ))
+        }
+        if query_params.len() > 0 {
+            uri = format!(
+                "{}?{}",
+                uri,
+                serde_urlencoded::to_string(query_params).unwrap()
+            );
+        }
+        req.uri(uri.as_str())
     }
 
     pub fn build_request(&self) -> TestRequest {
         let http_method = self.get_actix_http_method();
-        let mut req = TestRequest::default().method(http_method);
+        let mut req;
 
         if let Some(parameters) = self.parameters {
-            Self::insert_parameters(self.uri, parameters, &mut req);
+            req = self.insert_parameters(parameters);
         } else {
-            req = req.uri(self.uri);
+            req = TestRequest::default().uri(self.uri);
         }
+        req = req.method(http_method);
+
         if self.with_auth {
             req = req.append_header((
                 header::AUTHORIZATION,
@@ -216,13 +253,21 @@ where
     }
 }
 
-pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(api: OpenApi, ctx: F1, send_test_request: F2)
-where
+pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
+    api: OpenApi,
+    ctx_creator: F1,
+    send_test_request: F2,
+) where
     F1: Fn() -> Fut1,
     Fut1: Future<Output = (C, SessionId)>,
-    F2: Fn(actix_web::test::TestRequest, C) -> Fut2,
+    F2: Fn(TestRequest, C) -> Fut2,
     Fut2: Future<Output = ServiceResponse>,
 {
+    let schemas = api
+        .components
+        .expect("api has at least one component")
+        .schemas;
+
     for (uri, path_item) in api.paths.paths {
         for (http_method, operation) in path_item.operations {
             if let Some(request_body) = operation.request_body {
@@ -230,8 +275,9 @@ where
 
                 for content in request_body.content.into_values() {
                     if let Some(example) = content.example {
-                        let (ctx, session_id) = ctx().await;
+                        let (ctx, session_id) = ctx_creator().await;
                         RunnableExample {
+                            schemas: &schemas,
                             http_method: &http_method,
                             uri: uri.as_str(),
                             parameters: &operation.parameters,
@@ -251,8 +297,9 @@ where
                                 }
                                 RefOr::T(concrete) => {
                                     if let Some(body) = concrete.value {
-                                        let (ctx, session_id) = ctx().await;
+                                        let (ctx, session_id) = ctx_creator().await;
                                         RunnableExample {
+                                            schemas: &schemas,
                                             http_method: &http_method,
                                             uri: uri.as_str(),
                                             parameters: &operation.parameters,
