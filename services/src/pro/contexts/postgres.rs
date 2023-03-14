@@ -2987,4 +2987,169 @@ mod tests {
         })
         .await;
     }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_restricts_layer_permissions() {
+        with_temp_context(|ctx, _| async move {
+            let admin_session = admin_login(&ctx).await;
+            let session1 = ctx.create_anonymous_session().await.unwrap();
+
+            let admin_db = ctx.db(admin_session.clone());
+            let db1 = ctx.db(session1.clone());
+
+            let root = admin_db.get_root_layer_collection_id().await.unwrap();
+
+            // add new collection as admin
+            let new_collection_id = admin_db
+                .add_layer_collection(
+                    AddLayerCollection {
+                        name: "admin collection".to_string(),
+                        description: String::new(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &root,
+                )
+                .await
+                .unwrap();
+
+            // load as regular user, not visible
+            let collection = db1
+                .load_layer_collection(
+                    &root,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert!(!collection.items.iter().any(|c| match c {
+                CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
+                CollectionItem::Layer(_) => false,
+            }));
+
+            // give user read permission
+            admin_db
+                .add_permission(
+                    session1.user.id.into(),
+                    new_collection_id.clone(),
+                    Permission::Read,
+                )
+                .await
+                .unwrap();
+
+            // now visible
+            let collection = db1
+                .load_layer_collection(
+                    &root,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert!(collection.items.iter().any(|c| match c {
+                CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
+                CollectionItem::Layer(_) => false,
+            }));
+
+            // add new layer in the collection as user, fails because only read permission
+            let result = db1
+                .add_layer_collection(
+                    AddLayerCollection {
+                        name: "user layer".to_string(),
+                        description: String::new(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &new_collection_id,
+                )
+                .await;
+
+            assert!(result.is_err());
+
+            // give user owner permission
+            admin_db
+                .add_permission(
+                    session1.user.id.into(),
+                    new_collection_id.clone(),
+                    Permission::Owner,
+                )
+                .await
+                .unwrap();
+
+            // add now works
+            db1.add_layer_collection(
+                AddLayerCollection {
+                    name: "user layer".to_string(),
+                    description: String::new(),
+                }
+                .validated()
+                .unwrap(),
+                &new_collection_id,
+            )
+            .await
+            .unwrap();
+
+            // remove permissions again
+            admin_db
+                .remove_permission(
+                    session1.user.id.into(),
+                    new_collection_id.clone(),
+                    Permission::Read,
+                )
+                .await
+                .unwrap();
+            admin_db
+                .remove_permission(
+                    session1.user.id.into(),
+                    new_collection_id.clone(),
+                    Permission::Owner,
+                )
+                .await
+                .unwrap();
+
+            // access is gone now
+            let result = db1
+                .add_layer_collection(
+                    AddLayerCollection {
+                        name: "user layer".to_string(),
+                        description: String::new(),
+                    }
+                    .validated()
+                    .unwrap(),
+                    &root,
+                )
+                .await;
+
+            assert!(result.is_err());
+
+            let collection = db1
+                .load_layer_collection(
+                    &root,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 10,
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert!(!collection.items.iter().any(|c| match c {
+                CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
+                CollectionItem::Layer(_) => false,
+            }));
+        })
+        .await;
+    }
 }
