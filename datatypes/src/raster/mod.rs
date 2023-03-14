@@ -36,8 +36,8 @@ pub use no_data_value_grid::{
     NoDataValueGrid, NoDataValueGrid1D, NoDataValueGrid2D, NoDataValueGrid3D,
 };
 pub use operations::checked_scaling::{
-    ElementScaling, Scale, ScaleTransformation, ScalingTransformation, Unscale,
-    UnscaleTransformation,
+    CheckedMulThenAdd, CheckedMulThenAddTransformation, CheckedSubThenDiv,
+    CheckedSubThenDivTransformation, ElementScaling, ScalingTransformation,
 };
 pub use operations::from_index_fn::{FromIndexFn, FromIndexFnParallel};
 pub use operations::map_elements::{MapElements, MapElementsParallel};
