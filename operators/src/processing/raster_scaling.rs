@@ -8,11 +8,12 @@ use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
 
 use geoengine_datatypes::raster::{
-    ElementScaling, ScaleTransformation, ScalingTransformation, UnscaleTransformation,
+    CheckedMulThenAddTransformation, CheckedSubThenDivTransformation, ElementScaling,
+    ScalingTransformation,
 };
 use geoengine_datatypes::{
     primitives::Measurement,
-    raster::{Pixel, RasterProperties, RasterPropertiesKey, RasterTile2D},
+    raster::{Pixel, RasterPropertiesKey, RasterTile2D},
 };
 use num::FromPrimitive;
 use num_traits::AsPrimitive;
@@ -25,8 +26,8 @@ use tracing::{span, Level};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterScalingParams {
-    slope_key_or_value: Option<PropertiesKeyOrValue>,
-    offset_key_or_value: Option<PropertiesKeyOrValue>,
+    slope: SlopeOffsetSelection,
+    offset: SlopeOffsetSelection,
     output_measurement: Option<Measurement>,
     scaling_mode: ScalingMode,
 }
@@ -34,15 +35,22 @@ pub struct RasterScalingParams {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum ScalingMode {
-    Scale,
-    Unscale,
+    MulSlopeAddOffset,
+    SubOffsetDivSlope,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase", tag = "type")]
-enum PropertiesKeyOrValue {
+enum SlopeOffsetSelection {
+    Auto,
     MetadataKey(RasterPropertiesKey),
     Constant { value: f64 },
+}
+
+impl Default for SlopeOffsetSelection {
+    fn default() -> Self {
+        Self::Auto
+    }
 }
 
 /// The raster scaling operator scales/unscales the values of a raster by a given scale factor and offset.
@@ -69,8 +77,8 @@ impl OperatorName for RasterScaling {
 }
 
 pub struct InitializedRasterScalingOperator {
-    slope_key_or_value: Option<PropertiesKeyOrValue>,
-    offset_key_or_value: Option<PropertiesKeyOrValue>,
+    slope: SlopeOffsetSelection,
+    offset: SlopeOffsetSelection,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     scaling_mode: ScalingMode,
@@ -99,8 +107,8 @@ impl RasterOperator for RasterScaling {
         };
 
         let initialized_operator = InitializedRasterScalingOperator {
-            slope_key_or_value: self.params.slope_key_or_value,
-            offset_key_or_value: self.params.offset_key_or_value,
+            slope: self.params.slope,
+            offset: self.params.offset,
             result_descriptor: out_desc,
             source: input,
             scaling_mode: self.params.scaling_mode,
@@ -118,17 +126,17 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        let slope_key_or_value = self.slope_key_or_value.clone();
-        let offset_key_or_value = self.offset_key_or_value.clone();
+        let slope = self.slope.clone();
+        let offset = self.offset.clone();
         let source = self.source.query_processor()?;
         let scaling_mode = self.scaling_mode;
 
         let res = match scaling_mode {
-            ScalingMode::Scale => {
-                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, ScaleTransformation>(slope_key_or_value, offset_key_or_value,  source_proc)) })
+            ScalingMode::SubOffsetDivSlope => {
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedSubThenDivTransformation>(slope, offset,  source_proc)) })
             }
-            ScalingMode::Unscale => {
-                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, UnscaleTransformation>(slope_key_or_value, offset_key_or_value,  source_proc)) })
+            ScalingMode::MulSlopeAddOffset => {
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedMulThenAddTransformation>(slope, offset,  source_proc)) })
             }
         };
 
@@ -141,14 +149,14 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
-    slope_key_or_value: Option<PropertiesKeyOrValue>,
-    offset_key_or_value: Option<PropertiesKeyOrValue>,
+    slope: SlopeOffsetSelection,
+    offset: SlopeOffsetSelection,
     _transformation: PhantomData<S>,
 }
 
 fn create_boxed_processor<Q, P, S>(
-    slope_key_or_value: Option<PropertiesKeyOrValue>,
-    offset_key_or_value: Option<PropertiesKeyOrValue>,
+    slope: SlopeOffsetSelection,
+    offset: SlopeOffsetSelection,
     source: Q,
 ) -> Box<dyn RasterQueryProcessor<RasterType = P>>
 where
@@ -157,12 +165,7 @@ where
     f64: AsPrimitive<P>,
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
-    RasterTransformationProcessor::<Q, P, S>::create(
-        slope_key_or_value,
-        offset_key_or_value,
-        source,
-    )
-    .boxed()
+    RasterTransformationProcessor::<Q, P, S>::create(slope, offset, source).boxed()
 }
 
 impl<Q, P, S> RasterTransformationProcessor<Q, P, S>
@@ -173,14 +176,14 @@ where
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
     pub fn create(
-        slope_key_or_value: Option<PropertiesKeyOrValue>,
-        offset_key_or_value: Option<PropertiesKeyOrValue>,
+        slope: SlopeOffsetSelection,
+        offset: SlopeOffsetSelection,
         source: Q,
     ) -> RasterTransformationProcessor<Q, P, S> {
         RasterTransformationProcessor {
             source,
-            slope_key_or_value,
-            offset_key_or_value,
+            slope,
+            offset,
             _transformation: PhantomData,
         }
     }
@@ -191,16 +194,16 @@ where
         _pool: Arc<ThreadPool>,
     ) -> Result<RasterTile2D<P>> {
         // either use the provided metadata/constant or the default values from the properties
-        let offset = if let Some(offset_key_or_value) = &self.offset_key_or_value {
-            Self::prop_value(offset_key_or_value, &tile.properties)?
-        } else {
-            tile.properties.offset().as_()
+        let offset = match &self.offset {
+            SlopeOffsetSelection::MetadataKey(key) => tile.properties.number_property::<P>(key)?,
+            SlopeOffsetSelection::Constant { value } => value.as_(),
+            SlopeOffsetSelection::Auto => tile.properties.offset().as_(),
         };
 
-        let slope = if let Some(slope_key_or_value) = &self.slope_key_or_value {
-            Self::prop_value(slope_key_or_value, &tile.properties)?
-        } else {
-            tile.properties.scale().as_()
+        let slope = match &self.slope {
+            SlopeOffsetSelection::MetadataKey(key) => tile.properties.number_property::<P>(key)?,
+            SlopeOffsetSelection::Constant { value } => value.as_(),
+            SlopeOffsetSelection::Auto => tile.properties.scale().as_(),
         };
 
         let res_tile =
@@ -208,14 +211,6 @@ where
                 .await?;
 
         Ok(res_tile)
-    }
-
-    fn prop_value(prop_key_or_value: &PropertiesKeyOrValue, props: &RasterProperties) -> Result<P> {
-        let value = match prop_key_or_value {
-            PropertiesKeyOrValue::MetadataKey(key) => props.number_property::<P>(key)?,
-            PropertiesKeyOrValue::Constant { value } => value.as_(),
-        };
-        Ok(value)
     }
 }
 
@@ -251,8 +246,8 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
-            Grid2D, GridOrEmpty2D, GridShape, MaskedGrid2D, RasterDataType, TileInformation,
-            TilingSpecification,
+            Grid2D, GridOrEmpty2D, GridShape, MaskedGrid2D, RasterDataType, RasterProperties,
+            TileInformation, TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -311,14 +306,14 @@ mod tests {
         }
         .boxed();
 
-        let scaling_mode = ScalingMode::Unscale;
+        let scaling_mode = ScalingMode::MulSlopeAddOffset;
 
         let output_measurement = None;
 
         let op = RasterScaling {
             params: RasterScalingParams {
-                slope_key_or_value: None,
-                offset_key_or_value: None,
+                slope: SlopeOffsetSelection::Auto,
+                offset: SlopeOffsetSelection::Auto,
                 output_measurement,
                 scaling_mode,
             },
@@ -416,13 +411,13 @@ mod tests {
         }
         .boxed();
 
-        let scaling_mode = ScalingMode::Scale;
+        let scaling_mode = ScalingMode::SubOffsetDivSlope;
 
         let output_measurement = None;
 
         let params = RasterScalingParams {
-            slope_key_or_value: None,
-            offset_key_or_value: None,
+            slope: SlopeOffsetSelection::Auto,
+            offset: SlopeOffsetSelection::Auto,
             output_measurement,
             scaling_mode,
         };

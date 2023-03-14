@@ -7,7 +7,7 @@ use std::ops::{Add, Div, Mul, Sub};
 /// scales the value with `(value - offset) / slope`.
 #[inline]
 #[allow(clippy::unnecessary_wraps)]
-fn scale<T>(value: T, slope: T, offset: T) -> Option<T>
+fn sub_then_div<T>(value: T, slope: T, offset: T) -> Option<T>
 where
     T: Copy + 'static + Sub<Output = T> + Div<Output = T>,
 {
@@ -17,7 +17,7 @@ where
 /// unscales the value with `value * slope + offset`.
 #[inline]
 #[allow(clippy::unnecessary_wraps)]
-fn unscale<T>(value: T, slope: T, offset: T) -> Option<T>
+fn mul_then_add<T>(value: T, slope: T, offset: T) -> Option<T>
 where
     T: Copy + 'static + Add<Output = T> + Mul<Output = T>,
 {
@@ -25,7 +25,7 @@ where
 }
 /// scales the value with `(value - offset) / slope`. Overflows produce `None`.
 #[inline]
-fn scale_checked<T>(value: T, slope: T, offset: T) -> Option<T>
+fn checked_sub_then_div<T>(value: T, slope: T, offset: T) -> Option<T>
 where
     T: Copy + 'static + CheckedSub<Output = T> + CheckedDiv<Output = T>,
 {
@@ -36,7 +36,7 @@ where
 
 /// unscales the value with ``value * slope + offset``. Overflows produce `None`.
 #[inline]
-fn unscale_checked<T>(value: T, slope: T, offset: T) -> Option<T>
+fn checked_mul_then_add<T>(value: T, slope: T, offset: T) -> Option<T>
 where
     T: Copy + 'static + CheckedAdd<Output = T> + CheckedMul<Output = T>,
 {
@@ -45,90 +45,90 @@ where
         .and_then(|f| f.checked_add(&offset))
 }
 
-pub trait Scale
+pub trait CheckedSubThenDiv
 where
     Self: Sized,
 {
     /// scales with `(self - offset) / slope`. Overflows produce `None`.
-    fn scale(self, slope: Self, offset: Self) -> Option<Self>;
+    fn checked_sub_then_div(self, slope: Self, offset: Self) -> Option<Self>;
 }
 
 macro_rules! impl_scale_conv {
     ($T:ty, $conv:ident) => {
-        impl Scale for $T {
+        impl CheckedSubThenDiv for $T {
             #[inline]
-            fn scale(self, slope: Self, offset: Self) -> Option<Self> {
+            fn checked_sub_then_div(self, slope: Self, offset: Self) -> Option<Self> {
                 $conv(self, slope, offset)
             }
         }
     };
 }
 
-impl_scale_conv!(u8, scale_checked);
-impl_scale_conv!(u16, scale_checked);
-impl_scale_conv!(u32, scale_checked);
-impl_scale_conv!(u64, scale_checked);
-impl_scale_conv!(i8, scale_checked);
-impl_scale_conv!(i16, scale_checked);
-impl_scale_conv!(i32, scale_checked);
-impl_scale_conv!(i64, scale_checked);
-impl_scale_conv!(f32, scale);
-impl_scale_conv!(f64, scale);
+impl_scale_conv!(u8, checked_sub_then_div);
+impl_scale_conv!(u16, checked_sub_then_div);
+impl_scale_conv!(u32, checked_sub_then_div);
+impl_scale_conv!(u64, checked_sub_then_div);
+impl_scale_conv!(i8, checked_sub_then_div);
+impl_scale_conv!(i16, checked_sub_then_div);
+impl_scale_conv!(i32, checked_sub_then_div);
+impl_scale_conv!(i64, checked_sub_then_div);
+impl_scale_conv!(f32, sub_then_div);
+impl_scale_conv!(f64, sub_then_div);
 
-pub trait Unscale {
+pub trait CheckedMulThenAdd {
     /// unscales with `self * slope + offset`. Overflows produce `None`.
-    fn unscale(self, slope: Self, offset: Self) -> Option<Self>
+    fn checked_mul_then_add(self, slope: Self, offset: Self) -> Option<Self>
     where
         Self: Sized;
 }
 
 macro_rules! impl_unscale_conv {
     ($T:ty, $conv:ident) => {
-        impl Unscale for $T {
+        impl CheckedMulThenAdd for $T {
             #[inline]
-            fn unscale(self, slope: Self, offset: Self) -> Option<Self> {
+            fn checked_mul_then_add(self, slope: Self, offset: Self) -> Option<Self> {
                 $conv(self, slope, offset)
             }
         }
     };
 }
 
-impl_unscale_conv!(u8, unscale_checked);
-impl_unscale_conv!(u16, unscale_checked);
-impl_unscale_conv!(u32, unscale_checked);
-impl_unscale_conv!(u64, unscale_checked);
-impl_unscale_conv!(i8, unscale_checked);
-impl_unscale_conv!(i16, unscale_checked);
-impl_unscale_conv!(i32, unscale_checked);
-impl_unscale_conv!(i64, unscale_checked);
-impl_unscale_conv!(f32, unscale);
-impl_unscale_conv!(f64, unscale);
+impl_unscale_conv!(u8, checked_mul_then_add);
+impl_unscale_conv!(u16, checked_mul_then_add);
+impl_unscale_conv!(u32, checked_mul_then_add);
+impl_unscale_conv!(u64, checked_mul_then_add);
+impl_unscale_conv!(i8, checked_mul_then_add);
+impl_unscale_conv!(i16, checked_mul_then_add);
+impl_unscale_conv!(i32, checked_mul_then_add);
+impl_unscale_conv!(i64, checked_mul_then_add);
+impl_unscale_conv!(f32, mul_then_add);
+impl_unscale_conv!(f64, mul_then_add);
 
 pub trait ScalingTransformation<T> {
     fn transform(value: T, slope: T, offset: T) -> Option<T>;
 }
 
 /// scales the value with `(value - offset) / slope`. Overflows produce `None`.
-pub struct ScaleTransformation;
+pub struct CheckedSubThenDivTransformation;
 
-impl<T> ScalingTransformation<T> for ScaleTransformation
+impl<T> ScalingTransformation<T> for CheckedSubThenDivTransformation
 where
-    T: Scale,
+    T: CheckedSubThenDiv,
 {
     fn transform(value: T, slope: T, offset: T) -> Option<T> {
-        value.scale(slope, offset)
+        value.checked_sub_then_div(slope, offset)
     }
 }
 
 /// unscales with `self * slope + offset`. Overflows produce `None`.
-pub struct UnscaleTransformation;
+pub struct CheckedMulThenAddTransformation;
 
-impl<T> ScalingTransformation<T> for UnscaleTransformation
+impl<T> ScalingTransformation<T> for CheckedMulThenAddTransformation
 where
-    T: Unscale,
+    T: CheckedMulThenAdd,
 {
     fn transform(value: T, slope: T, offset: T) -> Option<T> {
-        value.unscale(slope, offset)
+        value.checked_mul_then_add(slope, offset)
     }
 }
 
@@ -200,70 +200,70 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn unscale_float() {
-        let unscaled = unscale(7., 2., 1.).unwrap();
+        let unscaled = mul_then_add(7., 2., 1.).unwrap();
         assert_eq!(unscaled, 15.);
     }
 
     #[test]
     fn unscale_checked_int() {
-        let unscaled = unscale_checked(7, 2, 1).unwrap();
+        let unscaled = checked_mul_then_add(7, 2, 1).unwrap();
         assert_eq!(unscaled, 15);
 
-        let unscaled: Option<u8> = unscale_checked(7, 100, 1);
+        let unscaled: Option<u8> = checked_mul_then_add(7, 100, 1);
         assert!(unscaled.is_none());
 
-        let unscaled: Option<u8> = unscale_checked(7, 2, 255);
+        let unscaled: Option<u8> = checked_mul_then_add(7, 2, 255);
         assert!(unscaled.is_none());
     }
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn scale_float() {
-        let scaled = scale(15., 2., 1.).unwrap();
+        let scaled = sub_then_div(15., 2., 1.).unwrap();
         assert_eq!(scaled, 7.);
     }
 
     #[test]
     fn scale_checked_int() {
-        let scaled = scale_checked(15, 2, 1).unwrap();
+        let scaled = checked_sub_then_div(15, 2, 1).unwrap();
         assert_eq!(scaled, 7);
 
-        let scaled: Option<u8> = scale_checked(7, 1, 10);
+        let scaled: Option<u8> = checked_sub_then_div(7, 1, 10);
         assert!(scaled.is_none());
     }
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn unscale_float_self() {
-        let unscaled = (7.).unscale(2., 1.).unwrap();
+        let unscaled = (7.).checked_mul_then_add(2., 1.).unwrap();
         assert_eq!(unscaled, 15.);
     }
 
     #[test]
     fn unscale_checked_int_self() {
-        let unscaled = 7.unscale(2, 1).unwrap();
+        let unscaled = 7.checked_mul_then_add(2, 1).unwrap();
         assert_eq!(unscaled, 15);
 
-        let unscaled: Option<u8> = 7.unscale(100, 1);
+        let unscaled: Option<u8> = 7.checked_mul_then_add(100, 1);
         assert!(unscaled.is_none());
 
-        let unscaled: Option<u8> = 7.unscale(2, 255);
+        let unscaled: Option<u8> = 7.checked_mul_then_add(2, 255);
         assert!(unscaled.is_none());
     }
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn scale_float_self() {
-        let scaled = (15.).scale(2., 1.).unwrap();
+        let scaled = (15.).checked_sub_then_div(2., 1.).unwrap();
         assert_eq!(scaled, 7.);
     }
 
     #[test]
     fn scale_checked_int_self() {
-        let scaled = 15.scale(2, 1).unwrap();
+        let scaled = 15.checked_sub_then_div(2, 1).unwrap();
         assert_eq!(scaled, 7);
 
-        let scaled: Option<u8> = 7.scale(1, 10);
+        let scaled: Option<u8> = 7.checked_sub_then_div(1, 10);
         assert!(scaled.is_none());
     }
 
@@ -273,7 +273,7 @@ mod tests {
         let data = vec![7; 4];
 
         let r1: MaskedGrid2D<i32> = Grid2D::new(dim.into(), data).unwrap().into();
-        let scaled_r1 = r1.transform_elements::<UnscaleTransformation>(2, 1);
+        let scaled_r1 = r1.transform_elements::<CheckedMulThenAddTransformation>(2, 1);
 
         let expected = vec![Some(15), Some(15), Some(15), Some(15)];
         let res: Vec<Option<i32>> = scaled_r1.masked_element_deref_iterator().collect();
@@ -287,7 +287,7 @@ mod tests {
 
         let r1: GridOrEmpty2D<i32> =
             GridOrEmpty::Grid(Grid2D::new(dim.into(), data).unwrap().into());
-        let scaled_r1 = r1.transform_elements::<UnscaleTransformation>(2, 1);
+        let scaled_r1 = r1.transform_elements::<CheckedMulThenAddTransformation>(2, 1);
 
         let expected = vec![Some(15), Some(15), Some(15), Some(15)];
 
@@ -310,7 +310,7 @@ mod tests {
             GridOrEmpty::Grid(Grid2D::new(dim.into(), data).unwrap().into());
         let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
 
-        let scaled_r1 = t1.transform_elements::<UnscaleTransformation>(2, 1);
+        let scaled_r1 = t1.transform_elements::<CheckedMulThenAddTransformation>(2, 1);
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
         let expected = vec![Some(15), Some(15), Some(15), Some(15)];
@@ -327,7 +327,7 @@ mod tests {
         let data = vec![15; 4];
 
         let r1: MaskedGrid2D<i32> = Grid2D::new(dim.into(), data).unwrap().into();
-        let scaled_r1 = r1.transform_elements::<ScaleTransformation>(2, 1);
+        let scaled_r1 = r1.transform_elements::<CheckedSubThenDivTransformation>(2, 1);
 
         let expected = vec![Some(7), Some(7), Some(7), Some(7)];
         let res: Vec<Option<i32>> = scaled_r1.masked_element_deref_iterator().collect();
@@ -340,7 +340,7 @@ mod tests {
         let data = vec![15; 4];
         let r1: GridOrEmpty2D<i32> =
             GridOrEmpty::Grid(Grid2D::new(dim.into(), data).unwrap().into());
-        let scaled_r1 = r1.transform_elements::<ScaleTransformation>(2, 1);
+        let scaled_r1 = r1.transform_elements::<CheckedSubThenDivTransformation>(2, 1);
 
         let expected = vec![Some(7), Some(7), Some(7), Some(7)];
 
@@ -362,7 +362,7 @@ mod tests {
         let r1: GridOrEmpty2D<i32> = GridOrEmpty2D::from(Grid2D::new(dim.into(), data).unwrap());
         let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
 
-        let scaled_r1 = t1.transform_elements::<ScaleTransformation>(2, 1);
+        let scaled_r1 = t1.transform_elements::<CheckedSubThenDivTransformation>(2, 1);
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
 
         let expected = vec![Some(7), Some(7), Some(7), Some(7)];
