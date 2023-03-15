@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+- Added a generic permission API for all resource types and a role management.
+
+  - https://github.com/geo-engine/geoengine/pull/756
+
 - Added a new option to the colorizer, allowing to use over- and underflow colors.
 
   - https://github.com/geo-engine/geoengine/pull/684
@@ -75,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - https://github.com/geo-engine/geoengine/pull/610
 
 - Added a `Rasterization` operator
-  
+
   - https://github.com/geo-engine/geoengine/pull/683
 
 - Added method to create dataset from the result of the workflow via a task
@@ -85,7 +90,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a `PieChart` operator
 
   - https://github.com/geo-engine/geoengine/pull/694
-
 
 ### Changed
 
