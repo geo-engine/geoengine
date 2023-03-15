@@ -282,6 +282,12 @@ pub enum Error {
     #[snafu(display("User registration is disabled"))]
     UserRegistrationDisabled,
 
+    UserDoesNotExist,
+    RoleDoesNotExist,
+    RoleWithNameAlreadyExists,
+    RoleAlreadyAssigned,
+    RoleNotAssigned,
+
     #[snafu(display(
         "WCS request endpoint {} must match identifier {}",
         endpoint,

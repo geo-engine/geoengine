@@ -9,7 +9,7 @@ use snafu::ensure;
 use crate::contexts::SessionId;
 use crate::error::{self, Result};
 use crate::pro::contexts::{ProInMemoryContext, ProInMemoryDb};
-use crate::pro::permissions::Role;
+use crate::pro::permissions::{Role, RoleId};
 use crate::pro::users::oidc::{ExternalUser, ExternalUserClaims};
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
@@ -26,7 +26,8 @@ pub struct HashMapUserDbBackend {
     sessions: HashMap<SessionId, UserSession>,
     quota_used: HashMap<UserId, u64>,
     quota_available: HashMap<UserId, i64>,
-    // TODO: roles
+
+    roles: HashMap<RoleId, Role>,
 }
 
 impl Default for HashMapUserDbBackend {
@@ -56,6 +57,7 @@ impl Default for HashMapUserDbBackend {
             sessions: HashMap::new(),
             quota_used: HashMap::new(),
             quota_available: HashMap::new(),
+            roles: HashMap::new(),
         }
     }
 }
@@ -366,6 +368,104 @@ impl UserDb for ProInMemoryDb {
 
         Ok(())
     }
+
+    async fn add_role(&self, role_name: &str) -> Result<RoleId> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let mut backend = self.backend.user_db.write().await;
+
+        ensure!(
+            !backend.roles.values().any(|r| r.name == role_name),
+            error::RoleWithNameAlreadyExists
+        );
+
+        let id = RoleId::new();
+
+        backend.roles.insert(
+            id,
+            Role {
+                id,
+                name: role_name.to_string(),
+            },
+        );
+
+        Ok(id)
+    }
+
+    async fn remove_role(&self, role_id: &RoleId) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let mut backend = self.backend.user_db.write().await;
+        let role = backend.roles.remove(role_id);
+
+        ensure!(role.is_some(), error::RoleDoesNotExist);
+
+        backend
+            .users
+            .values_mut()
+            .for_each(|u| u.roles.retain(|r| r != role_id));
+
+        backend.sessions.values_mut().for_each(|s| {
+            s.roles.retain(|r| r != role_id);
+        });
+
+        Ok(())
+    }
+
+    async fn assign_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()> {
+        let mut backend = self.backend.user_db.write().await;
+
+        ensure!(backend.roles.contains_key(role_id), error::RoleDoesNotExist);
+
+        let user = backend
+            .users
+            .values_mut()
+            .find(|u| u.id == *user_id)
+            .ok_or(error::Error::UserDoesNotExist)?;
+
+        ensure!(
+            user.roles.iter().all(|r| r != role_id),
+            error::RoleAlreadyAssigned
+        );
+
+        user.roles.push(*role_id);
+
+        backend
+            .sessions
+            .values_mut()
+            .filter(|s| s.user.id == *user_id)
+            .for_each(|s| {
+                s.roles.push(*role_id);
+            });
+
+        Ok(())
+    }
+
+    async fn revoke_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()> {
+        let mut backend = self.backend.user_db.write().await;
+
+        ensure!(backend.roles.contains_key(role_id), error::RoleDoesNotExist);
+
+        let user = backend
+            .users
+            .values_mut()
+            .find(|u| u.id == *user_id)
+            .ok_or(error::Error::UserDoesNotExist)?;
+
+        let len = user.roles.len();
+        user.roles.retain(|r| r != role_id);
+        ensure!(len != user.roles.len(), error::RoleNotAssigned);
+
+        backend
+            .sessions
+            .values_mut()
+            .filter(|s| s.user.id == *user_id)
+            .for_each(|s| {
+                s.roles.retain(|r| r != role_id);
+            });
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -373,7 +473,11 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
 
     use super::*;
-    use crate::{contexts::Context, util::user_input::UserInput};
+    use crate::{
+        contexts::Context,
+        pro::{contexts::ProContext, util::tests::admin_login},
+        util::user_input::UserInput,
+    };
 
     #[tokio::test]
     async fn register() {
@@ -520,5 +624,85 @@ mod tests {
         assert!(db2.logout().await.is_ok());
 
         assert!(ctx.user_session_by_id(session_2.id).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn it_handles_user_roles() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let admin_session = admin_login(&ctx).await;
+        let user_id = ctx
+            .register_user(
+                UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let admin_db = ctx.pro_db(admin_session.clone());
+
+        // create a new role
+        let role_id = admin_db.add_role("foo").await.unwrap();
+
+        let user_session = ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        // user does not have the role yet
+
+        assert!(!user_session.roles.contains(&role_id));
+
+        // we assign the role to the user
+        admin_db.assign_role(&role_id, &user_id).await.unwrap();
+
+        let user_session = ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        // should be present now
+        assert!(user_session.roles.contains(&role_id));
+
+        // we revoke it
+        admin_db.revoke_role(&role_id, &user_id).await.unwrap();
+
+        let user_session = ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        // the role is gone now
+        assert!(!user_session.roles.contains(&role_id));
+
+        // assign it again and then delete the whole role, should not be present at user
+
+        admin_db.assign_role(&role_id, &user_id).await.unwrap();
+
+        admin_db.remove_role(&role_id).await.unwrap();
+
+        let user_session = ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        assert!(!user_session.roles.contains(&role_id));
     }
 }

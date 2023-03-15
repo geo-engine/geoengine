@@ -1,7 +1,7 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
 use crate::pro::contexts::PostgresDb;
-use crate::pro::permissions::Role;
+use crate::pro::permissions::{Role, RoleId};
 use crate::pro::users::oidc::ExternalUserClaims;
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
@@ -549,6 +549,70 @@ where
 
         conn.execute(&stmt, &[&(new_available_quota), &user])
             .await?;
+
+        Ok(())
+    }
+
+    async fn add_role(&self, role_name: &str) -> Result<RoleId> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        let id = RoleId::new();
+
+        let stmt = conn
+            .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
+            .await?;
+
+        // TODO: map postgres error code to error::Error::RoleAlreadyExists
+
+        conn.execute(&stmt, &[&id, &role_name]).await?;
+
+        Ok(id)
+    }
+
+    async fn remove_role(&self, role_id: &RoleId) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn.prepare("DELETE FROM roles WHERE id = $1;").await?;
+
+        let deleted = conn.execute(&stmt, &[&role_id]).await?;
+
+        ensure!(deleted > 0, error::RoleDoesNotExist);
+
+        Ok(())
+    }
+
+    async fn assign_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+            .await?;
+
+        // TODO: map postgres error code to error::Error::RoleAlreadyAssigned, RoleDoesNotExist
+
+        conn.execute(&stmt, &[&user_id, &role_id]).await?;
+
+        Ok(())
+    }
+
+    async fn revoke_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare("DELETE FROM user_roles WHERE user_id= $1 AND role_id = $2;")
+            .await?;
+
+        let deleted = conn.execute(&stmt, &[&user_id, &role_id]).await?;
+
+        ensure!(deleted > 0, error::RoleNotAssigned);
 
         Ok(())
     }

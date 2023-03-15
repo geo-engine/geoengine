@@ -1,6 +1,7 @@
 use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::ProContext;
+use crate::pro::permissions::RoleId;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
 use crate::pro::users::UserRegistration;
@@ -41,7 +42,14 @@ where
                 .route(web::post().to(update_user_quota_handler::<C>)),
         )
         .service(web::resource("/oidcInit").route(web::post().to(oidc_init::<C>)))
-        .service(web::resource("/oidcLogin").route(web::post().to(oidc_login::<C>)));
+        .service(web::resource("/oidcLogin").route(web::post().to(oidc_login::<C>)))
+        .service(web::resource("/roles").route(web::put().to(add_role_handler::<C>)))
+        .service(web::resource("/roles/{role}").route(web::delete().to(remove_role_handler::<C>)))
+        .service(
+            web::resource("/users/{user}/roles/{role}")
+                .route(web::post().to(assign_role_handler::<C>))
+                .route(web::delete().to(revoke_role_handler::<C>)),
+        );
 }
 
 /// Registers a user.
@@ -451,6 +459,119 @@ pub(crate) async fn oidc_login<C: ProContext>(
     let session = ctx.login_external(user, duration).await?;
 
     Ok(web::Json(session))
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct AddRole {
+    pub name: String,
+}
+
+/// Add a new role. Requires admin privilige.
+#[utoipa::path(
+    tag = "User",
+    put,
+    path = "/roles",
+    request_body = AddRole,
+    responses(
+        (status = 200, description = "Role was added")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn add_role_handler<C: ProContext>(
+    ctx: web::Data<C>,
+    session: C::Session,
+    add_role: web::Json<AddRole>,
+) -> Result<web::Json<IdResponse<RoleId>>> {
+    let add_role = add_role.into_inner();
+
+    let id = ctx.pro_db(session).add_role(&add_role.name).await?;
+
+    Ok(web::Json(IdResponse::from(id)))
+}
+
+/// Remove a role. Requires admin privilige.
+#[utoipa::path(
+    tag = "User",
+    delete,
+    path = "/roles/{role}",
+    responses(
+        (status = 200, description = "Role was removed")
+    ),
+    params(
+        ("role" = RoleId, description = "Role id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn remove_role_handler<C: ProContext>(
+    ctx: web::Data<C>,
+    session: C::Session,
+    role: web::Path<RoleId>,
+) -> Result<HttpResponse> {
+    let role = role.into_inner();
+
+    ctx.pro_db(session).remove_role(&role).await?;
+
+    Ok(actix_web::HttpResponse::Ok().finish())
+}
+
+/// Assign a role to a user. Requires admin privilige.
+#[utoipa::path(
+    tag = "User",
+    post,
+    path = "/users/{user}/roles/{role}",
+    responses(
+        (status = 200, description = "Role was assigned")
+    ),
+    params(
+        ("user" = UserId, description = "User id"),
+        ("role" = RoleId, description = "Role id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn assign_role_handler<C: ProContext>(
+    ctx: web::Data<C>,
+    session: C::Session,
+    user: web::Path<(UserId, RoleId)>,
+) -> Result<HttpResponse> {
+    let (user, role) = user.into_inner();
+
+    ctx.pro_db(session).assign_role(&role, &user).await?;
+
+    Ok(actix_web::HttpResponse::Ok().finish())
+}
+
+/// Revoke a role from a user. Requires admin privilige.
+#[utoipa::path(
+    tag = "User",
+    delete,
+    path = "/users/{user}/roles/{role}",
+    responses(
+        (status = 200, description = "Role was revoked")
+    ),
+    params(
+        ("user" = UserId, description = "User id"),
+        ("role" = RoleId, description = "Role id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn revoke_role_handler<C: ProContext>(
+    ctx: web::Data<C>,
+    session: C::Session,
+    user: web::Path<(UserId, RoleId)>,
+) -> Result<HttpResponse> {
+    let (user, role) = user.into_inner();
+
+    ctx.pro_db(session).revoke_role(&role, &user).await?;
+
+    Ok(actix_web::HttpResponse::Ok().finish())
 }
 
 #[cfg(test)]
@@ -1481,5 +1602,96 @@ mod tests {
             res.headers().get(&CONTENT_TYPE),
             Some(&header::HeaderValue::from_static("image/png"))
         );
+    }
+
+    #[tokio::test]
+    async fn it_adds_and_removes_role() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let admin_session = admin_login(&ctx).await;
+
+        let add = AddRole {
+            name: "foo".to_string(),
+        };
+
+        let req = actix_web::test::TestRequest::put()
+            .uri("/roles")
+            .set_json(add)
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+        let role_id: IdResponse<RoleId> = test::read_body_json(res).await;
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/roles/{}", role_id.id))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, ctx).await;
+
+        assert_eq!(res.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn it_assigns_and_revokes_role() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let admin_session = admin_login(&ctx).await;
+
+        let user_id = ctx
+            .register_user(
+                UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let add = AddRole {
+            name: "foo".to_string(),
+        };
+
+        let req = actix_web::test::TestRequest::put()
+            .uri("/roles")
+            .set_json(add)
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+        let role_id: IdResponse<RoleId> = test::read_body_json(res).await;
+
+        // assign role
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/users/{}/roles/{}", user_id, role_id.id))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        // revoke role
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/users/{}/roles/{}", user_id, role_id.id))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, ctx).await;
+
+        assert_eq!(res.status(), 200);
     }
 }

@@ -56,6 +56,7 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
 use super::handlers::permissions::{PermissionRequest, ResourceType};
+use super::handlers::users::AddRole;
 use super::permissions::{Permission, ResourceId, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 
@@ -102,6 +103,10 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::update_user_quota_handler,
         pro::handlers::users::register_user_handler,
         pro::handlers::users::session_handler,
+        pro::handlers::users::add_role_handler,
+        pro::handlers::users::remove_role_handler,
+        pro::handlers::users::assign_role_handler,
+        pro::handlers::users::revoke_role_handler,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
@@ -324,7 +329,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             PermissionRequest,
             ResourceType,
             ResourceId,
-            Permission
+            Permission,
+            AddRole,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

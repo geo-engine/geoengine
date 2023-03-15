@@ -175,9 +175,11 @@ where
                         );
                         INSERT INTO version VALUES (1);
 
+                        -- TODO: distinguish between roles that are (correspond to) users and roles that are not
+                        -- TODO: integrity constraint for roles that correspond to users + DELETE CASCADE
                         CREATE TABLE roles (
                             id UUID PRIMARY KEY,
-                            name text NOT NULL
+                            name text UNIQUE NOT NULL
                         );
 
                         INSERT INTO roles (id, name) VALUES
@@ -3149,6 +3151,87 @@ mod tests {
                 CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
                 CollectionItem::Layer(_) => false,
             }));
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_handles_user_roles() {
+        with_temp_context(|ctx, _| async move {
+            let admin_session = admin_login(&ctx).await;
+            let user_id = ctx
+                .register_user(
+                    UserRegistration {
+                        email: "foo@example.com".to_string(),
+                        password: "secret123".to_string(),
+                        real_name: "Foo Bar".to_string(),
+                    }
+                    .validated()
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            let admin_db = ctx.pro_db(admin_session.clone());
+
+            // create a new role
+            let role_id = admin_db.add_role("foo").await.unwrap();
+
+            let user_session = ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                })
+                .await
+                .unwrap();
+
+            // user does not have the role yet
+
+            assert!(!user_session.roles.contains(&role_id));
+
+            // we assign the role to the user
+            admin_db.assign_role(&role_id, &user_id).await.unwrap();
+
+            let user_session = ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                })
+                .await
+                .unwrap();
+
+            // should be present now
+            assert!(user_session.roles.contains(&role_id));
+
+            // we revoke it
+            admin_db.revoke_role(&role_id, &user_id).await.unwrap();
+
+            let user_session = ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                })
+                .await
+                .unwrap();
+
+            // the role is gone now
+            assert!(!user_session.roles.contains(&role_id));
+
+            // assign it again and then delete the whole role, should not be present at user
+
+            admin_db.assign_role(&role_id, &user_id).await.unwrap();
+
+            admin_db.remove_role(&role_id).await.unwrap();
+
+            let user_session = ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                })
+                .await
+                .unwrap();
+
+            assert!(!user_session.roles.contains(&role_id));
         })
         .await;
     }
