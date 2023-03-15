@@ -93,7 +93,8 @@ where
         let stmt = tx
             .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
             .await?;
-        tx.execute(&stmt, &[&user_id, &"anonymous_user"]).await?;
+        tx.execute(&stmt, &[&user_id, &format!("anonymous_user_{user_id}")])
+            .await?;
 
         let quota_available =
             crate::util::config::get_config_element::<crate::pro::util::config::User>()?
