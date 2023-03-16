@@ -16,7 +16,7 @@ use crate::{
         suggest_meta_data_handler,
     },
     pro::{
-        contexts::ProContext,
+        contexts::{ProContext, ProGeoEngineDb},
         permissions::{Permission, PermissionDb, Role},
     },
     util::{
@@ -29,6 +29,7 @@ use crate::{
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
+    C::GeoEngineDB: ProGeoEngineDb,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -74,7 +75,10 @@ async fn create_dataset_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<web::Json<IdResponse<DatasetId>>> {
+) -> Result<web::Json<IdResponse<DatasetId>>>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let create = create.into_inner();
     match create {
         CreateDataset {
@@ -93,7 +97,10 @@ async fn create_system_dataset<C: ProContext>(
     ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>> {
+) -> Result<web::Json<IdResponse<DatasetId>>>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let volumes = get_config_element::<Data>()?.volumes;
     let volume_path = volumes
         .get(&volume_name)
@@ -105,7 +112,7 @@ async fn create_system_dataset<C: ProContext>(
 
     adjust_meta_data_path(&mut definition.meta_data, &volume)?;
 
-    let db = ctx.pro_db(session);
+    let db = ctx.db(session);
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let dataset_id = db
@@ -164,7 +171,10 @@ mod tests {
     pub async fn upload_ne_10m_ports_files<C: ProContext>(
         ctx: C,
         session_id: SessionId,
-    ) -> Result<UploadId> {
+    ) -> Result<UploadId>
+    where
+        C::GeoEngineDB: ProGeoEngineDb,
+    {
         let files = vec![
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").to_path_buf(),
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shx").to_path_buf(),
@@ -195,7 +205,10 @@ mod tests {
         ctx: C,
         upload_id: UploadId,
         session_id: SessionId,
-    ) -> DatasetId {
+    ) -> DatasetId
+    where
+        C::GeoEngineDB: ProGeoEngineDb,
+    {
         let s = json!({
             "dataPath": {
                 "upload": upload_id

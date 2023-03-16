@@ -24,6 +24,8 @@ use tracing_actix_web::TracingLogger;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
+use super::contexts::ProGeoEngineDb;
+
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
@@ -33,6 +35,7 @@ async fn start<C>(
 ) -> Result<(), Error>
 where
     C: ProContext,
+    C::GeoEngineDB: ProGeoEngineDb,
 {
     let wrapped_ctx = web::Data::new(ctx);
 

@@ -4,13 +4,14 @@ use utoipa::ToSchema;
 
 use crate::error::Result;
 
-use crate::pro::contexts::ProContext;
+use crate::pro::contexts::{ProContext, ProGeoEngineDb};
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
+    C::GeoEngineDB: ProGeoEngineDb,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -66,10 +67,13 @@ async fn add_permission_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     permission: web::Json<PermissionRequest>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let permission = permission.into_inner();
 
-    ctx.pro_db(session)
+    ctx.db(session)
         .add_permission(
             permission.role_id,
             permission.resource_id,
@@ -106,10 +110,13 @@ async fn remove_permission_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     permission: web::Json<PermissionRequest>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let permission = permission.into_inner();
 
-    ctx.pro_db(session)
+    ctx.db(session)
         .remove_permission(
             permission.role_id,
             permission.resource_id,

@@ -143,12 +143,6 @@ impl ProInMemoryContext {
 
 #[async_trait]
 impl ProContext for ProInMemoryContext {
-    type ProGeoEngineDB = ProInMemoryDb;
-
-    fn pro_db(&self, session: UserSession) -> Self::ProGeoEngineDB {
-        ProInMemoryDb::new(self.db.clone(), session)
-    }
-
     fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
         self.oidc_request_db.as_ref().as_ref()
     }

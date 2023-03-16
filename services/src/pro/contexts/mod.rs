@@ -44,11 +44,10 @@ pub use postgres::PostgresDb;
 /// A pro contexts that extends the default context.
 // TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
 #[async_trait]
-pub trait ProContext: Context<Session = UserSession> + UserAuth {
-    type ProGeoEngineDB: ProGeoEngineDb;
-
-    fn pro_db(&self, session: UserSession) -> Self::ProGeoEngineDB;
-
+pub trait ProContext: Context<Session = UserSession> + UserAuth
+where
+    Self::GeoEngineDB: ProGeoEngineDb,
+{
     fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
 }
 

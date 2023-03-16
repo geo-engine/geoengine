@@ -545,12 +545,6 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    type ProGeoEngineDB = PostgresDb<Tls>;
-
-    fn pro_db(&self, session: UserSession) -> Self::ProGeoEngineDB {
-        PostgresDb::new(self.pool.clone(), session)
-    }
-
     fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
         self.oidc_request_db.as_ref().as_ref()
     }
@@ -3172,7 +3166,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let admin_db = ctx.pro_db(admin_session.clone());
+            let admin_db = ctx.db(admin_session.clone());
 
             // create a new role
             let role_id = admin_db.add_role("foo").await.unwrap();

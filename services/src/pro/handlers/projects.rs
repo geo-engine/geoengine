@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::handlers;
 use crate::pro::contexts::ProContext;
+use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::projects::LoadVersion;
 use crate::pro::projects::ProProjectDb;
 use crate::projects::{ProjectId, ProjectVersionId};
@@ -10,6 +11,7 @@ use actix_web::{web, Responder};
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
+    C::GeoEngineDB: ProGeoEngineDb,
 {
     cfg.service(
         web::resource("/projects")
@@ -92,10 +94,13 @@ pub(crate) async fn load_project_version_handler<C: ProContext>(
     project: web::Path<(ProjectId, ProjectVersionId)>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let project = project.into_inner();
     let id = ctx
-        .pro_db(session)
+        .db(session)
         .load_project_version(project.0, LoadVersion::Version(project.1))
         .await?;
     Ok(web::Json(id))
@@ -154,9 +159,12 @@ pub(crate) async fn load_project_latest_handler<C: ProContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let id = ctx
-        .pro_db(session)
+        .db(session)
         .load_project_version(project.into_inner(), LoadVersion::Latest)
         .await?;
     Ok(web::Json(id))
@@ -194,9 +202,12 @@ pub(crate) async fn project_versions_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     project: web::Path<ProjectId>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let versions = ctx
-        .pro_db(session)
+        .db(session)
         .list_project_versions(project.into_inner())
         .await?;
     Ok(web::Json(versions))
@@ -211,6 +222,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::util::test::TestDefault;
 
+    use crate::contexts::Context;
     use crate::{
         handlers::ErrorResponse,
         pro::{
@@ -230,7 +242,7 @@ mod tests {
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        let db = ctx.pro_db(session.clone());
+        let db = ctx.db(session.clone());
 
         db.update_project(update_project_helper(project).validated().unwrap())
             .await
@@ -285,7 +297,7 @@ mod tests {
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        let db = ctx.pro_db(session.clone());
+        let db = ctx.db(session.clone());
 
         db.update_project(update_project_helper(project).validated().unwrap())
             .await
@@ -319,7 +331,7 @@ mod tests {
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        let db = ctx.pro_db(session.clone());
+        let db = ctx.db(session.clone());
 
         db.update_project(update_project_helper(project).validated().unwrap())
             .await

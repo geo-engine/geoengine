@@ -7,7 +7,7 @@ use crate::{
     },
     handlers, pro,
     pro::{
-        contexts::{ProContext, ProInMemoryContext},
+        contexts::{ProContext, ProGeoEngineDb, ProInMemoryContext},
         permissions::{Permission, PermissionDb, Role},
         users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
@@ -31,7 +31,10 @@ use geoengine_operators::{
 };
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
+pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     ctx.register_user(
         UserRegistration {
             email: "foo@example.com".to_string(),
@@ -71,7 +74,10 @@ pub fn create_random_user_session_helper() -> UserSession {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, ProjectId) {
+pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, ProjectId)
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let session = create_session_helper(ctx).await;
 
     let project = ctx
@@ -104,6 +110,7 @@ pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, Proj
 pub async fn send_pro_test_request<C>(req: test::TestRequest, ctx: C) -> ServiceResponse
 where
     C: ProContext,
+    C::GeoEngineDB: ProGeoEngineDb,
 {
     #[allow(unused_mut)]
     let mut app = App::new()
@@ -384,7 +391,10 @@ pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn admin_login<C: ProContext>(ctx: &C) -> UserSession {
+pub async fn admin_login<C: ProContext>(ctx: &C) -> UserSession
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let user_config = get_config_element::<super::config::User>().unwrap();
 
     ctx.login(UserCredentials {

@@ -473,11 +473,7 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
 
     use super::*;
-    use crate::{
-        contexts::Context,
-        pro::{contexts::ProContext, util::tests::admin_login},
-        util::user_input::UserInput,
-    };
+    use crate::{contexts::Context, pro::util::tests::admin_login, util::user_input::UserInput};
 
     #[tokio::test]
     async fn register() {
@@ -644,7 +640,7 @@ mod tests {
             .await
             .unwrap();
 
-        let admin_db = ctx.pro_db(admin_session.clone());
+        let admin_db = ctx.db(admin_session.clone());
 
         // create a new role
         let role_id = admin_db.add_role("foo").await.unwrap();

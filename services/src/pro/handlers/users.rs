@@ -1,6 +1,7 @@
 use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::ProContext;
+use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::permissions::RoleId;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
@@ -24,6 +25,7 @@ use utoipa::ToSchema;
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
+    C::GeoEngineDB: ProGeoEngineDb,
 {
     cfg.service(web::resource("/user").route(web::post().to(register_user_handler::<C>)))
         .service(web::resource("/anonymous").route(web::post().to(anonymous_handler::<C>)))
@@ -68,7 +70,10 @@ where
 pub(crate) async fn register_user_handler<C: ProContext>(
     user: web::Json<UserRegistration>,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     ensure!(
         config::get_config_element::<crate::pro::util::config::User>()?.user_registration,
         error::UserRegistrationDisabled
@@ -108,7 +113,10 @@ responses(
 pub(crate) async fn login_handler<C: ProContext>(
     user: web::Json<UserCredentials>,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let session = ctx
         .login(user.into_inner())
         .await
@@ -132,8 +140,11 @@ pub(crate) async fn login_handler<C: ProContext>(
 pub(crate) async fn logout_handler<C: ProContext>(
     session: UserSession,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
-    ctx.pro_db(session).logout().await?;
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    ctx.db(session).logout().await?;
     Ok(HttpResponse::Ok())
 }
 
@@ -167,7 +178,10 @@ pub(crate) async fn logout_handler<C: ProContext>(
     )
 )]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn session_handler<C: ProContext>(session: C::Session) -> impl Responder {
+pub(crate) async fn session_handler<C: ProContext>(session: C::Session) -> impl Responder
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     web::Json(session)
 }
 
@@ -197,7 +211,10 @@ pub(crate) async fn session_handler<C: ProContext>(session: C::Session) -> impl 
         )
     )
 )]
-pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
+pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
         return Err(error::Error::Authorization {
             source: Box::new(error::Error::AnonymousAccessDisabled),
@@ -227,8 +244,11 @@ pub(crate) async fn session_project_handler<C: ProContext>(
     project: web::Path<ProjectId>,
     session: UserSession,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
-    ctx.pro_db(session)
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    ctx.db(session)
         .set_session_project(project.into_inner())
         .await?;
 
@@ -252,10 +272,11 @@ pub(crate) async fn session_view_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     view: web::Json<STRectangle>,
-) -> Result<impl Responder> {
-    ctx.pro_db(session)
-        .set_session_view(view.into_inner())
-        .await?;
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    ctx.db(session).set_session_view(view.into_inner()).await?;
 
     Ok(HttpResponse::Ok())
 }
@@ -286,8 +307,11 @@ pub struct Quota {
 pub(crate) async fn quota_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: C::Session,
-) -> Result<web::Json<Quota>> {
-    let db = ctx.pro_db(session);
+) -> Result<web::Json<Quota>>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    let db = ctx.db(session);
     let available = db.quota_available().await?;
     let used = db.quota_used().await?;
 
@@ -318,7 +342,10 @@ pub(crate) async fn get_user_quota_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: C::Session,
     user: web::Path<UserId>,
-) -> Result<web::Json<Quota>> {
+) -> Result<web::Json<Quota>>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let user = user.into_inner();
 
     if session.user.id != user && !session.is_admin() {
@@ -326,7 +353,7 @@ pub(crate) async fn get_user_quota_handler<C: ProContext>(
             source: Box::new(error::Error::OperationRequiresAdminPrivilige),
         });
     }
-    let db = ctx.pro_db(UserSession::admin_session());
+    let db = ctx.db(UserSession::admin_session());
     let available = db.quota_available_by_user(&user).await?;
     let used = db.quota_used_by_user(&user).await?;
     Ok(web::Json(Quota { available, used }))
@@ -358,12 +385,15 @@ pub(crate) async fn update_user_quota_handler<C: ProContext>(
     session: C::Session,
     user: web::Path<UserId>,
     update: web::Json<UpdateQuota>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let user = user.into_inner();
 
     let update = update.into_inner();
 
-    ctx.pro_db(session)
+    ctx.db(session)
         .update_quota_available_by_user(&user, update.available)
         .await?;
 
@@ -388,7 +418,10 @@ pub(crate) async fn update_user_quota_handler<C: ProContext>(
 /// # Errors
 ///
 /// This call fails if Open ID Connect is disabled, misconfigured or the Id Provider is unreachable.
-pub(crate) async fn oidc_init<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
+pub(crate) async fn oidc_init<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
         crate::pro::users::OidcDisabled
@@ -444,7 +477,10 @@ pub(crate) async fn oidc_init<C: ProContext>(ctx: web::Data<C>) -> Result<impl R
 pub(crate) async fn oidc_login<C: ProContext>(
     response: web::Json<AuthCodeResponse>,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
         crate::pro::users::OidcDisabled
@@ -483,10 +519,13 @@ pub(crate) async fn add_role_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: C::Session,
     add_role: web::Json<AddRole>,
-) -> Result<web::Json<IdResponse<RoleId>>> {
+) -> Result<web::Json<IdResponse<RoleId>>>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let add_role = add_role.into_inner();
 
-    let id = ctx.pro_db(session).add_role(&add_role.name).await?;
+    let id = ctx.db(session).add_role(&add_role.name).await?;
 
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -510,10 +549,13 @@ pub(crate) async fn remove_role_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: C::Session,
     role: web::Path<RoleId>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let role = role.into_inner();
 
-    ctx.pro_db(session).remove_role(&role).await?;
+    ctx.db(session).remove_role(&role).await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -538,10 +580,13 @@ pub(crate) async fn assign_role_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: C::Session,
     user: web::Path<(UserId, RoleId)>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let (user, role) = user.into_inner();
 
-    ctx.pro_db(session).assign_role(&role, &user).await?;
+    ctx.db(session).assign_role(&role, &user).await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -566,10 +611,13 @@ pub(crate) async fn revoke_role_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: C::Session,
     user: web::Path<(UserId, RoleId)>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let (user, role) = user.into_inner();
 
-    ctx.pro_db(session).revoke_role(&role, &user).await?;
+    ctx.db(session).revoke_role(&role, &user).await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -610,7 +658,10 @@ mod tests {
         ctx: C,
         method: Method,
         email: &str,
-    ) -> ServiceResponse {
+    ) -> ServiceResponse
+    where
+        C::GeoEngineDB: ProGeoEngineDb,
+    {
         let user = UserRegistration {
             email: email.to_string(),
             password: "secret123".to_string(),
@@ -1421,7 +1472,7 @@ mod tests {
         let session = ctx.login(credentials).await.unwrap();
 
         let admin_session = admin_login(&ctx).await;
-        let admin_db = ctx.pro_db(admin_session.clone());
+        let admin_db = ctx.db(admin_session.clone());
 
         admin_db
             .increment_quota_used(&session.user.id, 111)
