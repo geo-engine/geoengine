@@ -23,15 +23,6 @@ where
     );
 }
 
-/// Enum used for dispatching the permissions to the correct Dbs
-#[derive(Debug, PartialEq, Eq, Deserialize, Clone, Hash, ToSchema)]
-pub enum ResourceType {
-    // Dataset,
-    Layer,
-    LayerCollection,
-    // Workflow, Project, Upload, Task, ...
-}
-
 /// Request for adding a new permission to the given role on the given resource
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
