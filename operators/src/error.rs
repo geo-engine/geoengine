@@ -178,6 +178,8 @@ pub enum Error {
 
     UnknownDatasetId,
 
+    // Error during loading of meta data. The source error typically comes from the services crate
+    #[snafu(display("Could not load meta data: {}", source))]
     MetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
