@@ -33,6 +33,7 @@ use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
+use crate::handlers::workflows::RasterStreamWebsocketResultType;
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
@@ -322,7 +323,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             PlotUpdate,
             Plot,
             ProjectLayer,
-            LayerVisibility
+            LayerVisibility,
+            RasterStreamWebsocketResultType
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
