@@ -44,10 +44,7 @@ where
             )
             .service(web::resource("").route(web::post().to(create_dataset_handler::<C>))), // must come last to not match other routes
     )
-    .service(
-        web::scope("/dataset")
-            .service(web::resource("").route(web::get().to(list_datasets_handler::<C>))),
-    );
+    .service(web::resource("/datasets").route(web::get().to(list_datasets_handler::<C>)));
 }
 
 /// Creates a new dataset using files available on the volumes.
