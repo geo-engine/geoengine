@@ -85,7 +85,7 @@ pub struct RasterInfo {
 
 #[cfg(test)]
 mod tests {
-    use crate::datasets::external::nfdi::metadata::{
+    use crate::datasets::external::aruna::metadata::{
         Attribute, DataType, GEMetadata, RasterInfo, VectorInfo,
     };
     use crate::datasets::listing::Provenance;

@@ -1,6 +1,6 @@
 pub use self::error::ArunaProviderError;
 use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
-use crate::datasets::external::nfdi::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
+use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
@@ -897,12 +897,12 @@ where
 #[cfg(test)]
 mod tests {
     use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
-    use crate::datasets::external::nfdi::metadata::GEMetadata;
-    use crate::datasets::external::nfdi::mock_grpc_server::MockGRPCServer;
-    use crate::datasets::external::nfdi::mock_grpc_server::{
+    use crate::datasets::external::aruna::metadata::GEMetadata;
+    use crate::datasets::external::aruna::mock_grpc_server::MockGRPCServer;
+    use crate::datasets::external::aruna::mock_grpc_server::{
         InfallibleHttpResponseFuture, MapResponseService,
     };
-    use crate::datasets::external::nfdi::{
+    use crate::datasets::external::aruna::{
         ArunaDataProvider, ArunaDataProviderDefinition, ArunaDatasetIds, ArunaProviderError,
         ExpiringDownloadLink,
     };
