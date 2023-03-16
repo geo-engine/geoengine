@@ -15,25 +15,26 @@ use uuid::Uuid;
 pub mod model;
 
 fn get_schema_name_from_ref(reference: &Ref) -> &str {
-    &reference.ref_location[21..]
+    const SCHEMA_REF_PREFIX_LEN: usize = "#/components/schemas/".len();
+    &reference.ref_location[SCHEMA_REF_PREFIX_LEN..]
 }
 
 fn throw_if_invalid_ref(reference: &Ref, schemas: &BTreeMap<String, RefOr<Schema>>) {
+    let schema_name = get_schema_name_from_ref(reference);
     assert!(
-        schemas.contains_key(get_schema_name_from_ref(&reference)),
-        "Referenced the unknown schema `{}`",
-        reference.ref_location
+        schemas.contains_key(schema_name),
+        "Referenced the unknown schema `{schema_name}`"
     );
 }
 
 fn can_resolve_schema(schema: RefOr<Schema>, schemas: &BTreeMap<String, RefOr<Schema>>) {
     match schema {
         RefOr::Ref(reference) => {
-            throw_if_invalid_ref(reference, schemas);
+            throw_if_invalid_ref(&reference, schemas);
         }
         RefOr::T(concrete) => match concrete {
             Schema::Array(arr) => {
-                can_resolve_schema(*arr.items, &schemas);
+                can_resolve_schema(*arr.items, schemas);
             }
             Schema::Object(obj) => {
                 for property in obj.properties.into_values() {
@@ -83,7 +84,7 @@ pub fn can_resolve_api(api: OpenApi) {
             for response in operation.responses.responses.into_values() {
                 match response {
                     RefOr::Ref(reference) => {
-                        throw_if_invalid_ref(reference, &schemas);
+                        throw_if_invalid_ref(&reference, &schemas);
                     }
                     RefOr::T(concrete) => {
                         for content in concrete.content.into_values() {
@@ -131,6 +132,7 @@ where
         }
     }
 
+    #[allow(clippy::unimplemented)]
     fn get_default_parameter_value(schema: &Schema) -> String {
         match schema {
             Schema::Object(obj) => match obj.schema_type {
@@ -154,7 +156,7 @@ where
         match ref_or {
             RefOr::Ref(reference) => {
                 throw_if_invalid_ref(reference, self.schemas);
-                let schema_name = get_schema_name_from_ref(&reference);
+                let schema_name = get_schema_name_from_ref(reference);
                 self.resolve_schema(self.schemas.get(schema_name).expect("checked before"))
             }
             RefOr::T(concrete) => concrete,
@@ -191,15 +193,15 @@ where
                 }
             }
         }
-        if cookies.len() > 0 {
+        if !cookies.is_empty() {
             req = req.append_header((
                 header::COOKIE,
                 serde_urlencoded::to_string(cookies)
                     .unwrap()
-                    .replace("&", "; "),
-            ))
+                    .replace('&', "; "),
+            ));
         }
-        if query_params.len() > 0 {
+        if !query_params.is_empty() {
             uri = format!(
                 "{}?{}",
                 uri,
@@ -209,7 +211,7 @@ where
         req.uri(uri.as_str())
     }
 
-    pub fn build_request(&self) -> TestRequest {
+    fn build_request(&self) -> TestRequest {
         let http_method = self.get_actix_http_method();
         let mut req;
 
@@ -224,7 +226,7 @@ where
             req = req.append_header((
                 header::AUTHORIZATION,
                 Bearer::new(self.session_id.to_string()),
-            ))
+            ));
         }
         req.append_header((header::CONTENT_TYPE, "application/json"))
             .set_json(&self.body)
@@ -235,7 +237,10 @@ where
         (self.send_test_request)(req, self.ctx).await
     }
 
-    pub async fn check_for_deserialization_error(self) {
+    /// # Panics
+    /// Will panic if an example cannot be run due to incomplete or
+    /// outdated OpenAPI documentation.
+    pub async fn check_for_bad_documentation(self) {
         let res = self.run().await;
 
         if res.status() == 400 {
@@ -243,16 +248,26 @@ where
             let path = res.request().path().to_string();
             let body: ErrorResponse = actix_web::test::read_body_json(res).await;
 
-            if body.error == "BodyDeserializeError" {
-                panic!(
-                    "The example at {} {} threw an BodyDeserializeError",
-                    method, path
-                );
+            match body.error.as_str() {
+                "NotFound" | "MethodNotAllowed" => panic!(
+                    "The handler of the example at {method} {path} wasn't reachable. \
+                    Check if the http method and path parameters are correctly set in the documentation."
+                ),
+                "UnableToParseQueryString" => panic!(
+                    "The example at {method} {path} threw an UnableToParseQueryString error. \
+                    Check if the query parameters are correctly set in the documentation."
+                ),
+                "BodyDeserializeError" => panic!(
+                    "The example at {method} {path} threw an BodyDeserializeError. \
+                    Check if there were schema changes and update the request body accordingly."
+                ),
+                _ => {}
             }
         }
     }
 }
 
+#[allow(clippy::unimplemented)]
 pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
     api: OpenApi,
     ctx_creator: F1,
@@ -283,16 +298,18 @@ pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
                             parameters: &operation.parameters,
                             body: example,
                             with_auth,
-                            ctx: ctx,
-                            session_id: session_id,
+                            ctx,
+                            session_id,
                             send_test_request: &send_test_request,
                         }
-                        .check_for_deserialization_error()
+                        .check_for_bad_documentation()
                         .await;
                     } else {
                         for example in content.examples.into_values() {
                             match example {
                                 RefOr::Ref(_reference) => {
+                                    // This never happened during testing.
+                                    // It is undocumented how the references would look like.
                                     unimplemented!()
                                 }
                                 RefOr::T(concrete) => {
@@ -305,11 +322,11 @@ pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
                                             parameters: &operation.parameters,
                                             body,
                                             with_auth,
-                                            ctx: ctx,
-                                            session_id: session_id,
+                                            ctx,
+                                            session_id,
                                             send_test_request: &send_test_request,
                                         }
-                                        .check_for_deserialization_error()
+                                        .check_for_bad_documentation()
                                         .await;
                                     } else {
                                         //skip external examples
@@ -327,23 +344,31 @@ pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::datasets::upload::Volume;
+    use crate::util::server::{configure_extractors, render_404, render_405};
+    use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
+    use geoengine_datatypes::util::test::TestDefault;
+    use serde::Deserialize;
+    use serde_json::json;
     use utoipa::openapi::path::{OperationBuilder, ParameterBuilder, PathItemBuilder};
     use utoipa::openapi::request_body::RequestBodyBuilder;
     use utoipa::openapi::{
-        AllOfBuilder, ArrayBuilder, ComponentsBuilder, ContentBuilder, ObjectBuilder, OneOfBuilder,
-        OpenApiBuilder, PathItemType, PathsBuilder, ResponseBuilder,
+        AllOfBuilder, ArrayBuilder, ComponentsBuilder, ContentBuilder, Object, ObjectBuilder,
+        OneOfBuilder, OpenApiBuilder, PathItemType, PathsBuilder, ResponseBuilder,
     };
+    use utoipa::ToSchema;
 
     #[test]
     #[should_panic(expected = "MissingSchema")]
     fn throws_because_of_invalid_ref() {
-        throw_if_invalid_ref(Ref::from_schema_name("MissingSchema"), &BTreeMap::new());
+        throw_if_invalid_ref(&Ref::from_schema_name("MissingSchema"), &BTreeMap::new());
     }
 
     #[test]
     fn finds_ref() {
         throw_if_invalid_ref(
-            Ref::from_schema_name("ExistingSchema"),
+            &Ref::from_schema_name("ExistingSchema"),
             &BTreeMap::from([("ExistingSchema".to_string(), RefOr::T(Schema::default()))]),
         );
     }
@@ -552,5 +577,120 @@ mod tests {
             ))
             .into();
         can_resolve_api(api);
+    }
+
+    #[derive(Deserialize)]
+    struct DummyQueryParams {
+        #[serde(rename = "x")]
+        _x: String,
+    }
+
+    // adding path and query parameter to ensure parameter insertion works
+    #[post("/test/{id}")]
+    #[allow(clippy::unused_async)] // the function signature of request handlers requires it
+    async fn dummy_handler(
+        _id: web::Path<u32>,
+        _params: web::Query<DummyQueryParams>,
+        _body: web::Json<Volume>,
+    ) -> impl Responder {
+        HttpResponse::Ok()
+    }
+
+    async fn dummy_send_test_request<C: SimpleContext>(
+        req: TestRequest,
+        ctx: C,
+    ) -> ServiceResponse {
+        let app = actix_web::test::init_service(
+            App::new()
+                .app_data(web::Data::new(ctx))
+                .wrap(
+                    middleware::ErrorHandlers::default()
+                        .handler(http::StatusCode::NOT_FOUND, render_404)
+                        .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+                )
+                .configure(configure_extractors)
+                .service(dummy_handler),
+        )
+        .await;
+        actix_web::test::call_service(&app, req.to_request())
+            .await
+            .map_into_boxed_body()
+    }
+
+    async fn run_dummy_example(example: serde_json::Value) {
+        can_run_examples(
+            OpenApiBuilder::new()
+                .paths(
+                    PathsBuilder::new().path(
+                        "/test/{id}",
+                        PathItemBuilder::new()
+                            .operation(
+                                PathItemType::Post,
+                                OperationBuilder::new()
+                                    .parameter(
+                                        ParameterBuilder::new()
+                                            .name("id")
+                                            .parameter_in(ParameterIn::Path)
+                                            .schema(Some(RefOr::T(
+                                                ObjectBuilder::new()
+                                                    .schema_type(SchemaType::Integer)
+                                                    .format(Some(SchemaFormat::KnownFormat(
+                                                        KnownFormat::Int32,
+                                                    )))
+                                                    .into(),
+                                            ))),
+                                    )
+                                    .parameter(
+                                        ParameterBuilder::new()
+                                            .name("x")
+                                            .parameter_in(ParameterIn::Query)
+                                            .schema(Some(RefOr::T(
+                                                Object::with_type(SchemaType::String).into(),
+                                            ))),
+                                    )
+                                    .request_body(Some(
+                                        RequestBodyBuilder::new()
+                                            .content(
+                                                "application/json",
+                                                ContentBuilder::new()
+                                                    .schema(Volume::schema().1)
+                                                    .example(Some(example))
+                                                    .into(),
+                                            )
+                                            .into(),
+                                    )),
+                            )
+                            .into(),
+                    ),
+                )
+                .components(Some(
+                    ComponentsBuilder::new()
+                        .schemas_from_iter([
+                            ("Schema1", Schema::default()),
+                            ("Schema2", Schema::default()),
+                            ("Schema3", Schema::default()),
+                        ])
+                        .into(),
+                ))
+                .into(),
+            move || async move {
+                let ctx = InMemoryContext::test_default();
+                let session_id = ctx.default_session_ref().await.id();
+                (ctx, session_id)
+            },
+            dummy_send_test_request,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "BodyDeserializeError")]
+    async fn detects_bodydeserializeerror() {
+        run_dummy_example(json!({"name": "note-path_field_missing"})).await;
+    }
+
+    #[tokio::test]
+    async fn successfull_example_run() {
+        run_dummy_example(json!({"name": "Files", "path": "/path/to/files"})).await;
     }
 }
