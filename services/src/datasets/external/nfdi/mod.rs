@@ -1,4 +1,4 @@
-pub use self::error::NFDIProviderError;
+pub use self::error::ArunaProviderError;
 use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::external::nfdi::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
 use crate::datasets::listing::ProvenanceOutput;
@@ -22,7 +22,7 @@ use aruna_rust_api::api::storage::services::v1::{
 };
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
-    FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
+    FeatureDataType, Measurement, RasterQueryRectangle, SpatialResolution, VectorQueryRectangle,
 };
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
@@ -55,13 +55,13 @@ pub mod metadata;
 #[macro_use]
 mod mock_grpc_server;
 
-type Result<T, E = NFDIProviderError> = std::result::Result<T, E>;
+type Result<T, E = ArunaProviderError> = std::result::Result<T, E>;
 
 const URL_REPLACEMENT: &str = "%URL%";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct NFDIDataProviderDefinition {
+pub struct ArunaDataProviderDefinition {
     id: DataProviderId,
     name: String,
     api_url: String,
@@ -72,13 +72,13 @@ pub struct NFDIDataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait::async_trait]
-impl DataProviderDefinition for NFDIDataProviderDefinition {
+impl DataProviderDefinition for ArunaDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
-        Ok(Box::new(NFDIDataProvider::new(self).await?))
+        Ok(Box::new(ArunaDataProvider::new(self).await?))
     }
 
     fn type_name(&self) -> &'static str {
-        "NFDI"
+        "Aruna"
     }
 
     fn name(&self) -> String {
@@ -102,7 +102,7 @@ impl APITokenInterceptor {
         let key = AsciiMetadataKey::from_bytes("Authorization".as_bytes())
             .expect("Key should be convertable to bytes");
         let value = AsciiMetadataValue::try_from(format!("Bearer {token}"))
-            .map_err(|source| NFDIProviderError::InvalidAPIToken { source })?;
+            .map_err(|source| ArunaProviderError::InvalidAPIToken { source })?;
 
         Ok(APITokenInterceptor { key, token: value })
     }
@@ -135,7 +135,7 @@ struct ArunaDatasetIds {
 /// a mutable self reference. However, according to the docs, cloning
 /// is cheap.
 #[derive(Debug)]
-pub struct NFDIDataProvider {
+pub struct ArunaDataProvider {
     name: String,
     id: DataProviderId,
     project_id: String,
@@ -145,12 +145,12 @@ pub struct NFDIDataProvider {
     label_filter: Option<LabelOrIdQuery>,
 }
 
-impl NFDIDataProvider {
+impl ArunaDataProvider {
     /// Creates a new provider from the given definition.
-    async fn new(def: Box<NFDIDataProviderDefinition>) -> Result<NFDIDataProvider> {
+    async fn new(def: Box<ArunaDataProviderDefinition>) -> Result<ArunaDataProvider> {
         let url = def.api_url;
         let channel = Endpoint::from_str(url.as_str())
-            .map_err(|_| NFDIProviderError::InvalidUri { uri_string: url })?
+            .map_err(|_| ArunaProviderError::InvalidUri { uri_string: url })?
             .connect()
             .await?;
 
@@ -175,7 +175,7 @@ impl NFDIDataProvider {
             ids: vec![],
         });
 
-        Ok(NFDIDataProvider {
+        Ok(ArunaDataProvider {
             name: def.name,
             id: def.id,
             project_id: def.project_id,
@@ -186,17 +186,17 @@ impl NFDIDataProvider {
         })
     }
 
-    /// Extracts the core store id from the given dataset id
-    fn dataset_nfdi_id(id: &DataId) -> Result<String> {
+    /// Extracts the aruna store id from the given dataset id
+    fn dataset_aruna_id(id: &DataId) -> Result<String> {
         match id {
             DataId::External(id) => Ok(id.layer_id.0.clone()),
-            DataId::Internal { .. } => Err(NFDIProviderError::InvalidDataId),
+            DataId::Internal { .. } => Err(ArunaProviderError::InvalidDataId),
         }
     }
 
     /// Retrieves information for the dataset with the given id.
     async fn get_dataset_info(&self, id: &DataId) -> Result<ArunaDatasetIds> {
-        self.get_collection_info(Self::dataset_nfdi_id(id)?).await
+        self.get_collection_info(Self::dataset_aruna_id(id)?).await
     }
 
     /// Retrieves information for the dataset with the given id.
@@ -217,15 +217,15 @@ impl NFDIDataProvider {
             .await?
             .into_inner()
             .object_groups
-            .ok_or(NFDIProviderError::MissingObjectGroup)?
+            .ok_or(ArunaProviderError::MissingObjectGroup)?
             .object_group_overviews;
 
         if aruna_object_group_overview.is_empty() {
-            return Err(NFDIProviderError::MissingObjectGroup);
+            return Err(ArunaProviderError::MissingObjectGroup);
         }
 
         if aruna_object_group_overview.len() != 1 {
-            return Err(NFDIProviderError::UnexpectedObjectHierarchy);
+            return Err(ArunaProviderError::UnexpectedObjectHierarchy);
         }
         let object_group_id = aruna_object_group_overview
             .pop()
@@ -244,24 +244,24 @@ impl NFDIDataProvider {
             .object_group_objects;
 
         if aruna_objects.len() > 2 {
-            return Err(NFDIProviderError::UnexpectedObjectHierarchy);
+            return Err(ArunaProviderError::UnexpectedObjectHierarchy);
         }
 
         let mut meta_object_id = None;
         let mut data_object_id = None;
         for i in aruna_objects {
             if i.is_metadata {
-                meta_object_id = Some(i.object.ok_or(NFDIProviderError::MissingMetaObject)?.id);
+                meta_object_id = Some(i.object.ok_or(ArunaProviderError::MissingMetaObject)?.id);
             } else {
-                data_object_id = Some(i.object.ok_or(NFDIProviderError::MissingDataObject)?.id);
+                data_object_id = Some(i.object.ok_or(ArunaProviderError::MissingDataObject)?.id);
             }
         }
 
         Ok(ArunaDatasetIds {
             collection_id,
             _object_group_id: object_group_id,
-            meta_object_id: meta_object_id.ok_or(NFDIProviderError::MissingMetaObject)?,
-            data_object_id: data_object_id.ok_or(NFDIProviderError::MissingDataObject)?,
+            meta_object_id: meta_object_id.ok_or(ArunaProviderError::MissingMetaObject)?,
+            data_object_id: data_object_id.ok_or(ArunaProviderError::MissingDataObject)?,
         })
     }
 
@@ -278,7 +278,7 @@ impl NFDIDataProvider {
             .await?
             .into_inner()
             .collection
-            .ok_or(NFDIProviderError::InvalidDataId)?;
+            .ok_or(ArunaProviderError::InvalidDataId)?;
 
         Ok(collection_overview)
     }
@@ -295,7 +295,7 @@ impl NFDIDataProvider {
             .await?
             .into_inner()
             .url
-            .ok_or(NFDIProviderError::MissingURL)?
+            .ok_or(ArunaProviderError::MissingURL)?
             .url;
 
         let data_get_response = reqwest::Client::new().get(download_url).send().await?;
@@ -304,12 +304,12 @@ impl NFDIDataProvider {
             let json = data_get_response.json::<GEMetadata>().await?;
             Ok(json)
         } else {
-            Err(NFDIProviderError::MissingNFDIMetaData)
+            Err(ArunaProviderError::MissingArunaMetaData)
         };
     }
 
     /// Creates a result descriptor for vector data
-    fn create_vector_result_descriptor(
+    fn create_single_vector_file_result_descriptor(
         crs: SpatialReferenceOption,
         info: &VectorInfo,
     ) -> VectorResultDescriptor {
@@ -331,27 +331,33 @@ impl NFDIDataProvider {
             data_type: info.vector_type,
             spatial_reference: crs,
             columns,
-            time: None,
-            bbox: None,
+            time: info.time,
+            bbox: info.bbox,
         }
     }
 
     /// Creates a result descriptor for raster data
-    fn create_raster_result_descriptor(
+    fn create_single_raster_file_result_descriptor(
         crs: SpatialReferenceOption,
         info: &RasterInfo,
-    ) -> RasterResultDescriptor {
-        RasterResultDescriptor {
+    ) -> geoengine_operators::util::Result<RasterResultDescriptor> {
+        Ok(RasterResultDescriptor {
             data_type: info.data_type,
             spatial_reference: crs,
             measurement: info
                 .measurement
                 .as_ref()
                 .map_or(Measurement::Unitless, Clone::clone),
-            time: None,
-            bbox: None,
-            resolution: None,
-        }
+            time: Some(info.time_interval),
+            bbox: Some(
+                info.geo_transform
+                    .spatial_partition(info.width, info.height),
+            ),
+            resolution: Some(SpatialResolution::try_from((
+                info.geo_transform.x_pixel_size,
+                info.geo_transform.y_pixel_size,
+            ))?),
+        })
     }
 
     /// Retrieves a file-object from the aruna object storage. It assumes, that the dataset consists
@@ -368,9 +374,9 @@ impl NFDIDataProvider {
             .await?
             .into_inner()
             .object
-            .ok_or(NFDIProviderError::MissingDataObject)
+            .ok_or(ArunaProviderError::MissingDataObject)
             .map(|x| x.object)?
-            .ok_or(NFDIProviderError::MissingDataObject)
+            .ok_or(ArunaProviderError::MissingDataObject)
     }
 
     /// Creates the loading template for vector files. This is basically a loading
@@ -494,7 +500,7 @@ impl NFDIDataProvider {
 #[async_trait::async_trait]
 impl
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for NFDIDataProvider
+    for ArunaDataProvider
 {
     async fn meta_data(
         &self,
@@ -514,7 +520,7 @@ impl
 
 #[async_trait::async_trait]
 impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for NFDIDataProvider
+    for ArunaDataProvider
 {
     async fn meta_data(
         &self,
@@ -546,10 +552,10 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         match meta_data.data_type {
             DataType::SingleVectorFile(info) => {
                 let result_descriptor =
-                    Self::create_vector_result_descriptor(meta_data.crs.into(), &info);
+                    Self::create_single_vector_file_result_descriptor(meta_data.crs.into(), &info);
                 let template = Self::vector_loading_template(&info, &result_descriptor);
 
-                let res = NFDIMetaData {
+                let res = ArunaMetaData {
                     collection_id: aruna_dataset_ids.collection_id,
                     object_id: aruna_data_object.id,
                     template,
@@ -569,7 +575,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
 #[async_trait::async_trait]
 impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for NFDIDataProvider
+    for ArunaDataProvider
 {
     async fn meta_data(
         &self,
@@ -601,10 +607,10 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         match &meta_data.data_type {
             DataType::SingleRasterFile(info) => {
                 let result_descriptor =
-                    Self::create_raster_result_descriptor(meta_data.crs.into(), info);
+                    Self::create_single_raster_file_result_descriptor(meta_data.crs.into(), info)?;
                 let template = Self::raster_loading_template(info);
 
-                let res = NFDIMetaData {
+                let res = ArunaMetaData {
                     collection_id: aruna_dataset_ids.collection_id,
                     object_id: aruna_data_object.id,
                     template,
@@ -623,7 +629,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 }
 
 #[async_trait::async_trait]
-impl DataProvider for NFDIDataProvider {
+impl DataProvider for ArunaDataProvider {
     async fn provenance(&self, id: &DataId) -> crate::error::Result<ProvenanceOutput> {
         let aruna_dataset_ids = self.get_dataset_info(id).await?;
         let metadata = self.get_metadata(&aruna_dataset_ids).await?;
@@ -636,7 +642,7 @@ impl DataProvider for NFDIDataProvider {
 }
 
 #[async_trait::async_trait]
-impl LayerCollectionProvider for NFDIDataProvider {
+impl LayerCollectionProvider for ArunaDataProvider {
     async fn collection(
         &self,
         collection: &LayerCollectionId,
@@ -658,10 +664,10 @@ impl LayerCollectionProvider for NFDIDataProvider {
                 page_request: None,
             })
             .await
-            .map_err(|source| NFDIProviderError::TonicStatus { source })?
+            .map_err(|source| ArunaProviderError::TonicStatus { source })?
             .into_inner()
             .collections
-            .ok_or(NFDIProviderError::MissingCollection)?
+            .ok_or(ArunaProviderError::MissingCollection)?
             .collection_overviews
             .into_iter()
             .map(|col| {
@@ -837,7 +843,7 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
 /// It stores an object-id, for which to generate new download links each
 /// time the `load_info()` function is called.
 #[derive(Clone, Debug)]
-struct NFDIMetaData<L, R, Q>
+struct ArunaMetaData<L, R, Q>
 where
     L: Debug + Clone + Send + Sync + ExpiringDownloadLink + 'static,
     R: Debug + Send + Sync + 'static + ResultDescriptor,
@@ -852,7 +858,7 @@ where
 }
 
 #[async_trait::async_trait]
-impl<L, R, Q> MetaData<L, R, Q> for NFDIMetaData<L, R, Q>
+impl<L, R, Q> MetaData<L, R, Q> for ArunaMetaData<L, R, Q>
 where
     L: Debug + Clone + Send + Sync + ExpiringDownloadLink + 'static,
     R: Debug + Send + Sync + 'static + ResultDescriptor,
@@ -866,13 +872,13 @@ where
                 object_id: self.object_id.clone(),
             })
             .await
-            .map_err(|source| NFDIProviderError::TonicStatus { source })
+            .map_err(|source| ArunaProviderError::TonicStatus { source })
             .map_err(|source| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(source),
             })?
             .into_inner()
             .url
-            .ok_or(NFDIProviderError::MissingURL)
+            .ok_or(ArunaProviderError::MissingURL)
             .map_err(|source| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(source),
             })?;
@@ -897,8 +903,8 @@ mod tests {
         InfallibleHttpResponseFuture, MapResponseService,
     };
     use crate::datasets::external::nfdi::{
-        ArunaDatasetIds, ExpiringDownloadLink, NFDIDataProvider, NFDIDataProviderDefinition,
-        NFDIProviderError,
+        ArunaDataProvider, ArunaDataProviderDefinition, ArunaDatasetIds, ArunaProviderError,
+        ExpiringDownloadLink,
     };
     use crate::layers::external::DataProvider;
     use crate::layers::layer::LayerCollectionListOptions;
@@ -1018,8 +1024,8 @@ mod tests {
 
     const FILTER_LABEL: &str = "geoengine";
 
-    async fn new_provider_with_url(url: String) -> NFDIDataProvider {
-        let def = NFDIDataProviderDefinition {
+    async fn new_provider_with_url(url: String) -> ArunaDataProvider {
+        let def = ArunaDataProviderDefinition {
             id: DataProviderId::from_str(PROVIDER_ID).unwrap(),
             api_token: TOKEN.to_string(),
             api_url: url,
@@ -1027,7 +1033,7 @@ mod tests {
             name: "NFDI".to_string(),
             filter_label: FILTER_LABEL.to_string(),
         };
-        NFDIDataProvider::new(Box::new(def)).await.unwrap()
+        ArunaDataProvider::new(Box::new(def)).await.unwrap()
     }
 
     pub(crate) fn vector_meta_data() -> Value {
@@ -1090,7 +1096,7 @@ mod tests {
     struct ArunaMockServer {
         _download_server: Option<Server>,
         _grpc_server: MockGRPCServer,
-        provider: NFDIDataProvider,
+        provider: ArunaDataProvider,
         dataset_ids: ArunaDatasetIds,
     }
 
@@ -1383,7 +1389,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(NFDIProviderError::TonicStatus { source: _ })
+            Err(ArunaProviderError::TonicStatus { source: _ })
         ));
     }
 
@@ -1410,7 +1416,7 @@ mod tests {
             .get_collection_info(COLLECTION_ID.to_string())
             .await;
 
-        assert!(matches!(result, Err(NFDIProviderError::MissingMetaObject)));
+        assert!(matches!(result, Err(ArunaProviderError::MissingMetaObject)));
     }
 
     #[tokio::test]
@@ -1436,7 +1442,7 @@ mod tests {
             .get_collection_info(COLLECTION_ID.to_string())
             .await;
 
-        assert!(matches!(result, Err(NFDIProviderError::MissingDataObject)));
+        assert!(matches!(result, Err(ArunaProviderError::MissingDataObject)));
     }
 
     #[tokio::test]
@@ -1487,7 +1493,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(NFDIProviderError::MissingNFDIMetaData)
+            Err(ArunaProviderError::MissingArunaMetaData)
         ));
     }
 
@@ -1619,9 +1625,9 @@ mod tests {
             super::metadata::DataType::SingleRasterFile(_) => panic!("Expected vector description"),
         };
 
-        let rd = NFDIDataProvider::create_vector_result_descriptor(md.crs.into(), &vi);
+        let rd = ArunaDataProvider::create_single_vector_file_result_descriptor(md.crs.into(), &vi);
 
-        let template = NFDIDataProvider::vector_loading_template(&vi, &rd);
+        let template = ArunaDataProvider::vector_loading_template(&vi, &rd);
 
         let url = template
             .new_link("test".to_string())
@@ -1654,7 +1660,7 @@ mod tests {
             super::metadata::DataType::SingleVectorFile(_) => panic!("Expected raster description"),
         };
 
-        let template = NFDIDataProvider::raster_loading_template(&ri);
+        let template = ArunaDataProvider::raster_loading_template(&ri);
 
         let url = template
             .new_link("test".to_string())

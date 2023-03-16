@@ -4,7 +4,7 @@ use crate::api::model::datatypes::{
 #[cfg(feature = "ebv")]
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 #[cfg(feature = "nfdi")]
-use crate::datasets::external::nfdi::error::NFDIProviderError;
+use crate::datasets::external::nfdi::error::ArunaProviderError;
 use crate::handlers::ErrorResponse;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::http::StatusCode;
@@ -316,7 +316,7 @@ pub enum Error {
     #[cfg(feature = "nfdi")]
     #[snafu(context(false))]
     NFDIProvider {
-        source: NFDIProviderError,
+        source: ArunaProviderError,
     },
 
     #[cfg(feature = "ebv")]
