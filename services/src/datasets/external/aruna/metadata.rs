@@ -127,7 +127,9 @@ mod tests {
                         "name":"name",
                         "type":"text"
                     }],
-                    "temporalExtend":null
+                    "temporalExtend":null,
+                    "time":null,
+                    "bbox":null
                 }
             },
             "provenance": [
