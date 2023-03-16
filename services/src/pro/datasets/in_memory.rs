@@ -477,13 +477,15 @@ impl DatasetLayerCollectionProvider for ProInMemoryDb {
 
         let backend = self.backend.dataset_db.read().await;
 
-        // TODO: filter items by permission
-        let items = backend
-            .datasets
-            .iter()
+        let items = stream::iter(backend.datasets.values())
+            .filter(|d| async {
+                self.has_permission(d.id, Permission::Read)
+                    .await
+                    .unwrap_or(false)
+            })
             .skip(options.offset as usize)
             .take(options.limit as usize)
-            .map(|(_id, d)| {
+            .map(|d| {
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id: DATASET_DB_LAYER_PROVIDER_ID,
@@ -495,7 +497,8 @@ impl DatasetLayerCollectionProvider for ProInMemoryDb {
                     properties: vec![],
                 })
             })
-            .collect();
+            .collect()
+            .await;
 
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
