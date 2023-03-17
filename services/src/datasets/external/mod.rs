@@ -1,4 +1,6 @@
 #[cfg(feature = "nfdi")]
+pub mod aruna;
+#[cfg(feature = "nfdi")]
 pub mod gbif;
 #[cfg(feature = "nfdi")]
 pub mod gfbio_abcd; // TODO: rename to "gfbio_abcd"?
@@ -9,7 +11,5 @@ pub mod mock;
 pub mod nature40;
 #[cfg(feature = "ebv")]
 pub mod netcdfcf;
-#[cfg(feature = "nfdi")]
-pub mod nfdi;
 #[cfg(feature = "nfdi")]
 pub mod pangaea;

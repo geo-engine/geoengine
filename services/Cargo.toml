@@ -14,7 +14,7 @@ nature40 = ["xml"]
 xml = ["quick-xml"]
 postgres = ["postgres-types", "bb8-postgres"]
 odm = ["pro"]
-nfdi = ["postgres", "geoengine-datatypes/postgres", "scienceobjectsdb_rust_api", "pro"]
+nfdi = ["postgres", "geoengine-datatypes/postgres", "aruna-rust-api", "pro"]
 ebv = []
 # This compiles Geo Engine Pro
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
@@ -30,6 +30,7 @@ actix-rt = "2.6"
 actix-web = "4.2"
 actix-web-actors = "4.2"
 actix-web-httpauth = "0.8"
+aruna-rust-api = { version = "1.0.0-rc.6", optional = true }
 async-trait = "0.1"
 base64 = "0.21"
 bb8-postgres = { version = "0.8", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"], optional = true }
@@ -66,7 +67,6 @@ quick-xml = { version = "0.27", optional = true }
 rayon = "1.5"
 regex = "1.5"
 reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
-scienceobjectsdb_rust_api = { version = "0.2.0-rc1", optional = true }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
@@ -78,7 +78,7 @@ time = "0.3"
 tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
 tokio-postgres = { version = "0.7" }
 tokio-util = { version = "0.7", features = ["codec"] }
-tonic = { version = "0.6", features = ["tls", "tls-roots"] } # must be compatible with `scienceobjectsdb_rust_api`
+tonic = { version = "0.8.3", features = ["tls", "tls-roots"] } # must be compatible with `aruna-rust-api`
 tracing = "0.1"
 tracing-actix-web = "0.7"
 tracing-opentelemetry = "0.18"
@@ -98,7 +98,8 @@ nix = "0.26"
 httptest = "0.15.2"
 rand = "0.8.4"
 tempfile = "3.1"
-wiremock-grpc = "0.0.3-alpha1"
+prost = "0.11.6"
+hyper = "0.14.24"
 xml-rs = "0.8.3"
 serial_test = "1.0"
 
