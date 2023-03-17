@@ -315,7 +315,7 @@ pub enum Error {
 
     #[cfg(feature = "nfdi")]
     #[snafu(context(false))]
-    NFDIProvider {
+    ArunaProvider {
         source: ArunaProviderError,
     },
 
