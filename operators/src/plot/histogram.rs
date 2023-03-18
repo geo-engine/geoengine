@@ -51,11 +51,28 @@ pub struct HistogramParams {
     pub column_name: Option<String>,
     /// The bounds (min/max) of the histogram.
     pub bounds: HistogramBounds,
-    /// If the number of buckets is undefined, it is derived from the square-root choice rule.
-    pub buckets: Option<usize>,
+    /// Specify the number of buckets or how it should be derived.
+    pub buckets: HistogramBuckets,
     /// Whether to create an interactive output (`false` by default)
     #[serde(default)]
     pub interactive: bool,
+}
+
+/// Options for how to derive the histogram's number of buckets.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum HistogramBuckets {
+    #[serde(rename_all = "camelCase")]
+    Number { value: u8 },
+    #[serde(rename_all = "camelCase")]
+    SquareRootChoiceRule {
+        #[serde(default = "default_max_number_of_buckets")]
+        max_number_of_buckets: u8,
+    },
+}
+
+fn default_max_number_of_buckets() -> u8 {
+    100
 }
 
 string_token!(Data, "data");
@@ -171,10 +188,20 @@ impl<Op> InitializedHistogram<Op> {
             (None, None)
         };
 
+        let (number_of_buckets, max_number_of_buckets) = match params.buckets {
+            HistogramBuckets::Number {
+                value: number_of_buckets,
+            } => (Some(number_of_buckets as usize), None),
+            HistogramBuckets::SquareRootChoiceRule {
+                max_number_of_buckets,
+            } => (None, Some(max_number_of_buckets as usize)),
+        };
+
         Self {
             result_descriptor,
             metadata: HistogramMetadataOptions {
-                number_of_buckets: params.buckets,
+                number_of_buckets,
+                max_number_of_buckets,
                 min,
                 max,
             },
@@ -495,6 +522,7 @@ impl HistogramMetadata {
 #[derive(Debug, Copy, Clone, PartialEq)]
 struct HistogramMetadataOptions {
     pub number_of_buckets: Option<usize>,
+    pub max_number_of_buckets: Option<usize>,
     pub min: Option<f64>,
     pub max: Option<f64>,
 }
@@ -516,8 +544,16 @@ impl TryFrom<HistogramMetadataOptions> for HistogramMetadata {
 
 impl HistogramMetadataOptions {
     fn merge_with(self, metadata: HistogramMetadata) -> HistogramMetadata {
+        let number_of_buckets = if let Some(number_of_buckets) = self.number_of_buckets {
+            number_of_buckets
+        } else if let Some(max_number_of_buckets) = self.max_number_of_buckets {
+            metadata.number_of_buckets.min(max_number_of_buckets)
+        } else {
+            metadata.number_of_buckets
+        };
+
         HistogramMetadata {
-            number_of_buckets: self.number_of_buckets.unwrap_or(metadata.number_of_buckets),
+            number_of_buckets,
             min: self.min.unwrap_or(metadata.min),
             max: self.max.unwrap_or(metadata.max),
         }
@@ -641,7 +677,7 @@ mod tests {
                     min: 5.0,
                     max: 10.0,
                 },
-                buckets: Some(15),
+                buckets: HistogramBuckets::Number { value: 15 },
                 interactive: false,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
@@ -657,7 +693,10 @@ mod tests {
                     "min": 5.0,
                     "max": 10.0,
                 },
-                "buckets": 15,
+                "buckets": {
+                    "type": "number",
+                    "value": 15,
+                },
                 "interactivity": false,
             },
             "sources": {
@@ -684,7 +723,9 @@ mod tests {
             params: HistogramParams {
                 column_name: None,
                 bounds: HistogramBounds::Data(Default::default()),
-                buckets: None,
+                buckets: HistogramBuckets::SquareRootChoiceRule {
+                    max_number_of_buckets: 100,
+                },
                 interactive: false,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
@@ -696,6 +737,10 @@ mod tests {
             "type": "Histogram",
             "params": {
                 "bounds": "data",
+                "buckets": {
+                    "type": "squareRootChoiceRule",
+                    "maxNumberOfBuckets": 100,
+                },
             },
             "sources": {
                 "source": {
@@ -721,7 +766,7 @@ mod tests {
             params: HistogramParams {
                 column_name: Some("foo".to_string()),
                 bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
-                buckets: Some(3),
+                buckets: HistogramBuckets::Number { value: 3 },
                 interactive: false,
             },
             sources: mock_raster_source().into(),
@@ -776,7 +821,7 @@ mod tests {
             params: HistogramParams {
                 column_name: None,
                 bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
-                buckets: Some(3),
+                buckets: HistogramBuckets::Number { value: 3 },
                 interactive: false,
             },
             sources: mock_raster_source().into(),
@@ -828,7 +873,9 @@ mod tests {
             params: HistogramParams {
                 column_name: None,
                 bounds: HistogramBounds::Data(Default::default()),
-                buckets: None,
+                buckets: HistogramBuckets::SquareRootChoiceRule {
+                    max_number_of_buckets: 100,
+                },
                 interactive: false,
             },
             sources: mock_raster_source().into(),
@@ -889,7 +936,7 @@ mod tests {
             params: HistogramParams {
                 column_name: Some("foo".to_string()),
                 bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
-                buckets: Some(3),
+                buckets: HistogramBuckets::Number { value: 3 },
                 interactive: true,
             },
             sources: vector_source.into(),
@@ -956,7 +1003,9 @@ mod tests {
             params: HistogramParams {
                 column_name: Some("foo".to_string()),
                 bounds: HistogramBounds::Data(Default::default()),
-                buckets: None,
+                buckets: HistogramBuckets::SquareRootChoiceRule {
+                    max_number_of_buckets: 100,
+                },
                 interactive: false,
             },
             sources: vector_source.into(),
@@ -1006,7 +1055,11 @@ mod tests {
             "type": "Histogram",
             "params": {
                 "columnName": "featurecla",
-                "bounds": "data"
+                "bounds": "data",
+                "buckets": {
+                    "type": "squareRootChoiceRule",
+                    "maxNumberOfBuckets": 100,
+                }
             },
             "sources": {
                 "source": {
@@ -1125,7 +1178,9 @@ mod tests {
             params: HistogramParams {
                 column_name: None,
                 bounds: HistogramBounds::Data(Data::default()),
-                buckets: None,
+                buckets: HistogramBuckets::SquareRootChoiceRule {
+                    max_number_of_buckets: 100,
+                },
                 interactive: false,
             },
             sources: MockRasterSource {
@@ -1201,7 +1256,9 @@ mod tests {
             params: HistogramParams {
                 column_name: Some("foo".to_string()),
                 bounds: HistogramBounds::Data(Default::default()),
-                buckets: None,
+                buckets: HistogramBuckets::SquareRootChoiceRule {
+                    max_number_of_buckets: 100,
+                },
                 interactive: false,
             },
             sources: vector_source.into(),
@@ -1263,7 +1320,9 @@ mod tests {
             params: HistogramParams {
                 column_name: Some("foo".to_string()),
                 bounds: HistogramBounds::Data(Default::default()),
-                buckets: None,
+                buckets: HistogramBuckets::SquareRootChoiceRule {
+                    max_number_of_buckets: 100,
+                },
                 interactive: false,
             },
             sources: vector_source.into(),
@@ -1321,7 +1380,9 @@ mod tests {
             params: HistogramParams {
                 column_name: None,
                 bounds: HistogramBounds::Data(Data::default()),
-                buckets: None,
+                buckets: HistogramBuckets::SquareRootChoiceRule {
+                    max_number_of_buckets: 100,
+                },
                 interactive: false,
             },
             sources: MockRasterSource {
