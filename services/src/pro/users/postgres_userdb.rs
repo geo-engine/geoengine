@@ -20,7 +20,7 @@ use pwhash::bcrypt;
 use snafu::ensure;
 use uuid::Uuid;
 
-use super::userdb::UserAuth;
+use super::userdb::{RoleDb, UserAuth};
 
 #[async_trait]
 impl<Tls> UserAuth for PostgresContext<Tls>
@@ -553,7 +553,16 @@ where
 
         Ok(())
     }
+}
 
+#[async_trait]
+impl<Tls> RoleDb for PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn add_role(&self, role_name: &str) -> Result<RoleId> {
         ensure!(self.session.is_admin(), error::PermissionDenied);
 

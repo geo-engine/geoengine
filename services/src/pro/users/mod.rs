@@ -15,4 +15,4 @@ pub(super) use oidc::{
 pub(super) use oidc::{AuthCodeResponse, OidcDisabled, OidcRequestDb};
 pub use session::{UserInfo, UserSession};
 pub use user::{User, UserCredentials, UserId, UserRegistration};
-pub use userdb::{UserAuth, UserDb};
+pub use userdb::{RoleDb, UserAuth, UserDb};

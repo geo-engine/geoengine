@@ -147,27 +147,4 @@ pub trait PermissionDb {
         &self,
         resource: R,
     ) -> Result<()>;
-
-    // TODO: own RoleDB trait?
-
-    // /// Create a new role
-    // /// Requires `Admin` Role
-    // async fn create_role(&self, name: &str) -> Result<RoleId>;
-
-    // /// List all roles
-    // /// Requires `Admin` Role
-    // // TODO: pagination
-    // async fn list_roles(&self) -> Result<Vec<Role>>;
-
-    // TODO: delete role
-
-    // /// Assign role to user
-    // /// Requires `Admin` Role
-    // /// TODO: make roles their own resource with Owners?
-    // async fn assign_role(&self, user: &UserId, role: &RoleId) -> Result<()>;
-
-    // /// Revoke role from user
-    // /// Requires `Admin` Role
-    // /// TODO: make roles their own resource with Owners?
-    // async fn revoke_role(&self, user: &UserId, role: &RoleId) -> Result<()>;
 }

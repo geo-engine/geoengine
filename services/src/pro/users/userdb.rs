@@ -137,20 +137,19 @@ pub trait UserDb: Send + Sync {
         user: &UserId,
         new_available_quota: i64,
     ) -> Result<()>;
+}
 
+#[async_trait]
+pub trait RoleDb {
     /// Add a new role
-    ///// TODO: move this method to some AdminDb?
     async fn add_role(&self, role_name: &str) -> Result<RoleId>;
 
     /// Remove an existing role
-    /// // TODO: move this method to some AdminDb?
     async fn remove_role(&self, role_id: &RoleId) -> Result<()>;
 
     /// Remove an existing role
-    /// // TODO: move this method to some AdminDb?
     async fn assign_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()>;
 
     /// Remove an existing role
-    /// // TODO: move this method to some AdminDb?
     async fn revoke_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()>;
 }

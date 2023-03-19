@@ -3,6 +3,7 @@ use crate::error::Result;
 use crate::pro::contexts::ProContext;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::permissions::RoleId;
+use crate::pro::users::RoleDb;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
 use crate::pro::users::UserRegistration;

@@ -36,7 +36,7 @@ use async_trait::async_trait;
 
 use super::permissions::PermissionDb;
 use super::projects::ProProjectDb;
-use super::users::UserAuth;
+use super::users::{RoleDb, UserAuth};
 
 pub use in_memory::ProInMemoryDb;
 pub use postgres::PostgresDb;
@@ -51,7 +51,7 @@ where
     fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
 }
 
-pub trait ProGeoEngineDb: GeoEngineDb + ProProjectDb + UserDb + PermissionDb {}
+pub trait ProGeoEngineDb: GeoEngineDb + ProProjectDb + UserDb + PermissionDb + RoleDb {}
 
 pub struct ExecutionContextImpl<D>
 where

@@ -18,7 +18,7 @@ use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::Validated;
 use geoengine_datatypes::util::Identifier;
 
-use super::userdb::UserAuth;
+use super::userdb::{RoleDb, UserAuth};
 
 pub struct HashMapUserDbBackend {
     users: HashMap<String, User>,
@@ -368,7 +368,10 @@ impl UserDb for ProInMemoryDb {
 
         Ok(())
     }
+}
 
+#[async_trait]
+impl RoleDb for ProInMemoryDb {
     async fn add_role(&self, role_name: &str) -> Result<RoleId> {
         ensure!(self.session.is_admin(), error::PermissionDenied);
 

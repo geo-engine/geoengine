@@ -686,7 +686,7 @@ mod tests {
     use crate::pro::permissions::{Permission, PermissionDb};
     use crate::pro::projects::{LoadVersion, ProProjectDb};
     use crate::pro::users::{
-        ExternalUserClaims, UserCredentials, UserDb, UserId, UserRegistration,
+        ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
     };
     use crate::pro::util::tests::admin_login;
     use crate::projects::{
