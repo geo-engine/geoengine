@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::api::model::datatypes::DatasetId;
+use crate::datasets::upload::{AdjustFilePath, Upload, UploadRootPath, Volume};
 use crate::util::user_input::UserInput;
 use crate::{
     api::model::services::DataPath,
@@ -19,10 +20,6 @@ use crate::{
     util::config::{get_config_element, Data},
 };
 use crate::{contexts::Context, datasets::storage::AutoCreateDataset};
-use crate::{
-    contexts::MockableSession,
-    datasets::upload::{AdjustFilePath, Upload, UploadRootPath, Volume},
-};
 use crate::{datasets::upload::VolumeName, error::Result};
 use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
@@ -326,10 +323,7 @@ async fn create_volume_dataset<C: Context>(
     ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>>
-where
-    C::Session: MockableSession,
-{
+) -> Result<web::Json<IdResponse<DatasetId>>> {
     let volumes = get_config_element::<Data>()?.volumes;
     let volume_path = volumes
         .get(&volume_name)
@@ -907,10 +901,7 @@ pub async fn delete_dataset_handler<C: Context>(
     dataset: web::Path<DatasetId>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<HttpResponse>
-where
-    C::Session: MockableSession,
-{
+) -> Result<HttpResponse> {
     ctx.db(session).delete_dataset(dataset.into_inner()).await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())

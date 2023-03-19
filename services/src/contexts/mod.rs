@@ -43,7 +43,7 @@ pub type Db<T> = Arc<RwLock<T>>;
 /// about the user to pass to the services handlers.
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
-    type Session: MockableSession + Clone;
+    type Session: Session + Clone;
     type GeoEngineDB: GeoEngineDb;
     type QueryContext: QueryContext;
     type ExecutionContext: ExecutionContext;
