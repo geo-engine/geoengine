@@ -172,6 +172,8 @@ where
         loop {
             match version {
                 0 => {
+                    let user_config = get_config_element::<crate::pro::util::config::User>()?;
+
                     conn.batch_execute(
                         &format!(r#"
                         CREATE TABLE version (
@@ -513,8 +515,8 @@ where
                         "#
                     ,
                     admin_role_id = escape_literal(&Role::admin_role_id().to_string()),
-                    admin_email = escape_literal(&get_config_element::<crate::pro::util::config::User>()?.admin_email),
-                    admin_password = escape_literal(&bcrypt::hash(get_config_element::<crate::pro::util::config::User>()?.admin_password).expect("Admin password hash should be valid")),
+                    admin_email = escape_literal(&user_config.admin_email),
+                    admin_password = escape_literal(&bcrypt::hash(user_config.admin_password).expect("Admin password hash should be valid")),
                     user_role_id = escape_literal(&Role::registered_user_role_id().to_string()),
                     anonymous_role_id = escape_literal(&Role::anonymous_role_id().to_string()),
                     root_layer_collection_id = escape_literal(&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
