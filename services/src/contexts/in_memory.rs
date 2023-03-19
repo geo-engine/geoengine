@@ -5,7 +5,7 @@ use super::{Context, Db, GeoEngineDb, SimpleSession};
 use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDbBackend;
-use crate::datasets::upload::Volume;
+use crate::datasets::upload::{Volume, Volumes};
 use crate::error::Error;
 use crate::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
@@ -35,6 +35,7 @@ pub struct InMemoryContext {
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+    volumes: Volumes,
 }
 
 impl TestDefault for InMemoryContext {
@@ -46,6 +47,7 @@ impl TestDefault for InMemoryContext {
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
+            volumes: Default::default(),
         }
     }
 }
@@ -66,6 +68,7 @@ impl InMemoryContext {
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             thread_pool: create_rayon_thread_pool(0),
+            volumes: Default::default(),
         };
 
         let mut db = ctx.db(ctx.default_session().read().await.clone());
@@ -90,6 +93,7 @@ impl InMemoryContext {
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             thread_pool: create_rayon_thread_pool(0),
+            volumes: Default::default(),
         }
     }
 }
@@ -139,13 +143,7 @@ impl Context for InMemoryContext {
     }
 
     fn volumes(&self, _session: SimpleSession) -> Result<Vec<Volume>> {
-        Ok(
-            crate::util::config::get_config_element::<crate::util::config::Data>()?
-                .volumes
-                .into_iter()
-                .map(|(name, path)| Volume { name, path })
-                .collect::<Vec<_>>(),
-        )
+        Ok(self.volumes.volumes.clone())
     }
 }
 

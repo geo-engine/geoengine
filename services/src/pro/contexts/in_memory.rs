@@ -1,5 +1,5 @@
 use crate::contexts::{GeoEngineDb, QueryContextImpl};
-use crate::datasets::upload::Volume;
+use crate::datasets::upload::{Volume, Volumes};
 use crate::error;
 
 use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDbBackend};
@@ -43,6 +43,7 @@ pub struct ProInMemoryContext {
     query_ctx_chunk_size: ChunkByteSize,
     task_manager: Arc<ProTaskManagerBackend>,
     quota: QuotaTrackingFactory,
+    volumes: Volumes,
 }
 
 impl TestDefault for ProInMemoryContext {
@@ -56,6 +57,7 @@ impl TestDefault for ProInMemoryContext {
             task_manager: Default::default(),
             oidc_request_db: Arc::new(None),
             quota: TestDefault::test_default(),
+            volumes: Default::default(),
         }
     }
 }
@@ -84,6 +86,7 @@ impl ProInMemoryContext {
             query_ctx_chunk_size,
             oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
             quota,
+            volumes: Default::default(),
         };
 
         let mut db = ctx.db(session);
@@ -120,6 +123,7 @@ impl ProInMemoryContext {
             query_ctx_chunk_size,
             oidc_request_db: Arc::new(None),
             quota,
+            volumes: Default::default(),
         }
     }
 
@@ -137,6 +141,7 @@ impl ProInMemoryContext {
             query_ctx_chunk_size: TestDefault::test_default(),
             oidc_request_db: Arc::new(Some(oidc_db)),
             quota,
+            volumes: Default::default(),
         }
     }
 }
@@ -202,13 +207,7 @@ impl Context for ProInMemoryContext {
     fn volumes(&self, session: UserSession) -> Result<Vec<Volume>> {
         ensure!(session.is_admin(), error::PermissionDenied);
 
-        Ok(
-            crate::util::config::get_config_element::<crate::util::config::Data>()?
-                .volumes
-                .into_iter()
-                .map(|(name, path)| Volume { name, path })
-                .collect::<Vec<_>>(),
-        )
+        Ok(self.volumes.volumes.clone())
     }
 }
 

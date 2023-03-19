@@ -1,7 +1,7 @@
 use crate::contexts::QueryContextImpl;
 use crate::contexts::{Context, GeoEngineDb};
 use crate::datasets::add_from_directory::add_providers_from_directory;
-use crate::datasets::upload::Volume;
+use crate::datasets::upload::{Volume, Volumes};
 use crate::error::{self, Result};
 use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
@@ -56,6 +56,7 @@ where
     oidc_request_db: Arc<Option<OidcRequestDb>>,
     quota: QuotaTrackingFactory,
     pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
+    volumes: Volumes,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -87,6 +88,7 @@ where
             oidc_request_db: Arc::new(None),
             quota,
             pool,
+            volumes: Default::default(),
         })
     }
 
@@ -119,6 +121,7 @@ where
             oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
             quota,
             pool,
+            volumes: Default::default(),
         };
 
         let mut db = ctx.db(UserSession::admin_session());
@@ -611,13 +614,7 @@ where
     fn volumes(&self, session: UserSession) -> Result<Vec<Volume>> {
         ensure!(session.is_admin(), error::PermissionDenied);
 
-        Ok(
-            crate::util::config::get_config_element::<crate::util::config::Data>()?
-                .volumes
-                .into_iter()
-                .map(|(name, path)| Volume { name, path })
-                .collect::<Vec<_>>(),
-        )
+        Ok(self.volumes.volumes.clone())
     }
 }
 

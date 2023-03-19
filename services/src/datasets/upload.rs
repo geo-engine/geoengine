@@ -62,6 +62,24 @@ impl AdjustFilePath for Volume {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Volumes {
+    pub volumes: Vec<Volume>,
+}
+
+impl Default for Volumes {
+    fn default() -> Self {
+        Self {
+            volumes: crate::util::config::get_config_element::<crate::util::config::Data>()
+                .expect("volumes should be defined, because they are in the default config")
+                .volumes
+                .into_iter()
+                .map(|(name, path)| Volume { name, path })
+                .collect::<Vec<_>>(),
+        }
+    }
+}
+
 pub trait UploadRootPath {
     fn root_path(&self) -> Result<PathBuf>;
 }
