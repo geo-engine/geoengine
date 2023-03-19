@@ -55,6 +55,8 @@ CREATE DATABASE geoengine OWNER geoengine;
 EOF
 ```
 
+During development, you can use the `start_with_fresh_postgres.sh` script to clean the database and start the server.
+
 ### Benchmarks
 
 For performance-critical features, we aim to provide benchmarks in the `benches` directory.
