@@ -30,6 +30,7 @@ use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, warn};
+use postgres_protocol::escape::escape_literal;
 use pwhash::bcrypt;
 use rayon::ThreadPool;
 use snafu::{ensure, ResultExt};
@@ -186,9 +187,9 @@ where
                         );
 
                         INSERT INTO roles (id, name) VALUES
-                            ('{admin_role_id}', 'admin'),
-                            ('{user_role_id}', 'user'),
-                            ('{anonymous_role_id}', 'anonymous');
+                            ({admin_role_id}, 'admin'),
+                            ({user_role_id}, 'user'),
+                            ({anonymous_role_id}, 'anonymous');
 
                         CREATE TABLE users (
                             id UUID PRIMARY KEY REFERENCES roles(id),
@@ -213,9 +214,9 @@ where
                             real_name,
                             active)
                         VALUES (
-                            '{admin_role_id}', 
-                            '{admin_email}',
-                            '{admin_password}',
+                            {admin_role_id}, 
+                            {admin_email},
+                            {admin_password},
                             'admin',
                             true
                         );
@@ -232,8 +233,8 @@ where
                         INSERT INTO user_roles 
                             (user_id, role_id)
                         VALUES 
-                            ('{admin_role_id}', 
-                            '{admin_role_id}');
+                            ({admin_role_id}, 
+                            {admin_role_id});
 
                         CREATE TYPE "SpatialReferenceAuthority" AS ENUM (
                             'Epsg', 'SrOrg', 'Iau2000', 'Esri'
@@ -382,7 +383,7 @@ where
                             name,
                             description
                         ) VALUES (
-                            '{root_layer_collection_id}',
+                            {root_layer_collection_id},
                             'Layers',
                             'All available Geo Engine layers'
                         );
@@ -393,7 +394,7 @@ where
                             name,
                             description
                         ) VALUES (
-                            '{unsorted_layer_collection_id}',
+                            {unsorted_layer_collection_id},
                             'Unsorted',
                             'Unsorted Layers'
                         );
@@ -421,7 +422,7 @@ where
 
                         -- add unsorted layers to root layer collection
                         INSERT INTO collection_children (parent, child) VALUES
-                        ('{root_layer_collection_id}', '{unsorted_layer_collection_id}');
+                        ({root_layer_collection_id}, {unsorted_layer_collection_id});
 
                         -- TODO: should name be unique (per user)?
                         CREATE TABLE layer_providers (
@@ -503,21 +504,21 @@ where
                         INSERT INTO permissions
                             (role_id, layer_collection_id, permission)  
                         VALUES 
-                            ('{admin_role_id}', '{root_layer_collection_id}', 'Owner'),
-                            ('{admin_role_id}', '{unsorted_layer_collection_id}', 'Owner'),
-                            ('{user_role_id}', '{root_layer_collection_id}', 'Read'),
-                            ('{user_role_id}', '{unsorted_layer_collection_id}', 'Read'),
-                            ('{anonymous_role_id}', '{root_layer_collection_id}', 'Read'),
-                            ('{anonymous_role_id}', '{unsorted_layer_collection_id}', 'Read');
+                            ({admin_role_id}, {root_layer_collection_id}, 'Owner'),
+                            ({admin_role_id}, {unsorted_layer_collection_id}, 'Owner'),
+                            ({user_role_id}, {root_layer_collection_id}, 'Read'),
+                            ({user_role_id}, {unsorted_layer_collection_id}, 'Read'),
+                            ({anonymous_role_id}, {root_layer_collection_id}, 'Read'),
+                            ({anonymous_role_id}, {unsorted_layer_collection_id}, 'Read');
                         "#
                     ,
-                    admin_role_id = Role::admin_role_id(),
-                    admin_email = get_config_element::<crate::pro::util::config::User>()?.admin_email,
-                    admin_password = bcrypt::hash(get_config_element::<crate::pro::util::config::User>()?.admin_password).expect("Admin password hash should be valid"),
-                    user_role_id = Role::registered_user_role_id(),
-                    anonymous_role_id = Role::anonymous_role_id(),
-                    root_layer_collection_id = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
-                    unsorted_layer_collection_id = UNSORTED_COLLECTION_ID))
+                    admin_role_id = escape_literal(&Role::admin_role_id().to_string()),
+                    admin_email = escape_literal(&get_config_element::<crate::pro::util::config::User>()?.admin_email),
+                    admin_password = escape_literal(&bcrypt::hash(get_config_element::<crate::pro::util::config::User>()?.admin_password).expect("Admin password hash should be valid")),
+                    user_role_id = escape_literal(&Role::registered_user_role_id().to_string()),
+                    anonymous_role_id = escape_literal(&Role::anonymous_role_id().to_string()),
+                    root_layer_collection_id = escape_literal(&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
+                    unsorted_layer_collection_id = escape_literal(&UNSORTED_COLLECTION_ID.to_string())))
                     .await?;
                     debug!("Updated user database to schema version {}", version + 1);
                 }
