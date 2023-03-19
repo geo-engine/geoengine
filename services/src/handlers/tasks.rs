@@ -1,9 +1,8 @@
-use crate::contexts::AdminSession;
 use crate::error::Result;
 use crate::tasks::{TaskListOptions, TaskManager};
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, tasks::TaskId};
-use actix_web::{web, Either, FromRequest, HttpResponse, Responder};
+use actix_web::{web, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -59,13 +58,13 @@ impl TaskResponse {
     )
 )]
 async fn status_handler<C: Context>(
-    _session: Either<AdminSession, C::Session>, // TODO: check for session auth
+    session: C::Session, // TODO: check for session auth
     ctx: web::Data<C>,
     task_id: web::Path<TaskId>,
 ) -> Result<impl Responder> {
     let task_id = task_id.into_inner();
 
-    let task = ctx.tasks_ref().status(task_id).await?;
+    let task = ctx.tasks(session).get_task_status(task_id).await?;
 
     Ok(web::Json(task))
 }
@@ -96,13 +95,13 @@ async fn status_handler<C: Context>(
     )
 )]
 async fn list_handler<C: Context>(
-    _session: Either<AdminSession, C::Session>, // TODO: check for session auth
+    session: C::Session,
     ctx: web::Data<C>,
     task_list_options: web::Query<TaskListOptions>,
 ) -> Result<impl Responder> {
     let task_list_options = task_list_options.into_inner().validated()?;
 
-    let task = ctx.tasks_ref().list(task_list_options).await?;
+    let task = ctx.tasks(session).list_tasks(task_list_options).await?;
 
     Ok(web::Json(task))
 }
@@ -135,14 +134,16 @@ pub struct TaskAbortOptions {
     )
 )]
 async fn abort_handler<C: Context>(
-    _session: Either<AdminSession, C::Session>, // TODO: check for session auth
+    session: C::Session, // TODO: check for session auth
     ctx: web::Data<C>,
     task_id: web::Path<TaskId>,
     options: web::Query<TaskAbortOptions>,
 ) -> Result<impl Responder> {
     let task_id = task_id.into_inner();
 
-    ctx.tasks_ref().abort(task_id, options.force).await?;
+    ctx.tasks(session)
+        .abort_tasks(task_id, options.force)
+        .await?;
 
     Ok(HttpResponse::Ok())
 }
@@ -256,7 +257,7 @@ mod tests {
             for subtask in self.subtasks.lock().await.drain(..) {
                 let subtask_id = self
                     .task_manager
-                    .schedule(subtask, None)
+                    .schedule_task(subtask, None)
                     .await
                     .map_err(ErrorSource::boxed)?;
                 self.subtask_ids.lock().await.push(subtask_id);
@@ -322,10 +323,13 @@ mod tests {
     #[tokio::test]
     async fn test_get_status() {
         let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let (task, complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+
+        let tasks = Arc::new(ctx.tasks(session));
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 1. initially, we should get a running status
 
@@ -350,7 +354,7 @@ mod tests {
 
         complete_tx.send(()).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks, task_id).await;
 
         // 3. finally, it should complete
 
@@ -382,19 +386,22 @@ mod tests {
         .unwrap();
 
         let ctx = InMemoryContext::test_default();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let (task, _complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = ctx
+            .tasks(session)
+            .schedule_task(task.boxed(), None)
+            .await
+            .unwrap();
 
         // 1. initially, we should get a running status
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/tasks/{task_id}/status"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(AdminSession::default().id().to_string()),
-            ));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, ctx.clone()).await;
 
@@ -412,14 +419,17 @@ mod tests {
     #[tokio::test]
     async fn test_get_list() {
         let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let tasks = Arc::new(ctx.tasks(session));
 
         let (task, complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         complete_tx.send(()).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks, task_id).await;
 
         let req = actix_web::test::TestRequest::get()
             .uri("/tasks/list")
@@ -443,12 +453,15 @@ mod tests {
     #[tokio::test]
     async fn test_abort_task() {
         let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let tasks = Arc::new(ctx.tasks(session));
 
         // 1. Create task
 
         let (task, complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 2. Abort task
 
@@ -465,7 +478,7 @@ mod tests {
 
         complete_tx.send(()).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks, task_id).await;
 
         // 4. check status
 
@@ -495,12 +508,15 @@ mod tests {
     #[tokio::test]
     async fn test_force_abort_task() {
         let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let tasks = Arc::new(ctx.tasks(session));
 
         // 1. Create task
 
         let (task, _complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 2. Abort task
 
@@ -515,7 +531,7 @@ mod tests {
 
         // 3. Wait for abortion to complete
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks, task_id).await;
 
         // 4. check status
 
@@ -544,12 +560,15 @@ mod tests {
     #[tokio::test]
     async fn test_abort_after_abort() {
         let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let tasks = Arc::new(ctx.tasks(session));
 
         // 1. Create task
 
         let (task, _complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 2. Abort task
 
@@ -625,11 +644,15 @@ mod tests {
         let unique_id = "highlander".to_string();
         let ctx = InMemoryContext::test_default();
 
+        let session = ctx.default_session_ref().await.clone();
+
+        let tasks = ctx.tasks(session);
+
         let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         let (task, _) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        assert!(ctx.tasks_ref().schedule(task.boxed(), None).await.is_err());
+        assert!(tasks.schedule_task(task.boxed(), None).await.is_err());
 
         complete_tx.send(()).unwrap();
     }
@@ -639,21 +662,25 @@ mod tests {
         let unique_id = "highlander".to_string();
         let ctx = InMemoryContext::test_default();
 
+        let session = ctx.default_session_ref().await.clone();
+
+        let tasks = Arc::new(ctx.tasks(session));
+
         // 1. start first task
 
         let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 2. wait for task to finish
 
         complete_tx.send(()).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks.clone(), task_id).await;
 
         // 3. start second task
 
         let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        assert!(ctx.tasks_ref().schedule(task.boxed(), None).await.is_ok());
+        assert!(tasks.schedule_task(task.boxed(), None).await.is_ok());
 
         complete_tx.send(()).unwrap();
     }
@@ -662,13 +689,17 @@ mod tests {
     async fn test_notify() {
         let ctx = InMemoryContext::test_default();
 
+        let session = ctx.default_session_ref().await.clone();
+
+        let tasks = ctx.tasks(session);
+
         // 1. start first task
 
         let (schedule_complete_tx, schedule_complete_rx) = oneshot::channel();
         let (task, complete_tx) = NopTask::new_with_sender();
 
-        ctx.tasks_ref()
-            .schedule(task.boxed(), Some(schedule_complete_tx))
+        tasks
+            .schedule_task(task.boxed(), Some(schedule_complete_tx))
             .await
             .unwrap();
 
@@ -687,24 +718,28 @@ mod tests {
     async fn abort_subtasks() {
         let ctx = InMemoryContext::test_default();
 
+        let session = ctx.default_session_ref().await.clone();
+
+        let tasks = Arc::new(ctx.tasks(session));
+
         // 1. start super task
 
         let (subtask_a, complete_tx_a) = NopTask::new_with_sender();
         let (subtask_b, complete_tx_b) = NopTask::new_with_sender();
 
         let (task, _complete_tx) =
-            TaskTree::new_with_sender(vec![subtask_a.boxed(), subtask_b.boxed()], ctx.tasks());
+            TaskTree::new_with_sender(vec![subtask_a.boxed(), subtask_b.boxed()], tasks.clone());
 
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 2. wait for all subtasks to schedule
 
         let all_task_ids: Vec<TaskId> =
             geoengine_operators::util::retry::retry(5, 100, 2., None, || {
-                let task_manager = ctx.tasks();
+                let task_manager = tasks.clone();
                 async move {
                     let task_list = task_manager
-                        .list(
+                        .list_tasks(
                             TaskListOptions {
                                 filter: None,
                                 offset: 0,
@@ -728,7 +763,7 @@ mod tests {
 
         // 3. abort task
 
-        ctx.tasks_ref().abort(task_id, false).await.unwrap();
+        tasks.abort_tasks(task_id, false).await.unwrap();
 
         // allow clean-up to complete
         complete_tx_a.send(()).unwrap();
@@ -737,14 +772,13 @@ mod tests {
         // 4. wait for completion
 
         for task_id in all_task_ids {
-            wait_for_task_to_finish(ctx.tasks(), task_id).await;
+            wait_for_task_to_finish(tasks.clone(), task_id).await;
         }
 
         // 5. check results
 
-        let list = ctx
-            .tasks_ref()
-            .list(
+        let list = tasks
+            .list_tasks(
                 TaskListOptions {
                     filter: None,
                     offset: 0,
@@ -783,23 +817,25 @@ mod tests {
     #[tokio::test]
     async fn test_failing_task_with_failing_cleanup() {
         let ctx = InMemoryContext::test_default();
+        let session = ctx.default_session_ref().await.clone();
+
+        let tasks = Arc::new(ctx.tasks(session));
 
         // 1. start task
 
-        let task_id = ctx
-            .tasks_ref()
-            .schedule(FailingTaskWithFailingCleanup.boxed(), None)
+        let task_id = tasks
+            .schedule_task(FailingTaskWithFailingCleanup.boxed(), None)
             .await
             .unwrap();
 
         // 2. wait for completion
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks.clone(), task_id).await;
 
         // 3. check results
 
         assert_eq!(
-            serde_json::to_value(ctx.tasks_ref().status(task_id).await.unwrap()).unwrap(),
+            serde_json::to_value(tasks.get_task_status(task_id).await.unwrap()).unwrap(),
             json!({
                 "status": "failed",
                 "error": "FailingTaskWithFailingCleanupError",

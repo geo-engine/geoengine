@@ -1365,7 +1365,7 @@ async fn listing_from_netcdf_file(
 
 #[async_trait]
 impl LayerCollectionProvider for NetCdfCfDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
@@ -1418,11 +1418,11 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
         Ok(NetCdfLayerCollectionId::Path { path: ".".into() }.try_into()?)
     }
 
-    async fn get_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
         let netcdf_id = NetCdfLayerCollectionId::from_str(&id.0)?;
 
         match netcdf_id {
@@ -1520,7 +1520,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use super::*;
 
-    use crate::contexts::{Context, MockableSession, SimpleSession};
+    use crate::contexts::{Context, MockableSession, SimpleContext, SimpleSession};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::layers::storage::LayerProviderDb;
     use crate::util::user_input::UserInput;
@@ -1717,10 +1717,10 @@ mod tests {
         .await
         .unwrap();
 
-        let root_id = provider.root_collection_id().await.unwrap();
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &root_id,
                 LayerCollectionListOptions {
                     offset: 0,
@@ -1788,7 +1788,7 @@ mod tests {
         let id = LayerCollectionId("dataset_m.nc".to_string());
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
@@ -1844,7 +1844,7 @@ mod tests {
         let id = LayerCollectionId("dataset_sm.nc".to_string());
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
@@ -2141,7 +2141,7 @@ mod tests {
         let id = LayerCollectionId("dataset_sm.nc".to_string());
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
@@ -2217,7 +2217,8 @@ mod tests {
                 base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
                 overviews: test_data!("netcdf4d/overviews/").into(),
             });
-        ctx.layer_provider_db_ref()
+
+        ctx.db(ctx.default_session_ref().await.clone())
             .add_layer_provider(provider_definition)
             .await
             .unwrap();

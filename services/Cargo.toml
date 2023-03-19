@@ -60,6 +60,7 @@ ordered-float = { version= "3.0", features = ["serde"] }
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive"], optional = true }
+postgres-protocol = "0.6"
 proj = "0.22"
 proj-sys = "0.19"
 pwhash = "1.0"

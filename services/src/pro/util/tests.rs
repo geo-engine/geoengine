@@ -1,19 +1,19 @@
 use crate::{
     api::model::{datatypes::DatasetId, services::AddDataset},
-    contexts::{Context, SessionId},
+    contexts::{Context, MockableSession, SessionId},
     datasets::{
         listing::Provenance,
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
     },
     handlers, pro,
     pro::{
-        contexts::{ProContext, ProInMemoryContext},
-        datasets::{DatasetPermission, Permission, Role, UpdateDatasetPermissions},
-        users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
+        contexts::{ProContext, ProGeoEngineDb, ProInMemoryContext},
+        permissions::{Permission, PermissionDb, Role},
+        users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
     util::server::{configure_extractors, render_404, render_405},
-    util::user_input::UserInput,
+    util::{config::get_config_element, user_input::UserInput},
     workflows::{
         registry::WorkflowRegistry,
         workflow::{Workflow, WorkflowId},
@@ -31,27 +31,28 @@ use geoengine_operators::{
 };
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
-    ctx.user_db_ref()
-        .register(
-            UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret123".to_string(),
-                real_name: "Foo Bar".to_string(),
-            }
-            .validated()
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    ctx.user_db_ref()
-        .login(UserCredentials {
+pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    ctx.register_user(
+        UserRegistration {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
-        })
-        .await
-        .unwrap()
+            real_name: "Foo Bar".to_string(),
+        }
+        .validated()
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    ctx.login(UserCredentials {
+        email: "foo@example.com".to_string(),
+        password: "secret123".to_string(),
+    })
+    .await
+    .unwrap()
 }
 
 pub fn create_random_user_session_helper() -> UserSession {
@@ -68,18 +69,20 @@ pub fn create_random_user_session_helper() -> UserSession {
         valid_until: DateTime::MAX,
         project: None,
         view: None,
-        roles: vec![user_id.into(), Role::user_role_id()],
+        roles: vec![user_id.into(), Role::registered_user_role_id()],
     }
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, ProjectId) {
+pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, ProjectId)
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let session = create_session_helper(ctx).await;
 
     let project = ctx
-        .project_db_ref()
-        .create(
-            &session,
+        .db(session.clone())
+        .create_project(
             CreateProject {
                 name: "Test".to_string(),
                 description: "Foo".to_string(),
@@ -107,6 +110,7 @@ pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, Proj
 pub async fn send_pro_test_request<C>(req: test::TestRequest, ctx: C) -> ServiceResponse
 where
     C: ProContext,
+    C::GeoEngineDB: ProGeoEngineDb,
 {
     #[allow(unused_mut)]
     let mut app = App::new()
@@ -119,6 +123,8 @@ where
         .wrap(middleware::NormalizePath::trim())
         .configure(configure_extractors)
         .configure(pro::handlers::datasets::init_dataset_routes::<C>)
+        .configure(handlers::layers::init_layer_routes::<C>)
+        .configure(pro::handlers::permissions::init_permissions_routes::<C>)
         .configure(handlers::plots::init_plot_routes::<C>)
         .configure(pro::handlers::projects::init_project_routes::<C>)
         .configure(pro::handlers::users::init_user_routes::<C>)
@@ -326,9 +332,11 @@ pub async fn register_ndvi_workflow_helper(ctx: &ProInMemoryContext) -> (Workflo
         ),
     };
 
+    let session = UserSession::mock();
+
     let id = ctx
-        .workflow_registry_ref()
-        .register(workflow.clone())
+        .db(session)
+        .register_workflow(workflow.clone())
         .await
         .unwrap();
 
@@ -353,13 +361,12 @@ pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
 
-    let system_session = UserSession::system_session();
+    let system_session = UserSession::admin_session();
 
-    let dataset_db = ctx.dataset_db_ref();
+    let db = ctx.db(system_session);
 
-    let dataset_id = dataset_db
+    let dataset_id = db
         .add_dataset(
-            &system_session,
             ndvi.properties
                 .validated()
                 .expect("valid dataset description"),
@@ -368,29 +375,32 @@ pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
         .await
         .expect("dataset db access");
 
-    dataset_db
-        .add_dataset_permission(
-            &system_session,
-            DatasetPermission {
-                role: Role::user_role_id(),
-                dataset: dataset_id,
-                permission: Permission::Read,
-            },
-        )
-        .await
-        .unwrap();
+    db.add_permission(
+        Role::registered_user_role_id(),
+        dataset_id,
+        Permission::Read,
+    )
+    .await
+    .unwrap();
 
-    dataset_db
-        .add_dataset_permission(
-            &system_session,
-            DatasetPermission {
-                role: Role::anonymous_role_id(),
-                dataset: dataset_id,
-                permission: Permission::Read,
-            },
-        )
+    db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
         .await
         .unwrap();
 
     dataset_id
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn admin_login<C: ProContext>(ctx: &C) -> UserSession
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    let user_config = get_config_element::<super::config::User>().unwrap();
+
+    ctx.login(UserCredentials {
+        email: user_config.admin_email.clone(),
+        password: user_config.admin_password.clone(),
+    })
+    .await
+    .unwrap()
 }

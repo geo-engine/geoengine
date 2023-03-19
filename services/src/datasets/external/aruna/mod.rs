@@ -643,13 +643,13 @@ impl DataProvider for ArunaDataProvider {
 
 #[async_trait::async_trait]
 impl LayerCollectionProvider for ArunaDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
     ) -> crate::error::Result<LayerCollection> {
         ensure!(
-            *collection == self.root_collection_id().await?,
+            *collection == self.get_root_layer_collection_id().await?,
             crate::error::UnknownLayerCollectionId {
                 id: collection.clone()
             }
@@ -696,11 +696,11 @@ impl LayerCollectionProvider for ArunaDataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
         Ok(LayerCollectionId("root".to_string()))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
         let aruna_dataset_ids = self.get_dataset_info_from_layer(id).await?;
 
         let dataset = self.get_collection_overview(&aruna_dataset_ids).await?;
@@ -1544,7 +1544,7 @@ mod tests {
         let layer_id = LayerId(COLLECTION_ID.to_string());
         let result = aruna_mock_server
             .provider
-            .get_layer(&layer_id)
+            .load_layer(&layer_id)
             .await
             .unwrap();
 
@@ -1582,7 +1582,7 @@ mod tests {
         let layer_id = LayerId(COLLECTION_ID.to_string());
         let result = aruna_mock_server
             .provider
-            .get_layer(&layer_id)
+            .load_layer(&layer_id)
             .await
             .unwrap();
 
@@ -1683,7 +1683,7 @@ mod tests {
         let aruna_mock_server = mock_server(None, vec![], HashMap::new(), HashMap::new()).await;
         let root = aruna_mock_server
             .provider
-            .root_collection_id()
+            .get_root_layer_collection_id()
             .await
             .unwrap();
 
@@ -1694,7 +1694,10 @@ mod tests {
         .validated()
         .unwrap();
 
-        let res = aruna_mock_server.provider.collection(&root, opts).await;
+        let res = aruna_mock_server
+            .provider
+            .load_layer_collection(&root, opts)
+            .await;
 
         assert!(res.is_ok());
         let res = res.unwrap();

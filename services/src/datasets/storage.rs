@@ -1,13 +1,12 @@
 use crate::api::model::datatypes::{DataProviderId, DatasetId};
 use crate::api::model::operators::TypedResultDescriptor;
 use crate::api::model::services::AddDataset;
-use crate::contexts::Session;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
 use crate::error;
 use crate::error::Result;
-use crate::layers::listing::LayerCollectionProvider;
+
 use crate::projects::Symbology;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
@@ -178,10 +177,7 @@ impl MetaDataDefinition {
 
 /// Handling of datasets provided by geo engine internally, staged and by external providers
 #[async_trait]
-pub trait DatasetDb<S: Session>:
-    DatasetStore<S> + DatasetProvider<S> + UploadDb<S> + LayerCollectionProvider + Send + Sync
-{
-}
+pub trait DatasetDb: DatasetStore + DatasetProvider + UploadDb + Send + Sync {}
 
 /// Defines the type of meta data a `DatasetDB` is able to store
 pub trait DatasetStorer: Send + Sync {
@@ -191,15 +187,14 @@ pub trait DatasetStorer: Send + Sync {
 /// Allow storage of meta data of a particular storage type, e.g. `HashMapStorable` meta data for
 /// `HashMapDatasetDB`
 #[async_trait]
-pub trait DatasetStore<S: Session>: DatasetStorer {
+pub trait DatasetStore: DatasetStorer {
     async fn add_dataset(
         &self,
-        session: &S,
         dataset: Validated<AddDataset>,
         meta_data: Self::StorageType,
     ) -> Result<DatasetId>;
 
-    async fn delete_dataset(&self, session: &S, dataset: DatasetId) -> Result<()>;
+    async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
 
     /// turn given `meta` data definition into the corresponding `StorageType` for the `DatasetStore`
     /// for use in the `add_dataset` method

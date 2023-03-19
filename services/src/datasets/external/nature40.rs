@@ -152,13 +152,13 @@ impl DataProvider for Nature40DataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for Nature40DataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
         ensure!(
-            *collection == self.root_collection_id().await?,
+            *collection == self.get_root_layer_collection_id().await?,
             error::UnknownLayerCollectionId {
                 id: collection.clone()
             }
@@ -221,11 +221,11 @@ impl LayerCollectionProvider for Nature40DataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(LayerCollectionId("root".to_owned()))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let split: Vec<_> = id.0.split(':').collect();
 
         let (db_name, band_index) = match *split.as_slice() {
@@ -795,10 +795,10 @@ mod tests {
         .await
         .unwrap();
 
-        let root_id = provider.root_collection_id().await.unwrap();
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &root_id,
                 LayerCollectionListOptions {
                     offset: 0,

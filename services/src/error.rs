@@ -182,6 +182,9 @@ pub enum Error {
         permission: String,
     },
 
+    // TODO: move to pro folder, because permissions are pro only
+    PermissionDenied,
+
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
     InvalidStringLength {
         parameter: String,
@@ -279,6 +282,12 @@ pub enum Error {
 
     #[snafu(display("User registration is disabled"))]
     UserRegistrationDisabled,
+
+    UserDoesNotExist,
+    RoleDoesNotExist,
+    RoleWithNameAlreadyExists,
+    RoleAlreadyAssigned,
+    RoleNotAssigned,
 
     #[snafu(display(
         "WCS request endpoint {} must match identifier {}",

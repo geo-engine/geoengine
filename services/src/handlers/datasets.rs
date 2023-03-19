@@ -4,8 +4,9 @@ use std::{
     path::Path,
 };
 
+use crate::api::model::datatypes::DatasetId;
+use crate::datasets::upload::{AdjustFilePath, Upload, UploadRootPath, Volume};
 use crate::util::user_input::UserInput;
-use crate::{api::model::datatypes::DatasetId, contexts::AdminSession};
 use crate::{
     api::model::services::DataPath,
     datasets::{
@@ -19,17 +20,12 @@ use crate::{
     util::config::{get_config_element, Data},
 };
 use crate::{contexts::Context, datasets::storage::AutoCreateDataset};
-use crate::{
-    contexts::MockableSession,
-    datasets::upload::{AdjustFilePath, Upload, UploadRootPath, Volume},
-};
 use crate::{datasets::upload::VolumeName, error::Result};
 use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
-use futures::{future::LocalBoxFuture, FutureExt};
+use actix_web::{web, FromRequest, HttpResponse, Responder};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use gdal::{
     vector::{Layer, LayerAccess},
@@ -50,8 +46,6 @@ use geoengine_operators::{
 };
 use snafu::ResultExt;
 
-use super::get_token;
-
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: Context,
@@ -61,7 +55,7 @@ where
         web::scope("/dataset")
             .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
-            .service(web::resource("/volumes").route(web::get().to(list_volumes_handler)))
+            .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
                 web::resource("/{dataset}")
                     .route(web::get().to(get_dataset_handler::<C>))
@@ -92,12 +86,11 @@ where
     )
 )]
 #[allow(clippy::unused_async)]
-pub async fn list_volumes_handler(_session: AdminSession) -> Result<impl Responder> {
-    let volumes = get_config_element::<Data>()?
-        .volumes
-        .into_iter()
-        .map(|(name, path)| Volume { name, path })
-        .collect::<Vec<_>>();
+pub async fn list_volumes_handler<C: Context>(
+    ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<impl Responder> {
+    let volumes = ctx.volumes(session)?;
     Ok(web::Json(volumes))
 }
 
@@ -141,7 +134,7 @@ pub async fn list_datasets_handler<C: Context>(
     options: web::Query<DatasetListOptions>,
 ) -> Result<impl Responder> {
     let options = options.into_inner().validated()?;
-    let list = ctx.dataset_db_ref().list(&session, options).await?;
+    let list = ctx.db(session).list_datasets(options).await?;
     Ok(web::Json(list))
 }
 
@@ -181,54 +174,8 @@ pub async fn get_dataset_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let dataset = ctx
-        .dataset_db_ref()
-        .load(&session, &dataset.into_inner())
-        .await?;
+    let dataset = ctx.db(session).load_dataset(&dataset.into_inner()).await?;
     Ok(web::Json(dataset))
-}
-
-pub enum AdminOrSession<C: Context> {
-    Admin,
-    Session(C::Session),
-}
-
-impl<C: Context> FromRequest for AdminOrSession<C> {
-    type Error = crate::error::Error;
-    type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
-
-    fn from_request(req: &HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
-        let header_token = match get_token(req) {
-            Ok(s) => s,
-            Err(e) => return async { Err(e) }.boxed_local(),
-        };
-
-        let admin_session_token =
-            crate::util::config::get_config_element::<crate::util::config::Session>()
-                .ok()
-                .and_then(|session| session.admin_session_token);
-
-        match admin_session_token {
-            Some(admin_session_token) if header_token == admin_session_token => {
-                async { Ok(AdminOrSession::Admin) }.boxed_local()
-            }
-            _ => {
-                let ctx = req
-                    .app_data::<web::Data<C>>()
-                    .expect("InMemoryContext must be available")
-                    .get_ref()
-                    .clone();
-
-                async move {
-                    ctx.session_by_id(header_token)
-                        .await
-                        .map(|s| AdminOrSession::Session(s))
-                        .map_err(Into::into)
-                }
-                .boxed_local()
-            }
-        }
-    }
 }
 
 /// Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.
@@ -335,58 +282,48 @@ impl<C: Context> FromRequest for AdminOrSession<C> {
     )
 )]
 pub async fn create_dataset_handler<C: Context>(
-    session: AdminOrSession<C>,
+    session: C::Session,
     ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
 ) -> Result<web::Json<IdResponse<DatasetId>>> {
     let create = create.into_inner();
-    match (session, create) {
-        (
-            AdminOrSession::Session(session),
-            CreateDataset {
-                data_path: DataPath::Upload(upload),
-                definition,
-            },
-        ) => create_user_dataset(session, ctx, upload, definition).await,
-        (
-            AdminOrSession::Admin,
-            CreateDataset {
-                data_path: DataPath::Volume(volume),
-                definition,
-            },
-        ) => create_system_dataset(ctx, volume, definition).await,
-        (AdminOrSession::Session(_), _) => Err(error::Error::OnlyAdminsCanCreateDatasetFromVolume),
-        (AdminOrSession::Admin, _) => Err(error::Error::AdminsCannotCreateDatasetFromUpload),
+    match create {
+        CreateDataset {
+            data_path: DataPath::Upload(upload),
+            definition,
+        } => create_upload_dataset(session, ctx, upload, definition).await,
+        CreateDataset {
+            data_path: DataPath::Volume(volume),
+            definition,
+        } => create_volume_dataset(session, ctx, volume, definition).await,
     }
 }
 
-pub async fn create_user_dataset<C: Context>(
+pub async fn create_upload_dataset<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
     upload_id: UploadId,
     mut definition: DatasetDefinition,
 ) -> Result<web::Json<IdResponse<DatasetId>>> {
-    let upload = ctx.dataset_db_ref().get_upload(&session, upload_id).await?;
+    let db = ctx.db(session);
+    let upload = db.load_upload(upload_id).await?;
 
     adjust_meta_data_path(&mut definition.meta_data, &upload)?;
 
-    let db = ctx.dataset_db_ref();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
     let id = db
-        .add_dataset(&session, definition.properties.validated()?, meta_data)
+        .add_dataset(definition.properties.validated()?, meta_data)
         .await?;
 
     Ok(web::Json(IdResponse::from(id)))
 }
 
-async fn create_system_dataset<C: Context>(
+async fn create_volume_dataset<C: Context>(
+    session: C::Session,
     ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>>
-where
-    C::Session: MockableSession,
-{
+) -> Result<web::Json<IdResponse<DatasetId>>> {
     let volumes = get_config_element::<Data>()?.volumes;
     let volume_path = volumes
         .get(&volume_name)
@@ -398,15 +335,11 @@ where
 
     adjust_meta_data_path(&mut definition.meta_data, &volume)?;
 
-    let db = ctx.dataset_db_ref();
+    let db = ctx.db(session);
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let id = db
-        .add_dataset(
-            &AdminSession::default().into(),
-            definition.properties.validated()?,
-            meta_data,
-        )
+        .add_dataset(definition.properties.validated()?, meta_data)
         .await?;
 
     Ok(web::Json(IdResponse::from(id)))
@@ -466,10 +399,8 @@ pub async fn auto_create_dataset_handler<C: Context>(
     ctx: web::Data<C>,
     create: web::Json<AutoCreateDataset>,
 ) -> Result<impl Responder> {
-    let upload = ctx
-        .dataset_db_ref()
-        .get_upload(&session, create.upload)
-        .await?;
+    let db = ctx.db(session);
+    let upload = db.load_upload(create.upload).await?;
 
     let create = create.into_inner().validated()?.user_input;
 
@@ -485,11 +416,8 @@ pub async fn auto_create_dataset_handler<C: Context>(
         provenance: None,
     };
 
-    let db = ctx.dataset_db_ref();
     let meta_data = db.wrap_meta_data(meta_data);
-    let id = db
-        .add_dataset(&session, properties.validated()?, meta_data)
-        .await?;
+    let id = db.add_dataset(properties.validated()?, meta_data).await?;
 
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -553,10 +481,7 @@ pub async fn suggest_meta_data_handler<C: Context>(
     ctx: web::Data<C>,
     suggest: web::Query<SuggestMetaData>,
 ) -> Result<impl Responder> {
-    let upload = ctx
-        .dataset_db_ref()
-        .get_upload(&session, suggest.upload)
-        .await?;
+    let upload = ctx.db(session).load_upload(suggest.upload).await?;
 
     let main_file = suggest
         .into_inner()
@@ -974,20 +899,10 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
 )]
 pub async fn delete_dataset_handler<C: Context>(
     dataset: web::Path<DatasetId>,
-    session: AdminOrSession<C>,
+    session: C::Session,
     ctx: web::Data<C>,
-) -> Result<HttpResponse>
-where
-    C::Session: MockableSession,
-{
-    let session = match session {
-        AdminOrSession::Admin => AdminSession::default().into(),
-        AdminOrSession::Session(s) => s,
-    };
-
-    ctx.dataset_db_ref()
-        .delete_dataset(&session, dataset.into_inner())
-        .await?;
+) -> Result<HttpResponse> {
+    ctx.db(session).delete_dataset(dataset.into_inner()).await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -1071,10 +986,8 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let _id = ctx
-            .dataset_db_ref()
-            .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
-            .await?;
+        let db = ctx.db(SimpleSession::default());
+        let _id = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
         let id2 = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
 
@@ -1105,10 +1018,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let _id2 = ctx
-            .dataset_db_ref()
-            .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
-            .await?;
+        let _id2 = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
@@ -1391,6 +1301,8 @@ mod tests {
     async fn it_creates_system_dataset() -> Result<()> {
         let ctx = InMemoryContext::test_default();
 
+        let session_id = ctx.default_session_ref().await.id();
+
         let volume = VolumeName("test_data".to_string());
 
         let mut meta_data = create_ndvi_meta_data();
@@ -1417,15 +1329,7 @@ mod tests {
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(
-                    get_config_element::<crate::util::config::Session>()?
-                        .admin_session_token
-                        .unwrap()
-                        .to_string(),
-                ),
-            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
         let res = send_test_request(req, ctx.clone()).await;
@@ -1435,11 +1339,10 @@ mod tests {
         let dataset_id = dataset_id.id;
 
         // assert dataset is accessible via regular session
-        let session = ctx.default_session_ref().await.clone();
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{dataset_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
 
@@ -1953,14 +1856,8 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id = ctx
-            .dataset_db_ref()
-            .add_dataset(
-                &*ctx.default_session_ref().await,
-                ds.validated()?,
-                Box::new(meta),
-            )
-            .await?;
+        let db = ctx.db(ctx.default_session_ref().await.clone());
+        let id = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{id}"))
@@ -2135,7 +2032,7 @@ mod tests {
 
         let ctx = InMemoryContext::test_default();
 
-        let session = ctx.default_session_ref().await;
+        let session = ctx.default_session_ref().await.clone();
 
         let session_id = session.id();
 
@@ -2144,7 +2041,8 @@ mod tests {
 
         let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
 
-        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_ok());
+        let db = ctx.db(session);
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
             .uri(&format!("/dataset/{dataset_id}"))
@@ -2156,13 +2054,13 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_err());
+        assert!(db.load_dataset(&dataset_id).await.is_err());
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn it_deletes_admin_dataset() -> Result<()> {
+    async fn it_deletes_system_dataset() -> Result<()> {
         let ctx = InMemoryContext::test_default();
 
         let volume = VolumeName("test_data".to_string());
@@ -2187,7 +2085,7 @@ mod tests {
             },
         };
 
-        let session: SimpleSession = AdminSession::default().into();
+        let session = ctx.default_session_ref().await;
 
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
@@ -2200,7 +2098,8 @@ mod tests {
         let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
         let dataset_id = dataset_id.id;
 
-        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_ok());
+        let db = ctx.db(session.clone());
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
             .uri(&format!("/dataset/{dataset_id}"))
@@ -2212,7 +2111,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_err());
+        assert!(db.load_dataset(&dataset_id).await.is_err());
 
         Ok(())
     }

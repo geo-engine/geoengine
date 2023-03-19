@@ -6,21 +6,18 @@ use std::{
     path::PathBuf,
 };
 
+use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 use crate::layers::external::DataProviderDefinition;
 use crate::layers::storage::LayerProviderDb;
 use crate::util::user_input::UserInput;
-use crate::{contexts::MockableSession, datasets::storage::DatasetDb};
 
 use super::storage::DatasetDefinition;
 
 use log::{error, info, warn};
 
-pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
-    dataset_db: &mut D,
-    file_path: PathBuf,
-) {
-    async fn add_dataset_definition_from_dir_entry<S: MockableSession, D: DatasetDb<S>>(
+pub async fn add_datasets_from_directory<D: DatasetDb>(dataset_db: &mut D, file_path: PathBuf) {
+    async fn add_dataset_definition_from_dir_entry<D: DatasetDb>(
         db: &mut D,
         entry: &DirEntry,
     ) -> Result<()> {
@@ -28,11 +25,10 @@ pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
         db.add_dataset(
-            &S::mock(), // TODO: find suitable way to add public dataset
             def.properties.clone().validated()?,
             db.wrap_meta_data(def.meta_data.clone()),
         )
-        .await?; // TODO: add as system user
+        .await?;
 
         Ok(())
     }

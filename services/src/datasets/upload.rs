@@ -1,7 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 
-use crate::contexts::Session;
 use crate::error::Result;
 use crate::identifier;
 use crate::util::path_with_base_path;
@@ -63,6 +62,24 @@ impl AdjustFilePath for Volume {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Volumes {
+    pub volumes: Vec<Volume>,
+}
+
+impl Default for Volumes {
+    fn default() -> Self {
+        Self {
+            volumes: crate::util::config::get_config_element::<crate::util::config::Data>()
+                .expect("volumes should be defined, because they are in the default config")
+                .volumes
+                .into_iter()
+                .map(|(name, path)| Volume { name, path })
+                .collect::<Vec<_>>(),
+        }
+    }
+}
+
 pub trait UploadRootPath {
     fn root_path(&self) -> Result<PathBuf>;
 }
@@ -103,8 +120,8 @@ pub struct UploadListing {
 }
 
 #[async_trait]
-pub trait UploadDb<S: Session> {
-    async fn get_upload(&self, session: &S, upload: UploadId) -> Result<Upload>;
+pub trait UploadDb {
+    async fn load_upload(&self, upload: UploadId) -> Result<Upload>;
 
-    async fn create_upload(&self, session: &S, upload: Upload) -> Result<()>;
+    async fn create_upload(&self, upload: Upload) -> Result<()>;
 }
