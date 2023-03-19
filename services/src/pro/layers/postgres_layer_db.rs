@@ -145,6 +145,9 @@ where
 
         trans.execute(&stmt, &[&collection_id, &layer_id]).await?;
 
+        // TODO: `ON CONFLICT DO NOTHING` means, we do not get an error if the permission already exists.
+        //       Do we want that, or should we report an error and let the caller decide whether to ignore it?
+        //       We should decide that and adjust all places where `ON CONFILCT DO NOTHING` is used.
         let stmt = trans
             .prepare(
                 "
