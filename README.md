@@ -55,7 +55,11 @@ CREATE DATABASE geoengine OWNER geoengine;
 EOF
 ```
 
-During development, you can use the `start_with_fresh_postgres.sh` script to clean the database and start the server.
+During development, you can use the following command to clean the database and start the server.
+
+```bash
+sudo -u postgres psql -d geoengine -c "drop schema public cascade; create schema public authorization geoengine; create extension postgis;" && cargo run --features pro
+```
 
 ### Benchmarks
 
