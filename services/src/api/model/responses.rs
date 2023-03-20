@@ -75,11 +75,6 @@ pub struct UnauthorizedAdminResponse(ErrorResponse);
 ))]
 pub struct UnauthorizedUserResponse(ErrorResponse);
 
-/*("Operation can only be executed by an admin" = (value = json!({
-    "error": "OperationRequiresAdminPrivilige",
-    "message": "OperationRequiresAdminPrivilige"
-})))*/
-
 #[derive(ToResponse)]
 #[response(description = "Bad request", examples(
     ("Missing field in query string" = (value = json!({
