@@ -19,9 +19,8 @@ use crate::api::model::operators::{
     VectorResultDescriptor,
 };
 use crate::api::model::responses::{
-    BadRequestAutoCreateDatasetResponse, BadRequestDeleteDatasetResponse, BadRequestQueryResponse,
-    BadRequestSuggestMetadataResponse, IdResponse, PayloadTooLargeResponse,
-    UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
+    UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
@@ -133,10 +132,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             IdResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
-            BadRequestQueryResponse,
-            BadRequestAutoCreateDatasetResponse,
-            BadRequestSuggestMetadataResponse,
-            BadRequestDeleteDatasetResponse
+            BadRequestQueryResponse
         ),
         schemas(
             ErrorResponse,

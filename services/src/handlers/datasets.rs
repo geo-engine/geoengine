@@ -567,7 +567,36 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
     request_body = AutoCreateDataset,
     responses(
         (status = 200, response = crate::api::model::responses::IdResponse),
-        (status = 400, response = crate::api::model::responses::BadRequestAutoCreateDatasetResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse, examples(
+            ("Body is invalid json" = (value = json!({
+                "error": "BodyDeserializeError",
+                "message": "expected `,` or `}` at line 13 column 7"
+            }))),
+            ("Failed to read body" = (value = json!({
+                "error": "Payload",
+                "message": "Error that occur during reading payload: Can not decode content-encoding."
+            }))),
+            ("Referenced an unknown upload" = (value = json!({
+                "error": "UnknownUploadId",
+                "message": "UnknownUploadId"
+            }))),
+            ("Dataset name is empty" = (value = json!({
+                "error": "InvalidDatasetName",
+                "message": "InvalidDatasetName"
+            }))),
+            ("Upload filename is invalid" = (value = json!({
+                "error": "InvalidUploadFileName",
+                "message": "InvalidUploadFileName"
+            }))),
+            ("File does not exist" = (value = json!({
+                "error": "Operator",
+                "message": "Operator: GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
+            }))),
+            ("Dataset has no auto-importable layer" = (value = json!({
+                "error": "DatasetHasNoAutoImportableLayer",
+                "message": "DatasetHasNoAutoImportableLayer"
+            })))
+        )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse),
         (status = 413, response = crate::api::model::responses::PayloadTooLargeResponse),
         (status = 415, response = crate::api::model::responses::UnsupportedMediaTypeForJsonResponse)
@@ -655,7 +684,32 @@ pub async fn auto_create_dataset_handler<C: Context>(
                 }
             })
         ),
-        (status = 400, response = crate::api::model::responses::BadRequestSuggestMetadataResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse, examples(
+            ("Missing field in query string" = (value = json!({
+                "error": "UnableToParseQueryString",
+                "message": "Unable to parse query string: missing field `offset`"
+            }))),
+            ("Number in query string contains letters" = (value = json!({
+                "error": "UnableToParseQueryString",
+                "message": "Unable to parse query string: invalid digit found in string"
+            }))),
+            ("Referenced an unknown upload" = (value = json!({
+                "error": "UnknownUploadId",
+                "message": "UnknownUploadId"
+            }))),
+            ("No suitable mainfile found" = (value = json!({
+                "error": "NoMainFileCandidateFound",
+                "message": "NoMainFileCandidateFound"
+            }))),
+            ("File does not exist" = (value = json!({
+                "error": "Operator",
+                "message": "Operator: GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
+            }))),
+            ("Dataset has no auto-importable layer" = (value = json!({
+                "error": "DatasetHasNoAutoImportableLayer",
+                "message": "DatasetHasNoAutoImportableLayer"
+            })))
+        )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
@@ -1081,7 +1135,16 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
     path = "/dataset/{dataset}",
     responses(
         (status = 200, description = "OK"),
-        (status = 400, response = crate::api::model::responses::BadRequestDeleteDatasetResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse, examples(
+            ("Referenced an unknown dataset" = (value = json!({
+                "error": "UnknownDatasetId",
+                "message": "UnknownDatasetId"
+            }))),
+            ("Given dataset can only be deleted by owner" = (value = json!({
+                "error": "OperationRequiresOwnerPermission",
+                "message": "OperationRequiresOwnerPermission"
+            })))
+        )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
