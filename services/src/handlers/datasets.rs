@@ -269,7 +269,7 @@ pub enum CreateDatasetError {
     AdminsCannotCreateDatasetFromUpload,
     CannotResolveUploadFilePath { source: error::Error },
     JsonValidationFailed { source: error::Error },
-    FailedToWriteToDatabase { source: error::Error },
+    DatabaseAccessError { source: error::Error },
     CannotAccessConfig { source: error::Error },
     UnknownVolume,
 }
@@ -281,7 +281,7 @@ impl actix_web::error::ResponseError for CreateDatasetError {
 
     fn status_code(&self) -> StatusCode {
         match self {
-            Self::FailedToWriteToDatabase { .. } | Self::CannotAccessConfig { .. } => {
+            Self::DatabaseAccessError { .. } | Self::CannotAccessConfig { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
             _ => StatusCode::BAD_REQUEST,
@@ -415,9 +415,9 @@ impl actix_web::error::ResponseError for CreateDatasetError {
         (status = 413, response = crate::api::model::responses::PayloadTooLargeResponse),
         (status = 415, response = crate::api::model::responses::UnsupportedMediaTypeForJsonResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse, examples(
-            ("Failed to write to database" = (value = json!({
-                "error": "FailedToWriteToDatabase",
-                "message": "FailedToWriteToDatabase: connection closed"
+            ("Failed to access database" = (value = json!({
+                "error": "DatabaseAccessError",
+                "message": "DatabaseAccessError: connection closed"
             }))),
             ("Cannot access config" = (value = json!({
                 "error": "CannotAccessConfig",
@@ -484,7 +484,7 @@ pub async fn create_user_dataset<C: Context>(
             meta_data,
         )
         .await
-        .context(FailedToWriteToDatabase)?;
+        .context(DatabaseAccess)?;
 
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -524,7 +524,7 @@ where
             meta_data,
         )
         .await
-        .context(FailedToWriteToDatabase)?;
+        .context(DatabaseAccess)?;
 
     Ok(web::Json(IdResponse::from(id)))
 }

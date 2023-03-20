@@ -163,7 +163,7 @@ impl FromRequest for AdminSession {
             let admin_session = Self::default();
 
             if request_token != admin_session.id() {
-                return Err(Error::Authorization {
+                return Err(Error::Unauthorized {
                     source: Box::new(Error::InvalidAdminToken),
                 });
             }

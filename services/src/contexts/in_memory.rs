@@ -189,7 +189,7 @@ impl Context for InMemoryContext {
         let default_session = self.default_session_ref().await;
 
         if default_session.id() != session_id {
-            return Err(Error::Authorization {
+            return Err(Error::Unauthorized {
                 source: Box::new(Error::InvalidSession),
             });
         }

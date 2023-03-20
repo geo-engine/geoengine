@@ -108,7 +108,7 @@ pub(crate) async fn login_handler<C: ProContext>(
         .login(user.into_inner())
         .await
         .map_err(Box::new)
-        .context(error::Authorization)?;
+        .context(error::Unauthorized)?;
     Ok(web::Json(session))
 }
 
@@ -194,7 +194,7 @@ pub(crate) async fn session_handler<C: ProContext>(session: C::Session) -> impl 
 )]
 pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
     if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
-        return Err(error::Error::Authorization {
+        return Err(error::Error::Unauthorized {
             source: Box::new(error::Error::AnonymousAccessDisabled),
         });
     }
@@ -317,7 +317,7 @@ pub(crate) async fn get_user_quota_handler<C: ProContext>(
 
     if let Either::Right(session) = session {
         if session.user.id != user {
-            return Err(error::Error::Authorization {
+            return Err(error::Error::Unauthorized {
                 source: Box::new(error::Error::OperationRequiresAdminPrivilige),
             });
         }

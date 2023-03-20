@@ -39,7 +39,7 @@ where
 )]
 async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> Result<impl Responder> {
     if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
-        return Err(error::Error::Authorization {
+        return Err(error::Error::Unauthorized {
             source: Box::new(error::Error::AnonymousAccessDisabled),
         });
     }

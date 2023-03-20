@@ -84,13 +84,13 @@ pub fn get_token(req: &HttpRequest) -> Result<SessionId> {
     let header = req
         .headers()
         .get(header::AUTHORIZATION)
-        .ok_or(Error::Authorization {
+        .ok_or(Error::Unauthorized {
             source: Box::new(Error::MissingAuthorizationHeader),
         })?;
-    let scheme = Bearer::parse(header).map_err(|_| Error::Authorization {
+    let scheme = Bearer::parse(header).map_err(|_| Error::Unauthorized {
         source: Box::new(Error::InvalidAuthorizationScheme),
     })?;
-    SessionId::from_str(scheme.token()).map_err(|_err| Error::Authorization {
+    SessionId::from_str(scheme.token()).map_err(|_err| Error::Unauthorized {
         source: Box::new(Error::InvalidUuid),
     })
 }

@@ -274,6 +274,6 @@ impl Context for ProInMemoryContext {
             .session(session_id)
             .await
             .map_err(Box::new)
-            .context(error::Authorization)
+            .context(error::Unauthorized)
     }
 }

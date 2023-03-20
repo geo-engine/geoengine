@@ -32,45 +32,45 @@ pub struct IdResponse {
 #[derive(ToResponse)]
 #[response(description = "Authorization failed", examples(
     ("Authorization Header is missing" = (value = json!({
-        "error": "MissingAuthorizationHeader",
-        "message": "Header with authorization token not provided."
+        "error": "Unauthorized",
+        "message": "Authorization error: Header with authorization token not provided."
     }))),
     ("Authorization Scheme other than Bearer is used" = (value = json!({
-        "error": "InvalidAuthorizationScheme",
-        "message": "Authentication scheme must be Bearer."
+        "error": "Unauthorized",
+        "message": "Authorization error: Authentication scheme must be Bearer."
     }))),
     ("Provided auth token has an invalid format" = (value = json!({
-        "error": "InvalidUuid",
-        "message": "Identifier does not have the right format."
-    }))),
-    ("Auth token does not correspond to an admin" = (value = json!({
-        "error": "InvalidAdminToken",
-        "message": "Invalid admin token"
+        "error": "Unauthorized",
+        "message": "Authorization error: Identifier does not have the right format."
     }))),
     ("Session id is invalid" = (value = json!({
-        "error": "InvalidSession",
-        "message": "The session id is invalid."
+        "error": "Unauthorized",
+        "message": "Authorization error: The session id is invalid."
     }))),
+    ("Auth token does not correspond to an admin" = (value = json!({
+        "error": "Unauthorized",
+        "message": "Authorization error: Invalid admin token"
+    })))
 ))]
 pub struct UnauthorizedAdminResponse(ErrorResponse);
 
 #[derive(ToResponse)]
 #[response(description = "Authorization failed", examples(
     ("Authorization Header is missing" = (value = json!({
-        "error": "MissingAuthorizationHeader",
-        "message": "Header with authorization token not provided."
+        "error": "Unauthorized",
+        "message": "Authorization error: Header with authorization token not provided."
     }))),
     ("Authorization Scheme other than Bearer is used" = (value = json!({
-        "error": "InvalidAuthorizationScheme",
-        "message": "Authentication scheme must be Bearer."
+        "error": "Unauthorized",
+        "message": "Authorization error: Authentication scheme must be Bearer."
     }))),
     ("Provided auth token has an invalid format" = (value = json!({
-        "error": "InvalidUuid",
-        "message": "Identifier does not have the right format."
+        "error": "Unauthorized",
+        "message": "Authorization error: Identifier does not have the right format."
     }))),
     ("Session id is invalid" = (value = json!({
-        "error": "InvalidSession",
-        "message": "The session id is invalid."
+        "error": "Unauthorized",
+        "message": "Authorization error: The session id is invalid."
     })))
 ))]
 pub struct UnauthorizedUserResponse(ErrorResponse);

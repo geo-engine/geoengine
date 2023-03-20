@@ -124,7 +124,7 @@ async fn create_system_dataset<C: ProContext>(
             meta_data,
         )
         .await
-        .context(datasets::FailedToWriteToDatabase)?;
+        .context(datasets::DatabaseAccess)?;
 
     dataset_db
         .add_dataset_permission(
@@ -136,7 +136,7 @@ async fn create_system_dataset<C: ProContext>(
             },
         )
         .await
-        .context(datasets::FailedToWriteToDatabase)?;
+        .context(datasets::DatabaseAccess)?;
 
     dataset_db
         .add_dataset_permission(
@@ -148,7 +148,7 @@ async fn create_system_dataset<C: ProContext>(
             },
         )
         .await
-        .context(datasets::FailedToWriteToDatabase)?;
+        .context(datasets::DatabaseAccess)?;
 
     Ok(web::Json(IdResponse::from(dataset_id)))
 }
