@@ -7,7 +7,7 @@ use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefiniti
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
-use crate::pro::contexts::ProContext;
+use crate::pro::contexts::{ProContext, ProGeoEngineDb};
 use crate::pro::util::config::Odm;
 use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
@@ -35,6 +35,7 @@ use uuid::Uuid;
 pub(crate) fn init_drone_mapping_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
+    C::GeoEngineDB: ProGeoEngineDb,
 {
     cfg.service(web::resource("/droneMapping/task").route(web::post().to(start_task_handler::<C>)))
         .service(
@@ -92,7 +93,10 @@ async fn start_task_handler<C: ProContext>(
     _session: C::Session,
     _ctx: web::Data<C>,
     task_start: web::Json<TaskStart>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let base_url = get_config_element::<Odm>()?.endpoint;
 
     // TODO: auth
@@ -195,7 +199,10 @@ async fn dataset_from_drone_mapping_handler<C: ProContext>(
     task_id: web::Path<Uuid>,
     session: C::Session,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let base_url = get_config_element::<Odm>()?.endpoint;
 
     // TODO: auth
@@ -258,11 +265,11 @@ async fn dataset_from_drone_mapping_handler<C: ProContext>(
 
     let dataset_definition = dataset_definition_from_geotiff(&tiff_path).await?;
 
-    let db = ctx.dataset_db_ref();
+    let db = ctx.db(session);
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
 
     let dataset = db
-        .add_dataset(&session, dataset_definition.properties.validated()?, meta)
+        .add_dataset(dataset_definition.properties.validated()?, meta)
         .await?;
 
     Ok(web::Json(CreateDatasetResponse {

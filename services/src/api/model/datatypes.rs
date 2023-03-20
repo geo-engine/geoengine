@@ -127,7 +127,11 @@ impl From<geoengine_datatypes::dataset::DatasetId> for DatasetId {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema)]
-pub struct LayerId(pub String);
+#[cfg_attr(
+    feature = "postgres",
+    derive(postgres_types::ToSql, postgres_types::FromSql)
+)]
+pub struct LayerId(pub String); // TODO: differentiate between internal layer ids (UUID) and external layer ids (String)
 
 impl From<LayerId> for geoengine_datatypes::dataset::LayerId {
     fn from(value: LayerId) -> Self {

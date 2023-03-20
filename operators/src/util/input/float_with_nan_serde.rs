@@ -99,6 +99,13 @@ pub mod float_option {
                 .deserialize_any(float::FloatOrStringVisitor)
                 .map(Some)
         }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
     }
 
     /// Parse no data from either number or `"nan"`

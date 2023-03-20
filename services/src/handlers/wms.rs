@@ -137,7 +137,7 @@ where
     let workflow_id = workflow.into_inner();
     let wms_url = wms_url(workflow_id)?;
 
-    let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
+    let workflow = ctx.db(session.clone()).load_workflow(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -268,8 +268,8 @@ async fn wms_map_handler<C: Context>(
         );
 
         let workflow = ctx
-            .workflow_registry_ref()
-            .load(&WorkflowId::from_str(&request.layers)?)
+            .db(session.clone())
+            .load_workflow(&WorkflowId::from_str(&request.layers)?)
             .await?;
 
         let operator = workflow.operator.get_raster().context(error::Operator)?;

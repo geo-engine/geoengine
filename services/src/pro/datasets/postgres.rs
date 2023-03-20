@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::api::model::datatypes::{DataId, DatasetId, LayerId};
+use crate::api::model::datatypes::{DatasetId, LayerId};
 use crate::api::model::services::AddDataset;
 use crate::datasets::listing::ProvenanceOutput;
-use crate::datasets::listing::SessionMetaDataProvider;
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
 use crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID;
 use crate::datasets::storage::{
@@ -20,64 +19,39 @@ use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
-use crate::layers::listing::LayerCollectionId;
-use crate::layers::listing::LayerCollectionProvider;
+
+use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
+use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
-use crate::pro::datasets::storage::UpdateDatasetPermissions;
-use crate::pro::datasets::RoleId;
+use crate::pro::contexts::PostgresDb;
+use crate::pro::permissions::{Permission, PermissionDb, RoleId};
 use crate::projects::Symbology;
 use crate::util::operators::source_operator_from_dataset;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
-use crate::{
-    datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider},
-    pro::users::UserSession,
-};
 use async_trait::async_trait;
-use bb8_postgres::bb8::Pool;
+
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
-use bb8_postgres::PostgresConnectionManager;
+
+use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
-    MetaData, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
+    VectorResultDescriptor,
 };
 
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
-use log::info;
+
 use postgres_types::{FromSql, ToSql};
 use snafu::{ensure, ResultExt};
 use uuid::Uuid;
 
-use super::{DatasetPermission, Permission};
-
-pub struct PostgresDatasetDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    conn_pool: Pool<PostgresConnectionManager<Tls>>,
-}
-
-impl<Tls> PostgresDatasetDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
-        Self { conn_pool }
-    }
-}
-
-impl<Tls> DatasetDb<UserSession> for PostgresDatasetDb<Tls>
+impl<Tls> DatasetDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -87,16 +61,15 @@ where
 }
 
 #[async_trait]
-impl<Tls> DatasetProvider<UserSession> for PostgresDatasetDb<Tls>
+impl<Tls> DatasetProvider for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn list(
+    async fn list_datasets(
         &self,
-        session: &UserSession,
         _options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
         // TODO: use options
@@ -121,7 +94,7 @@ where
             )
             .await?;
 
-        let rows = conn.query(&stmt, &[&session.user.id]).await?;
+        let rows = conn.query(&stmt, &[&self.session.user.id]).await?;
 
         Ok(rows
             .iter()
@@ -140,7 +113,7 @@ where
             .collect())
     }
 
-    async fn load(&self, session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
+    async fn load_dataset(&self, dataset: &DatasetId) -> Result<Dataset> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
@@ -164,7 +137,9 @@ where
             .await?;
 
         // TODO: throw proper dataset does not exist/no permission error
-        let row = conn.query_one(&stmt, &[&session.user.id, dataset]).await?;
+        let row = conn
+            .query_one(&stmt, &[&self.session.user.id, dataset])
+            .await?;
 
         Ok(Dataset {
             id: row.get(0),
@@ -177,11 +152,7 @@ where
         })
     }
 
-    async fn provenance(
-        &self,
-        session: &UserSession,
-        dataset: &DatasetId,
-    ) -> Result<ProvenanceOutput> {
+    async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
@@ -197,7 +168,9 @@ where
             )
             .await?;
 
-        let row = conn.query_one(&stmt, &[&session.user.id, dataset]).await?;
+        let row = conn
+            .query_one(&stmt, &[&self.session.user.id, dataset])
+            .await?;
 
         Ok(ProvenanceOutput {
             data: (*dataset).into(),
@@ -208,23 +181,18 @@ where
 
 #[async_trait]
 impl<Tls>
-    SessionMetaDataProvider<
-        UserSession,
-        MockDatasetDataSourceLoadingInfo,
-        VectorResultDescriptor,
-        VectorQueryRectangle,
-    > for PostgresDatasetDb<Tls>
+    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
+    for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn session_meta_data(
+    async fn meta_data(
         &self,
-        _session: &UserSession,
         _id: &DataId,
-    ) -> Result<
+    ) -> geoengine_operators::util::Result<
         Box<
             dyn MetaData<
                 MockDatasetDataSourceLoadingInfo,
@@ -233,47 +201,63 @@ where
             >,
         >,
     > {
-        Err(Error::NotYetImplemented)
+        Err(geoengine_operators::error::Error::NotYetImplemented)
     }
 }
 
 #[async_trait]
-impl<Tls>
-    SessionMetaDataProvider<
-        UserSession,
-        OgrSourceDataset,
-        VectorResultDescriptor,
-        VectorQueryRectangle,
-    > for PostgresDatasetDb<Tls>
+impl<Tls> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn session_meta_data(
+    async fn meta_data(
         &self,
-        session: &UserSession,
         id: &DataId,
-    ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
-    {
-        let id = id.internal().ok_or(error::Error::DataIdTypeMissMatch)?;
+    ) -> geoengine_operators::util::Result<
+        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+    > {
+        let id: DatasetId = id
+            .internal()
+            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?
+            .into();
 
-        let conn = self.conn_pool.get().await?;
+        if !self
+            .has_permission(id, Permission::Read)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+        {
+            return Err(geoengine_operators::error::Error::PermissionDenied);
+        };
+
+        let conn = self.conn_pool.get().await.unwrap(); // TODO
         let stmt = conn
             .prepare(
                 "
-        SELECT 
+        SELECT
             d.meta_data
-        FROM 
-            user_permitted_datasets p JOIN datasets d 
+        FROM
+            user_permitted_datasets p JOIN datasets d
                 ON (p.dataset_id = d.id)
-        WHERE 
+        WHERE
             d.id = $1 AND p.user_id = $2",
             )
-            .await?;
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
 
-        let row = conn.query_one(&stmt, &[&id, &session.user.id]).await?;
+        let row = conn
+            .query_one(&stmt, &[&id, &self.session.user.id])
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
 
         let meta_data: StaticMetaData<
             OgrSourceDataset,
@@ -286,49 +270,65 @@ where
 }
 
 #[async_trait]
-impl<Tls>
-    SessionMetaDataProvider<
-        UserSession,
-        GdalLoadingInfo,
-        RasterResultDescriptor,
-        RasterQueryRectangle,
-    > for PostgresDatasetDb<Tls>
+impl<Tls> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn session_meta_data(
+    async fn meta_data(
         &self,
-        session: &UserSession,
         id: &DataId,
-    ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
-    {
-        let id = id.internal().ok_or(error::Error::DataIdTypeMissMatch)?;
+    ) -> geoengine_operators::util::Result<
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+    > {
+        let id: DatasetId = id
+            .internal()
+            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?
+            .into();
 
-        let conn = self.conn_pool.get().await?;
+        if !self
+            .has_permission(id, Permission::Read)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+        {
+            return Err(geoengine_operators::error::Error::PermissionDenied);
+        };
+
+        let conn = self.conn_pool.get().await.unwrap(); // TODO
         let stmt = conn
             .prepare(
                 "
-        SELECT 
+        SELECT
             d.meta_data
-        FROM 
-            user_permitted_datasets p JOIN datasets d 
+        FROM
+            user_permitted_datasets p JOIN datasets d
                 ON (p.dataset_id = d.id)
-        WHERE 
+        WHERE
             d.id = $1 AND p.user_id = $2",
             )
-            .await?;
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
 
-        let row = conn.query_one(&stmt, &[&id, &session.user.id]).await?;
+        let row = conn
+            .query_one(&stmt, &[&id, &self.session.user.id])
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
 
         let meta_data: MetaDataDefinition = serde_json::from_value(row.get(0))?;
 
         Ok(match meta_data {
             MetaDataDefinition::GdalMetaDataRegular(m) => Box::new(m),
             MetaDataDefinition::GdalStatic(m) => Box::new(m),
-            _ => return Err(Error::DataIdTypeMissMatch),
+            _ => return Err(geoengine_operators::error::Error::DataIdTypeMissMatch),
         })
     }
 }
@@ -349,7 +349,7 @@ pub struct DatasetMetaDataJson {
     result_descriptor: serde_json::Value,
 }
 
-impl<Tls> DatasetStorer for PostgresDatasetDb<Tls>
+impl<Tls> DatasetStorer for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -409,7 +409,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> DatasetStore<UserSession> for PostgresDatasetDb<Tls>
+impl<Tls> DatasetStore for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -418,7 +418,6 @@ where
 {
     async fn add_dataset(
         &self,
-        session: &UserSession,
         dataset: Validated<AddDataset>,
         meta_data: Box<dyn PostgresStorable<Tls>>,
     ) -> Result<DatasetId> {
@@ -466,7 +465,7 @@ where
         let stmt = tx
             .prepare(
                 "
-            INSERT INTO dataset_permissions (
+            INSERT INTO permissions (
                 role_id,
                 dataset_id,
                 permission
@@ -477,7 +476,7 @@ where
 
         tx.execute(
             &stmt,
-            &[&RoleId::from(session.user.id), &id, &Permission::Owner],
+            &[&RoleId::from(self.session.user.id), &id, &Permission::Owner],
         )
         .await?;
 
@@ -486,7 +485,12 @@ where
         Ok(id)
     }
 
-    async fn delete_dataset(&self, session: &UserSession, dataset_id: DatasetId) -> Result<()> {
+    async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {
+        ensure!(
+            self.has_permission(dataset_id, Permission::Owner).await?,
+            error::PermissionDenied
+        );
+
         let mut conn = self.conn_pool.get().await?;
 
         let tx = conn.build_transaction().start().await?;
@@ -504,7 +508,9 @@ where
             )
             .await?;
 
-        let rows = tx.query(&stmt, &[&dataset_id, &session.user.id]).await?;
+        let rows = tx
+            .query(&stmt, &[&dataset_id, &self.session.user.id])
+            .await?;
 
         if rows.is_empty() {
             return Err(Error::OperationRequiresOwnerPermission);
@@ -525,119 +531,25 @@ where
 }
 
 #[async_trait]
-impl<Tls> UpdateDatasetPermissions for PostgresDatasetDb<Tls>
+impl<Tls> UploadDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn add_dataset_permission(
-        &self,
-        session: &UserSession,
-        permission: DatasetPermission,
-    ) -> Result<()> {
-        info!(
-            "Add dataset permission session: {:?} permission: {:?}",
-            session, permission
-        );
+    async fn load_upload(&self, upload: UploadId) -> Result<Upload> {
+        // TODO: check permissions
 
-        let id = permission.dataset;
-
-        let mut conn = self.conn_pool.get().await?;
-
-        let tx = conn.build_transaction().start().await?;
-
-        let stmt = tx
-            .prepare(
-                "
-            SELECT
-                user_id 
-            FROM 
-                user_permitted_datasets 
-            WHERE
-                user_id = $1 AND dataset_id = $2 AND permission = $3",
-            )
-            .await?;
-
-        let auth = tx
-            .query_one(
-                &stmt,
-                &[&RoleId::from(session.user.id), &id, &Permission::Owner],
-            )
-            .await;
-
-        ensure!(
-            auth.is_ok(),
-            error::UpdateDatasetPermission {
-                role: session.user.id.to_string(),
-                dataset: permission.dataset,
-                permission: format!("{:?}", permission.permission),
-            }
-        );
-
-        let stmt = tx
-            .prepare(
-                "
-            SELECT 
-                COUNT(role_id) 
-            FROM 
-                dataset_permissions 
-            WHERE 
-                role_id = $1 AND dataset_id = $2 and permission = $3",
-            )
-            .await?;
-
-        let duplicate = tx
-            .query_one(&stmt, &[&permission.role, &id, &permission.permission])
-            .await?;
-
-        ensure!(
-            duplicate.get::<usize, i64>(0) == 0,
-            error::DuplicateDatasetPermission {
-                role: session.user.id.to_string(),
-                dataset: permission.dataset,
-                permission: format!("{:?}", permission.permission),
-            }
-        );
-
-        let stmt = tx
-            .prepare(
-                "
-            INSERT INTO dataset_permissions (
-                role_id,
-                dataset_id,
-                permission
-            )
-            VALUES ($1, $2, $3)",
-            )
-            .await?;
-
-        tx.execute(&stmt, &[&permission.role, &id, &permission.permission])
-            .await?;
-
-        tx.commit().await?;
-
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl<Tls> UploadDb<UserSession> for PostgresDatasetDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    async fn get_upload(&self, session: &UserSession, upload: UploadId) -> Result<Upload> {
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
             .prepare("SELECT id, files FROM uploads WHERE id = $1 AND user_id = $2")
             .await?;
 
-        let row = conn.query_one(&stmt, &[&upload, &session.user.id]).await?;
+        let row = conn
+            .query_one(&stmt, &[&upload, &self.session.user.id])
+            .await?;
 
         Ok(Upload {
             id: row.get(0),
@@ -649,7 +561,7 @@ where
         })
     }
 
-    async fn create_upload(&self, session: &UserSession, upload: Upload) -> Result<()> {
+    async fn create_upload(&self, upload: Upload) -> Result<()> {
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
@@ -660,7 +572,7 @@ where
             &stmt,
             &[
                 &upload.id,
-                &session.user.id,
+                &self.session.user.id,
                 &upload
                     .files
                     .iter()
@@ -674,31 +586,22 @@ where
 }
 
 #[async_trait]
-impl<Tls> LayerCollectionProvider for PostgresDatasetDb<Tls>
+impl<Tls> DatasetLayerCollectionProvider for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn collection(
+    async fn load_dataset_layer_collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
-        ensure!(
-            *collection == self.root_collection_id().await?,
-            error::UnknownLayerCollectionId {
-                id: collection.clone()
-            }
-        );
-
         let conn = self.conn_pool.get().await?;
 
         let options = options.user_input;
 
-        // TODO: only list datasets that are accessible to the user as layer
-        // for now they are listed, but cannot be accessed
         let stmt = conn
             .prepare(
                 "
@@ -707,17 +610,24 @@ where
                     d.name, 
                     d.description
                 FROM 
-                    datasets d
+                    user_permitted_datasets p JOIN datasets d 
+                        ON (p.dataset_id = d.id)
+                WHERE 
+                    p.user_id = $1
                 ORDER BY d.name ASC
-                LIMIT $1
-                OFFSET $2;",
+                LIMIT $2
+                OFFSET $3;",
             )
             .await?;
 
         let rows = conn
             .query(
                 &stmt,
-                &[&i64::from(options.limit), &i64::from(options.offset)],
+                &[
+                    &self.session.user.id,
+                    &i64::from(options.limit),
+                    &i64::from(options.offset),
+                ],
             )
             .await?;
 
@@ -750,17 +660,20 @@ where
         })
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_dataset_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(LayerCollectionId(DATASET_DB_ROOT_COLLECTION_ID.to_string()))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_dataset_layer(&self, id: &LayerId) -> Result<Layer> {
         let dataset_id = DatasetId::from_str(&id.0)?;
+
+        ensure!(
+            self.has_permission(dataset_id, Permission::Read).await?,
+            error::PermissionDenied
+        );
 
         let conn = self.conn_pool.get().await?;
 
-        // TODO: check permission to dataset
-        // for now they dataset is returned, but cannot be accessed
         let stmt = conn
             .prepare(
                 "

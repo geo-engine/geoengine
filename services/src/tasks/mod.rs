@@ -16,7 +16,7 @@ pub use error::TaskError;
 use futures::channel::oneshot;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::{error::ErrorSource, util::AsAnyArc};
-pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
+pub use in_memory::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
 use snafu::ensure;
 use std::{fmt, sync::Arc};
@@ -26,17 +26,17 @@ use utoipa::{IntoParams, ToSchema};
 #[async_trait::async_trait]
 pub trait TaskManager<C: TaskContext>: Send + Sync {
     #[must_use]
-    async fn schedule(
+    async fn schedule_task(
         &self,
         task: Box<dyn Task<C>>,
         notify: Option<oneshot::Sender<TaskStatus>>,
     ) -> Result<TaskId, TaskError>;
 
     #[must_use]
-    async fn status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError>;
+    async fn get_task_status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError>;
 
     #[must_use]
-    async fn list(
+    async fn list_tasks(
         &self,
         options: Validated<TaskListOptions>,
     ) -> Result<Vec<TaskStatusWithId>, TaskError>;
@@ -46,7 +46,7 @@ pub trait TaskManager<C: TaskContext>: Send + Sync {
     /// # Parameters
     ///  - `force`: If `true`, the task will be aborted without calling clean-up functions.
     ///
-    async fn abort(&self, task_id: TaskId, force: bool) -> Result<(), TaskError>;
+    async fn abort_tasks(&self, task_id: TaskId, force: bool) -> Result<(), TaskError>;
 }
 
 identifier!(TaskId);

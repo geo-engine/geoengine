@@ -6,8 +6,9 @@ use std::{
     path::PathBuf,
 };
 
-use crate::layers::layer::{
-    AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerDefinition,
+use crate::layers::{
+    layer::{AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerDefinition},
+    storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
 };
 use crate::{error::Result, layers::listing::LayerCollectionId};
 use crate::{layers::storage::LayerDb, util::user_input::UserInput};
@@ -85,7 +86,7 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         }
         .validated()?;
 
-        db.add_collection_with_id(
+        db.add_layer_collection_with_id(
             &def.id,
             collection,
             &LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
@@ -131,10 +132,7 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         }
     }
 
-    let root_id = db
-        .root_collection_id()
-        .await
-        .expect("root id must be resolved");
+    let root_id = LayerCollectionId(INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string());
     let mut collection_children: HashMap<LayerCollectionId, Vec<LayerCollectionId>> =
         HashMap::new();
 

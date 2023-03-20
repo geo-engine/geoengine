@@ -1,15 +1,13 @@
 use crate::datasets::listing::Provenance;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
-    FeatureDataType, Measurement, TimeGranularity, TimeInterval,
+    BoundingBox2D, FeatureDataType, Measurement, TimeGranularity, TimeInterval,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::source::GdalDatasetGeoTransform;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-
-pub const METADATA_KEY: &str = "geoengine";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -53,13 +51,15 @@ pub enum TemporalExtend {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorInfo {
     pub vector_type: VectorDataType,
     pub layer_name: String,
     pub attributes: Vec<Attribute>,
     pub temporal_extend: Option<TemporalExtend>,
+    pub time: Option<TimeInterval>,
+    pub bbox: Option<BoundingBox2D>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -85,7 +85,7 @@ pub struct RasterInfo {
 
 #[cfg(test)]
 mod tests {
-    use crate::datasets::external::nfdi::metadata::{
+    use crate::datasets::external::aruna::metadata::{
         Attribute, DataType, GEMetadata, RasterInfo, VectorInfo,
     };
     use crate::datasets::listing::Provenance;
@@ -107,6 +107,8 @@ mod tests {
                     r#type: FeatureDataType::Text,
                 }],
                 temporal_extend: None,
+                time: None,
+                bbox: None,
             }),
             provenance: Some(vec![Provenance {
                 citation: "Test".to_string(),
@@ -125,7 +127,9 @@ mod tests {
                         "name":"name",
                         "type":"text"
                     }],
-                    "temporalExtend":null
+                    "temporalExtend":null,
+                    "time":null,
+                    "bbox":null
                 }
             },
             "provenance": [

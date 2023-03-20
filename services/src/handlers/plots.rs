@@ -105,8 +105,8 @@ async fn get_plot_handler<C: Context>(
     );
 
     let workflow = ctx
-        .workflow_registry_ref()
-        .load(&WorkflowId(id.into_inner()))
+        .db(session.clone())
+        .load_workflow(&WorkflowId(id.into_inner()))
         .await?;
 
     let operator = workflow.operator.get_plot().context(error::Operator)?;
@@ -226,7 +226,7 @@ mod tests {
     };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::plot::{
-        Histogram, HistogramBounds, HistogramParams, Statistics, StatisticsParams,
+        Histogram, HistogramBounds, HistogramBuckets, HistogramParams, Statistics, StatisticsParams,
     };
     use serde_json::{json, Value};
 
@@ -264,7 +264,8 @@ mod tests {
             tiling_specification,
             ChunkByteSize::test_default(),
         );
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -277,11 +278,7 @@ mod tests {
             .into(),
         };
 
-        let id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
-            .await
-            .unwrap();
+        let id = ctx.db(session).register_workflow(workflow).await.unwrap();
 
         let params = &[
             ("bbox", "0,-0.3,0.2,0"),
@@ -326,7 +323,8 @@ mod tests {
             tiling_specification,
             ChunkByteSize::test_default(),
         );
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: Histogram {
@@ -336,7 +334,7 @@ mod tests {
                         min: 0.0,
                         max: 10.0,
                     },
-                    buckets: Some(4),
+                    buckets: HistogramBuckets::Number { value: 4 },
                     interactive: false,
                 },
                 sources: example_raster_source().into(),
@@ -345,7 +343,7 @@ mod tests {
             .into(),
         };
 
-        let id = ctx.workflow_registry().register(workflow).await.unwrap();
+        let id = ctx.db(session).register_workflow(workflow).await.unwrap();
 
         let params = &[
             ("bbox", "0,-0.3,0.2,0"),
@@ -450,7 +448,8 @@ mod tests {
     async fn check_request_types() {
         async fn get_workflow_json(method: Method) -> ServiceResponse {
             let ctx = InMemoryContext::test_default();
-            let session_id = ctx.default_session_ref().await.id();
+            let session = ctx.default_session_ref().await.clone();
+            let session_id = session.id();
 
             let workflow = Workflow {
                 operator: Statistics {
@@ -463,11 +462,7 @@ mod tests {
                 .into(),
             };
 
-            let id = ctx
-                .workflow_registry_ref()
-                .register(workflow)
-                .await
-                .unwrap();
+            let id = ctx.db(session).register_workflow(workflow).await.unwrap();
 
             let params = &[
                 ("bbox", "-180,-90,180,90"),

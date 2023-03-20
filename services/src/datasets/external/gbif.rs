@@ -287,7 +287,7 @@ impl GbifDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for GbifDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
@@ -321,11 +321,11 @@ impl LayerCollectionProvider for GbifDataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(LayerCollectionId("select".to_owned()))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let key = id.clone().0;
 
         let (taxonrank, canonicalname) =
@@ -1044,10 +1044,10 @@ mod tests {
             .await
             .unwrap();
 
-            let root_id = provider.root_collection_id().await.unwrap();
+            let root_id = provider.get_root_layer_collection_id().await.unwrap();
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &root_id,
                     LayerCollectionListOptions {
                         offset: 0,
@@ -1125,7 +1125,7 @@ mod tests {
             let root_id = LayerCollectionId("select/Animalia/Chordata".to_string());
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &root_id,
                     LayerCollectionListOptions {
                         offset: 0,
@@ -1221,7 +1221,7 @@ mod tests {
                 let id = LayerCollectionId(id);
 
                 let collection = provider
-                    .collection(
+                    .load_layer_collection(
                         &id,
                         LayerCollectionListOptions {
                             offset: 0,
@@ -1297,7 +1297,7 @@ mod tests {
             let root_id = LayerCollectionId("datasets/family/".to_string());
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &root_id,
                     LayerCollectionListOptions {
                         offset: 0,
@@ -1350,7 +1350,7 @@ mod tests {
             let root_id = LayerCollectionId("datasets/family/Plantae/".to_string());
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &root_id,
                     LayerCollectionListOptions {
                         offset: 0,
@@ -1395,7 +1395,7 @@ mod tests {
             let layer_collection_id = LayerCollectionId("filter/".to_string());
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &layer_collection_id,
                     LayerCollectionListOptions {
                         offset: 0,
@@ -1447,7 +1447,7 @@ mod tests {
             let layer_collection_id = LayerCollectionId("filter/Plantae".to_string());
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &layer_collection_id,
                     LayerCollectionListOptions {
                         offset: 0,
@@ -2124,7 +2124,7 @@ mod tests {
                 let layer_id = LayerId("species/Rhipidia willistoniana".to_owned());
 
                 let result = provider
-                    .get_layer(&layer_id)
+                    .load_layer(&layer_id)
                     .await
                     .map_err(|e| e.to_string())?;
 

@@ -110,7 +110,7 @@ impl DataProvider for PangaeaDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for PangaeaDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         _collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
@@ -118,11 +118,11 @@ impl LayerCollectionProvider for PangaeaDataProvider {
         Err(Error::NotYetImplemented)
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Err(Error::NotYetImplemented)
     }
 
-    async fn get_layer(&self, _id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, _id: &LayerId) -> Result<Layer> {
         Err(Error::NotYetImplemented)
     }
 }

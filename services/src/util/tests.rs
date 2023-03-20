@@ -45,12 +45,11 @@ use std::path::PathBuf;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper<C: SimpleContext>(ctx: &C) -> (SimpleSession, ProjectId) {
-    let session = ctx.default_session_ref().await;
+    let session = ctx.default_session_ref().await.clone();
 
     let project = ctx
-        .project_db_ref()
-        .create(
-            &session,
+        .db(session.clone())
+        .create_project(
             CreateProject {
                 name: "Test".to_string(),
                 description: "Foo".to_string(),
@@ -72,7 +71,7 @@ pub async fn create_project_helper<C: SimpleContext>(ctx: &C) -> (SimpleSession,
         .await
         .unwrap();
 
-    (session.clone(), project)
+    (session, project)
 }
 
 pub fn update_project_helper(project: ProjectId) -> UpdateProject {
@@ -110,9 +109,11 @@ pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, 
         ),
     };
 
+    let session = ctx.default_session_ref().await.clone();
+
     let id = ctx
-        .workflow_registry_ref()
-        .register(workflow.clone())
+        .db(session)
+        .register_workflow(workflow.clone())
         .await
         .unwrap();
 
@@ -136,9 +137,10 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
 
-    ctx.dataset_db_ref()
+    let session = ctx.default_session_ref().await.clone();
+
+    ctx.db(session)
         .add_dataset(
-            &SimpleSession::default(),
             ndvi.properties
                 .validated()
                 .expect("valid dataset description"),
@@ -245,9 +247,10 @@ pub async fn add_land_cover_to_datasets(ctx: &InMemoryContext) -> DatasetId {
         }.into()),
     };
 
-    ctx.dataset_db_ref()
+    let session = ctx.default_session_ref().await.clone();
+
+    ctx.db(session)
         .add_dataset(
-            &SimpleSession::default(),
             ndvi.properties
                 .validated()
                 .expect("valid dataset description"),

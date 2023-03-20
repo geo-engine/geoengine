@@ -1,7 +1,7 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
-use crate::pro::datasets::Role;
-use crate::pro::projects::ProjectPermission;
+use crate::pro::contexts::PostgresDb;
+use crate::pro::permissions::{Role, RoleId};
 use crate::pro::users::oidc::ExternalUserClaims;
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
@@ -11,39 +11,19 @@ use crate::util::user_input::Validated;
 use crate::util::Identifier;
 use crate::{error, pro::contexts::PostgresContext};
 use async_trait::async_trait;
-use bb8_postgres::PostgresConnectionManager;
+
 use bb8_postgres::{
-    bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
-    tokio_postgres::Socket,
+    tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
 use geoengine_datatypes::primitives::Duration;
 use pwhash::bcrypt;
+use snafu::ensure;
 use uuid::Uuid;
 
-pub struct PostgresUserDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    conn_pool: Pool<PostgresConnectionManager<Tls>>,
-}
-
-impl<Tls> PostgresUserDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
-        Self { conn_pool }
-    }
-}
+use super::userdb::{RoleDb, UserAuth};
 
 #[async_trait]
-impl<Tls> UserDb for PostgresUserDb<Tls>
+impl<Tls> UserAuth for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -52,8 +32,8 @@ where
 {
     // TODO: clean up expired sessions?
 
-    async fn register(&self, user: Validated<UserRegistration>) -> Result<UserId> {
-        let mut conn = self.conn_pool.get().await?;
+    async fn register_user(&self, user: Validated<UserRegistration>) -> Result<UserId> {
+        let mut conn = self.pool.get().await?;
 
         let tx = conn.build_transaction().start().await?;
 
@@ -95,7 +75,7 @@ where
         let stmt = tx
             .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
             .await?;
-        tx.execute(&stmt, &[&user.id, &Role::user_role_id()])
+        tx.execute(&stmt, &[&user.id, &Role::registered_user_role_id()])
             .await?;
 
         tx.commit().await?;
@@ -103,8 +83,8 @@ where
         Ok(user.id)
     }
 
-    async fn anonymous(&self) -> Result<UserSession> {
-        let mut conn = self.conn_pool.get().await?;
+    async fn create_anonymous_session(&self) -> Result<UserSession> {
+        let mut conn = self.pool.get().await?;
 
         let tx = conn.build_transaction().start().await?;
 
@@ -113,7 +93,8 @@ where
         let stmt = tx
             .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
             .await?;
-        tx.execute(&stmt, &[&user_id, &"anonymous_user"]).await?;
+        tx.execute(&stmt, &[&user_id, &format!("anonymous_user_{user_id}")])
+            .await?;
 
         let quota_available =
             crate::util::config::get_config_element::<crate::pro::util::config::User>()?
@@ -177,7 +158,7 @@ where
     }
 
     async fn login(&self, user_credentials: UserCredentials) -> Result<UserSession> {
-        let conn = self.conn_pool.get().await?;
+        let conn = self.pool.get().await?;
         let stmt = conn
             .prepare("SELECT id, password_hash, email, real_name FROM users WHERE email = $1;")
             .await?;
@@ -250,7 +231,7 @@ where
         user: ExternalUserClaims,
         duration: Duration,
     ) -> Result<UserSession> {
-        let mut conn = self.conn_pool.get().await?;
+        let mut conn = self.pool.get().await?;
         let stmt = conn
             .prepare("SELECT id, external_id, email, real_name FROM external_users WHERE external_id = $1;")
             .await?;
@@ -311,7 +292,7 @@ where
                 let stmt = tx
                     .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
                     .await?;
-                tx.execute(&stmt, &[&user_id, &Role::user_role_id()])
+                tx.execute(&stmt, &[&user_id, &Role::registered_user_role_id()])
                     .await?;
 
                 tx.commit().await?;
@@ -363,21 +344,12 @@ where
         })
     }
 
-    async fn logout(&self, session: SessionId) -> Result<()> {
-        let conn = self.conn_pool.get().await?;
-        let stmt = conn
-            .prepare("DELETE FROM sessions WHERE id = $1;") // TODO: only invalidate session?
-            .await?;
+    async fn user_session_by_id(&self, session: SessionId) -> Result<UserSession> {
+        let mut conn = self.pool.get().await?;
 
-        conn.execute(&stmt, &[&session])
-            .await
-            .map_err(|_error| error::Error::LogoutFailed)?;
-        Ok(())
-    }
+        let tx = conn.build_transaction().start().await?;
 
-    async fn session(&self, session: SessionId) -> Result<UserSession> {
-        let conn = self.conn_pool.get().await?;
-        let stmt = conn
+        let stmt = tx
             .prepare(
                 "
             SELECT 
@@ -387,18 +359,18 @@ where
                 s.created, 
                 s.valid_until, 
                 s.project_id,
-                s.view           
+                s.view
             FROM sessions s JOIN users u ON (s.user_id = u.id)
             WHERE s.id = $1 AND CURRENT_TIMESTAMP < s.valid_until;",
             )
             .await?;
 
-        let row = conn
+        let row = tx
             .query_one(&stmt, &[&session])
             .await
             .map_err(|_error| error::Error::InvalidSession)?;
 
-        Ok(UserSession {
+        let mut session = UserSession {
             id: session,
             user: UserInfo {
                 id: row.get(0),
@@ -409,46 +381,74 @@ where
             valid_until: row.get(4),
             project: row.get::<usize, Option<Uuid>>(5).map(ProjectId),
             view: row.get(6),
-            roles: vec![], // TODO
-        })
+            roles: vec![],
+        };
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT role_id FROM user_roles WHERE user_id = $1;
+            ",
+            )
+            .await?;
+
+        let rows = tx.query(&stmt, &[&session.user.id]).await?;
+
+        session.roles = rows.into_iter().map(|row| row.get(0)).collect();
+
+        Ok(session)
+    }
+}
+
+#[async_trait]
+impl<Tls> UserDb for PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    // TODO: clean up expired sessions?
+
+    async fn logout(&self) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare("DELETE FROM sessions WHERE id = $1;") // TODO: only invalidate session?
+            .await?;
+
+        conn.execute(&stmt, &[&self.session.id])
+            .await
+            .map_err(|_error| error::Error::LogoutFailed)?;
+        Ok(())
     }
 
-    async fn set_session_project(&self, session: &UserSession, project: ProjectId) -> Result<()> {
-        let conn = self.conn_pool.get().await?;
-        PostgresContext::check_user_project_permission(
-            &conn,
-            session.user.id,
-            project,
-            &[
-                ProjectPermission::Read,
-                ProjectPermission::Write,
-                ProjectPermission::Owner,
-            ],
-        )
-        .await?;
+    async fn set_session_project(&self, project: ProjectId) -> Result<()> {
+        // TODO: check permission
 
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("UPDATE sessions SET project_id = $1 WHERE id = $2;")
             .await?;
 
-        conn.execute(&stmt, &[&project, &session.id]).await?;
+        conn.execute(&stmt, &[&project, &self.session.id]).await?;
 
         Ok(())
     }
 
-    async fn set_session_view(&self, session: &UserSession, view: STRectangle) -> Result<()> {
+    async fn set_session_view(&self, view: STRectangle) -> Result<()> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("UPDATE sessions SET view = $1 WHERE id = $2;")
             .await?;
 
-        conn.execute(&stmt, &[&view, &session.id]).await?;
+        conn.execute(&stmt, &[&view, &self.session.id]).await?;
 
         Ok(())
     }
 
     async fn increment_quota_used(&self, user: &UserId, quota_used: u64) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
@@ -465,14 +465,14 @@ where
         Ok(())
     }
 
-    async fn quota_used(&self, session: &UserSession) -> Result<u64> {
+    async fn quota_used(&self) -> Result<u64> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT quota_used FROM users WHERE id = $1;")
             .await?;
 
         let row = conn
-            .query_one(&stmt, &[&session.user.id])
+            .query_one(&stmt, &[&self.session.user.id])
             .await
             .map_err(|_error| error::Error::InvalidSession)?;
 
@@ -480,6 +480,11 @@ where
     }
 
     async fn quota_used_by_user(&self, user: &UserId) -> Result<u64> {
+        ensure!(
+            self.session.user.id == *user || self.session.is_admin(),
+            error::PermissionDenied
+        );
+
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT quota_used FROM users WHERE id = $1;")
@@ -493,14 +498,14 @@ where
         Ok(row.get::<usize, i64>(0) as u64)
     }
 
-    async fn quota_available(&self, session: &UserSession) -> Result<i64> {
+    async fn quota_available(&self) -> Result<i64> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT quota_available FROM users WHERE id = $1;")
             .await?;
 
         let row = conn
-            .query_one(&stmt, &[&session.user.id])
+            .query_one(&stmt, &[&self.session.user.id])
             .await
             .map_err(|_error| error::Error::InvalidSession)?;
 
@@ -508,6 +513,11 @@ where
     }
 
     async fn quota_available_by_user(&self, user: &UserId) -> Result<i64> {
+        ensure!(
+            self.session.user.id == *user || self.session.is_admin(),
+            error::PermissionDenied
+        );
+
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT quota_available FROM users WHERE id = $1;")
@@ -526,6 +536,8 @@ where
         user: &UserId,
         new_available_quota: i64,
     ) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
@@ -538,6 +550,79 @@ where
 
         conn.execute(&stmt, &[&(new_available_quota), &user])
             .await?;
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl<Tls> RoleDb for PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn add_role(&self, role_name: &str) -> Result<RoleId> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        let id = RoleId::new();
+
+        let stmt = conn
+            .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
+            .await?;
+
+        // TODO: map postgres error code to error::Error::RoleAlreadyExists
+
+        conn.execute(&stmt, &[&id, &role_name]).await?;
+
+        Ok(id)
+    }
+
+    async fn remove_role(&self, role_id: &RoleId) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn.prepare("DELETE FROM roles WHERE id = $1;").await?;
+
+        let deleted = conn.execute(&stmt, &[&role_id]).await?;
+
+        ensure!(deleted > 0, error::RoleDoesNotExist);
+
+        Ok(())
+    }
+
+    async fn assign_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
+            .await?;
+
+        // TODO: map postgres error code to error::Error::RoleAlreadyAssigned, RoleDoesNotExist
+
+        conn.execute(&stmt, &[&user_id, &role_id]).await?;
+
+        Ok(())
+    }
+
+    async fn revoke_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare("DELETE FROM user_roles WHERE user_id= $1 AND role_id = $2;")
+            .await?;
+
+        let deleted = conn.execute(&stmt, &[&user_id, &role_id]).await?;
+
+        ensure!(deleted > 0, error::RoleNotAssigned);
 
         Ok(())
     }

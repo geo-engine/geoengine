@@ -139,6 +139,8 @@ anonymous_access = true
 user_registration = true
 quota_check = false
 # default_available_quota = 999999
+admin_email = "admin@localhost"
+admin_password = "admin" # Initial password for the user "admin", which is created on startup
 
 [odm]
 endpoint = "http://localhost:3000/"

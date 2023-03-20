@@ -174,6 +174,15 @@ pub enum Error {
     InvalidDataId,
     InvalidMetaDataType,
     UnknownDataId,
+    DataIdTypeMissMatch,
+
+    UnknownDatasetId,
+
+    // Error during loading of meta data. The source error typically comes from the services crate
+    #[snafu(display("Could not load meta data: {}", source))]
+    MetaData {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 
     // TODO: this error should not be propagated to user
     #[snafu(display("Could not open gdal dataset for file path {:?}", file_path))]
@@ -357,6 +366,9 @@ pub enum Error {
     QueryingProcessorFailed {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
+
+    // TODO: wrap this somehow, because it's pro
+    PermissionDenied,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

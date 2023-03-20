@@ -32,3 +32,5 @@ scopes = [ ]
 [user]
 quota_check = true
 default_available_quota = 9999
+admin_email = "admin@localhost"
+admin_password = "admin"
