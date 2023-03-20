@@ -12,13 +12,13 @@ use crate::{
     },
     error::Result,
     handlers::datasets::{
-        self, adjust_meta_data_path, auto_create_dataset_handler, create_user_dataset,
+        self, adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
         delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
-        suggest_meta_data_handler, AdminOrSession, CreateDatasetError,
+        suggest_meta_data_handler, CreateDatasetError,
     },
     pro::{
-        contexts::ProContext,
-        datasets::{DatasetPermission, Permission, Role, UpdateDatasetPermissions},
+        contexts::{ProContext, ProGeoEngineDb},
+        permissions::{Permission, PermissionDb, Role},
     },
     util::{
         config::{get_config_element, Data},
@@ -30,13 +30,14 @@ use crate::{
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
+    C::GeoEngineDB: ProGeoEngineDb,
     C::Session: FromRequest,
 {
     cfg.service(
         web::scope("/dataset")
             .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
-            .service(web::resource("/volumes").route(web::get().to(list_volumes_handler)))
+            .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
                 web::resource("/{dataset}")
                     .route(web::get().to(get_dataset_handler::<C>))
@@ -63,40 +64,37 @@ where
     )
 )]
 async fn create_dataset_handler<C: ProContext>(
-    session: AdminOrSession<C>,
+    session: C::Session,
     ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let create = create.into_inner();
-    match (session, create) {
-        (
-            AdminOrSession::Admin,
-            CreateDataset {
-                data_path: DataPath::Volume(upload),
-                definition,
-            },
-        ) => create_system_dataset(ctx, upload, definition).await,
-        (
-            AdminOrSession::Session(session),
-            CreateDataset {
-                data_path: DataPath::Upload(volume),
-                definition,
-            },
-        ) => create_user_dataset(session, ctx, volume, definition).await,
-        (AdminOrSession::Admin, _) => Err(CreateDatasetError::AdminsCannotCreateDatasetFromUpload),
-        (AdminOrSession::Session(_), _) => {
-            Err(CreateDatasetError::OnlyAdminsCanCreateDatasetFromVolume)
-        }
+    match create {
+        CreateDataset {
+            data_path: DataPath::Volume(upload),
+            definition,
+        } => create_system_dataset(session, ctx, upload, definition).await,
+        CreateDataset {
+            data_path: DataPath::Upload(volume),
+            definition,
+        } => create_upload_dataset(session, ctx, volume, definition).await,
     }
 }
 
 async fn create_system_dataset<C: ProContext>(
+    session: C::Session,
     ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
-    let volumes = get_config_element::<Data>()
-        .context(datasets::CannotAccessConfig)?
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    let volumes = get_config_element::<Data>()?
+        .context(datasets::CannotAccessConfig)
         .volumes;
     let volume_path = volumes
         .get(&volume_name)
@@ -109,44 +107,23 @@ async fn create_system_dataset<C: ProContext>(
     adjust_meta_data_path(&mut definition.meta_data, &volume)
         .context(datasets::CannotResolveUploadFilePath)?;
 
-    let dataset_db = ctx.pro_dataset_db_ref();
-    let meta_data = dataset_db.wrap_meta_data(definition.meta_data.into());
+    let db = ctx.db(session);
+    let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
-    let system_session = C::Session::system_session();
-
-    let dataset_id = dataset_db
-        .add_dataset(
-            &system_session,
-            definition
-                .properties
-                .validated()
-                .context(datasets::JsonValidationFailed)?,
-            meta_data,
-        )
+    let dataset_id = db
+        .add_dataset(definition.properties.validated()?, meta_data)
         .await
         .context(datasets::DatabaseAccess)?;
 
-    dataset_db
-        .add_dataset_permission(
-            &system_session,
-            DatasetPermission {
-                role: Role::user_role_id(),
-                dataset: dataset_id,
-                permission: Permission::Read,
-            },
-        )
-        .await
-        .context(datasets::DatabaseAccess)?;
+    db.add_permission(
+        Role::registered_user_role_id(),
+        dataset_id,
+        Permission::Read,
+    )
+    .await
+    .context(datasets::DatabaseAccess)?;
 
-    dataset_db
-        .add_dataset_permission(
-            &system_session,
-            DatasetPermission {
-                role: Role::anonymous_role_id(),
-                dataset: dataset_id,
-                permission: Permission::Read,
-            },
-        )
+    db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
         .await
         .context(datasets::DatabaseAccess)?;
 
@@ -173,16 +150,16 @@ mod tests {
     use serde_json::json;
 
     use crate::{
-        api::model::services::{AddDataset, DatasetDefinition, MetaDataDefinition},
-        contexts::{AdminSession, Context, Session, SessionId},
+        api::model::services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
+        contexts::{Context, Session, SessionId},
         datasets::{
             listing::DatasetProvider,
             upload::{UploadId, UploadRootPath, VolumeName},
         },
         pro::{
             contexts::ProInMemoryContext,
-            users::{UserDb, UserSession},
-            util::tests::send_pro_test_request,
+            users::UserAuth,
+            util::tests::{admin_login, send_pro_test_request},
         },
         util::tests::{SetMultipartBody, TestDataUploads},
     };
@@ -192,7 +169,10 @@ mod tests {
     pub async fn upload_ne_10m_ports_files<C: ProContext>(
         ctx: C,
         session_id: SessionId,
-    ) -> Result<UploadId> {
+    ) -> Result<UploadId>
+    where
+        C::GeoEngineDB: ProGeoEngineDb,
+    {
         let files = vec![
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").to_path_buf(),
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shx").to_path_buf(),
@@ -223,7 +203,10 @@ mod tests {
         ctx: C,
         upload_id: UploadId,
         session_id: SessionId,
-    ) -> DatasetId {
+    ) -> DatasetId
+    where
+        C::GeoEngineDB: ProGeoEngineDb,
+    {
         let s = json!({
             "dataPath": {
                 "upload": upload_id
@@ -341,7 +324,7 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let session = ctx.user_db_ref().anonymous().await.unwrap();
+        let session = ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
 
@@ -392,8 +375,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_creates_system_dataset() -> Result<()> {
+    async fn it_creates_volume_dataset() -> Result<()> {
         let ctx = ProInMemoryContext::test_default();
+        let session = ctx.create_anonymous_session().await.unwrap();
 
         let volume = VolumeName("test_data".to_string());
 
@@ -418,17 +402,13 @@ mod tests {
         };
 
         // create via admin session
+        let admin_session = admin_login(&ctx).await;
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((
                 header::AUTHORIZATION,
-                Bearer::new(
-                    get_config_element::<crate::util::config::Session>()?
-                        .admin_session_token
-                        .unwrap()
-                        .to_string(),
-                ),
+                Bearer::new(admin_session.id().to_string()),
             ))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_json(create);
@@ -438,8 +418,6 @@ mod tests {
         let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
         let dataset_id = dataset_id.id;
 
-        // assert dataset is accessible via regular session
-        let session = ctx.user_db_ref().anonymous().await.unwrap();
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{dataset_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
@@ -457,7 +435,7 @@ mod tests {
 
         let ctx = ProInMemoryContext::test_default();
 
-        let session = ctx.user_db_ref().anonymous().await.unwrap();
+        let session = ctx.create_anonymous_session().await.unwrap();
         let session_id = session.id();
 
         let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
@@ -465,7 +443,9 @@ mod tests {
 
         let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
 
-        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_ok());
+        let db = ctx.db(session.clone());
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
             .uri(&format!("/dataset/{dataset_id}"))
@@ -477,13 +457,13 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_err());
+        assert!(db.load_dataset(&dataset_id).await.is_err());
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn it_deletes_admin_dataset() -> Result<()> {
+    async fn it_deletes_volume_dataset() -> Result<()> {
         let ctx = ProInMemoryContext::test_default();
 
         let volume = VolumeName("test_data".to_string());
@@ -508,7 +488,9 @@ mod tests {
             },
         };
 
-        let session: UserSession = AdminSession::default().into();
+        let session = admin_login(&ctx).await;
+
+        let db = ctx.db(session.clone());
 
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
@@ -521,7 +503,7 @@ mod tests {
         let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
         let dataset_id = dataset_id.id;
 
-        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_ok());
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
             .uri(&format!("/dataset/{dataset_id}"))
@@ -533,7 +515,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert!(ctx.dataset_db().load(&session, &dataset_id).await.is_err());
+        assert!(db.load_dataset(&dataset_id).await.is_err());
 
         Ok(())
     }

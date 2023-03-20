@@ -1,4 +1,9 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
+
+use crate::error;
+use crate::pro::contexts::PostgresDb;
+use crate::pro::permissions::{Permission, PermissionDb, RoleId};
+
 use crate::{
     error::Result,
     layers::{
@@ -18,91 +23,66 @@ use crate::{
     util::user_input::Validated,
 };
 use async_trait::async_trait;
-use bb8_postgres::{
-    bb8::Pool,
-    tokio_postgres::{
-        tls::{MakeTlsConnect, TlsConnect},
-        Socket,
-    },
-    PostgresConnectionManager,
+use bb8_postgres::tokio_postgres::{
+    tls::{MakeTlsConnect, TlsConnect},
+    Socket,
 };
-use snafu::ResultExt;
+
+use snafu::{ensure, ResultExt};
 use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
 
-pub struct PostgresLayerDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    pub(crate) conn_pool: Pool<PostgresConnectionManager<Tls>>,
-}
+/// delete all collections without parent collection
+async fn _remove_collections_without_parent_collection(
+    transaction: &tokio_postgres::Transaction<'_>,
+) -> Result<()> {
+    // HINT: a recursive delete statement seems reasonable, but hard to implement in postgres
+    //       because you have a graph with potential loops
 
-impl<Tls> PostgresLayerDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
-        Self { conn_pool }
-    }
-
-    /// delete all collections without parent collection
-    async fn _remove_collections_without_parent_collection(
-        transaction: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()> {
-        // HINT: a recursive delete statement seems reasonable, but hard to implement in postgres
-        //       because you have a graph with potential loops
-
-        let remove_layer_collections_without_parents_stmt = transaction
-            .prepare(
-                "DELETE FROM layer_collections
+    let remove_layer_collections_without_parents_stmt = transaction
+        .prepare(
+            "DELETE FROM layer_collections
                  WHERE  id <> $1 -- do not delete root collection
                  AND    id NOT IN (
                     SELECT child FROM collection_children
                  );",
-            )
-            .await?;
-        while 0 < transaction
-            .execute(
-                &remove_layer_collections_without_parents_stmt,
-                &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID],
-            )
-            .await?
-        {
-            // whenever one collection is deleted, we have to check again if there are more
-            // collections without parents
-        }
-
-        Ok(())
+        )
+        .await?;
+    while 0 < transaction
+        .execute(
+            &remove_layer_collections_without_parents_stmt,
+            &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID],
+        )
+        .await?
+    {
+        // whenever one collection is deleted, we have to check again if there are more
+        // collections without parents
     }
 
-    /// delete all layers without parent collection
-    async fn _remove_layers_without_parent_collection(
-        transaction: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()> {
-        let remove_layers_without_parents_stmt = transaction
-            .prepare(
-                "DELETE FROM layers
+    Ok(())
+}
+
+/// delete all layers without parent collection
+async fn _remove_layers_without_parent_collection(
+    transaction: &tokio_postgres::Transaction<'_>,
+) -> Result<()> {
+    let remove_layers_without_parents_stmt = transaction
+        .prepare(
+            "DELETE FROM layers
                  WHERE id NOT IN (
                     SELECT layer FROM collection_layers
                  );",
-            )
-            .await?;
-        transaction
-            .execute(&remove_layers_without_parents_stmt, &[])
-            .await?;
+        )
+        .await?;
+    transaction
+        .execute(&remove_layers_without_parents_stmt, &[])
+        .await?;
 
-        Ok(())
-    }
+    Ok(())
 }
 
 #[async_trait]
-impl<Tls> LayerDb for PostgresLayerDb<Tls>
+impl<Tls> LayerDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -114,6 +94,12 @@ where
         layer: Validated<AddLayer>,
         collection: &LayerCollectionId,
     ) -> Result<LayerId> {
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
+
         let collection_id =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -159,6 +145,28 @@ where
 
         trans.execute(&stmt, &[&collection_id, &layer_id]).await?;
 
+        // TODO: `ON CONFLICT DO NOTHING` means, we do not get an error if the permission already exists.
+        //       Do we want that, or should we report an error and let the caller decide whether to ignore it?
+        //       We should decide that and adjust all places where `ON CONFILCT DO NOTHING` is used.
+        let stmt = trans
+            .prepare(
+                "
+        INSERT INTO permissions (role_id, permission, layer_id)
+        VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
+            )
+            .await?;
+
+        trans
+            .execute(
+                &stmt,
+                &[
+                    &RoleId::from(self.session.user.id),
+                    &Permission::Owner,
+                    &layer_id,
+                ],
+            )
+            .await?;
+
         trans.commit().await?;
 
         Ok(LayerId(layer_id.to_string()))
@@ -170,6 +178,12 @@ where
         layer: Validated<AddLayer>,
         collection: &LayerCollectionId,
     ) -> Result<()> {
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
+
         let layer_id =
             Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -219,6 +233,25 @@ where
 
         trans.execute(&stmt, &[&collection_id, &layer_id]).await?;
 
+        let stmt = trans
+            .prepare(
+                "
+            INSERT INTO permissions (role_id, permission, layer_id)
+            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
+            )
+            .await?;
+
+        trans
+            .execute(
+                &stmt,
+                &[
+                    &RoleId::from(self.session.user.id),
+                    &Permission::Owner,
+                    &layer_id,
+                ],
+            )
+            .await?;
+
         trans.commit().await?;
 
         Ok(())
@@ -229,6 +262,12 @@ where
         layer: &LayerId,
         collection: &LayerCollectionId,
     ) -> Result<()> {
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
+
         let layer_id =
             Uuid::from_str(&layer.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: layer.0.clone(),
@@ -254,11 +293,17 @@ where
         Ok(())
     }
 
-    async fn add_collection(
+    async fn add_layer_collection(
         &self,
         collection: Validated<AddLayerCollection>,
         parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId> {
+        ensure!(
+            self.has_permission(parent.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
+
         let parent =
             Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: parent.0.clone(),
@@ -297,17 +342,42 @@ where
 
         trans.execute(&stmt, &[&parent, &collection_id]).await?;
 
+        let stmt = trans
+            .prepare(
+                "
+            INSERT INTO permissions (role_id, permission, layer_collection_id)
+            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
+            )
+            .await?;
+
+        trans
+            .execute(
+                &stmt,
+                &[
+                    &RoleId::from(self.session.user.id),
+                    &Permission::Owner,
+                    &collection_id,
+                ],
+            )
+            .await?;
+
         trans.commit().await?;
 
         Ok(LayerCollectionId(collection_id.to_string()))
     }
 
-    async fn add_collection_with_id(
+    async fn add_layer_collection_with_id(
         &self,
         id: &LayerCollectionId,
         collection: Validated<AddLayerCollection>,
         parent: &LayerCollectionId,
     ) -> Result<()> {
+        ensure!(
+            self.has_permission(parent.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
+
         let collection_id =
             Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: id.0.clone(),
@@ -349,6 +419,25 @@ where
 
         trans.execute(&stmt, &[&parent, &collection_id]).await?;
 
+        let stmt = trans
+            .prepare(
+                "
+            INSERT INTO permissions (role_id, permission, layer_collection_id)
+            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
+            )
+            .await?;
+
+        trans
+            .execute(
+                &stmt,
+                &[
+                    &RoleId::from(self.session.user.id),
+                    &Permission::Owner,
+                    &collection_id,
+                ],
+            )
+            .await?;
+
         trans.commit().await?;
 
         Ok(())
@@ -359,6 +448,12 @@ where
         collection: &LayerCollectionId,
         parent: &LayerCollectionId,
     ) -> Result<()> {
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
+
         let collection =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -384,7 +479,13 @@ where
         Ok(())
     }
 
-    async fn remove_collection(&self, collection: &LayerCollectionId) -> Result<()> {
+    async fn remove_layer_collection(&self, collection: &LayerCollectionId) -> Result<()> {
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
+
         let collection =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -410,9 +511,9 @@ where
             .execute(&remove_layer_collection_stmt, &[&collection])
             .await?;
 
-        Self::_remove_collections_without_parent_collection(&transaction).await?;
+        _remove_collections_without_parent_collection(&transaction).await?;
 
-        Self::_remove_layers_without_parent_collection(&transaction).await?;
+        _remove_layers_without_parent_collection(&transaction).await?;
 
         transaction.commit().await.map_err(Into::into)
     }
@@ -422,6 +523,12 @@ where
         layer: &LayerId,
         collection: &LayerCollectionId,
     ) -> Result<()> {
+        ensure!(
+            self.has_permission(layer.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
+
         let collection_uuid =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -457,16 +564,22 @@ where
             .into());
         }
 
-        Self::_remove_layers_without_parent_collection(&transaction).await?;
+        _remove_layers_without_parent_collection(&transaction).await?;
 
         transaction.commit().await.map_err(Into::into)
     }
 
-    async fn remove_collection_from_parent(
+    async fn remove_layer_collection_from_parent(
         &self,
         collection: &LayerCollectionId,
         parent: &LayerCollectionId,
     ) -> Result<()> {
+        ensure!(
+            self.has_permission(collection.clone(), Permission::Owner)
+                .await?,
+            error::PermissionDenied
+        );
+
         let collection_uuid =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -502,27 +615,33 @@ where
             .into());
         }
 
-        Self::_remove_collections_without_parent_collection(&transaction).await?;
+        _remove_collections_without_parent_collection(&transaction).await?;
 
-        Self::_remove_layers_without_parent_collection(&transaction).await?;
+        _remove_layers_without_parent_collection(&transaction).await?;
 
         transaction.commit().await.map_err(Into::into)
     }
 }
 
 #[async_trait]
-impl<Tls> LayerCollectionProvider for PostgresLayerDb<Tls>
+impl<Tls> LayerCollectionProvider for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn collection(
+    #[allow(clippy::too_many_lines)]
+    async fn load_layer_collection(
         &self,
         collection_id: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
+        ensure!(
+            self.has_permission(collection_id.clone(), Permission::Read)
+                .await?,
+            error::PermissionDenied
+        );
         let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
             crate::error::Error::IdStringMustBeUuid {
                 found: collection_id.0.clone(),
@@ -536,12 +655,16 @@ where
         let stmt = conn
             .prepare(
                 "
-        SELECT name, description
-        FROM layer_collections WHERE id = $1;",
+        SELECT DISTINCT name, description
+        FROM user_permitted_layer_collections p 
+            JOIN layer_collections c ON (p.layer_collection_id = c.id) 
+        WHERE p.user_id = $1 AND layer_collection_id = $2;",
             )
             .await?;
 
-        let row = conn.query_one(&stmt, &[&collection]).await?;
+        let row = conn
+            .query_one(&stmt, &[&self.session.user.id, &collection])
+            .await?;
 
         let name: String = row.get(0);
         let description: String = row.get(1);
@@ -549,23 +672,27 @@ where
         let stmt = conn
             .prepare(
                 "
-        SELECT id, name, description, is_layer
+        SELECT DISTINCT id, name, description, is_layer
         FROM (
             SELECT 
                 concat(id, '') AS id, 
                 name, 
                 description, 
                 FALSE AS is_layer
-            FROM layer_collections c JOIN collection_children cc ON (c.id = cc.child)
-            WHERE cc.parent = $1
+            FROM user_permitted_layer_collections u 
+                JOIN layer_collections lc ON (u.layer_collection_id = lc.id)
+                JOIN collection_children cc ON (layer_collection_id = cc.child)
+            WHERE u.user_id = $4 AND cc.parent = $1
         ) u UNION (
             SELECT 
                 concat(id, '') AS id, 
                 name, 
                 description, 
                 TRUE As is_layer
-            FROM layers l JOIN collection_layers cl ON (l.id = cl.layer)
-            WHERE cl.collection = $1
+            FROM user_permitted_layers ul
+                JOIN layers uc ON (ul.layer_id = uc.id) 
+                JOIN collection_layers cl ON (layer_id = cl.layer)
+            WHERE ul.user_id = $4 AND cl.collection = $1
         )
         ORDER BY is_layer ASC, name ASC
         LIMIT $2 
@@ -581,6 +708,7 @@ where
                     &collection,
                     &i64::from(options.limit),
                     &i64::from(options.offset),
+                    &self.session.user.id,
                 ],
             )
             .await?;
@@ -626,13 +754,18 @@ where
         })
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(LayerCollectionId(
             INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
         ))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
+        ensure!(
+            self.has_permission(id.clone(), Permission::Read).await?,
+            error::PermissionDenied
+        );
+
         let layer_id =
             Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: id.0.clone(),
@@ -673,30 +806,8 @@ where
     }
 }
 
-pub struct PostgresLayerProviderDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    pub(crate) conn_pool: Pool<PostgresConnectionManager<Tls>>,
-}
-
-impl<Tls> PostgresLayerProviderDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
-        Self { conn_pool }
-    }
-}
-
 #[async_trait]
-impl<Tls> LayerProviderDb for PostgresLayerProviderDb<Tls>
+impl<Tls> LayerProviderDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -707,7 +818,8 @@ where
         &self,
         provider: Box<dyn DataProviderDefinition>,
     ) -> Result<DataProviderId> {
-        // TODO: permissions
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
@@ -778,7 +890,7 @@ where
             .collect())
     }
 
-    async fn layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>> {
+    async fn load_layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>> {
         // TODO: permissions
         let conn = self.conn_pool.get().await?;
 

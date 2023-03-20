@@ -72,3 +72,20 @@ pub trait ArrowTyped {
     where
         Self: Sized;
 }
+
+/// Read record batches from an Arrow IPC file
+pub fn arrow_ipc_file_to_record_batches(
+    bytes: &[u8],
+) -> Result<Vec<arrow::record_batch::RecordBatch>, arrow::error::ArrowError> {
+    let reader = arrow::ipc::reader::FileReader::try_new(std::io::Cursor::new(bytes), None)?;
+
+    let mut record_batches = vec![];
+
+    for data in reader {
+        let data = data?;
+
+        record_batches.push(data);
+    }
+
+    Ok(record_batches)
+}

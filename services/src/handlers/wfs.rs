@@ -177,7 +177,7 @@ where
     let workflow_id = workflow_id.into_inner();
     let wfs_url = wfs_url(workflow_id)?;
 
-    let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
+    let workflow = ctx.db(session.clone()).load_workflow(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context(session)?;
     let operator = workflow
@@ -449,7 +449,7 @@ async fn wfs_feature_handler<C: Context>(
             .map(Duration::from_secs),
     );
 
-    let workflow: Workflow = ctx.workflow_registry_ref().load(&type_names).await?;
+    let workflow: Workflow = ctx.db(session.clone()).load_workflow(&type_names).await?;
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
@@ -798,7 +798,8 @@ x;y
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
         let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -814,11 +815,7 @@ x;y
             })),
         };
 
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db(session).register_workflow(workflow).await.unwrap();
 
         let req = test::TestRequest::with_uri(&format!(
             "/wfs/{workflow_id}?request=GetCapabilities&service=WFS"
@@ -863,7 +860,8 @@ x;y
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
         let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -880,8 +878,8 @@ x;y
         };
 
         let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
+            .db(session)
+            .register_workflow(workflow.clone())
             .await
             .unwrap();
 
@@ -979,7 +977,8 @@ x;y
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
         let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -995,11 +994,7 @@ x;y
             })),
         };
 
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db(session).register_workflow(workflow).await.unwrap();
 
         let params = &[
             ("request", "GetFeature"),
@@ -1112,15 +1107,11 @@ x;y
         let data = data.replace("test_data/", test_data!("./").to_str().unwrap());
         let def: DatasetDefinition = serde_json::from_str(&data).unwrap();
 
-        let db = ctx.dataset_db_ref();
+        let db = ctx.db(ctx.default_session_ref().await.clone());
 
-        db.add_dataset(
-            &*ctx.default_session_ref().await,
-            def.properties.validated().unwrap(),
-            Box::new(def.meta_data),
-        )
-        .await
-        .unwrap()
+        db.add_dataset(def.properties.validated().unwrap(), Box::new(def.meta_data))
+            .await
+            .unwrap()
     }
 
     #[tokio::test]
@@ -1136,7 +1127,8 @@ x;y
             TestDefault::test_default(),
         );
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let ndvi_id: DataId =
             add_dataset_definition_to_datasets(&ctx, test_data!("dataset_defs/ndvi.json"))
@@ -1182,11 +1174,7 @@ x;y
 
         let workflow = serde_json::from_str(&json).unwrap();
 
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db(session).register_workflow(workflow).await.unwrap();
 
         let params = &[
             ("request", "GetFeature"),

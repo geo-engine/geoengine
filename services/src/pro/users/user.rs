@@ -6,6 +6,7 @@ use utoipa::ToSchema;
 use crate::error;
 use crate::error::{Error, Result};
 use crate::identifier;
+use crate::pro::permissions::{Role, RoleId};
 use crate::util::user_input::UserInput;
 use geoengine_datatypes::util::Identifier;
 
@@ -69,16 +70,19 @@ pub struct User {
     pub password_hash: String,
     pub real_name: String,
     pub active: bool,
+    pub roles: Vec<RoleId>,
 }
 
 impl From<UserRegistration> for User {
     fn from(user_registration: UserRegistration) -> Self {
+        let id = UserId::new();
         Self {
-            id: UserId::new(),
+            id,
             email: user_registration.email,
             password_hash: bcrypt::hash(&user_registration.password).unwrap(),
             real_name: user_registration.real_name,
             active: true,
+            roles: vec![id.into(), Role::registered_user_role_id()],
         }
     }
 }

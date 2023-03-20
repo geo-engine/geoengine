@@ -1,8 +1,0 @@
-{
-  "type": "NFDIDataProviderDefinition",
-  "id": "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0",
-  "name": "NFDI",
-  "apiToken": "TOKEN",
-  "apiUrl": "https://api.core-server-dev.m1.k8s.computational.bio/",
-  "projectId": "PROJECT_ID"
-}

@@ -24,6 +24,8 @@ use tracing_actix_web::TracingLogger;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
+use super::contexts::ProGeoEngineDb;
+
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
@@ -33,6 +35,7 @@ async fn start<C>(
 ) -> Result<(), Error>
 where
     C: ProContext,
+    C::GeoEngineDB: ProGeoEngineDb,
 {
     let wrapped_ctx = web::Data::new(ctx);
 
@@ -43,6 +46,7 @@ where
             .configure(configure_extractors)
             .configure(pro::handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
+            .configure(pro::handlers::permissions::init_permissions_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(pro::handlers::projects::init_project_routes::<C>)
             .configure(pro::handlers::users::init_user_routes::<C>)

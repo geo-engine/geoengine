@@ -6,17 +6,18 @@ use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::layers::storage::LayerProviderDb;
-use crate::ogc::util::parse_time;
+use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::parsing::{parse_spatial_partition, parse_spatial_resolution};
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
-use crate::workflows::RasterWebsocketStreamHandler;
+use crate::workflows::{RasterWebsocketStreamHandler, VectorWebsocketStreamHandler};
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+    BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+    VectorQueryRectangle,
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor};
@@ -56,6 +57,10 @@ where
                     .service(
                         web::resource("/rasterStream")
                             .route(web::get().to(raster_stream_websocket::<C>)),
+                    )
+                    .service(
+                        web::resource("/vectorStream")
+                            .route(web::get().to(vector_stream_websocket::<C>)),
                     ),
             ),
     )
@@ -119,7 +124,7 @@ async fn register_workflow_handler<C: Context>(
     let workflow = workflow.into_inner();
 
     // ensure the workflow is valid by initializing it
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context(session.clone())?;
     match workflow.clone().operator {
         TypedOperator::Vector(o) => {
             o.initialize(&execution_context)
@@ -138,7 +143,7 @@ async fn register_workflow_handler<C: Context>(
         }
     }
 
-    let id = ctx.workflow_registry_ref().register(workflow).await?;
+    let id = ctx.db(session).register_workflow(workflow).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -161,10 +166,10 @@ async fn register_workflow_handler<C: Context>(
 )]
 async fn load_workflow_handler<C: Context>(
     id: web::Path<WorkflowId>,
-    _session: C::Session,
+    session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let wf = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let wf = ctx.db(session).load_workflow(&id.into_inner()).await?;
     Ok(web::Json(wf))
 }
 
@@ -190,7 +195,10 @@ async fn get_workflow_metadata_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let workflow = ctx
+        .db(session.clone())
+        .load_workflow(&id.into_inner())
+        .await?;
 
     let execution_context = ctx.execution_context(session)?;
 
@@ -241,7 +249,10 @@ async fn get_workflow_provenance_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow: Workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let workflow: Workflow = ctx
+        .db(session.clone())
+        .load_workflow(&id.into_inner())
+        .await?;
 
     let provenance = workflow_provenance(&workflow, ctx.get_ref(), session).await?;
 
@@ -266,12 +277,11 @@ async fn workflow_provenance<C: Context>(
         .map(Into::into)
         .collect();
 
-    let db = ctx.dataset_db_ref();
-    let providers = ctx.layer_provider_db_ref();
+    let db = ctx.db(session);
 
     let provenance: Vec<_> = datasets
         .iter()
-        .map(|id| resolve_provenance::<C>(&session, db, providers, id))
+        .map(|id| resolve_provenance::<C>(&db, id))
         .collect();
     let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
 
@@ -320,7 +330,7 @@ async fn get_workflow_all_metadata_zip_handler<C: Context>(
 ) -> Result<impl Responder> {
     let id = id.into_inner();
 
-    let workflow = ctx.workflow_registry_ref().load(&id).await?;
+    let workflow = ctx.db(session.clone()).load_workflow(&id).await?;
 
     let (metadata, provenance) = futures::try_join!(
         workflow_metadata::<C>(workflow.clone(), ctx.execution_context(session.clone())?),
@@ -391,16 +401,13 @@ async fn get_workflow_all_metadata_zip_handler<C: Context>(
 }
 
 async fn resolve_provenance<C: Context>(
-    session: &C::Session,
-    datasets: &C::DatasetDB,
-    providers: &C::LayerProviderDB,
+    db: &C::GeoEngineDB,
     id: &DataId,
 ) -> Result<ProvenanceOutput> {
     match id {
-        DataId::Internal { dataset_id } => datasets.provenance(session, dataset_id).await,
+        DataId::Internal { dataset_id } => db.load_provenance(dataset_id).await,
         DataId::External(e) => {
-            providers
-                .layer_provider(e.provider_id)
+            db.load_layer_provider(e.provider_id)
                 .await?
                 .provenance(id)
                 .await
@@ -433,7 +440,10 @@ async fn dataset_from_workflow_handler<C: Context>(
     ctx: web::Data<C>,
     info: web::Json<RasterDatasetFromWorkflow>,
 ) -> Result<impl Responder> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let workflow = ctx
+        .db(session.clone())
+        .load_workflow(&id.into_inner())
+        .await?;
     let compression_num_threads =
         get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
 
@@ -502,7 +512,10 @@ async fn raster_stream_websocket<C: Context>(
     request: HttpRequest,
     stream: web::Payload,
 ) -> Result<HttpResponse> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let workflow = ctx
+        .db(session.clone())
+        .load_workflow(&id.into_inner())
+        .await?;
 
     let operator = workflow
         .operator
@@ -535,6 +548,88 @@ async fn raster_stream_websocket<C: Context>(
     }
 }
 
+/// The query parameters for `raster_stream_websocket`.
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct VectorStreamWebsocketQuery {
+    #[serde(deserialize_with = "parse_bbox")]
+    pub spatial_bounds: BoundingBox2D,
+    #[serde(deserialize_with = "parse_time")]
+    pub time_interval: TimeInterval,
+    #[serde(deserialize_with = "parse_spatial_resolution")]
+    pub spatial_resolution: SpatialResolution,
+    pub result_type: RasterStreamWebsocketResultType,
+}
+
+/// Query a workflow raster result as a stream of tiles via a websocket connection.
+#[utoipa::path(
+    tag = "Workflows",
+    get,
+    path = "/workflow/{id}/vectorStream",
+    responses(
+        (
+            status = 101,
+            description = "Upgrade to websocket connection",
+            example = json!({
+                "connection": "upgrade",
+                "upgrade": "websocket",
+                "sec-websocket-accept": "c31quXa8jR1ISUyecRy0pTdNLXk",
+                "date": "Mon, 13 Feb 2023 12:10:15 GMT",
+            })
+        )
+    ),
+    params(
+        ("id" = WorkflowId, description = "Workflow id"),
+        VectorStreamWebsocketQuery,
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn vector_stream_websocket<C: Context>(
+    ctx: web::Data<C>,
+    session: C::Session,
+    id: web::Path<WorkflowId>,
+    query: web::Query<VectorStreamWebsocketQuery>,
+    request: HttpRequest,
+    stream: web::Payload,
+) -> Result<HttpResponse> {
+    let workflow = ctx
+        .db(session.clone())
+        .load_workflow(&id.into_inner())
+        .await?;
+
+    let operator = workflow
+        .operator
+        .get_vector()
+        .boxed_context(error::WorkflowMustBeOfTypeVector)?;
+
+    let query_rectangle = VectorQueryRectangle {
+        spatial_bounds: query.spatial_bounds,
+        time_interval: query.time_interval.into(),
+        spatial_resolution: query.spatial_resolution,
+    };
+
+    // this is the only result type for now
+    debug_assert!(matches!(
+        query.result_type,
+        RasterStreamWebsocketResultType::Arrow
+    ));
+
+    let stream_handler = VectorWebsocketStreamHandler::new::<C>(
+        operator,
+        query_rectangle,
+        ctx.execution_context(session.clone())?,
+        ctx.query_context(session.clone())?,
+    )
+    .await?;
+
+    match actix_web_actors::ws::start(stream_handler, &request, stream) {
+        Ok(websocket) => Ok(websocket),
+        Err(e) => Ok(e.error_response()),
+    }
+}
+
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(module(error), context(suffix(false)))] // disables default `Snafu` suffix
@@ -548,6 +643,8 @@ pub enum WorkflowApiError {
     CannotFinishZipFile { source: Box<dyn ErrorSource> },
     #[snafu(display("You can only query a raster stream for a raster workflow"))]
     WorkflowMustBeOfTypeRaster { source: Box<dyn ErrorSource> },
+    #[snafu(display("You can only query a vector stream for a vector workflow"))]
+    WorkflowMustBeOfTypeVector { source: Box<dyn ErrorSource> },
 }
 
 #[cfg(test)]
@@ -594,6 +691,7 @@ mod tests {
     };
     use serde_json::json;
     use std::io::Read;
+    use std::sync::Arc;
     use zip::read::ZipFile;
     use zip::ZipArchive;
 
@@ -782,7 +880,8 @@ mod tests {
     async fn vector_metadata_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -804,8 +903,8 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
+            .db(session)
+            .register_workflow(workflow.clone())
             .await
             .unwrap();
 
@@ -854,7 +953,8 @@ mod tests {
     async fn raster_metadata() {
         let ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockRasterSource::<u8> {
@@ -878,8 +978,8 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
+            .db(session)
+            .register_workflow(workflow.clone())
             .await
             .unwrap();
 
@@ -938,9 +1038,11 @@ mod tests {
             .into(),
         };
 
+        let session = ctx.default_session_ref().await.clone();
+
         let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
+            .db(session)
+            .register_workflow(workflow.clone())
             .await
             .unwrap();
 
@@ -960,7 +1062,8 @@ mod tests {
     async fn plot_metadata() {
         let ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -976,8 +1079,8 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
+            .db(session)
+            .register_workflow(workflow.clone())
             .await
             .unwrap();
 
@@ -1005,8 +1108,8 @@ mod tests {
     async fn provenance() {
         let ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
-
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
         let dataset = add_ndvi_to_datasets(&ctx).await;
 
         let workflow = Workflow {
@@ -1021,8 +1124,8 @@ mod tests {
         };
 
         let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
+            .db(session)
+            .register_workflow(workflow.clone())
             .await
             .unwrap();
 
@@ -1118,7 +1221,8 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let dataset = add_ndvi_to_datasets(&ctx).await;
 
@@ -1133,11 +1237,7 @@ mod tests {
             ),
         };
 
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db(session).register_workflow(workflow).await.unwrap();
 
         // create dataset from workflow
         let req = test::TestRequest::get()
@@ -1233,7 +1333,8 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let dataset = add_ndvi_to_datasets(&ctx).await;
 
@@ -1249,8 +1350,8 @@ mod tests {
         };
 
         let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
+            .db(session.clone())
+            .register_workflow(workflow)
             .await
             .unwrap();
 
@@ -1292,9 +1393,11 @@ mod tests {
         let task_response =
             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+        let tasks = Arc::new(ctx.tasks(session.clone()));
 
-        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+        wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
+
+        let status = tasks.get_task_status(task_response.task_id).await.unwrap();
 
         let response = if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()

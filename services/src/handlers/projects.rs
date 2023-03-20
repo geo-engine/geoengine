@@ -39,7 +39,7 @@ pub(crate) async fn create_project_handler<C: Context>(
     create: web::Json<CreateProject>,
 ) -> Result<impl Responder> {
     let create = create.into_inner().validated()?;
-    let id = ctx.project_db_ref().create(&session, create).await?;
+    let id = ctx.db(session).create_project(create).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -73,7 +73,7 @@ pub(crate) async fn list_projects_handler<C: Context>(
     options: web::Query<ProjectListOptions>,
 ) -> Result<impl Responder> {
     let options = options.into_inner().validated()?;
-    let listing = ctx.project_db_ref().list(&session, options).await?;
+    let listing = ctx.db(session).list_projects(options).await?;
     Ok(web::Json(listing))
 }
 
@@ -131,10 +131,7 @@ async fn load_project_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let id = ctx
-        .project_db_ref()
-        .load(&session, project.into_inner())
-        .await?;
+    let id = ctx.db(session).load_project(project.into_inner()).await?;
     Ok(web::Json(id))
 }
 
@@ -163,7 +160,7 @@ pub(crate) async fn update_project_handler<C: Context>(
 ) -> Result<impl Responder> {
     update.id = project.into_inner(); // TODO: avoid passing project id in path AND body
     let update = update.into_inner().validated()?;
-    ctx.project_db_ref().update(&session, update).await?;
+    ctx.db(session).update_project(update).await?;
     Ok(HttpResponse::Ok())
 }
 
@@ -187,7 +184,7 @@ pub(crate) async fn delete_project_handler<C: Context>(
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    ctx.project_db_ref().delete(&session, *project).await?;
+    ctx.db(session).delete_project(*project).await?;
     Ok(HttpResponse::Ok())
 }
 
@@ -494,7 +491,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        let loaded = ctx.project_db().load(&session, project).await.unwrap();
+        let loaded = ctx.db(session).load_project(project).await.unwrap();
         assert_eq!(loaded.name, "TestUpdate");
         assert_eq!(loaded.layers.len(), 1);
     }
@@ -576,7 +573,11 @@ mod tests {
 
             assert_eq!(res.status(), 200);
 
-            let loaded = ctx.project_db().load(session, project_id).await.unwrap();
+            let loaded = ctx
+                .db(session.clone())
+                .load_project(project_id)
+                .await
+                .unwrap();
 
             loaded.layers
         }
@@ -715,7 +716,11 @@ mod tests {
 
             assert_eq!(res.status(), 200);
 
-            let loaded = ctx.project_db().load(session, project_id).await.unwrap();
+            let loaded = ctx
+                .db(session.clone())
+                .load_project(project_id)
+                .await
+                .unwrap();
 
             loaded.plots
         }
@@ -835,7 +840,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert!(ctx.project_db_ref().load(&session, project).await.is_err());
+        assert!(ctx.db(session.clone()).load_project(project).await.is_err());
 
         let req = test::TestRequest::delete()
             .uri(&format!("/project/{project}"))

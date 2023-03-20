@@ -6,6 +6,7 @@ use float_cmp::{ApproxEq, F64Margin};
 use geo::algorithm::intersects::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use wkt::{ToWkt, Wkt};
 
 use crate::collections::VectorDataType;
 use crate::error::Error;
@@ -281,6 +282,28 @@ impl<'g> MultiLineStringAccess for MultiLineStringRef<'g> {
     }
 }
 
+impl<'r> ToWkt<f64> for MultiLineStringRef<'r> {
+    fn to_wkt(&self) -> Wkt<f64> {
+        let line_strings = self.lines();
+        let mut multi_line_string =
+            wkt::types::MultiLineString(Vec::with_capacity(line_strings.len()));
+
+        for line_string in line_strings {
+            let mut line_strings = wkt::types::LineString(Vec::with_capacity(line_string.len()));
+
+            for coord in *line_string {
+                line_strings.0.push(coord.into());
+            }
+
+            multi_line_string.0.push(line_strings);
+        }
+
+        Wkt {
+            item: wkt::Geometry::MultiLineString(multi_line_string),
+        }
+    }
+}
+
 impl<'g> From<MultiLineStringRef<'g>> for geojson::Geometry {
     fn from(geometry: MultiLineStringRef<'g>) -> geojson::Geometry {
         geojson::Geometry::new(match geometry.point_coordinates.len() {
@@ -315,6 +338,18 @@ impl<'g> From<&MultiLineStringRef<'g>> for MultiLineString {
                 .copied()
                 .map(ToOwned::to_owned)
                 .collect(),
+        )
+    }
+}
+
+impl<'g> From<&'g MultiLineString> for MultiLineStringRef<'g> {
+    fn from(multi_line_string: &'g MultiLineString) -> Self {
+        MultiLineStringRef::new_unchecked(
+            multi_line_string
+                .lines()
+                .iter()
+                .map(AsRef::as_ref)
+                .collect::<Vec<_>>(),
         )
     }
 }
@@ -410,5 +445,22 @@ mod tests {
         .unwrap();
 
         assert!(!approx_eq!(&MultiLineString, &a, &b, F64Margin::default()));
+    }
+
+    #[test]
+    fn test_to_wkt() {
+        let a = MultiLineString::new(vec![
+            vec![(0.1, 0.1).into(), (0.5, 0.5).into()],
+            vec![(0.5, 0.5).into(), (0.6, 0.6).into(), (0.7, 0.7).into()],
+            vec![(0.7, 0.7).into(), (0.9, 0.9).into()],
+        ])
+        .unwrap();
+
+        let a_ref = MultiLineStringRef::from(&a);
+
+        assert_eq!(
+            a_ref.wkt_string(),
+            "MULTILINESTRING((0.1 0.1,0.5 0.5),(0.5 0.5,0.6 0.6,0.7 0.7),(0.7 0.7,0.9 0.9))"
+        );
     }
 }

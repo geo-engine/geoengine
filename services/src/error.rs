@@ -1,6 +1,8 @@
 use crate::api::model::datatypes::{
     DataProviderId, DatasetId, LayerId, SpatialReference, SpatialReferenceOption, TimeInstance,
 };
+#[cfg(feature = "nfdi")]
+use crate::datasets::external::aruna::error::ArunaProviderError;
 #[cfg(feature = "ebv")]
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 use crate::handlers::ErrorResponse;
@@ -10,7 +12,6 @@ use actix_web::HttpResponse;
 use snafu::prelude::*;
 use std::path::PathBuf;
 use strum::IntoStaticStr;
-use tonic::Status;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -177,6 +178,9 @@ pub enum Error {
         permission: String,
     },
 
+    // TODO: move to pro folder, because permissions are pro only
+    PermissionDenied,
+
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
     InvalidStringLength {
         parameter: String,
@@ -275,6 +279,12 @@ pub enum Error {
     #[snafu(display("User registration is disabled"))]
     UserRegistrationDisabled,
 
+    UserDoesNotExist,
+    RoleDoesNotExist,
+    RoleWithNameAlreadyExists,
+    RoleAlreadyAssigned,
+    RoleNotAssigned,
+
     #[snafu(display(
         "WCS request endpoint {} must match identifier {}",
         endpoint,
@@ -308,22 +318,11 @@ pub enum Error {
         type_names: WorkflowId,
     },
 
-    Tonic {
-        source: tonic::Status,
+    #[cfg(feature = "nfdi")]
+    #[snafu(context(false))]
+    ArunaProvider {
+        source: ArunaProviderError,
     },
-
-    TonicTransport {
-        source: tonic::transport::Error,
-    },
-
-    InvalidUri {
-        uri_string: String,
-    },
-
-    InvalidAPIToken {
-        message: String,
-    },
-    MissingNFDIMetaData,
 
     #[cfg(feature = "ebv")]
     #[snafu(context(false))]
@@ -520,18 +519,6 @@ impl From<flexi_logger::FlexiLoggerError> for Error {
 impl From<proj::ProjError> for Error {
     fn from(source: proj::ProjError) -> Self {
         Self::Proj { source }
-    }
-}
-
-impl From<tonic::Status> for Error {
-    fn from(source: Status) -> Self {
-        Self::Tonic { source }
-    }
-}
-
-impl From<tonic::transport::Error> for Error {
-    fn from(source: tonic::transport::Error) -> Self {
-        Self::TonicTransport { source }
     }
 }
 

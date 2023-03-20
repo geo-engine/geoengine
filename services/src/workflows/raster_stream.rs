@@ -175,7 +175,7 @@ mod tests {
     use futures::channel::mpsc::UnboundedSender;
     use geoengine_datatypes::{
         primitives::{DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
-        util::test::TestDefault,
+        util::{arrow::arrow_ipc_file_to_record_batches, test::TestDefault},
     };
 
     #[tokio::test]
@@ -219,11 +219,24 @@ mod tests {
 
         let mut websocket_context = WebsocketContext::create(handler, input_receiver);
 
-        for _ in 0..5 {
+        // 4 tiles
+        for _ in 0..4 {
             send_next(&input_sender);
 
-            let _tile = websocket_context.next().await.unwrap().unwrap();
+            let bytes = websocket_context.next().await.unwrap().unwrap();
+
+            let bytes = &bytes[4..]; // the first four bytes are WS op bytes
+
+            let record_batches = arrow_ipc_file_to_record_batches(bytes).unwrap();
+            assert_eq!(record_batches.len(), 1);
+            let record_batch = record_batches.first().unwrap();
+            let schema = record_batch.schema();
+
+            assert_eq!(schema.metadata()["spatialReference"], "EPSG:4326");
         }
+
+        send_next(&input_sender);
+        assert_eq!(websocket_context.next().await.unwrap().unwrap().len(), 4); // close frame
 
         send_next(&input_sender);
         assert!(websocket_context.next().await.is_none());

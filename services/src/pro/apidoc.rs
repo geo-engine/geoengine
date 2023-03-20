@@ -47,7 +47,6 @@ use crate::ogc::util::OgcBoundingBox;
 use crate::ogc::{wcs, wfs, wms};
 use crate::pro;
 use crate::pro::handlers::users::{Quota, UpdateQuota};
-use crate::pro::projects::{ProjectPermission, UserProjectPermission};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
@@ -60,7 +59,9 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
-use super::datasets::RoleId;
+use super::handlers::permissions::PermissionRequest;
+use super::handlers::users::AddRole;
+use super::permissions::{Permission, ResourceId, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 
 #[derive(OpenApi)]
@@ -106,6 +107,10 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::update_user_quota_handler,
         pro::handlers::users::register_user_handler,
         pro::handlers::users::session_handler,
+        pro::handlers::users::add_role_handler,
+        pro::handlers::users::remove_role_handler,
+        pro::handlers::users::assign_role_handler,
+        pro::handlers::users::revoke_role_handler,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
@@ -116,14 +121,14 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::projects::list_projects_handler,
         pro::handlers::projects::project_versions_handler,
-        pro::handlers::projects::add_permission_handler,
-        pro::handlers::projects::remove_permission_handler,
         handlers::projects::create_project_handler,
         pro::handlers::projects::load_project_latest_handler,
         handlers::projects::update_project_handler,
         handlers::projects::delete_project_handler,
-        pro::handlers::projects::list_permissions_handler,
-        pro::handlers::projects::load_project_version_handler
+        pro::handlers::projects::load_project_version_handler,
+        handlers::upload::upload_handler,
+        pro::handlers::permissions::add_permission_handler,
+        pro::handlers::permissions::remove_permission_handler
     ),
     components(
         responses(
@@ -322,18 +327,21 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             WrappedPlotOutput,
 
             CreateProject,
-            UserProjectPermission,
             Project,
             UpdateProject,
             ProjectFilter,
             ProjectListing,
-            ProjectPermission,
             ProjectVersion,
             LayerUpdate,
             PlotUpdate,
             Plot,
             ProjectLayer,
-            LayerVisibility
+            LayerVisibility,
+
+            PermissionRequest,
+            ResourceId,
+            Permission,
+            AddRole,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

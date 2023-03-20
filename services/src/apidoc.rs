@@ -108,7 +108,8 @@ use utoipa::{Modify, OpenApi};
         handlers::projects::list_projects_handler,
         handlers::projects::load_project_handler,
         handlers::projects::update_project_handler,
-        handlers::projects::delete_project_handler
+        handlers::projects::delete_project_handler,
+        handlers::upload::upload_handler
     ),
     components(
         responses(

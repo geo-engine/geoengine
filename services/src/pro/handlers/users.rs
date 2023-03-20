@@ -1,7 +1,9 @@
-use crate::contexts::AdminSession;
 use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::ProContext;
+use crate::pro::contexts::ProGeoEngineDb;
+use crate::pro::permissions::RoleId;
+use crate::pro::users::RoleDb;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
 use crate::pro::users::UserRegistration;
@@ -14,7 +16,6 @@ use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
 use crate::pro::users::OidcError::OidcDisabled;
-use actix_web::Either;
 use actix_web::{web, HttpResponse, Responder};
 use serde::Deserialize;
 use serde::Serialize;
@@ -25,6 +26,7 @@ use utoipa::ToSchema;
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ProContext,
+    C::GeoEngineDB: ProGeoEngineDb,
 {
     cfg.service(web::resource("/user").route(web::post().to(register_user_handler::<C>)))
         .service(web::resource("/anonymous").route(web::post().to(anonymous_handler::<C>)))
@@ -43,7 +45,14 @@ where
                 .route(web::post().to(update_user_quota_handler::<C>)),
         )
         .service(web::resource("/oidcInit").route(web::post().to(oidc_init::<C>)))
-        .service(web::resource("/oidcLogin").route(web::post().to(oidc_login::<C>)));
+        .service(web::resource("/oidcLogin").route(web::post().to(oidc_login::<C>)))
+        .service(web::resource("/roles").route(web::put().to(add_role_handler::<C>)))
+        .service(web::resource("/roles/{role}").route(web::delete().to(remove_role_handler::<C>)))
+        .service(
+            web::resource("/users/{user}/roles/{role}")
+                .route(web::post().to(assign_role_handler::<C>))
+                .route(web::delete().to(revoke_role_handler::<C>)),
+        );
 }
 
 /// Registers a user.
@@ -62,14 +71,17 @@ where
 pub(crate) async fn register_user_handler<C: ProContext>(
     user: web::Json<UserRegistration>,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     ensure!(
         config::get_config_element::<crate::pro::util::config::User>()?.user_registration,
         error::UserRegistrationDisabled
     );
 
     let user = user.into_inner().validated()?;
-    let id = ctx.user_db_ref().register(user).await?;
+    let id = ctx.register_user(user).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -102,9 +114,11 @@ responses(
 pub(crate) async fn login_handler<C: ProContext>(
     user: web::Json<UserCredentials>,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let session = ctx
-        .user_db_ref()
         .login(user.into_inner())
         .await
         .map_err(Box::new)
@@ -127,8 +141,11 @@ pub(crate) async fn login_handler<C: ProContext>(
 pub(crate) async fn logout_handler<C: ProContext>(
     session: UserSession,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
-    ctx.user_db_ref().logout(session.id).await?;
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    ctx.db(session).logout().await?;
     Ok(HttpResponse::Ok())
 }
 
@@ -162,7 +179,10 @@ pub(crate) async fn logout_handler<C: ProContext>(
     )
 )]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn session_handler<C: ProContext>(session: C::Session) -> impl Responder {
+pub(crate) async fn session_handler<C: ProContext>(session: C::Session) -> impl Responder
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     web::Json(session)
 }
 
@@ -192,14 +212,17 @@ pub(crate) async fn session_handler<C: ProContext>(session: C::Session) -> impl 
         )
     )
 )]
-pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
+pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
         return Err(error::Error::Unauthorized {
             source: Box::new(error::Error::AnonymousAccessDisabled),
         });
     }
 
-    let session = ctx.user_db_ref().anonymous().await?;
+    let session = ctx.create_anonymous_session().await?;
     Ok(web::Json(session))
 }
 
@@ -222,9 +245,12 @@ pub(crate) async fn session_project_handler<C: ProContext>(
     project: web::Path<ProjectId>,
     session: UserSession,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
-    ctx.user_db_ref()
-        .set_session_project(&session, project.into_inner())
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    ctx.db(session)
+        .set_session_project(project.into_inner())
         .await?;
 
     Ok(HttpResponse::Ok())
@@ -247,10 +273,11 @@ pub(crate) async fn session_view_handler<C: ProContext>(
     session: C::Session,
     ctx: web::Data<C>,
     view: web::Json<STRectangle>,
-) -> Result<impl Responder> {
-    ctx.user_db_ref()
-        .set_session_view(&session, view.into_inner())
-        .await?;
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    ctx.db(session).set_session_view(view.into_inner()).await?;
 
     Ok(HttpResponse::Ok())
 }
@@ -281,9 +308,13 @@ pub struct Quota {
 pub(crate) async fn quota_handler<C: ProContext>(
     ctx: web::Data<C>,
     session: C::Session,
-) -> Result<web::Json<Quota>> {
-    let available = ctx.user_db_ref().quota_available(&session).await?;
-    let used = ctx.user_db_ref().quota_used(&session).await?;
+) -> Result<web::Json<Quota>>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    let db = ctx.db(session);
+    let available = db.quota_available().await?;
+    let used = db.quota_used().await?;
 
     Ok(web::Json(Quota { available, used }))
 }
@@ -310,21 +341,22 @@ pub(crate) async fn quota_handler<C: ProContext>(
 )]
 pub(crate) async fn get_user_quota_handler<C: ProContext>(
     ctx: web::Data<C>,
-    session: Either<AdminSession, C::Session>,
+    session: C::Session,
     user: web::Path<UserId>,
-) -> Result<web::Json<Quota>> {
+) -> Result<web::Json<Quota>>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let user = user.into_inner();
 
-    if let Either::Right(session) = session {
-        if session.user.id != user {
-            return Err(error::Error::Unauthorized {
-                source: Box::new(error::Error::OperationRequiresAdminPrivilige),
-            });
-        }
+    if session.user.id != user && !session.is_admin() {
+        return Err(error::Error::Unauthorized {
+            source: Box::new(error::Error::OperationRequiresAdminPrivilige),
+        });
     }
-
-    let available = ctx.user_db_ref().quota_available_by_user(&user).await?;
-    let used = ctx.user_db_ref().quota_used_by_user(&user).await?;
+    let db = ctx.db(UserSession::admin_session());
+    let available = db.quota_available_by_user(&user).await?;
+    let used = db.quota_used_by_user(&user).await?;
     Ok(web::Json(Quota { available, used }))
 }
 
@@ -351,15 +383,18 @@ pub struct UpdateQuota {
 )]
 pub(crate) async fn update_user_quota_handler<C: ProContext>(
     ctx: web::Data<C>,
-    _session: AdminSession,
+    session: C::Session,
     user: web::Path<UserId>,
     update: web::Json<UpdateQuota>,
-) -> Result<HttpResponse> {
+) -> Result<HttpResponse>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     let user = user.into_inner();
 
     let update = update.into_inner();
 
-    ctx.user_db_ref()
+    ctx.db(session)
         .update_quota_available_by_user(&user, update.available)
         .await?;
 
@@ -384,7 +419,10 @@ pub(crate) async fn update_user_quota_handler<C: ProContext>(
 /// # Errors
 ///
 /// This call fails if Open ID Connect is disabled, misconfigured or the Id Provider is unreachable.
-pub(crate) async fn oidc_init<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
+pub(crate) async fn oidc_init<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
         crate::pro::users::OidcDisabled
@@ -440,7 +478,10 @@ pub(crate) async fn oidc_init<C: ProContext>(ctx: web::Data<C>) -> Result<impl R
 pub(crate) async fn oidc_login<C: ProContext>(
     response: web::Json<AuthCodeResponse>,
     ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
         crate::pro::users::OidcDisabled
@@ -452,29 +493,154 @@ pub(crate) async fn oidc_login<C: ProContext>(
         .resolve_request(oidc_client, response.into_inner())
         .await?;
 
-    let session = ctx.user_db_ref().login_external(user, duration).await?;
+    let session = ctx.login_external(user, duration).await?;
 
     Ok(web::Json(session))
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct AddRole {
+    pub name: String,
+}
+
+/// Add a new role. Requires admin privilige.
+#[utoipa::path(
+    tag = "User",
+    put,
+    path = "/roles",
+    request_body = AddRole,
+    responses(
+        (status = 200, description = "Role was added")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn add_role_handler<C: ProContext>(
+    ctx: web::Data<C>,
+    session: C::Session,
+    add_role: web::Json<AddRole>,
+) -> Result<web::Json<IdResponse<RoleId>>>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    let add_role = add_role.into_inner();
+
+    let id = ctx.db(session).add_role(&add_role.name).await?;
+
+    Ok(web::Json(IdResponse::from(id)))
+}
+
+/// Remove a role. Requires admin privilige.
+#[utoipa::path(
+    tag = "User",
+    delete,
+    path = "/roles/{role}",
+    responses(
+        (status = 200, description = "Role was removed")
+    ),
+    params(
+        ("role" = RoleId, description = "Role id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn remove_role_handler<C: ProContext>(
+    ctx: web::Data<C>,
+    session: C::Session,
+    role: web::Path<RoleId>,
+) -> Result<HttpResponse>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    let role = role.into_inner();
+
+    ctx.db(session).remove_role(&role).await?;
+
+    Ok(actix_web::HttpResponse::Ok().finish())
+}
+
+/// Assign a role to a user. Requires admin privilige.
+#[utoipa::path(
+    tag = "User",
+    post,
+    path = "/users/{user}/roles/{role}",
+    responses(
+        (status = 200, description = "Role was assigned")
+    ),
+    params(
+        ("user" = UserId, description = "User id"),
+        ("role" = RoleId, description = "Role id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn assign_role_handler<C: ProContext>(
+    ctx: web::Data<C>,
+    session: C::Session,
+    user: web::Path<(UserId, RoleId)>,
+) -> Result<HttpResponse>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    let (user, role) = user.into_inner();
+
+    ctx.db(session).assign_role(&role, &user).await?;
+
+    Ok(actix_web::HttpResponse::Ok().finish())
+}
+
+/// Revoke a role from a user. Requires admin privilige.
+#[utoipa::path(
+    tag = "User",
+    delete,
+    path = "/users/{user}/roles/{role}",
+    responses(
+        (status = 200, description = "Role was revoked")
+    ),
+    params(
+        ("user" = UserId, description = "User id"),
+        ("role" = RoleId, description = "Role id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn revoke_role_handler<C: ProContext>(
+    ctx: web::Data<C>,
+    session: C::Session,
+    user: web::Path<(UserId, RoleId)>,
+) -> Result<HttpResponse>
+where
+    C::GeoEngineDB: ProGeoEngineDb,
+{
+    let (user, role) = user.into_inner();
+
+    ctx.db(session).revoke_role(&role, &user).await?;
+
+    Ok(actix_web::HttpResponse::Ok().finish())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::contexts::Session;
+    use crate::contexts::{Context, Session};
     use crate::handlers::ErrorResponse;
     use crate::pro::util::tests::mock_oidc::{
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
     };
     use crate::pro::util::tests::{
-        create_project_helper, create_session_helper, register_ndvi_workflow_helper,
+        admin_login, create_project_helper, create_session_helper, register_ndvi_workflow_helper,
         send_pro_test_request,
     };
     use crate::pro::{contexts::ProInMemoryContext, users::UserId};
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
     use crate::util::user_input::Validated;
 
-    use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb};
+    use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb, UserAuth};
     use crate::pro::util::config::Oidc;
     use actix_http::header::CONTENT_TYPE;
     use actix_web::dev::ServiceResponse;
@@ -493,7 +659,10 @@ mod tests {
         ctx: C,
         method: Method,
         email: &str,
-    ) -> ServiceResponse {
+    ) -> ServiceResponse
+    where
+        C::GeoEngineDB: ProGeoEngineDb,
+    {
         let user = UserRegistration {
             email: email.to_string(),
             password: "secret123".to_string(),
@@ -640,7 +809,7 @@ mod tests {
             },
         };
 
-        ctx.user_db_ref().register(user).await.unwrap();
+        ctx.register_user(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".to_string(),
@@ -718,7 +887,7 @@ mod tests {
             },
         };
 
-        ctx.user_db_ref().register(user).await.unwrap();
+        ctx.register_user(user).await.unwrap();
 
         let credentials = json!({
             "email": "foo@example.com",
@@ -750,14 +919,14 @@ mod tests {
             },
         };
 
-        ctx.user_db_ref().register(user).await.unwrap();
+        ctx.register_user(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
         };
 
-        let session = ctx.user_db_ref().login(credentials).await.unwrap();
+        let session = ctx.login(credentials).await.unwrap();
 
         let req = test::TestRequest::default()
             .method(method)
@@ -857,8 +1026,9 @@ mod tests {
         let res = send_pro_test_request(req, ctx.clone()).await;
 
         let session: UserSession = test::read_body_json(res).await;
+        let db = ctx.db(session.clone());
 
-        ctx.user_db_ref().logout(session.id).await.unwrap();
+        db.logout().await.unwrap();
 
         let req = test::TestRequest::get()
             .uri("/session")
@@ -882,7 +1052,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            ctx.user_db_ref().session(session.id).await.unwrap().project,
+            ctx.user_session_by_id(session.id).await.unwrap().project,
             Some(project)
         );
 
@@ -898,7 +1068,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            ctx.user_db_ref().session(session.id()).await.unwrap().view,
+            ctx.user_session_by_id(session.id()).await.unwrap().view,
             Some(rect)
         );
     }
@@ -1293,16 +1463,19 @@ mod tests {
             },
         };
 
-        ctx.user_db_ref().register(user).await.unwrap();
+        ctx.register_user(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
         };
 
-        let session = ctx.user_db_ref().login(credentials).await.unwrap();
+        let session = ctx.login(credentials).await.unwrap();
 
-        ctx.user_db_ref()
+        let admin_session = admin_login(&ctx).await;
+        let admin_db = ctx.db(admin_session.clone());
+
+        admin_db
             .increment_quota_used(&session.user.id, 111)
             .await
             .unwrap();
@@ -1335,13 +1508,7 @@ mod tests {
             .uri(&format!("/quotas/{}", session.user.id))
             .append_header((
                 header::AUTHORIZATION,
-                format!(
-                    "Bearer {}",
-                    config::get_config_element::<config::Session>()
-                        .unwrap()
-                        .admin_session_token
-                        .unwrap()
-                ),
+                format!("Bearer {}", admin_session.id()),
             ));
         let res = send_pro_test_request(req, ctx).await;
         let quota: Quota = test::read_body_json(res).await;
@@ -1360,9 +1527,9 @@ mod tests {
             },
         };
 
-        let user_id = ctx.user_db_ref().register(user).await.unwrap();
+        let user_id = ctx.register_user(user).await.unwrap();
 
-        let admin_session: UserSession = AdminSession::default().into();
+        let admin_session = admin_login(&ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!("/quotas/{user_id}"))
@@ -1406,8 +1573,9 @@ mod tests {
     #[tokio::test]
     async fn it_checks_quota_before_querying() {
         let ctx = ProInMemoryContext::test_default();
+        let admin_db = ctx.db(UserSession::admin_session());
 
-        let session = ctx.user_db_ref().anonymous().await.unwrap();
+        let session = ctx.create_anonymous_session().await.unwrap();
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -1445,7 +1613,7 @@ mod tests {
             ("exceptions", "JSON"),
         ];
 
-        ctx.user_db_ref()
+        admin_db
             .update_quota_available_by_user(&session.user.id, 0)
             .await
             .unwrap();
@@ -1467,7 +1635,7 @@ mod tests {
         )
         .await;
 
-        ctx.user_db_ref()
+        admin_db
             .update_quota_available_by_user(&session.user.id, 9999)
             .await
             .unwrap();
@@ -1486,5 +1654,96 @@ mod tests {
             res.headers().get(&CONTENT_TYPE),
             Some(&header::HeaderValue::from_static("image/png"))
         );
+    }
+
+    #[tokio::test]
+    async fn it_adds_and_removes_role() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let admin_session = admin_login(&ctx).await;
+
+        let add = AddRole {
+            name: "foo".to_string(),
+        };
+
+        let req = actix_web::test::TestRequest::put()
+            .uri("/roles")
+            .set_json(add)
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+        let role_id: IdResponse<RoleId> = test::read_body_json(res).await;
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/roles/{}", role_id.id))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, ctx).await;
+
+        assert_eq!(res.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn it_assigns_and_revokes_role() {
+        let ctx = ProInMemoryContext::test_default();
+
+        let admin_session = admin_login(&ctx).await;
+
+        let user_id = ctx
+            .register_user(
+                UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let add = AddRole {
+            name: "foo".to_string(),
+        };
+
+        let req = actix_web::test::TestRequest::put()
+            .uri("/roles")
+            .set_json(add)
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+        let role_id: IdResponse<RoleId> = test::read_body_json(res).await;
+
+        // assign role
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/users/{}/roles/{}", user_id, role_id.id))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        // revoke role
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/users/{}/roles/{}", user_id, role_id.id))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, ctx).await;
+
+        assert_eq!(res.status(), 200);
     }
 }

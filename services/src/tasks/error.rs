@@ -23,4 +23,8 @@ pub enum TaskError {
         task_type: &'static str,
         task_unique_id: String,
     },
+
+    TaskManagerOperationFailed {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 }

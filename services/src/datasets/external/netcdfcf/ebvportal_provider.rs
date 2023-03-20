@@ -533,7 +533,7 @@ impl EbvPortalDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for EbvPortalDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
@@ -574,11 +574,11 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         EbvCollectionId::Classes.try_into()
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let ebv_id: EbvCollectionId = EbvCollectionId::from_str(&id.0)?;
 
         match &ebv_id {
@@ -824,10 +824,10 @@ mod tests {
         .await
         .unwrap();
 
-        let root_id = provider.root_collection_id().await.unwrap();
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &root_id,
                 LayerCollectionListOptions {
                     offset: 0,
@@ -961,7 +961,7 @@ mod tests {
 
         let id = LayerCollectionId("classes/Ecosystem functioning".into());
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
@@ -1127,7 +1127,7 @@ mod tests {
         let id = LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology".into());
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
@@ -1364,7 +1364,7 @@ mod tests {
         let id = LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology/10".into());
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
@@ -1524,7 +1524,7 @@ mod tests {
         );
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,

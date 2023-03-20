@@ -1,5 +1,4 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
-use crate::contexts::AdminSession;
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::{Error, Result};
 use crate::handlers::tasks::TaskResponse;
@@ -7,7 +6,9 @@ use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
     ProviderLayerCollectionId,
 };
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::layers::listing::{
+    DatasetLayerCollectionProvider, LayerCollectionId, LayerCollectionProvider,
+};
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
@@ -15,7 +16,7 @@ use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
-use actix_web::{web, Either, FromRequest, HttpResponse, Responder};
+use actix_web::{web, FromRequest, HttpResponse, Responder};
 use geoengine_datatypes::primitives::QueryRectangle;
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;
@@ -124,16 +125,17 @@ where
     )
 )]
 async fn list_root_collections_handler<C: Context>(
-    _session: Either<AdminSession, C::Session>,
+    session: C::Session,
     ctx: web::Data<C>,
     options: web::Query<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
-    let root_collection = get_layer_providers(options, ctx).await?;
+    let root_collection = get_layer_providers(session, options, ctx).await?;
 
     Ok(web::Json(root_collection))
 }
 
 async fn get_layer_providers<C: Context>(
+    session: C::Session,
     mut options: web::Query<LayerCollectionListOptions>,
     ctx: web::Data<C>,
 ) -> Result<LayerCollection> {
@@ -166,7 +168,7 @@ async fn get_layer_providers<C: Context>(
 
         options.limit -= 1;
     }
-    let external = ctx.layer_provider_db_ref();
+    let external = ctx.db(session);
     for provider_listing in external
         .list_layer_providers(
             LayerProviderListingOptions {
@@ -178,7 +180,7 @@ async fn get_layer_providers<C: Context>(
         .await?
     {
         // TODO: resolve providers in parallel
-        let provider = match external.layer_provider(provider_listing.id).await {
+        let provider = match external.load_layer_provider(provider_listing.id).await {
             Ok(provider) => provider,
             Err(err) => {
                 log::error!("Error loading provider: {err}");
@@ -186,7 +188,7 @@ async fn get_layer_providers<C: Context>(
             }
         };
 
-        let collection_id = match provider.root_collection_id().await {
+        let collection_id = match provider.get_root_layer_collection_id().await {
             Ok(root) => root,
             Err(err) => {
                 log::error!(
@@ -272,37 +274,37 @@ async fn list_collection_handler<C: Context>(
     ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerCollectionId)>,
     options: web::Query<LayerCollectionListOptions>,
+    session: C::Session,
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();
 
     if provider == ROOT_PROVIDER_ID && item == LayerCollectionId(ROOT_COLLECTION_ID.to_string()) {
-        let collection = get_layer_providers(options, ctx).await?;
+        let collection = get_layer_providers(session.clone(), options, ctx).await?;
         return Ok(web::Json(collection));
     }
 
+    let db = ctx.db(session);
+
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID {
-        let collection = ctx
-            .dataset_db_ref()
-            .collection(&item, options.into_inner().validated()?)
+        let collection = db
+            .load_dataset_layer_collection(&item, options.into_inner().validated()?)
             .await?;
 
         return Ok(web::Json(collection));
     }
 
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
-        let collection = ctx
-            .layer_db_ref()
-            .collection(&item, options.into_inner().validated()?)
+        let collection = db
+            .load_layer_collection(&item, options.into_inner().validated()?)
             .await?;
 
         return Ok(web::Json(collection));
     }
 
-    let collection = ctx
-        .layer_provider_db_ref()
-        .layer_provider(provider)
+    let collection = db
+        .load_layer_provider(provider)
         .await?
-        .collection(&item, options.into_inner().validated()?)
+        .load_layer_collection(&item, options.into_inner().validated()?)
         .await?;
 
     Ok(web::Json(collection))
@@ -473,26 +475,28 @@ async fn list_collection_handler<C: Context>(
 async fn layer_handler<C: Context>(
     ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerId)>,
+    session: C::Session,
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();
 
+    let db = ctx.db(session);
+
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID {
-        let collection = ctx.dataset_db_ref().get_layer(&item).await?;
+        let collection = db.load_dataset_layer(&item).await?;
 
         return Ok(web::Json(collection));
     }
 
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
-        let collection = ctx.layer_db_ref().get_layer(&item).await?;
+        let collection = db.load_layer(&item).await?;
 
         return Ok(web::Json(collection));
     }
 
-    let collection = ctx
-        .layer_provider_db_ref()
-        .layer_provider(provider)
+    let collection = db
+        .load_layer_provider(provider)
         .await?
-        .get_layer(&item)
+        .load_layer(&item)
         .await?;
 
     Ok(web::Json(collection))
@@ -517,26 +521,27 @@ async fn layer_handler<C: Context>(
 async fn layer_to_workflow_id_handler<C: Context>(
     ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerId)>,
-) -> Result<web::Json<WorkflowId>> {
+    session: C::Session,
+) -> Result<web::Json<IdResponse<WorkflowId>>> {
     let (provider, item) = path.into_inner();
 
+    let db = ctx.db(session);
     let layer = match provider {
         crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID => {
-            ctx.dataset_db_ref().get_layer(&item).await?
+            db.load_dataset_layer(&item).await?
         }
-        crate::layers::storage::INTERNAL_PROVIDER_ID => ctx.layer_db_ref().get_layer(&item).await?,
+        crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item).await?,
         _ => {
-            ctx.layer_provider_db_ref()
-                .layer_provider(provider)
+            db.load_layer_provider(provider)
                 .await?
-                .get_layer(&item)
+                .load_layer(&item)
                 .await?
         }
     };
 
-    let workflow_id = ctx.workflow_registry().register(layer.workflow).await?;
+    let workflow_id = db.register_workflow(layer.workflow).await?;
 
-    Ok(web::Json(workflow_id))
+    Ok(web::Json(IdResponse::from(workflow_id)))
 }
 
 /// Persist a raster layer from a provider as a dataset.
@@ -560,27 +565,26 @@ async fn layer_to_workflow_id_handler<C: Context>(
     )
 )]
 async fn layer_to_dataset<C: Context>(
-    session: AdminSession,
+    session: C::Session,
     ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerId)>,
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();
 
+    let db = ctx.db(session.clone());
+
     let layer = match provider {
         crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID => {
-            ctx.dataset_db_ref().get_layer(&item).await?
+            db.load_dataset_layer(&item).await?
         }
-        crate::layers::storage::INTERNAL_PROVIDER_ID => ctx.layer_db_ref().get_layer(&item).await?,
+        crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item).await?,
         _ => {
-            ctx.layer_provider_db_ref()
-                .layer_provider(provider)
+            db.load_layer_provider(provider)
                 .await?
-                .get_layer(&item)
+                .load_layer(&item)
                 .await?
         }
     };
-
-    let session = C::Session::from(session.clone());
 
     let execution_context = ctx.execution_context(session.clone())?;
 
@@ -654,7 +658,7 @@ async fn layer_to_dataset<C: Context>(
     )
 )]
 async fn add_layer<C: Context>(
-    _session: AdminSession, // TODO: allow normal users to add layers to their stuff
+    session: C::Session,
     ctx: web::Data<C>,
     collection: web::Path<LayerCollectionId>,
     request: web::Json<AddLayer>,
@@ -663,7 +667,7 @@ async fn add_layer<C: Context>(
 
     let add_layer = request.validated()?;
 
-    let id = ctx.layer_db_ref().add_layer(add_layer, &collection).await?;
+    let id = ctx.db(session).add_layer(add_layer, &collection).await?;
 
     Ok(web::Json(IdResponse { id }))
 }
@@ -685,7 +689,7 @@ async fn add_layer<C: Context>(
     )
 )]
 async fn add_collection<C: Context>(
-    _session: AdminSession, // TODO: allow normal users to add collections to their stuff
+    session: C::Session,
     ctx: web::Data<C>,
     collection: web::Path<LayerCollectionId>,
     request: web::Json<AddLayerCollection>,
@@ -693,8 +697,8 @@ async fn add_collection<C: Context>(
     let add_collection = request.into_inner().validated()?;
 
     let id = ctx
-        .layer_db_ref()
-        .add_collection(add_collection, &collection)
+        .db(session)
+        .add_layer_collection(add_collection, &collection)
         .await?;
 
     Ok(web::Json(IdResponse { id }))
@@ -716,11 +720,11 @@ async fn add_collection<C: Context>(
     )
 )]
 async fn remove_collection<C: Context>(
-    _session: AdminSession, // TODO: allow normal users to remove their collections
+    session: C::Session,
     ctx: web::Data<C>,
     collection: web::Path<LayerCollectionId>,
 ) -> Result<HttpResponse> {
-    ctx.layer_db_ref().remove_collection(&collection).await?;
+    ctx.db(session).remove_layer_collection(&collection).await?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -749,11 +753,11 @@ struct RemoveLayerFromCollectionParams {
     )
 )]
 async fn remove_layer_from_collection<C: Context>(
-    _session: AdminSession, // TODO: allow normal users to remove their collections
+    session: C::Session,
     ctx: web::Data<C>,
     path: web::Path<RemoveLayerFromCollectionParams>,
 ) -> Result<HttpResponse> {
-    ctx.layer_db_ref()
+    ctx.db(session)
         .remove_layer_from_collection(&path.layer, &path.collection)
         .await?;
 
@@ -783,11 +787,11 @@ struct AddExistingLayerToCollectionParams {
     )
 )]
 async fn add_existing_layer_to_collection<C: Context>(
-    _session: AdminSession, // TODO: allow normal users to remove their collections
+    session: C::Session,
     ctx: web::Data<C>,
     path: web::Path<AddExistingLayerToCollectionParams>,
 ) -> Result<HttpResponse> {
-    ctx.layer_db_ref()
+    ctx.db(session)
         .add_layer_to_collection(&path.layer, &path.collection)
         .await?;
 
@@ -817,11 +821,11 @@ struct CollectionAndSubCollectionParams {
     )
 )]
 async fn add_existing_collection_to_collection<C: Context>(
-    _session: AdminSession, // TODO: allow normal users to remove their collections
+    session: C::Session,
     ctx: web::Data<C>,
     path: web::Path<CollectionAndSubCollectionParams>,
 ) -> Result<HttpResponse> {
-    ctx.layer_db_ref()
+    ctx.db(session)
         .add_collection_to_parent(&path.sub_collection, &path.collection)
         .await?;
 
@@ -845,12 +849,12 @@ async fn add_existing_collection_to_collection<C: Context>(
     )
 )]
 async fn remove_collection_from_collection<C: Context>(
-    _session: AdminSession, // TODO: allow normal users to remove their collections
+    session: C::Session,
     ctx: web::Data<C>,
     path: web::Path<CollectionAndSubCollectionParams>,
 ) -> Result<HttpResponse> {
-    ctx.layer_db_ref()
-        .remove_collection_from_parent(&path.sub_collection, &path.collection)
+    ctx.db(session)
+        .remove_layer_collection_from_parent(&path.sub_collection, &path.collection)
         .await?;
 
     Ok(HttpResponse::Ok().finish())
@@ -859,7 +863,9 @@ async fn remove_collection_from_collection<C: Context>(
 #[cfg(test)]
 mod tests {
 
-    use crate::contexts::{SessionId, SimpleContext};
+    use std::sync::Arc;
+
+    use crate::contexts::{SessionId, SimpleContext, SimpleSession};
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::handlers::ErrorResponse;
     use crate::layers::layer::Layer;
@@ -904,16 +910,18 @@ mod tests {
     async fn test_add_layer_to_collection() {
         let ctx = InMemoryContext::test_default();
 
-        let admin_session_id = AdminSession::default().id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
-        let collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+        let collection_id = ctx
+            .db(session.clone())
+            .get_root_layer_collection_id()
+            .await
+            .unwrap();
 
         let req = test::TestRequest::post()
             .uri(&format!("/layerDb/collections/{collection_id}/layers"))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(admin_session_id.to_string()),
-            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(serde_json::json!({
                 "name": "Foo",
                 "description": "Bar",
@@ -937,11 +945,14 @@ mod tests {
 
         let result: IdResponse<LayerId> = test::read_body_json(response).await;
 
-        ctx.layer_db_ref().get_layer(&result.id).await.unwrap();
+        ctx.db(session.clone())
+            .load_layer(&result.id)
+            .await
+            .unwrap();
 
         let collection = ctx
-            .layer_db_ref()
-            .collection(
+            .db(session.clone())
+            .load_layer_collection(
                 &collection_id,
                 LayerCollectionListOptions::default().validated().unwrap(),
             )
@@ -958,12 +969,17 @@ mod tests {
     async fn test_add_existing_layer_to_collection() {
         let ctx = InMemoryContext::test_default();
 
-        let admin_session_id = AdminSession::default().id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
-        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+        let root_collection_id = ctx
+            .db(session.clone())
+            .get_root_layer_collection_id()
+            .await
+            .unwrap();
 
         let layer_id = ctx
-            .layer_db_ref()
+            .db(session.clone())
             .add_layer(
                 AddLayer {
                     name: "Layer Name".to_string(),
@@ -987,8 +1003,8 @@ mod tests {
             .unwrap();
 
         let collection_id = ctx
-            .layer_db_ref()
-            .add_collection(
+            .db(session.clone())
+            .add_layer_collection(
                 AddLayerCollection {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
@@ -1004,17 +1020,14 @@ mod tests {
             .uri(&format!(
                 "/layerDb/collections/{collection_id}/layers/{layer_id}"
             ))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(admin_session_id.to_string()),
-            ));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
         let collection = ctx
-            .layer_db_ref()
-            .collection(
+            .db(session.clone())
+            .load_layer_collection(
                 &collection_id,
                 LayerCollectionListOptions::default().validated().unwrap(),
             )
@@ -1024,19 +1037,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_add_collection() {
+    async fn test_add_layer_collection() {
         let ctx = InMemoryContext::test_default();
 
-        let admin_session_id = AdminSession::default().id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
-        let collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+        let collection_id = ctx
+            .db(session.clone())
+            .get_root_layer_collection_id()
+            .await
+            .unwrap();
 
         let req = test::TestRequest::post()
             .uri(&format!("/layerDb/collections/{collection_id}/collections"))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(admin_session_id.to_string()),
-            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(serde_json::json!({
                 "name": "Foo",
                 "description": "Bar",
@@ -1047,8 +1062,8 @@ mod tests {
 
         let result: IdResponse<LayerCollectionId> = test::read_body_json(response).await;
 
-        ctx.layer_db_ref()
-            .collection(
+        ctx.db(session.clone())
+            .load_layer_collection(
                 &result.id,
                 LayerCollectionListOptions::default().validated().unwrap(),
             )
@@ -1060,13 +1075,18 @@ mod tests {
     async fn test_add_existing_collection_to_collection() {
         let ctx = InMemoryContext::test_default();
 
-        let admin_session_id = AdminSession::default().id();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
-        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+        let root_collection_id = ctx
+            .db(session.clone())
+            .get_root_layer_collection_id()
+            .await
+            .unwrap();
 
         let collection_a_id = ctx
-            .layer_db_ref()
-            .add_collection(
+            .db(session.clone())
+            .add_layer_collection(
                 AddLayerCollection {
                     name: "Foo".to_string(),
                     description: "Foo".to_string(),
@@ -1079,8 +1099,8 @@ mod tests {
             .unwrap();
 
         let collection_b_id = ctx
-            .layer_db_ref()
-            .add_collection(
+            .db(session.clone())
+            .add_layer_collection(
                 AddLayerCollection {
                     name: "Bar".to_string(),
                     description: "Bar".to_string(),
@@ -1096,17 +1116,14 @@ mod tests {
             .uri(&format!(
                 "/layerDb/collections/{collection_a_id}/collections/{collection_b_id}"
             ))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(admin_session_id.to_string()),
-            ));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
         let collection_a = ctx
-            .layer_db_ref()
-            .collection(
+            .db(session.clone())
+            .load_layer_collection(
                 &collection_a_id,
                 LayerCollectionListOptions::default().validated().unwrap(),
             )
@@ -1120,11 +1137,18 @@ mod tests {
     async fn test_remove_layer_from_collection() {
         let ctx = InMemoryContext::test_default();
 
-        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let root_collection_id = ctx
+            .db(session.clone())
+            .get_root_layer_collection_id()
+            .await
+            .unwrap();
 
         let collection_id = ctx
-            .layer_db_ref()
-            .add_collection(
+            .db(session.clone())
+            .add_layer_collection(
                 AddLayerCollection {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
@@ -1137,7 +1161,7 @@ mod tests {
             .unwrap();
 
         let layer_id = ctx
-            .layer_db_ref()
+            .db(session.clone())
             .add_layer(
                 AddLayer {
                     name: "Layer Name".to_string(),
@@ -1160,16 +1184,11 @@ mod tests {
             .await
             .unwrap();
 
-        let admin_session_id = AdminSession::default().id();
-
         let req = test::TestRequest::delete()
             .uri(&format!(
                 "/layerDb/collections/{collection_id}/layers/{layer_id}"
             ))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(admin_session_id.to_string()),
-            ));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, ctx.clone()).await;
 
         assert!(
@@ -1180,18 +1199,28 @@ mod tests {
         );
 
         // layer should be gone
-        ctx.layer_db_ref().get_layer(&layer_id).await.unwrap_err();
+        ctx.db(session.clone())
+            .load_layer(&layer_id)
+            .await
+            .unwrap_err();
     }
 
     #[tokio::test]
     async fn test_remove_collection() {
         let ctx = InMemoryContext::test_default();
 
-        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let root_collection_id = ctx
+            .db(session.clone())
+            .get_root_layer_collection_id()
+            .await
+            .unwrap();
 
         let collection_id = ctx
-            .layer_db_ref()
-            .add_collection(
+            .db(session.clone())
+            .add_layer_collection(
                 AddLayerCollection {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
@@ -1203,20 +1232,15 @@ mod tests {
             .await
             .unwrap();
 
-        let admin_session_id = AdminSession::default().id();
-
         let req = test::TestRequest::delete()
             .uri(&format!("/layerDb/collections/{collection_id}"))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(admin_session_id.to_string()),
-            ));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
-        ctx.layer_db_ref()
-            .collection(
+        ctx.db(session.clone())
+            .load_layer_collection(
                 &collection_id,
                 LayerCollectionListOptions::default().validated().unwrap(),
             )
@@ -1227,10 +1251,7 @@ mod tests {
 
         let req = test::TestRequest::delete()
             .uri(&format!("/layers/collections/{root_collection_id}"))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(admin_session_id.to_string()),
-            ));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, ctx.clone()).await;
 
         assert!(response.status().is_client_error(), "{response:?}");
@@ -1240,11 +1261,18 @@ mod tests {
     async fn test_remove_collection_from_collection() {
         let ctx = InMemoryContext::test_default();
 
-        let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+        let session = ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let root_collection_id = ctx
+            .db(session.clone())
+            .get_root_layer_collection_id()
+            .await
+            .unwrap();
 
         let collection_id = ctx
-            .layer_db_ref()
-            .add_collection(
+            .db(session.clone())
+            .add_layer_collection(
                 AddLayerCollection {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
@@ -1256,23 +1284,18 @@ mod tests {
             .await
             .unwrap();
 
-        let admin_session_id = AdminSession::default().id();
-
         let req = test::TestRequest::delete()
             .uri(&format!(
                 "/layerDb/collections/{root_collection_id}/collections/{collection_id}"
             ))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(admin_session_id.to_string()),
-            ));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
         let root_collection = ctx
-            .layer_db_ref()
-            .collection(
+            .db(session.clone())
+            .load_layer_collection(
                 &root_collection_id,
                 LayerCollectionListOptions::default().validated().unwrap(),
             )
@@ -1398,12 +1421,18 @@ mod tests {
             }
         }
 
-        async fn create_layer_in_context<C: Context>(&self, ctx: &C) -> Layer {
-            let root_collection_id = ctx.layer_db_ref().root_collection_id().await.unwrap();
+        async fn create_layer_in_context(&self, ctx: &InMemoryContext) -> Layer {
+            let session = ctx.default_session_ref().await.clone();
+
+            let root_collection_id = ctx
+                .db(session.clone())
+                .get_root_layer_collection_id()
+                .await
+                .unwrap();
 
             let collection_id = ctx
-                .layer_db_ref()
-                .add_collection(
+                .db(session.clone())
+                .add_layer_collection(
                     AddLayerCollection {
                         name: self.collection_name.clone(),
                         description: self.collection_description.clone(),
@@ -1416,7 +1445,7 @@ mod tests {
                 .unwrap();
 
             let layer_id = ctx
-                .layer_db_ref()
+                .db(session.clone())
                 .add_layer(
                     AddLayer {
                         name: self.layer_name.clone(),
@@ -1431,7 +1460,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            ctx.layer_db_ref().get_layer(&layer_id).await.unwrap()
+            ctx.db(session.clone()).load_layer(&layer_id).await.unwrap()
         }
     }
 
@@ -1454,17 +1483,21 @@ mod tests {
     async fn create_dataset_request_with_result_success<C: SimpleContext>(
         ctx: &C,
         layer: Layer,
-        admin_session_id: SessionId,
+        session: SimpleSession,
     ) -> RasterDatasetFromWorkflowResult {
-        let res = send_dataset_creation_test_request(ctx, layer, admin_session_id).await;
+        let res = send_dataset_creation_test_request(ctx, layer, session.id()).await;
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         let task_response =
             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+        let task_manager = Arc::new(ctx.tasks(session));
+        wait_for_task_to_finish(task_manager.clone(), task_response.task_id).await;
 
-        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+        let status = task_manager
+            .get_task_status(task_response.task_id)
+            .await
+            .unwrap();
 
         let response = if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()
@@ -1523,17 +1556,16 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let admin_session_id = AdminSession::default().id();
+        let session = ctx.default_session_ref().await.clone();
+
         let layer = mock_source.create_layer_in_context(&ctx).await;
         let response =
-            create_dataset_request_with_result_success(&ctx, layer, admin_session_id).await;
+            create_dataset_request_with_result_success(&ctx, layer, session.clone()).await;
 
         // automatically deletes uploads on drop
         let _test_uploads = TestDataUploads {
             uploads: vec![response.upload],
         };
-
-        let session = ctx.default_session_ref().await.clone();
 
         // query the layer
         let workflow_operator = mock_source.workflow.operator.get_raster().unwrap();
@@ -1579,8 +1611,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_raster_layer_to_dataset_invalid_admin_token() {
-        let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 0);
+    async fn test_raster_layer_to_dataset_no_time_interval() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
         let ctx = InMemoryContext::new_with_context_spec(
             mock_source.tiling_specification,
             TestDefault::test_default(),
@@ -1591,23 +1623,6 @@ mod tests {
         let layer = mock_source.create_layer_in_context(&ctx).await;
 
         let res = send_dataset_creation_test_request(&ctx, layer, session_id).await;
-
-        ErrorResponse::assert(res, 401, "InvalidAdminToken", "Invalid admin token").await;
-    }
-
-    #[tokio::test]
-    async fn test_raster_layer_to_dataset_no_time_interval() {
-        let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
-        let ctx = InMemoryContext::new_with_context_spec(
-            mock_source.tiling_specification,
-            TestDefault::test_default(),
-        );
-
-        let admin_session_id = AdminSession::default().id();
-
-        let layer = mock_source.create_layer_in_context(&ctx).await;
-
-        let res = send_dataset_creation_test_request(&ctx, layer, admin_session_id).await;
 
         ErrorResponse::assert(
             res,
@@ -1626,11 +1641,11 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let admin_session_id = AdminSession::default().id();
+        let session_id = ctx.default_session_ref().await.id();
 
         let layer = mock_source.create_layer_in_context(&ctx).await;
 
-        let res = send_dataset_creation_test_request(&ctx, layer, admin_session_id).await;
+        let res = send_dataset_creation_test_request(&ctx, layer, session_id).await;
 
         ErrorResponse::assert(
             res,
@@ -1649,11 +1664,11 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let admin_session_id = AdminSession::default().id();
+        let session_id = ctx.default_session_ref().await.id();
 
         let layer = mock_source.create_layer_in_context(&ctx).await;
 
-        let res = send_dataset_creation_test_request(&ctx, layer, admin_session_id).await;
+        let res = send_dataset_creation_test_request(&ctx, layer, session_id).await;
 
         ErrorResponse::assert(
             res,

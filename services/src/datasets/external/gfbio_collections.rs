@@ -577,7 +577,7 @@ impl GfbioCollectionsDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for GfbioCollectionsDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
@@ -596,11 +596,11 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
         }
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         GfBioCollectionId::Collections.try_into()
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let gfbio_collection_id = GfBioCollectionId::from_str(&id.0)?;
 
         match &gfbio_collection_id {
@@ -939,10 +939,10 @@ mod tests {
             .await
             .unwrap();
 
-            let root_id = provider.root_collection_id().await.unwrap();
+            let root_id = provider.get_root_layer_collection_id().await.unwrap();
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &root_id,
                     LayerCollectionListOptions {
                         offset: 0,
@@ -959,7 +959,7 @@ mod tests {
             assert_eq!(collection.items.len(), 0);
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &LayerCollectionId(
                         "collections/63cf68e4-6e11-469d-8f35-af83ee6586dc".to_string(),
                     ),
