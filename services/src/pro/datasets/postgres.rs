@@ -235,7 +235,11 @@ where
             return Err(geoengine_operators::error::Error::PermissionDenied);
         };
 
-        let conn = self.conn_pool.get().await.unwrap(); // TODO
+        let conn = self.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
         let stmt = conn
             .prepare(
                 "
@@ -299,7 +303,11 @@ where
             return Err(geoengine_operators::error::Error::PermissionDenied);
         };
 
-        let conn = self.conn_pool.get().await.unwrap(); // TODO
+        let conn = self.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
         let stmt = conn
             .prepare(
                 "
