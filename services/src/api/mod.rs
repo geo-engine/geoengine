@@ -7,6 +7,7 @@ use actix_web_httpauth::headers::authorization::Bearer;
 use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use utoipa::openapi::path::{Parameter, ParameterIn};
+use utoipa::openapi::schema::AdditionalProperties;
 use utoipa::openapi::{
     KnownFormat, OpenApi, PathItemType, Ref, RefOr, Schema, SchemaFormat, SchemaType,
 };
@@ -41,7 +42,9 @@ fn can_resolve_schema(schema: RefOr<Schema>, schemas: &BTreeMap<String, RefOr<Sc
                     can_resolve_schema(property, schemas);
                 }
                 if let Some(additional_properties) = obj.additional_properties {
-                    can_resolve_schema(*additional_properties, schemas);
+                    if let AdditionalProperties::RefOr(properties_schema) = *additional_properties {
+                        can_resolve_schema(properties_schema, schemas);
+                    }
                 }
             }
             Schema::OneOf(oo) => {
@@ -97,7 +100,7 @@ pub fn can_resolve_api(api: OpenApi) {
     }
 }
 
-pub struct RunnableExample<'a, C, F, Fut>
+struct RunnableExample<'a, C, F, Fut>
 where
     F: Fn(TestRequest, C) -> Fut,
     Fut: Future<Output = ServiceResponse>,
@@ -232,7 +235,7 @@ where
             .set_json(&self.body)
     }
 
-    pub async fn run(self) -> ServiceResponse {
+    async fn run(self) -> ServiceResponse {
         let req = self.build_request();
         (self.send_test_request)(req, self.ctx).await
     }
@@ -240,7 +243,7 @@ where
     /// # Panics
     /// Will panic if an example cannot be run due to incomplete or
     /// outdated OpenAPI documentation.
-    pub async fn check_for_bad_documentation(self) {
+    async fn check_for_bad_documentation(self) {
         let res = self.run().await;
 
         if res.status() == 400 {
