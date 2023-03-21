@@ -58,7 +58,6 @@ impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
 
 pub struct RasterDatasetFromWorkflowTask<C: Context> {
     pub workflow: Workflow,
-    pub session: C::Session,
     pub ctx: Arc<C>,
     pub info: RasterDatasetFromWorkflow,
     pub upload: UploadId,
@@ -72,7 +71,7 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
 
         let operator = operator.get_raster().context(crate::error::Operator)?;
 
-        let execution_context = self.ctx.execution_context(self.session.clone())?;
+        let execution_context = self.ctx.execution_context()?;
         let initialized = operator
             .initialize(&execution_context)
             .await
@@ -85,7 +84,7 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
             .context(crate::error::Operator)?;
 
         let query_rect = self.info.query;
-        let query_ctx = self.ctx.query_context(self.session.clone())?;
+        let query_ctx = self.ctx.query_context()?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
@@ -120,7 +119,6 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
             result_descriptor,
             query_rect,
             self.ctx.as_ref(),
-            self.session.clone(),
         )
         .await?;
 
@@ -169,7 +167,6 @@ impl<C: Context> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
 
 pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
     workflow: Workflow,
-    session: C::Session,
     ctx: Arc<C>,
     info: RasterDatasetFromWorkflow,
     compression_num_threads: GdalCompressionNumThreads,
@@ -183,7 +180,6 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
 
     let task = RasterDatasetFromWorkflowTask {
         workflow,
-        session: session.clone(),
         ctx: ctx.clone(),
         info,
         upload,
@@ -192,7 +188,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
     }
     .boxed();
 
-    let task_id = ctx.tasks(session).schedule_task(task, None).await?;
+    let task_id = ctx.tasks().schedule_task(task, None).await?;
 
     Ok(task_id)
 }
@@ -203,7 +199,6 @@ async fn create_dataset<C: Context>(
     origin_result_descriptor: &RasterResultDescriptor,
     query_rectangle: RasterQueryRectangle,
     ctx: &C,
-    session: <C as Context>::Session,
 ) -> error::Result<DatasetId> {
     ensure!(!slice_info.is_empty(), error::EmptyDatasetCannotBeImported);
 
@@ -259,7 +254,7 @@ async fn create_dataset<C: Context>(
         meta_data,
     };
 
-    let db = ctx.db(session);
+    let db = ctx.db();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
     let dataset = db
         .add_dataset(dataset_definition.properties.validated()?, meta)

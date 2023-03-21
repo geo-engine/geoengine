@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{Context, Db, GeoEngineDb, SimpleSession};
+use super::{ApplicationContext, Context, Db, GeoEngineDb, SimpleSession};
 use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDbBackend;
@@ -61,17 +61,21 @@ impl InMemoryContext {
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Self {
-        let ctx = Self {
+        let session = SimpleSession::default();
+
+        let app_ctx = Self {
             db: Default::default(),
             task_manager: Default::default(),
-            session: Default::default(),
+            session: Arc::new(RwLock::new(session.clone())),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             thread_pool: create_rayon_thread_pool(0),
             volumes: Default::default(),
         };
 
-        let mut db = ctx.db(ctx.default_session().read().await.clone());
+        let ctx = app_ctx.session_context(session);
+
+        let mut db = ctx.db();
         add_layers_from_directory(&mut db, layer_defs_path).await;
         add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
 
@@ -79,7 +83,7 @@ impl InMemoryContext {
 
         add_providers_from_directory(&mut db, provider_defs_path, &[]).await;
 
-        ctx
+        app_ctx
     }
 
     pub fn new_with_context_spec(
@@ -99,35 +103,15 @@ impl InMemoryContext {
 }
 
 #[async_trait]
-impl Context for InMemoryContext {
+impl ApplicationContext for InMemoryContext {
+    type Context = InMemorySessionContext;
     type Session = SimpleSession;
-    type GeoEngineDB = InMemoryDb;
-    type TaskContext = SimpleTaskManagerContext;
-    type TaskManager = SimpleTaskManager;
-    type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
-    fn db(&self, _session: Self::Session) -> Self::GeoEngineDB {
-        InMemoryDb::new(self.db.clone())
-    }
-
-    fn tasks(&self, _session: SimpleSession) -> Self::TaskManager {
-        SimpleTaskManager::new(self.task_manager.clone())
-    }
-
-    fn query_context(&self, _session: SimpleSession) -> Result<Self::QueryContext> {
-        Ok(QueryContextImpl::new(
-            self.query_ctx_chunk_size,
-            self.thread_pool.clone(),
-        ))
-    }
-
-    fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<InMemoryDb>::new(
-            self.db(session),
-            self.thread_pool.clone(),
-            self.exe_ctx_tiling_spec,
-        ))
+    fn session_context(&self, session: Self::Session) -> Self::Context {
+        InMemorySessionContext {
+            session,
+            context: self.clone(),
+        }
     }
 
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {
@@ -141,9 +125,52 @@ impl Context for InMemoryContext {
 
         Ok(default_session.clone())
     }
+}
 
-    fn volumes(&self, _session: SimpleSession) -> Result<Vec<Volume>> {
-        Ok(self.volumes.volumes.clone())
+#[derive(Clone)]
+pub struct InMemorySessionContext {
+    session: SimpleSession,
+    context: InMemoryContext,
+}
+
+#[async_trait]
+impl Context for InMemorySessionContext {
+    type Session = SimpleSession;
+    type GeoEngineDB = InMemoryDb;
+    type TaskContext = SimpleTaskManagerContext;
+    type TaskManager = SimpleTaskManager;
+    type QueryContext = QueryContextImpl;
+    type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
+
+    fn db(&self) -> Self::GeoEngineDB {
+        InMemoryDb::new(self.context.db.clone())
+    }
+
+    fn tasks(&self) -> Self::TaskManager {
+        SimpleTaskManager::new(self.context.task_manager.clone())
+    }
+
+    fn query_context(&self) -> Result<Self::QueryContext> {
+        Ok(QueryContextImpl::new(
+            self.context.query_ctx_chunk_size,
+            self.context.thread_pool.clone(),
+        ))
+    }
+
+    fn execution_context(&self) -> Result<Self::ExecutionContext> {
+        Ok(ExecutionContextImpl::<InMemoryDb>::new(
+            self.db(),
+            self.context.thread_pool.clone(),
+            self.context.exe_ctx_tiling_spec,
+        ))
+    }
+
+    fn volumes(&self) -> Result<Vec<Volume>> {
+        Ok(self.context.volumes.volumes.clone())
+    }
+
+    fn session(&self) -> &Self::Session {
+        &self.session
     }
 }
 

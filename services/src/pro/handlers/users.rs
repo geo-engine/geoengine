@@ -1,9 +1,12 @@
+use crate::contexts::ApplicationContext;
+use crate::contexts::Context;
 use crate::error;
 use crate::error::Result;
-use crate::pro::contexts::ProContext;
+use crate::pro::contexts::OidcRequestDbProvider;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::permissions::RoleId;
 use crate::pro::users::RoleDb;
+use crate::pro::users::UserAuth;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
 use crate::pro::users::UserRegistration;
@@ -16,6 +19,7 @@ use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
 use crate::pro::users::OidcError::OidcDisabled;
+use actix_web::FromRequest;
 use actix_web::{web, HttpResponse, Responder};
 use serde::Deserialize;
 use serde::Serialize;
@@ -25,8 +29,9 @@ use utoipa::ToSchema;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ProContext,
-    C::GeoEngineDB: ProGeoEngineDb,
+    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+    C::Session: FromRequest,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     cfg.service(web::resource("/user").route(web::post().to(register_user_handler::<C>)))
         .service(web::resource("/anonymous").route(web::post().to(anonymous_handler::<C>)))
@@ -68,12 +73,12 @@ where
             })
         )
     ))]
-pub(crate) async fn register_user_handler<C: ProContext>(
+pub(crate) async fn register_user_handler<C: ApplicationContext + UserAuth>(
     user: web::Json<UserRegistration>,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
         config::get_config_element::<crate::pro::util::config::User>()?.user_registration,
@@ -81,7 +86,7 @@ where
     );
 
     let user = user.into_inner().validated()?;
-    let id = ctx.register_user(user).await?;
+    let id = app_ctx.register_user(user).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -111,14 +116,14 @@ responses(
         })
     )
 ))]
-pub(crate) async fn login_handler<C: ProContext>(
+pub(crate) async fn login_handler<C: ApplicationContext + UserAuth>(
     user: web::Json<UserCredentials>,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
-    let session = ctx
+    let session = app_ctx
         .login(user.into_inner())
         .await
         .map_err(Box::new)
@@ -138,14 +143,14 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn logout_handler<C: ProContext>(
+pub(crate) async fn logout_handler<C: ApplicationContext<Session = UserSession>>(
     session: UserSession,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
-    ctx.db(session).logout().await?;
+    app_ctx.session_context(session).db().logout().await?;
     Ok(HttpResponse::Ok())
 }
 
@@ -179,9 +184,13 @@ where
     )
 )]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn session_handler<C: ProContext>(session: C::Session) -> impl Responder
+pub(crate) async fn session_handler<
+    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+>(
+    session: C::Session,
+) -> impl Responder
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     web::Json(session)
 }
@@ -212,9 +221,11 @@ where
         )
     )
 )]
-pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder>
+pub(crate) async fn anonymous_handler<C: ApplicationContext + UserAuth>(
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
         return Err(error::Error::Authorization {
@@ -222,7 +233,7 @@ where
         });
     }
 
-    let session = ctx.create_anonymous_session().await?;
+    let session = app_ctx.create_anonymous_session().await?;
     Ok(web::Json(session))
 }
 
@@ -241,15 +252,17 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn session_project_handler<C: ProContext>(
+pub(crate) async fn session_project_handler<C: ApplicationContext<Session = UserSession>>(
     project: web::Path<ProjectId>,
     session: UserSession,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
-    ctx.db(session)
+    app_ctx
+        .session_context(session)
+        .db()
         .set_session_project(project.into_inner())
         .await?;
 
@@ -269,15 +282,21 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn session_view_handler<C: ProContext>(
+pub(crate) async fn session_view_handler<
+    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     view: web::Json<STRectangle>,
 ) -> Result<impl Responder>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
-    ctx.db(session).set_session_view(view.into_inner()).await?;
+    app_ctx
+        .session_context(session)
+        .db()
+        .set_session_view(view.into_inner())
+        .await?;
 
     Ok(HttpResponse::Ok())
 }
@@ -305,14 +324,16 @@ pub struct Quota {
         ("session_token" = [])
     )
 )]
-pub(crate) async fn quota_handler<C: ProContext>(
-    ctx: web::Data<C>,
+pub(crate) async fn quota_handler<
+    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+>(
+    app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<web::Json<Quota>>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
-    let db = ctx.db(session);
+    let db = app_ctx.session_context(session).db();
     let available = db.quota_available().await?;
     let used = db.quota_used().await?;
 
@@ -339,13 +360,13 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn get_user_quota_handler<C: ProContext>(
-    ctx: web::Data<C>,
-    session: C::Session,
+pub(crate) async fn get_user_quota_handler<C: ApplicationContext<Session = UserSession>>(
+    app_ctx: web::Data<C>,
+    session: UserSession,
     user: web::Path<UserId>,
 ) -> Result<web::Json<Quota>>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     let user = user.into_inner();
 
@@ -354,7 +375,9 @@ where
             source: Box::new(error::Error::OperationRequiresAdminPrivilige),
         });
     }
-    let db = ctx.db(UserSession::admin_session());
+
+    let ctx = app_ctx.session_context(session);
+    let db = ctx.db();
     let available = db.quota_available_by_user(&user).await?;
     let used = db.quota_used_by_user(&user).await?;
     Ok(web::Json(Quota { available, used }))
@@ -381,20 +404,24 @@ pub struct UpdateQuota {
         ("session_token" = [])
     )
 )]
-pub(crate) async fn update_user_quota_handler<C: ProContext>(
-    ctx: web::Data<C>,
+pub(crate) async fn update_user_quota_handler<
+    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+>(
+    app_ctx: web::Data<C>,
     session: C::Session,
     user: web::Path<UserId>,
     update: web::Json<UpdateQuota>,
 ) -> Result<HttpResponse>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     let user = user.into_inner();
 
     let update = update.into_inner();
 
-    ctx.db(session)
+    app_ctx
+        .session_context(session)
+        .db()
         .update_quota_available_by_user(&user, update.available)
         .await?;
 
@@ -419,18 +446,20 @@ where
 /// # Errors
 ///
 /// This call fails if Open ID Connect is disabled, misconfigured or the Id Provider is unreachable.
-pub(crate) async fn oidc_init<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder>
+pub(crate) async fn oidc_init<C: ApplicationContext + OidcRequestDbProvider>(
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
         crate::pro::users::OidcDisabled
     );
-    let request_db = ctx.oidc_request_db().ok_or(OidcDisabled)?;
+    let request_db = app_ctx.oidc_request_db().ok_or(OidcDisabled)?;
     let oidc_client = request_db.get_client().await?;
 
-    let result = ctx
+    let result = app_ctx
         .oidc_request_db()
         .ok_or(OidcDisabled)?
         .generate_request(oidc_client)
@@ -475,25 +504,25 @@ where
 /// if a previous oidcLogin call with the same state was already successfully or unsuccessfully resolved,
 /// if the Open Id Connect configuration is invalid,
 /// or if the Id Provider is unreachable.
-pub(crate) async fn oidc_login<C: ProContext>(
+pub(crate) async fn oidc_login<C: ApplicationContext + OidcRequestDbProvider + UserAuth>(
     response: web::Json<AuthCodeResponse>,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
         crate::pro::users::OidcDisabled
     );
-    let request_db = ctx.oidc_request_db().ok_or(OidcDisabled)?;
+    let request_db = app_ctx.oidc_request_db().ok_or(OidcDisabled)?;
     let oidc_client = request_db.get_client().await?;
 
     let (user, duration) = request_db
         .resolve_request(oidc_client, response.into_inner())
         .await?;
 
-    let session = ctx.login_external(user, duration).await?;
+    let session = app_ctx.login_external(user, duration).await?;
 
     Ok(web::Json(session))
 }
@@ -516,17 +545,23 @@ pub struct AddRole {
         ("session_token" = [])
     )
 )]
-pub(crate) async fn add_role_handler<C: ProContext>(
-    ctx: web::Data<C>,
+pub(crate) async fn add_role_handler<
+    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+>(
+    app_ctx: web::Data<C>,
     session: C::Session,
     add_role: web::Json<AddRole>,
 ) -> Result<web::Json<IdResponse<RoleId>>>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     let add_role = add_role.into_inner();
 
-    let id = ctx.db(session).add_role(&add_role.name).await?;
+    let id = app_ctx
+        .session_context(session)
+        .db()
+        .add_role(&add_role.name)
+        .await?;
 
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -546,17 +581,23 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn remove_role_handler<C: ProContext>(
-    ctx: web::Data<C>,
+pub(crate) async fn remove_role_handler<
+    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+>(
+    app_ctx: web::Data<C>,
     session: C::Session,
     role: web::Path<RoleId>,
 ) -> Result<HttpResponse>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     let role = role.into_inner();
 
-    ctx.db(session).remove_role(&role).await?;
+    app_ctx
+        .session_context(session)
+        .db()
+        .remove_role(&role)
+        .await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -577,17 +618,23 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn assign_role_handler<C: ProContext>(
-    ctx: web::Data<C>,
+pub(crate) async fn assign_role_handler<
+    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+>(
+    app_ctx: web::Data<C>,
     session: C::Session,
     user: web::Path<(UserId, RoleId)>,
 ) -> Result<HttpResponse>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     let (user, role) = user.into_inner();
 
-    ctx.db(session).assign_role(&role, &user).await?;
+    app_ctx
+        .session_context(session)
+        .db()
+        .assign_role(&role, &user)
+        .await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -608,17 +655,23 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn revoke_role_handler<C: ProContext>(
-    ctx: web::Data<C>,
+pub(crate) async fn revoke_role_handler<
+    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+>(
+    app_ctx: web::Data<C>,
     session: C::Session,
     user: web::Path<(UserId, RoleId)>,
 ) -> Result<HttpResponse>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
 {
     let (user, role) = user.into_inner();
 
-    ctx.db(session).revoke_role(&role, &user).await?;
+    app_ctx
+        .session_context(session)
+        .db()
+        .revoke_role(&role, &user)
+        .await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -655,13 +708,15 @@ mod tests {
     use serde_json::json;
     use serial_test::serial;
 
-    async fn register_test_helper<C: ProContext>(
-        ctx: C,
+    async fn register_test_helper<
+        C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+    >(
+        app_ctx: C,
         method: Method,
         email: &str,
     ) -> ServiceResponse
     where
-        C::GeoEngineDB: ProGeoEngineDb,
+        <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
     {
         let user = UserRegistration {
             email: email.to_string(),
@@ -675,14 +730,14 @@ mod tests {
             .uri("/user")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&user);
-        send_pro_test_request(req, ctx).await
+        send_pro_test_request(req, app_ctx).await
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn register() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let res = register_test_helper(ctx, Method::POST, "foo@example.com").await;
+        let res = register_test_helper(app_ctx, Method::POST, "foo@example.com").await;
 
         assert_eq!(res.status(), 200);
 
@@ -691,9 +746,9 @@ mod tests {
 
     #[tokio::test]
     async fn register_fail() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let res = register_test_helper(ctx, Method::POST, "notanemail").await;
+        let res = register_test_helper(app_ctx, Method::POST, "notanemail").await;
 
         ErrorResponse::assert(
             res,
@@ -706,12 +761,12 @@ mod tests {
 
     #[tokio::test]
     async fn register_duplicate_email() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        register_test_helper(ctx.clone(), Method::POST, "foo@example.com").await;
+        register_test_helper(app_ctx.clone(), Method::POST, "foo@example.com").await;
 
         // register user
-        let res = register_test_helper(ctx, Method::POST, "foo@example.com").await;
+        let res = register_test_helper(app_ctx, Method::POST, "foo@example.com").await;
 
         ErrorResponse::assert(
             res,
@@ -724,10 +779,10 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_method() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         check_allowed_http_methods(
-            |method| register_test_helper(ctx.clone(), method, "foo@example.com"),
+            |method| register_test_helper(app_ctx.clone(), method, "foo@example.com"),
             &[Method::POST],
         )
         .await;
@@ -735,14 +790,14 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_body() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         // register user
         let req = test::TestRequest::post()
             .uri("/user")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_payload("no json");
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -755,7 +810,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_missing_fields() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let user = json!({
             "password": "secret123",
@@ -767,7 +822,7 @@ mod tests {
             .uri("/user")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&user);
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -780,14 +835,14 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_type() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         // register user
         let req = test::TestRequest::post()
             .uri("/user")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::CONTENT_TYPE, "text/html"));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -799,7 +854,7 @@ mod tests {
     }
 
     async fn login_test_helper(method: Method, password: &str) -> ServiceResponse {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -809,7 +864,7 @@ mod tests {
             },
         };
 
-        ctx.register_user(user).await.unwrap();
+        app_ctx.register_user(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".to_string(),
@@ -821,7 +876,7 @@ mod tests {
             .uri("/login")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&credentials);
-        send_pro_test_request(req, ctx).await
+        send_pro_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -857,14 +912,14 @@ mod tests {
 
     #[tokio::test]
     async fn login_invalid_body() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post()
             .uri("/login")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload("no json");
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -877,7 +932,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_missing_fields() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -887,7 +942,7 @@ mod tests {
             },
         };
 
-        ctx.register_user(user).await.unwrap();
+        app_ctx.register_user(user).await.unwrap();
 
         let credentials = json!({
             "email": "foo@example.com",
@@ -897,7 +952,7 @@ mod tests {
             .uri("/login")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&credentials);
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -909,7 +964,7 @@ mod tests {
     }
 
     async fn logout_test_helper(method: Method) -> ServiceResponse {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -919,21 +974,21 @@ mod tests {
             },
         };
 
-        ctx.register_user(user).await.unwrap();
+        app_ctx.register_user(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
         };
 
-        let session = ctx.login(credentials).await.unwrap();
+        let session = app_ctx.login(credentials).await.unwrap();
 
         let req = test::TestRequest::default()
             .method(method)
             .uri("/logout")
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_payload("no json");
-        send_pro_test_request(req, ctx).await
+        send_pro_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -946,10 +1001,10 @@ mod tests {
 
     #[tokio::test]
     async fn logout_missing_header() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post().uri("/logout");
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -962,25 +1017,25 @@ mod tests {
 
     #[tokio::test]
     async fn logout_wrong_token() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post().uri("/logout").append_header((
             header::AUTHORIZATION,
             Bearer::new("6ecff667-258e-4108-9dc9-93cb8c64793c"),
         ));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 401, "InvalidSession", "The session id is invalid.").await;
     }
 
     #[tokio::test]
     async fn logout_wrong_scheme() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post()
             .uri("/logout")
             .append_header((header::AUTHORIZATION, "7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5"));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -993,12 +1048,12 @@ mod tests {
 
     #[tokio::test]
     async fn logout_invalid_token() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post()
             .uri("/logout")
             .append_header((header::AUTHORIZATION, format!("Bearer {}", "no uuid")));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1016,43 +1071,47 @@ mod tests {
 
     #[tokio::test]
     async fn session() {
-        let ctx = ProInMemoryContext::test_default();
-
-        let session = create_session_helper(&ctx).await;
+        let app_ctx = ProInMemoryContext::test_default();
+        let session = create_session_helper(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
         let req = test::TestRequest::get()
             .uri("/session")
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         let session: UserSession = test::read_body_json(res).await;
-        let db = ctx.db(session.clone());
+        let db = ctx.db();
 
         db.logout().await.unwrap();
 
         let req = test::TestRequest::get()
             .uri("/session")
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 401, "InvalidSession", "The session id is invalid.").await;
     }
 
     #[tokio::test]
     async fn session_view_project() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let (session, project) = create_project_helper(&app_ctx).await;
 
         let req = test::TestRequest::post()
             .uri(&format!("/session/project/{project}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            ctx.user_session_by_id(session.id).await.unwrap().project,
+            app_ctx
+                .user_session_by_id(session.id)
+                .await
+                .unwrap()
+                .project,
             Some(project)
         );
 
@@ -1063,12 +1122,12 @@ mod tests {
             .uri("/session/view")
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&rect);
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            ctx.user_session_by_id(session.id()).await.unwrap().view,
+            app_ctx.user_session_by_id(session.id()).await.unwrap().view,
             Some(rect)
         );
     }
@@ -1076,19 +1135,19 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn it_disables_anonymous_access() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post().uri("/anonymous");
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
         config::set_config("session.anonymous_access", false).unwrap();
 
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post().uri("/anonymous");
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         config::set_config("session.anonymous_access", true).unwrap();
 
@@ -1104,7 +1163,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn it_disables_user_registration() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let user_reg = UserRegistration {
             email: "foo@example.com".to_owned(),
@@ -1116,19 +1175,19 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .uri("/user")
             .set_json(&user_reg);
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
         config::set_config("user.user_registration", false).unwrap();
 
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post()
             .append_header((header::CONTENT_LENGTH, 0))
             .uri("/user")
             .set_json(&user_reg);
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         config::set_config("user.user_registration", true).unwrap();
 
@@ -1258,10 +1317,10 @@ mod tests {
 
     #[tokio::test]
     async fn oidc_init_invalid_method() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         check_allowed_http_methods(
-            |method| oidc_init_test_helper(method, ctx.clone()),
+            |method| oidc_init_test_helper(method, app_ctx.clone()),
             &[Method::POST],
         )
         .await;
@@ -1372,7 +1431,7 @@ mod tests {
 
     #[tokio::test]
     async fn oidc_login_invalid_method() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let auth_code_response = AuthCodeResponse {
             session_state: String::new(),
@@ -1381,7 +1440,7 @@ mod tests {
         };
 
         check_allowed_http_methods(
-            |method| oidc_login_test_helper(method, ctx.clone(), auth_code_response.clone()),
+            |method| oidc_login_test_helper(method, app_ctx.clone(), auth_code_response.clone()),
             &[Method::POST],
         )
         .await;
@@ -1389,13 +1448,13 @@ mod tests {
 
     #[tokio::test]
     async fn oidc_login_invalid_body() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let req = test::TestRequest::post()
             .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_payload("no json");
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1408,7 +1467,7 @@ mod tests {
 
     #[tokio::test]
     async fn oidc_login_missing_fields() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let auth_code_response = json!({
             "sessionState": "",
@@ -1420,7 +1479,7 @@ mod tests {
             .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&auth_code_response);
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1433,14 +1492,14 @@ mod tests {
 
     #[tokio::test]
     async fn oidc_login_invalid_type() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         // register user
         let req = test::TestRequest::post()
             .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::CONTENT_TYPE, "text/html"));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1453,7 +1512,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_gets_quota() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -1463,17 +1522,17 @@ mod tests {
             },
         };
 
-        ctx.register_user(user).await.unwrap();
+        app_ctx.register_user(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
         };
 
-        let session = ctx.login(credentials).await.unwrap();
+        let session = app_ctx.login(credentials).await.unwrap();
 
-        let admin_session = admin_login(&ctx).await;
-        let admin_db = ctx.db(admin_session.clone());
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_db = app_ctx.session_context(admin_session.clone()).db();
 
         admin_db
             .increment_quota_used(&session.user.id, 111)
@@ -1484,7 +1543,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri("/quota")
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(quota.used, 111);
 
@@ -1492,7 +1551,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/quotas/{}", session.user.id))
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(quota.used, 111);
 
@@ -1500,7 +1559,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/quotas/{}", uuid::Uuid::new_v4()))
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 401);
 
         // specific user quota as admin
@@ -1510,14 +1569,14 @@ mod tests {
                 header::AUTHORIZATION,
                 format!("Bearer {}", admin_session.id()),
             ));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(quota.used, 111);
     }
 
     #[tokio::test]
     async fn it_updates_quota() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -1527,9 +1586,9 @@ mod tests {
             },
         };
 
-        let user_id = ctx.register_user(user).await.unwrap();
+        let user_id = app_ctx.register_user(user).await.unwrap();
 
-        let admin_session = admin_login(&ctx).await;
+        let admin_session = admin_login(&app_ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!("/quotas/{user_id}"))
@@ -1537,7 +1596,7 @@ mod tests {
                 header::AUTHORIZATION,
                 format!("Bearer {}", admin_session.id),
             ));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(
             quota.available,
@@ -1555,7 +1614,7 @@ mod tests {
                 format!("Bearer {}", admin_session.id),
             ))
             .set_json(update);
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1565,19 +1624,19 @@ mod tests {
                 header::AUTHORIZATION,
                 format!("Bearer {}", admin_session.id),
             ));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(quota.available, 123);
     }
 
     #[tokio::test]
     async fn it_checks_quota_before_querying() {
-        let ctx = ProInMemoryContext::test_default();
-        let admin_db = ctx.db(UserSession::admin_session());
+        let app_ctx = ProInMemoryContext::test_default();
+        let admin_db = app_ctx.session_context(UserSession::admin_session()).db();
 
-        let session = ctx.create_anonymous_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -1625,7 +1684,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         ErrorResponse::assert(
             res,
@@ -1647,7 +1706,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(
@@ -1658,9 +1717,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_adds_and_removes_role() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let admin_session = admin_login(&ctx).await;
+        let admin_session = admin_login(&app_ctx).await;
 
         let add = AddRole {
             name: "foo".to_string(),
@@ -1673,7 +1732,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(admin_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
         let role_id: IdResponse<RoleId> = test::read_body_json(res).await;
@@ -1684,18 +1743,18 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(admin_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
     }
 
     #[tokio::test]
     async fn it_assigns_and_revokes_role() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let admin_session = admin_login(&ctx).await;
+        let admin_session = admin_login(&app_ctx).await;
 
-        let user_id = ctx
+        let user_id = app_ctx
             .register_user(
                 UserRegistration {
                     email: "foo@example.com".to_string(),
@@ -1719,7 +1778,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(admin_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
         let role_id: IdResponse<RoleId> = test::read_body_json(res).await;
@@ -1731,7 +1790,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(admin_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1742,7 +1801,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(admin_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
     }

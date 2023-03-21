@@ -99,7 +99,7 @@ mod tests {
     use geoengine_datatypes::util::Identifier;
 
     use crate::{
-        contexts::Context,
+        contexts::{ApplicationContext, Context},
         pro::{
             contexts::ProInMemoryContext,
             users::{UserAuth, UserCredentials, UserRegistration},
@@ -112,9 +112,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_tracks_quota() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let _user = ctx
+        let _user = app_ctx
             .register_user(
                 UserRegistration {
                     email: "foo@example.com".to_string(),
@@ -127,7 +127,7 @@ mod tests {
             .await
             .unwrap();
 
-        let session = ctx
+        let session = app_ctx
             .login(UserCredentials {
                 email: "foo@example.com".to_string(),
                 password: "secret1234".to_string(),
@@ -135,16 +135,16 @@ mod tests {
             .await
             .unwrap();
 
-        let admin_session = admin_login(&ctx).await;
+        let admin_session = admin_login(&app_ctx).await;
 
-        let quota = initialize_quota_tracking(ctx.db(admin_session.clone()));
+        let quota = initialize_quota_tracking(app_ctx.session_context(admin_session.clone()).db());
 
         let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
         tracking.work_unit_done();
         tracking.work_unit_done();
 
-        let db = ctx.db(session);
+        let db = app_ctx.session_context(session).db();
 
         // wait for quota to be recorded
         let mut success = false;

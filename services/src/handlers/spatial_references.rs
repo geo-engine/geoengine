@@ -1,7 +1,7 @@
 use crate::api::model::datatypes::{
     BoundingBox2D, Coordinate2D, SpatialReference, SpatialReferenceAuthority, StringPair,
 };
-use crate::handlers::Context;
+use crate::contexts::ApplicationContext;
 use crate::{error, error::Error, error::Result};
 use actix_web::{web, FromRequest, Responder};
 use proj_sys::PJ_PROJ_STRING_TYPE_PJ_PROJ_4;
@@ -12,7 +12,7 @@ use utoipa::ToSchema;
 
 pub(crate) fn init_spatial_reference_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -192,7 +192,7 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
         ("session_token" = [])
     )
 )]
-pub(crate) async fn get_spatial_reference_specification_handler<C: Context>(
+pub(crate) async fn get_spatial_reference_specification_handler<C: ApplicationContext>(
     srs_string: web::Path<String>,
     _session: C::Session,
 ) -> Result<impl Responder> {
@@ -269,7 +269,7 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::SimpleContext;
+    use crate::contexts::{Context, SimpleContext};
     use crate::contexts::{InMemoryContext, Session};
     use crate::util::tests::send_test_request;
     use actix_web;
@@ -282,14 +282,16 @@ mod tests {
 
     #[tokio::test]
     async fn get_spatial_reference() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
 
         let req = actix_web::test::TestRequest::get()
             .uri("/spatialReferenceSpecification/EPSG:4326")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 

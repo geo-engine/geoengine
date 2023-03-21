@@ -166,7 +166,7 @@ fn send_result(
 mod tests {
     use super::*;
     use crate::{
-        contexts::{InMemoryContext, SimpleContext},
+        contexts::{InMemoryContext, InMemorySessionContext, SimpleContext},
         util::tests::register_ndvi_workflow_helper,
     };
     use actix_http::error::PayloadError;
@@ -193,10 +193,11 @@ mod tests {
             input_sender.unbounded_send(Ok(buf.into())).unwrap();
         }
 
-        let ctx = InMemoryContext::test_default();
-        let session = ctx.default_session_ref().await.clone();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (workflow, _workflow_id) = register_ndvi_workflow_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+
+        let (workflow, _workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let query_rectangle = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
@@ -206,11 +207,11 @@ mod tests {
             spatial_resolution: SpatialResolution::one(),
         };
 
-        let handler = RasterWebsocketStreamHandler::new::<InMemoryContext>(
+        let handler = RasterWebsocketStreamHandler::new::<InMemorySessionContext>(
             workflow.operator.get_raster().unwrap(),
             query_rectangle,
-            ctx.execution_context(session.clone()).unwrap(),
-            ctx.query_context(session).unwrap(),
+            ctx.execution_context().unwrap(),
+            ctx.query_context().unwrap(),
         )
         .await
         .unwrap();

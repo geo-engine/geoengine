@@ -28,7 +28,7 @@ use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 
 use crate::layers::storage::LayerProviderDb;
-use crate::pro::users::{OidcRequestDb, UserDb, UserSession};
+use crate::pro::users::{OidcRequestDb, UserDb};
 use crate::util::config::get_config_element;
 use crate::util::path_with_base_path;
 
@@ -36,18 +36,14 @@ use async_trait::async_trait;
 
 use super::permissions::PermissionDb;
 use super::projects::ProProjectDb;
-use super::users::{RoleDb, UserAuth};
+use super::users::RoleDb;
 
 pub use in_memory::ProInMemoryDb;
 pub use postgres::PostgresDb;
 
 /// A pro contexts that extends the default context.
-// TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
 #[async_trait]
-pub trait ProContext: Context<Session = UserSession> + UserAuth
-where
-    Self::GeoEngineDB: ProGeoEngineDb,
-{
+pub trait OidcRequestDbProvider {
     fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
 }
 
@@ -341,7 +337,9 @@ mod tests {
     use serial_test::serial;
 
     use crate::{
-        contexts::Context, pro::util::tests::create_session_helper, util::config::set_config,
+        contexts::{ApplicationContext, Context},
+        pro::util::tests::create_session_helper,
+        util::config::set_config,
     };
 
     #[tokio::test]
@@ -356,9 +354,12 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = ProInMemoryContext::test_default();
-        let session = create_session_helper(&ctx).await;
-        let exe_ctx = ctx.execution_context(session).unwrap();
+        let app_ctx = ProInMemoryContext::test_default();
+        let session = create_session_helper(&app_ctx).await;
+        let exe_ctx = app_ctx
+            .session_context(session)
+            .execution_context()
+            .unwrap();
 
         let model_path = PathBuf::from("xgboost/s2_10m_de_marburg/model.json");
         let mut model = exe_ctx.read_ml_model(model_path).await.unwrap();
@@ -389,9 +390,12 @@ mod tests {
 
         set_config("machinelearning.model_defs_path", temp_ml_path).unwrap();
 
-        let ctx = ProInMemoryContext::test_default();
-        let session = create_session_helper(&ctx).await;
-        let mut exe_ctx = ctx.execution_context(session).unwrap();
+        let app_ctx = ProInMemoryContext::test_default();
+        let session = create_session_helper(&app_ctx).await;
+        let mut exe_ctx = app_ctx
+            .session_context(session)
+            .execution_context()
+            .unwrap();
 
         let model_path = PathBuf::from("xgboost/ml.json");
         exe_ctx

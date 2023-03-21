@@ -5,6 +5,7 @@ use actix_web::{web, FromRequest, Responder};
 use futures::StreamExt;
 use geoengine_datatypes::util::Identifier;
 
+use crate::contexts::ApplicationContext;
 use crate::datasets::upload::{FileId, FileUpload, Upload, UploadDb, UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
@@ -15,7 +16,7 @@ use utoipa::ToSchema;
 
 pub(crate) fn init_upload_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(web::resource("/upload").route(web::post().to(upload_handler::<C>)));
@@ -58,9 +59,9 @@ impl<'a> ToSchema<'a> for FileUploadRequest {
         ("session_token" = [])
     )
 )]
-async fn upload_handler<C: Context>(
+async fn upload_handler<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     mut body: Multipart,
 ) -> Result<impl Responder> {
     let upload_id = UploadId::new();
@@ -98,7 +99,9 @@ async fn upload_handler<C: Context>(
         });
     }
 
-    ctx.db(session)
+    app_ctx
+        .session_context(session)
+        .db()
         .create_upload(Upload {
             id: upload_id,
             files,
@@ -121,8 +124,10 @@ mod tests {
     async fn upload() {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
 
         let body = vec![("bar.txt", "bar"), ("foo.txt", "foo")];
 
@@ -131,7 +136,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart(body);
 
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 

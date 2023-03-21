@@ -1520,7 +1520,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use super::*;
 
-    use crate::contexts::{Context, MockableSession, SimpleContext, SimpleSession};
+    use crate::contexts::{Context, SimpleContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::layers::storage::LayerProviderDb;
     use crate::util::user_input::UserInput;
@@ -2206,7 +2206,9 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_irregular_time_series() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
 
         let land_cover_dataset_id = add_land_cover_to_datasets(&ctx).await;
 
@@ -2218,7 +2220,7 @@ mod tests {
                 overviews: test_data!("netcdf4d/overviews/").into(),
             });
 
-        ctx.db(ctx.default_session_ref().await.clone())
+        ctx.db()
             .add_layer_provider(provider_definition)
             .await
             .unwrap();
@@ -2267,7 +2269,7 @@ mod tests {
         .boxed();
 
         // let execution_context = MockExecutionContext::test_default();
-        let execution_context = ctx.execution_context(SimpleSession::mock()).unwrap();
+        let execution_context = ctx.execution_context().unwrap();
 
         let initialized_operator = operator.initialize(&execution_context).await.unwrap();
 

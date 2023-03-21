@@ -33,14 +33,26 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
-pub use in_memory::{InMemoryContext, InMemoryDb};
+pub use in_memory::{InMemoryContext, InMemoryDb, InMemorySessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
 pub use simple_context::SimpleContext;
 
 pub type Db<T> = Arc<RwLock<T>>;
 
-/// A context bundles access to shared resources like databases and session specific information
-/// about the user to pass to the services handlers.
+// TODO: rename AppContext?
+/// The application context bundles access to shared resources like databases and session specific information
+#[async_trait]
+pub trait ApplicationContext: 'static + Send + Sync + Clone {
+    type Context: Context;
+    type Session: Session + Clone;
+
+    fn session_context(&self, session: Self::Session) -> Self::Context;
+
+    async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session>;
+}
+
+/// A context binds a session to the shared access to resources
+// TODO: rename to SessionContext?
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
     type Session: Session + Clone;
@@ -50,18 +62,17 @@ pub trait Context: 'static + Send + Sync + Clone {
     type TaskContext: TaskContext;
     type TaskManager: TaskManager<Self::TaskContext>;
 
-    // TODO: move session into Context itself
-    fn db(&self, session: Self::Session) -> Self::GeoEngineDB;
+    fn db(&self) -> Self::GeoEngineDB;
 
-    fn tasks(&self, session: Self::Session) -> Self::TaskManager;
+    fn tasks(&self) -> Self::TaskManager;
 
-    fn query_context(&self, session: Self::Session) -> Result<Self::QueryContext>;
+    fn query_context(&self) -> Result<Self::QueryContext>;
 
-    fn execution_context(&self, session: Self::Session) -> Result<Self::ExecutionContext>;
+    fn execution_context(&self) -> Result<Self::ExecutionContext>;
 
-    async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session>;
+    fn volumes(&self) -> Result<Vec<Volume>>;
 
-    fn volumes(&self, session: Self::Session) -> Result<Vec<Volume>>;
+    fn session(&self) -> &Self::Session;
 }
 
 pub trait GeoEngineDb:
@@ -386,7 +397,7 @@ mod tests {
     use serial_test::serial;
 
     use crate::{
-        contexts::{Context, InMemoryContext, SimpleSession},
+        contexts::{Context, InMemoryContext},
         util::config::set_config,
     };
 
@@ -402,8 +413,11 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = InMemoryContext::test_default();
-        let exe_ctx = ctx.execution_context(SimpleSession::default()).unwrap();
+        let ctx = InMemoryContext::test_default()
+            .default_session_context()
+            .await;
+
+        let exe_ctx = ctx.execution_context().unwrap();
 
         let model_path = PathBuf::from("xgboost/s2_10m_de_marburg/model.json");
         let mut model = exe_ctx.read_ml_model(model_path).await.unwrap();
@@ -434,8 +448,10 @@ mod tests {
         let temp_ml_path = tmp_path.join("pro/ml").to_str().unwrap().to_string();
 
         set_config("machinelearning.model_defs_path", temp_ml_path).unwrap();
-        let ctx = InMemoryContext::test_default();
-        let mut exe_ctx = ctx.execution_context(SimpleSession::default()).unwrap();
+        let ctx = InMemoryContext::test_default()
+            .default_session_context()
+            .await;
+        let mut exe_ctx = ctx.execution_context().unwrap();
 
         let model_path = PathBuf::from("xgboost/model.json");
 

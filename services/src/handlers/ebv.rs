@@ -4,6 +4,7 @@
 
 use super::tasks::TaskResponse;
 use crate::api::model::datatypes::ResamplingMethod;
+use crate::contexts::ApplicationContext;
 use crate::datasets::external::netcdfcf::{
     error, EbvPortalDataProvider, NetCdfCf4DProviderError, OverviewGeneration, EBV_PROVIDER_ID,
     NETCDF_CF_PROVIDER_ID,
@@ -104,7 +105,7 @@ impl Modify for ApiDocInfo {
 ///
 pub(crate) fn init_ebv_routes<C>() -> Box<dyn FnOnce(&mut ServiceConfig)>
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     Box::new(move |cfg: &mut web::ServiceConfig| {
@@ -124,14 +125,13 @@ where
 /// Otherwise an erorr is returned.
 async fn with_netcdfcf_provider<C: Context, T, F>(
     ctx: &C,
-    session: &C::Session,
     f: F,
 ) -> Result<T, NetCdfCf4DProviderError>
 where
     T: Send + 'static,
     F: FnOnce(&NetCdfCfDataProvider) -> Result<T, NetCdfCf4DProviderError> + Send + 'static,
 {
-    let db = ctx.db(session.clone());
+    let db = ctx.db();
 
     let ebv_provider: Result<Box<dyn DataProvider>> = db.load_layer_provider(EBV_PROVIDER_ID).await;
 
@@ -196,28 +196,26 @@ struct CreateOverviewsParams {
         ("admin_token" = [])
     )
 )]
-async fn create_overviews<C: Context>(
+async fn create_overviews<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     params: Option<web::Json<CreateOverviewsParams>>,
 ) -> Result<impl Responder> {
-    let ctx = ctx.into_inner();
+    let ctx = Arc::new(app_ctx.into_inner().session_context(session.clone()));
 
-    let task: Box<dyn Task<C::TaskContext>> = EvbMultiOverviewTask::<C> {
-        session: session.clone(),
+    let task = EvbMultiOverviewTask::<C::Context> {
         ctx: ctx.clone(),
         resampling_method: params.as_ref().and_then(|p| p.resampling_method),
         current_subtask_id: Arc::new(Mutex::new(None)),
     }
     .boxed();
 
-    let task_id = ctx.tasks(session).schedule_task(task, None).await?;
+    let task_id = ctx.tasks().schedule_task(task, None).await?;
 
     Ok(web::Json(TaskResponse::new(task_id)))
 }
 
 struct EvbMultiOverviewTask<C: Context> {
-    session: C::Session,
     ctx: Arc<C>,
     resampling_method: Option<ResamplingMethod>,
     current_subtask_id: Arc<Mutex<Option<TaskId>>>,
@@ -238,11 +236,10 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
         task_ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let task_ctx = Arc::new(task_ctx);
-        let session = self.session.clone();
         let resampling_method = self.resampling_method;
         let current_subtask_id = self.current_subtask_id.clone();
 
-        let files = with_netcdfcf_provider(self.ctx.as_ref(), &session.clone(), move |provider| {
+        let files = with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
             provider.list_files().map_err(|_| {
                 NetCdfCf4DProviderError::CdfCfProviderCannotListFiles {
                     id: NETCDF_CF_PROVIDER_ID,
@@ -261,7 +258,6 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
 
         for (i, file) in files.into_iter().enumerate() {
             let subtask: Box<dyn Task<C::TaskContext>> = EvbOverviewTask::<C> {
-                session: session.clone(),
                 ctx: self.ctx.clone(),
                 file: file.clone(),
                 params: CreateOverviewParams { resampling_method },
@@ -272,7 +268,7 @@ impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
 
             let subtask_id = self
                 .ctx
-                .tasks(session.clone())
+                .tasks()
                 .schedule_task(subtask, Some(notification_tx))
                 .await
                 .map_err(ErrorSource::boxed)?;
@@ -374,29 +370,27 @@ struct CreateOverviewParams {
         ("admin_token" = [])
     )
 )]
-async fn create_overview<C: Context>(
+async fn create_overview<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     path: web::Path<PathBuf>,
     params: Option<web::Json<CreateOverviewParams>>,
 ) -> Result<impl Responder> {
-    let ctx = ctx.into_inner();
+    let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
-    let task: Box<dyn Task<C::TaskContext>> = EvbOverviewTask::<C> {
-        session: session.clone(),
+    let task = EvbOverviewTask::<C::Context> {
         ctx: ctx.clone(),
         file: path.into_inner(),
         params: params.map(web::Json::into_inner).unwrap_or_default(),
     }
     .boxed();
 
-    let task_id = ctx.tasks(session).schedule_task(task, None).await?;
+    let task_id = ctx.tasks().schedule_task(task, None).await?;
 
     Ok(web::Json(TaskResponse::new(task_id)))
 }
 
 struct EvbOverviewTask<C: Context> {
-    session: C::Session,
     ctx: Arc<C>,
     file: PathBuf,
     params: CreateOverviewParams,
@@ -409,10 +403,9 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
         ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let file = self.file.clone();
-        let session = self.session.clone();
         let resampling_method = self.params.resampling_method;
 
-        let response = with_netcdfcf_provider(self.ctx.as_ref(), &session, move |provider| {
+        let response = with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
             // TODO: provide some detailed pct status
 
             match provider.create_overviews(&file, resampling_method, &ctx) {
@@ -441,9 +434,8 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
 
     async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
         let file = self.file.clone();
-        let session = self.session.clone();
 
-        let response = with_netcdfcf_provider(self.ctx.as_ref(), &session, move |provider| {
+        let response = with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
             provider
                 .remove_overviews(&file, false)
                 .boxed_context(error::CannotRemoveOverviews)
@@ -495,29 +487,27 @@ struct RemoveOverviewParams {
         ("admin_token" = [])
     )
 )]
-async fn remove_overview<C: Context>(
+async fn remove_overview<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     path: web::Path<PathBuf>,
     params: web::Query<RemoveOverviewParams>,
 ) -> Result<impl Responder> {
-    let ctx = ctx.into_inner();
+    let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
-    let task: Box<dyn Task<C::TaskContext>> = EvbRemoveOverviewTask::<C> {
-        session: session.clone(),
+    let task = EvbRemoveOverviewTask::<C::Context> {
         ctx: ctx.clone(),
         file: path.into_inner(),
         params: params.into_inner(),
     }
     .boxed();
 
-    let task_id = ctx.tasks(session).schedule_task(task, None).await?;
+    let task_id = ctx.tasks().schedule_task(task, None).await?;
 
     Ok(web::Json(TaskResponse::new(task_id)))
 }
 
 struct EvbRemoveOverviewTask<C: Context> {
-    session: C::Session,
     ctx: Arc<C>,
     file: PathBuf,
     params: RemoveOverviewParams,
@@ -530,10 +520,9 @@ impl<C: Context> Task<C::TaskContext> for EvbRemoveOverviewTask<C> {
         _ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let file = self.file.clone();
-        let session = self.session.clone();
         let force = self.params.force;
 
-        let response = with_netcdfcf_provider(self.ctx.as_ref(), &session, move |provider| {
+        let response = with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
             provider
                 .remove_overviews(&file, force)
                 .boxed_context(error::CannotRemoveOverviews)
@@ -578,11 +567,11 @@ mod tests {
 
     async fn send_test_request<C: SimpleContext>(
         req: test::TestRequest,
-        ctx: C,
+        app_ctx: C,
     ) -> ServiceResponse {
         let app = test::init_service({
             let app = App::new()
-                .app_data(web::Data::new(ctx))
+                .app_data(web::Data::new(app_ctx))
                 .wrap(
                     middleware::ErrorHandlers::default()
                         .handler(http::StatusCode::NOT_FOUND, render_404)
@@ -612,15 +601,17 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session = ctx.default_session_ref().await.clone();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = app_ctx.default_session_ref().await.clone();
 
         let session_id = session.id();
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        ctx.db(ctx.default_session_ref().await.clone())
+        ctx.db()
             .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
                 name: "test".to_string(),
                 path: test_data!("netcdf4d").to_path_buf(),
@@ -633,14 +624,14 @@ mod tests {
             .uri("/ebv/overviews/dataset_m.nc")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         let task_response =
             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-        let tasks = Arc::new(ctx.tasks(session));
+        let tasks = Arc::new(ctx.tasks());
 
         wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
 
@@ -672,7 +663,7 @@ mod tests {
             .uri("/ebv/overviews/dataset_m.nc")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
@@ -702,14 +693,16 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = InMemoryContext::test_default();
-        let session = ctx.default_session_ref().await.clone();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
 
         let session_id = session.id();
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        ctx.db(ctx.default_session_ref().await.clone())
+        ctx.db()
             .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
                 name: "test".to_string(),
                 path: test_data!("netcdf4d").to_path_buf(),
@@ -724,14 +717,14 @@ mod tests {
             .uri("/ebv/overviews/path%2Fto%2Fdataset.nc?force=true")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         let task_response =
             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-        let tasks = Arc::new(ctx.tasks(session));
+        let tasks = Arc::new(ctx.tasks());
 
         wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
 
@@ -756,14 +749,16 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = InMemoryContext::test_default();
-        let session = ctx.default_session_ref().await.clone();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
 
         let session_id = session.id();
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        ctx.db(ctx.default_session_ref().await.clone())
+        ctx.db()
             .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
                 name: "test".to_string(),
                 path: test_data!("netcdf4d").to_path_buf(),
@@ -776,14 +771,14 @@ mod tests {
             .uri("/ebv/overviews/foo%2Fbar.nc")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         let task_response =
             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-        let tasks = Arc::new(ctx.tasks(session));
+        let tasks = Arc::new(ctx.tasks());
         wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
 
         let status = tasks.get_task_status(task_response.task_id).await.unwrap();

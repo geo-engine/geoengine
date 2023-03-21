@@ -71,12 +71,12 @@ async fn start<C>(
     bind_address: SocketAddr,
     api_prefix: String,
     version_api: bool,
-    ctx: C,
+    app_ctx: C,
 ) -> Result<(), Error>
 where
     C: SimpleContext,
 {
-    let wrapped_ctx = web::Data::new(ctx);
+    let wrapped_ctx = web::Data::new(app_ctx);
 
     let openapi = ApiDoc::openapi();
 

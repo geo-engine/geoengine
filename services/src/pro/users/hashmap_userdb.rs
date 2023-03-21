@@ -308,7 +308,10 @@ impl UserDb for ProInMemoryDb {
     }
 
     async fn quota_used_by_user(&self, user: &UserId) -> Result<u64> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
+        ensure!(
+            self.session.user.id == *user || self.session.is_admin(),
+            error::PermissionDenied
+        );
 
         Ok(self
             .backend
@@ -476,11 +479,15 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
 
     use super::*;
-    use crate::{contexts::Context, pro::util::tests::admin_login, util::user_input::UserInput};
+    use crate::{
+        contexts::{ApplicationContext, Context},
+        pro::util::tests::admin_login,
+        util::user_input::UserInput,
+    };
 
     #[tokio::test]
     async fn register() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let user_registration = UserRegistration {
             email: "foo@example.com".into(),
@@ -490,12 +497,12 @@ mod tests {
         .validated()
         .unwrap();
 
-        assert!(ctx.register_user(user_registration).await.is_ok());
+        assert!(app_ctx.register_user(user_registration).await.is_ok());
     }
 
     #[tokio::test]
     async fn login() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let user_registration = UserRegistration {
             email: "foo@example.com".into(),
@@ -505,19 +512,19 @@ mod tests {
         .validated()
         .unwrap();
 
-        assert!(ctx.register_user(user_registration).await.is_ok());
+        assert!(app_ctx.register_user(user_registration).await.is_ok());
 
         let user_credentials = UserCredentials {
             email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
-        assert!(ctx.login(user_credentials).await.is_ok());
+        assert!(app_ctx.login(user_credentials).await.is_ok());
     }
 
     #[tokio::test]
     async fn logout() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let user_registration = UserRegistration {
             email: "foo@example.com".into(),
@@ -527,23 +534,23 @@ mod tests {
         .validated()
         .unwrap();
 
-        assert!(ctx.register_user(user_registration).await.is_ok());
+        assert!(app_ctx.register_user(user_registration).await.is_ok());
 
         let user_credentials = UserCredentials {
             email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
-        let session = ctx.login(user_credentials).await.unwrap();
+        let session = app_ctx.login(user_credentials).await.unwrap();
 
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session).db();
 
         assert!(db.logout().await.is_ok());
     }
 
     #[tokio::test]
     async fn session() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let user_registration = UserRegistration {
             email: "foo@example.com".into(),
@@ -553,21 +560,21 @@ mod tests {
         .validated()
         .unwrap();
 
-        assert!(ctx.register_user(user_registration).await.is_ok());
+        assert!(app_ctx.register_user(user_registration).await.is_ok());
 
         let user_credentials = UserCredentials {
             email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
-        let session = ctx.login(user_credentials).await.unwrap();
+        let session = app_ctx.login(user_credentials).await.unwrap();
 
-        assert!(ctx.user_session_by_id(session.id).await.is_ok());
+        assert!(app_ctx.user_session_by_id(session.id).await.is_ok());
     }
 
     #[tokio::test]
     async fn login_external() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let external_user_claims = ExternalUserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
@@ -575,13 +582,13 @@ mod tests {
             real_name: "Foo Bar".into(),
         };
         let duration = Duration::minutes(30);
-        let login_result = ctx
+        let login_result = app_ctx
             .login_external(external_user_claims.clone(), duration)
             .await;
         assert!(login_result.is_ok());
 
         let session_1 = login_result.unwrap();
-        let db = ctx.db(session_1.clone());
+        let db = app_ctx.session_context(session_1.clone()).db();
 
         let previous_user_id = session_1.user.id; //TODO: Not a deterministic test.
 
@@ -593,21 +600,21 @@ mod tests {
         let expected_duration = session_1.created + duration;
         assert_eq!(session_1.valid_until, expected_duration);
 
-        assert!(ctx.user_session_by_id(session_1.id).await.is_ok());
+        assert!(app_ctx.user_session_by_id(session_1.id).await.is_ok());
 
         assert!(db.logout().await.is_ok());
 
-        assert!(ctx.user_session_by_id(session_1.id).await.is_err());
+        assert!(app_ctx.user_session_by_id(session_1.id).await.is_err());
 
         let duration = Duration::minutes(10);
-        let login_result = ctx
+        let login_result = app_ctx
             .login_external(external_user_claims.clone(), duration)
             .await;
         assert!(login_result.is_ok());
 
         let session_2 = login_result.unwrap();
 
-        let db2 = ctx.db(session_2.clone());
+        let db2 = app_ctx.session_context(session_2.clone()).db();
 
         assert!(session_2.user.email.is_some()); //TODO: Technically, user details could change for each login. For simplicity, this is not covered yet.
         assert_eq!(session_2.user.email.unwrap(), "foo@bar.de");
@@ -618,19 +625,19 @@ mod tests {
         let expected_duration = session_2.created + duration;
         assert_eq!(session_2.valid_until, expected_duration);
 
-        assert!(ctx.user_session_by_id(session_2.id).await.is_ok());
+        assert!(app_ctx.user_session_by_id(session_2.id).await.is_ok());
 
         assert!(db2.logout().await.is_ok());
 
-        assert!(ctx.user_session_by_id(session_2.id).await.is_err());
+        assert!(app_ctx.user_session_by_id(session_2.id).await.is_err());
     }
 
     #[tokio::test]
     async fn it_handles_user_roles() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let admin_session = admin_login(&ctx).await;
-        let user_id = ctx
+        let admin_session = admin_login(&app_ctx).await;
+        let user_id = app_ctx
             .register_user(
                 UserRegistration {
                     email: "foo@example.com".to_string(),
@@ -643,12 +650,12 @@ mod tests {
             .await
             .unwrap();
 
-        let admin_db = ctx.db(admin_session.clone());
+        let admin_db = app_ctx.session_context(admin_session.clone()).db();
 
         // create a new role
         let role_id = admin_db.add_role("foo").await.unwrap();
 
-        let user_session = ctx
+        let user_session = app_ctx
             .login(UserCredentials {
                 email: "foo@example.com".to_string(),
                 password: "secret123".to_string(),
@@ -663,7 +670,7 @@ mod tests {
         // we assign the role to the user
         admin_db.assign_role(&role_id, &user_id).await.unwrap();
 
-        let user_session = ctx
+        let user_session = app_ctx
             .login(UserCredentials {
                 email: "foo@example.com".to_string(),
                 password: "secret123".to_string(),
@@ -677,7 +684,7 @@ mod tests {
         // we revoke it
         admin_db.revoke_role(&role_id, &user_id).await.unwrap();
 
-        let user_session = ctx
+        let user_session = app_ctx
             .login(UserCredentials {
                 email: "foo@example.com".to_string(),
                 password: "secret123".to_string(),
@@ -694,7 +701,7 @@ mod tests {
 
         admin_db.remove_role(&role_id).await.unwrap();
 
-        let user_session = ctx
+        let user_session = app_ctx
             .login(UserCredentials {
                 email: "foo@example.com".to_string(),
                 password: "secret123".to_string(),
