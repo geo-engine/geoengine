@@ -26,10 +26,9 @@ use crate::{
 use crate::{contexts::Context, datasets::storage::AutoCreateDataset};
 use actix_web::http::StatusCode;
 use actix_web::{web, FromRequest, HttpResponse, Responder};
-use gdal::{vector::OGRFieldType, DatasetOptions};
 use gdal::{
-    vector::{Layer, LayerAccess},
-    Dataset,
+    vector::{Layer, LayerAccess, OGRFieldType},
+    Dataset, DatasetOptions,
 };
 use geoengine_datatypes::{
     collections::VectorDataType,

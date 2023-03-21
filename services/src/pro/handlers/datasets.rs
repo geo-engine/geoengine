@@ -93,8 +93,8 @@ async fn create_system_dataset<C: ProContext>(
 where
     C::GeoEngineDB: ProGeoEngineDb,
 {
-    let volumes = get_config_element::<Data>()?
-        .context(datasets::CannotAccessConfig)
+    let volumes = get_config_element::<Data>()
+        .context(datasets::CannotAccessConfig)?
         .volumes;
     let volume_path = volumes
         .get(&volume_name)
@@ -111,7 +111,13 @@ where
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let dataset_id = db
-        .add_dataset(definition.properties.validated()?, meta_data)
+        .add_dataset(
+            definition
+                .properties
+                .validated()
+                .context(datasets::JsonValidationFailed)?,
+            meta_data,
+        )
         .await
         .context(datasets::DatabaseAccess)?;
 
