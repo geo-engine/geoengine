@@ -373,6 +373,7 @@ mod tests {
                 AddLayerCollection {
                     name: "admin collection".to_string(),
                     description: String::new(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -434,6 +435,7 @@ mod tests {
                 AddLayerCollection {
                     name: "user layer".to_string(),
                     description: String::new(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -458,6 +460,7 @@ mod tests {
             AddLayerCollection {
                 name: "user layer".to_string(),
                 description: String::new(),
+                properties: Default::default(),
             }
             .validated()
             .unwrap(),
@@ -490,6 +493,7 @@ mod tests {
                 AddLayerCollection {
                     name: "user layer".to_string(),
                     description: String::new(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),

@@ -246,6 +246,7 @@ impl EbvPortalDataProvider {
                     },
                     name: c.name,
                     description: String::new(),
+                    properties: Default::default(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -294,6 +295,7 @@ impl EbvPortalDataProvider {
                     },
                     name: ebv,
                     description: String::new(),
+                    properties: Default::default(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -338,6 +340,7 @@ impl EbvPortalDataProvider {
                     },
                     name: d.name.clone(),
                     description: d.description,
+                    properties: Default::default(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -402,6 +405,7 @@ impl EbvPortalDataProvider {
                     },
                     name: g.title,
                     description: g.description,
+                    properties: Default::default(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -508,6 +512,7 @@ impl EbvPortalDataProvider {
                         },
                         name: group.title.clone(),
                         description: group.description.clone(),
+                        properties: Default::default(),
                     }))
                 })
                 .collect::<Result<Vec<CollectionItem>>>()?
@@ -861,6 +866,7 @@ mod tests {
                         },
                         name: "Community composition".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -874,6 +880,7 @@ mod tests {
                         },
                         name: "Ecosystem functioning".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -885,6 +892,7 @@ mod tests {
                         },
                         name: "Ecosystem structure".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -896,6 +904,7 @@ mod tests {
                         },
                         name: "Species populations".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     })
                 ],
                 entry_label: Some("EBV Class".to_string()),
@@ -995,6 +1004,7 @@ mod tests {
                         },
                         name: "Ecosystem phenology".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -1008,6 +1018,7 @@ mod tests {
                         },
                         name: "Primary productivity".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     })
                 ],
                 entry_label: Some("EBV Name".to_string()),
@@ -1153,7 +1164,8 @@ mod tests {
                         collection_id: LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology/10".into()) 
                     },
                     name: "Vegetation Phenology in Finland".to_string(),
-                    description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(), 
+                    description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(),
+                    properties: Default::default(),
                 })],
             entry_label: Some("EBV Dataset".to_string()),
             properties: vec![],
@@ -1396,6 +1408,7 @@ mod tests {
                     },
                     name: "Random metric 1".to_string(),
                     description: "Randomly created data".to_string(),
+                    properties: Default::default(),
                 }),
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
@@ -1404,6 +1417,7 @@ mod tests {
                     },
                     name: "Random metric 2".to_string(),
                     description: "Randomly created data".to_string(),
+                    properties: Default::default(),
                 })],
                 entry_label: Some("Metric".to_string()),
                 properties: vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()).into(),
