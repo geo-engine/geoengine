@@ -93,6 +93,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Layer listings now contain a properties list. Layers contain a metadata map.
+
+  - https://github.com/geo-engine/geoengine/pull/761
+
 - The Interpolation operator's input resolution can now be set to `native` to take the best available resolution, if it is known.
 
   - https://github.com/geo-engine/geoengine/pull/618
