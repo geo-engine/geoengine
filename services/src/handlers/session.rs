@@ -238,8 +238,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "AnonymousAccessDisabled",
-            "Anonymous access is disabled, please log in",
+            "Unauthorized",
+            "Authorization error: Anonymous access is disabled, please log in",
         )
         .await;
     }
