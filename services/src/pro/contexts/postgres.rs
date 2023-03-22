@@ -299,12 +299,11 @@ where
                             bounds "STRectangle" NOT NULL,
                             time_step "TimeStep" NOT NULL,
                             changed timestamp with time zone,
-                            author_user_id UUID REFERENCES users(id) NOT NULL,
-                            latest boolean
+                            author_user_id UUID REFERENCES users(id) NOT NULL
                         );
 
-                        CREATE INDEX project_version_latest_idx 
-                        ON project_versions (project_id, latest DESC, changed DESC, author_user_id DESC);
+                        CREATE INDEX project_version_idx 
+                        ON project_versions (project_id, changed DESC, author_user_id DESC);
 
                         CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
                         
@@ -735,7 +734,7 @@ mod tests {
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
     };
-    use crate::pro::util::tests::admin_login;
+    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::projects::{
         CreateProject, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
         ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
@@ -747,7 +746,7 @@ mod tests {
     use crate::workflows::workflow::Workflow;
     use bb8_postgres::bb8::ManageConnection;
     use bb8_postgres::tokio_postgres::{self, NoTls};
-    use futures::Future;
+    use futures::{join, Future};
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
@@ -770,6 +769,7 @@ mod tests {
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use openidconnect::SubjectIdentifier;
     use rand::RngCore;
+    use serde_json::json;
     use tokio::runtime::Handle;
 
     /// Setup database schema and return its name.
@@ -3302,6 +3302,317 @@ let ctx = app_ctx.session_context(session);
                 .unwrap();
 
             assert!(!user_session.roles.contains(&role_id));
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_updates_project_layer_symbology() {
+        with_temp_context(|app_ctx, _| async move {
+            let session = app_ctx.create_anonymous_session().await.unwrap();
+
+            let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
+
+            let db = app_ctx.session_context(session.clone()).db();
+
+            let create_project: CreateProject = serde_json::from_value(json!({
+                "name": "Default",
+                "description": "Default project",
+                "bounds": {
+                    "boundingBox": {
+                        "lowerLeftCoordinate": {
+                            "x": -180,
+                            "y": -90
+                        },
+                        "upperRightCoordinate": {
+                            "x": 180,
+                            "y": 90
+                        }
+                    },
+                    "spatialReference": "EPSG:4326",
+                    "timeInterval": {
+                        "start": 1_396_353_600_000i64,
+                        "end": 1_396_353_600_000i64
+                    }
+                },
+                "timeStep": {
+                    "step": 1,
+                    "granularity": "months"
+                }
+            }))
+            .unwrap();
+
+            let project_id = db
+                .create_project(create_project.validated().unwrap())
+                .await
+                .unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 0, 255]
+                            }, {
+                                "value": 255,
+                                "color": [255, 255, 255, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            db.update_project(update.validated().unwrap())
+                .await
+                .unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 4, 255]
+                            }, {
+                                "value": 17.866_666_666_666_667,
+                                "color": [11, 9, 36, 255]
+                            }, {
+                                "value": 34.733_333_333_333_334,
+                                "color": [32, 17, 75, 255]
+                            }, {
+                                "value": 51.6,
+                                "color": [59, 15, 112, 255]
+                            }, {
+                                "value": 68.466_666_666_666_67,
+                                "color": [87, 21, 126, 255]
+                            }, {
+                                "value": 85.333_333_333_333_33,
+                                "color": [114, 31, 129, 255]
+                            }, {
+                                "value": 102.199_999_999_999_99,
+                                "color": [140, 41, 129, 255]
+                            }, {
+                                "value": 119.066_666_666_666_65,
+                                "color": [168, 50, 125, 255]
+                            }, {
+                                "value": 135.933_333_333_333_34,
+                                "color": [196, 60, 117, 255]
+                            }, {
+                                "value": 152.799_999_999_999_98,
+                                "color": [222, 73, 104, 255]
+                            }, {
+                                "value": 169.666_666_666_666_66,
+                                "color": [241, 96, 93, 255]
+                            }, {
+                                "value": 186.533_333_333_333_33,
+                                "color": [250, 127, 94, 255]
+                            }, {
+                                "value": 203.399_999_999_999_98,
+                                "color": [254, 159, 109, 255]
+                            }, {
+                                "value": 220.266_666_666_666_65,
+                                "color": [254, 191, 132, 255]
+                            }, {
+                                "value": 237.133_333_333_333_3,
+                                "color": [253, 222, 160, 255]
+                            }, {
+                                "value": 254,
+                                "color": [252, 253, 191, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            db.update_project(update.validated().unwrap())
+                .await
+                .unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 4, 255]
+                            }, {
+                                "value": 17.866_666_666_666_667,
+                                "color": [11, 9, 36, 255]
+                            }, {
+                                "value": 34.733_333_333_333_334,
+                                "color": [32, 17, 75, 255]
+                            }, {
+                                "value": 51.6,
+                                "color": [59, 15, 112, 255]
+                            }, {
+                                "value": 68.466_666_666_666_67,
+                                "color": [87, 21, 126, 255]
+                            }, {
+                                "value": 85.333_333_333_333_33,
+                                "color": [114, 31, 129, 255]
+                            }, {
+                                "value": 102.199_999_999_999_99,
+                                "color": [140, 41, 129, 255]
+                            }, {
+                                "value": 119.066_666_666_666_65,
+                                "color": [168, 50, 125, 255]
+                            }, {
+                                "value": 135.933_333_333_333_34,
+                                "color": [196, 60, 117, 255]
+                            }, {
+                                "value": 152.799_999_999_999_98,
+                                "color": [222, 73, 104, 255]
+                            }, {
+                                "value": 169.666_666_666_666_66,
+                                "color": [241, 96, 93, 255]
+                            }, {
+                                "value": 186.533_333_333_333_33,
+                                "color": [250, 127, 94, 255]
+                            }, {
+                                "value": 203.399_999_999_999_98,
+                                "color": [254, 159, 109, 255]
+                            }, {
+                                "value": 220.266_666_666_666_65,
+                                "color": [254, 191, 132, 255]
+                            }, {
+                                "value": 237.133_333_333_333_3,
+                                "color": [253, 222, 160, 255]
+                            }, {
+                                "value": 254,
+                                "color": [252, 253, 191, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            db.update_project(update.validated().unwrap())
+                .await
+                .unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 4, 255]
+                            }, {
+                                "value": 17.933_333_333_333_334,
+                                "color": [11, 9, 36, 255]
+                            }, {
+                                "value": 34.866_666_666_666_67,
+                                "color": [32, 17, 75, 255]
+                            }, {
+                                "value": 51.800_000_000_000_004,
+                                "color": [59, 15, 112, 255]
+                            }, {
+                                "value": 68.733_333_333_333_33,
+                                "color": [87, 21, 126, 255]
+                            }, {
+                                "value": 85.666_666_666_666_66,
+                                "color": [114, 31, 129, 255]
+                            }, {
+                                "value": 102.6,
+                                "color": [140, 41, 129, 255]
+                            }, {
+                                "value": 119.533_333_333_333_32,
+                                "color": [168, 50, 125, 255]
+                            }, {
+                                "value": 136.466_666_666_666_67,
+                                "color": [196, 60, 117, 255]
+                            }, {
+                                "value": 153.4,
+                                "color": [222, 73, 104, 255]
+                            }, {
+                                "value": 170.333_333_333_333_31,
+                                "color": [241, 96, 93, 255]
+                            }, {
+                                "value": 187.266_666_666_666_65,
+                                "color": [250, 127, 94, 255]
+                            }, {
+                                "value": 204.2,
+                                "color": [254, 159, 109, 255]
+                            }, {
+                                "value": 221.133_333_333_333_33,
+                                "color": [254, 191, 132, 255]
+                            }, {
+                                "value": 238.066_666_666_666_63,
+                                "color": [253, 222, 160, 255]
+                            }, {
+                                "value": 255,
+                                "color": [252, 253, 191, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            let update = update.validated().unwrap();
+
+            // run two updates concurrently
+            let (r0, r1) = join!(db.update_project(update.clone()), db.update_project(update));
+
+            assert!(r0.is_ok());
+            assert!(r1.is_ok());
         })
         .await;
     }
