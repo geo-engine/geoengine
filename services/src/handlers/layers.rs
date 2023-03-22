@@ -150,6 +150,7 @@ async fn get_layer_providers<C: Context>(
             },
             name: "Datasets".to_string(),
             description: "Basic Layers for all Datasets".to_string(),
+            properties: Default::default(),
         }));
 
         options.limit -= 1;
@@ -164,6 +165,7 @@ async fn get_layer_providers<C: Context>(
             },
             name: "Layers".to_string(),
             description: "All available Geo Engine layers".to_string(),
+            properties: Default::default(),
         }));
 
         options.limit -= 1;
@@ -206,6 +208,7 @@ async fn get_layer_providers<C: Context>(
             },
             name: provider_listing.name,
             description: provider_listing.description,
+            properties: Default::default(),
         }));
     }
     let root_collection = LayerCollection {
@@ -1006,6 +1009,8 @@ mod tests {
                         .into(),
                     },
                     symbology: None,
+                    metadata: Default::default(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -1020,6 +1025,7 @@ mod tests {
                 AddLayerCollection {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -1102,6 +1108,7 @@ mod tests {
                 AddLayerCollection {
                     name: "Foo".to_string(),
                     description: "Foo".to_string(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -1116,6 +1123,7 @@ mod tests {
                 AddLayerCollection {
                     name: "Bar".to_string(),
                     description: "Bar".to_string(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -1164,6 +1172,7 @@ mod tests {
                 AddLayerCollection {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -1188,6 +1197,8 @@ mod tests {
                         .into(),
                     },
                     symbology: None,
+                    metadata: Default::default(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -1236,6 +1247,7 @@ mod tests {
                 AddLayerCollection {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -1288,6 +1300,7 @@ mod tests {
                 AddLayerCollection {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -1448,6 +1461,7 @@ mod tests {
                     AddLayerCollection {
                         name: self.collection_name.clone(),
                         description: self.collection_description.clone(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -1464,6 +1478,8 @@ mod tests {
                         description: self.layer_description.clone(),
                         workflow: self.workflow.clone(),
                         symbology: None,
+                        metadata: Default::default(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),

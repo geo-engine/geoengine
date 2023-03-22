@@ -373,32 +373,42 @@ where
                             'Read', 'Owner'
                         );  
 
+                        CREATE TYPE "PropertyType" AS (
+                            key text,
+                            value text
+                        );
+
                         CREATE TABLE layer_collections (
                             id UUID PRIMARY KEY,
                             name text NOT NULL,
-                            description text NOT NULL
+                            description text NOT NULL,
+                            properties "PropertyType"[] NOT NULL
                         );
 
                         -- insert the root layer collection
                         INSERT INTO layer_collections (
                             id,
                             name,
-                            description
+                            description,
+                            properties
                         ) VALUES (
                             {root_layer_collection_id},
                             'Layers',
-                            'All available Geo Engine layers'
+                            'All available Geo Engine layers',
+                            ARRAY[]::"PropertyType"[]
                         );
 
                         -- insert the unsorted layer collection
                         INSERT INTO layer_collections (
                             id,
                             name,
-                            description
+                            description,
+                            properties
                         ) VALUES (
                             {unsorted_layer_collection_id},
                             'Unsorted',
-                            'Unsorted Layers'
+                            'Unsorted Layers',
+                            ARRAY[]::"PropertyType"[]
                         );
     
 
@@ -407,7 +417,9 @@ where
                             name text NOT NULL,
                             description text NOT NULL,
                             workflow json NOT NULL,
-                            symbology json 
+                            symbology json,
+                            properties "PropertyType"[] NOT NULL,
+                            metadata json NOT NULL
                         );
 
                         CREATE TABLE collection_layers (
@@ -664,7 +676,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::str::FromStr;
 
     use super::*;
@@ -1994,6 +2005,8 @@ mod tests {
                         description: "Layer 1".to_string(),
                         symbology: None,
                         workflow: workflow.clone(),
+                        metadata: [("meta".to_string(), "datum".to_string())].into(),
+                        properties: vec![("proper".to_string(), "tee".to_string()).into()],
                     }
                     .validated()
                     .unwrap(),
@@ -2013,8 +2026,8 @@ mod tests {
                     description: "Layer 1".to_string(),
                     symbology: None,
                     workflow: workflow.clone(),
-                    properties: vec![],
-                    metadata: HashMap::new(),
+                    metadata: [("meta".to_string(), "datum".to_string())].into(),
+                    properties: vec![("proper".to_string(), "tee".to_string()).into()],
                 }
             );
 
@@ -2023,6 +2036,7 @@ mod tests {
                     AddLayerCollection {
                         name: "Collection1".to_string(),
                         description: "Collection 1".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2038,6 +2052,8 @@ mod tests {
                         description: "Layer 2".to_string(),
                         symbology: None,
                         workflow: workflow.clone(),
+                        metadata: Default::default(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2051,6 +2067,7 @@ mod tests {
                     AddLayerCollection {
                         name: "Collection2".to_string(),
                         description: "Collection 2".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2094,6 +2111,7 @@ mod tests {
                             },
                             name: "Collection1".to_string(),
                             description: "Collection 1".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -2104,6 +2122,7 @@ mod tests {
                             },
                             name: "Unsorted".to_string(),
                             description: "Unsorted Layers".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
@@ -2112,7 +2131,7 @@ mod tests {
                             },
                             name: "Layer1".to_string(),
                             description: "Layer 1".to_string(),
-                            properties: vec![],
+                            properties: vec![("proper".to_string(), "tee".to_string()).into()],
                         })
                     ],
                     entry_label: None,
@@ -2150,6 +2169,7 @@ mod tests {
                             },
                             name: "Collection2".to_string(),
                             description: "Collection 2".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
@@ -2353,6 +2373,8 @@ mod tests {
                     ),
                 },
                 symbology: None,
+                metadata: Default::default(),
+                properties: Default::default(),
             }
             .validated()
             .unwrap();
@@ -2362,6 +2384,7 @@ mod tests {
             let collection = AddLayerCollection {
                 name: "top collection".to_string(),
                 description: "description".to_string(),
+                properties: Default::default(),
             }
             .validated()
             .unwrap();
@@ -2376,6 +2399,7 @@ mod tests {
             let collection = AddLayerCollection {
                 name: "empty collection".to_string(),
                 description: "description".to_string(),
+                properties: Default::default(),
             }
             .validated()
             .unwrap();
@@ -2415,6 +2439,7 @@ mod tests {
                             },
                             name: "empty collection".to_string(),
                             description: "description".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
@@ -2525,6 +2550,7 @@ mod tests {
                     AddLayerCollection {
                         name: "mid collection".to_string(),
                         description: "description".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2538,6 +2564,7 @@ mod tests {
                     AddLayerCollection {
                         name: "bottom collection".to_string(),
                         description: "description".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2562,6 +2589,8 @@ mod tests {
                             ),
                         },
                         symbology: None,
+                        metadata: Default::default(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2620,6 +2649,7 @@ mod tests {
                     AddLayerCollection {
                         name: "top collection".to_string(),
                         description: "description".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2644,6 +2674,8 @@ mod tests {
                             ),
                         },
                         symbology: None,
+                        metadata: Default::default(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2668,6 +2700,8 @@ mod tests {
                             ),
                         },
                         symbology: None,
+                        metadata: Default::default(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2936,6 +2970,7 @@ mod tests {
                     AddLayerCollection {
                         name: "top collection".to_string(),
                         description: "description".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -3002,6 +3037,7 @@ mod tests {
                     AddLayerCollection {
                         name: "admin collection".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -3063,6 +3099,7 @@ mod tests {
                     AddLayerCollection {
                         name: "user layer".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -3087,6 +3124,7 @@ mod tests {
                 AddLayerCollection {
                     name: "user layer".to_string(),
                     description: String::new(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -3119,6 +3157,7 @@ mod tests {
                     AddLayerCollection {
                         name: "user layer".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),

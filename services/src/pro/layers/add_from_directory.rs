@@ -34,6 +34,8 @@ pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, fi
                 description: def.description,
                 workflow: def.workflow,
                 symbology: def.symbology,
+                metadata: def.metadata,
+                properties: def.properties,
             }
             .validated()?,
             &LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
@@ -98,6 +100,7 @@ pub async fn add_layer_collections_from_directory<
         let collection = AddLayerCollection {
             name: def.name.clone(),
             description: def.description.clone(),
+            properties: Default::default(),
         }
         .validated()?;
 

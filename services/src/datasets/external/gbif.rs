@@ -232,6 +232,7 @@ impl GbifDataProvider {
                     },
                     name,
                     description: String::new(),
+                    properties: Default::default(),
                 })
             })
             .collect::<Vec<_>>();
@@ -250,6 +251,7 @@ impl GbifDataProvider {
                 },
                 name: "Select ".to_string() + &level_name,
                 description: "Refine the current filter".to_string(),
+                properties: Default::default(),
             }));
         }
         if !GbifDataProvider::LEVELS[5..].contains(&level_name.as_str()) {
@@ -260,6 +262,7 @@ impl GbifDataProvider {
                 },
                 name: "Family datasets".to_string(),
                 description: "Apply the current filter".to_string(),
+                properties: Default::default(),
             }));
         }
         if !GbifDataProvider::LEVELS[6..].contains(&level_name.as_str()) {
@@ -270,6 +273,7 @@ impl GbifDataProvider {
                 },
                 name: "Genus datasets".to_string(),
                 description: "Apply the current filter".to_string(),
+                properties: Default::default(),
             }));
         }
         items.push(CollectionItem::Collection(LayerCollectionListing {
@@ -279,6 +283,7 @@ impl GbifDataProvider {
             },
             name: "Species datasets".to_string(),
             description: "Apply the current filter".to_string(),
+            properties: Default::default(),
         }));
 
         items
@@ -1077,6 +1082,7 @@ mod tests {
                             },
                             name: "Select kingdom".to_string(),
                             description: "Refine the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1085,6 +1091,7 @@ mod tests {
                             },
                             name: "Family datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1093,6 +1100,7 @@ mod tests {
                             },
                             name: "Genus datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1101,6 +1109,7 @@ mod tests {
                             },
                             name: "Species datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         })
                     ],
                     entry_label: None,
@@ -1157,6 +1166,7 @@ mod tests {
                             },
                             name: "Select class".to_string(),
                             description: "Refine the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1167,6 +1177,7 @@ mod tests {
                             },
                             name: "Family datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1177,6 +1188,7 @@ mod tests {
                             },
                             name: "Genus datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1187,6 +1199,7 @@ mod tests {
                             },
                             name: "Species datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         })
                     ],
                     entry_label: None,
@@ -1424,6 +1437,7 @@ mod tests {
                         },
                         name: "Animalia".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     })],
                     entry_label: None,
                     properties: vec![],

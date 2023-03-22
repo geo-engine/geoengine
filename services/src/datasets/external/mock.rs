@@ -162,6 +162,7 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                         },
                         name: c.name.clone(),
                         description: c.description.clone(),
+                        properties: Default::default(),
                     })
                 })
                 .chain(collection.layers.iter().map(|l| {
