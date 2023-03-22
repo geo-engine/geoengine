@@ -928,7 +928,9 @@ mod tests {
     use super::*;
     use crate::api::model::datatypes::DatasetId;
     use crate::api::model::services::DatasetDefinition;
-    use crate::contexts::{ApplicationContext, InMemoryContext, Session, SessionId, SimpleContext};
+    use crate::contexts::{
+        ApplicationContext, InMemoryContext, Session, SessionId, SimpleApplicationContext,
+    };
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
     use crate::error::Result;
@@ -1113,7 +1115,7 @@ mod tests {
         Ok(())
     }
 
-    async fn upload_ne_10m_ports_files<C: SimpleContext>(
+    async fn upload_ne_10m_ports_files<C: SimpleApplicationContext>(
         app_ctx: C,
         session_id: SessionId,
     ) -> Result<UploadId> {
@@ -1143,7 +1145,7 @@ mod tests {
         Ok(upload.id)
     }
 
-    async fn construct_dataset_from_upload<C: SimpleContext>(
+    async fn construct_dataset_from_upload<C: SimpleApplicationContext>(
         app_ctx: C,
         upload_id: UploadId,
         session_id: SessionId,

@@ -35,7 +35,7 @@ use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 pub use in_memory::{InMemoryContext, InMemoryDb, InMemorySessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
-pub use simple_context::SimpleContext;
+pub use simple_context::SimpleApplicationContext;
 
 pub type Db<T> = Arc<RwLock<T>>;
 

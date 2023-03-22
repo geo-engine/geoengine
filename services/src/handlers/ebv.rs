@@ -553,7 +553,7 @@ mod tests {
     use super::*;
 
     use crate::{
-        contexts::{InMemoryContext, Session, SimpleContext},
+        contexts::{InMemoryContext, Session, SimpleApplicationContext},
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
         tasks::util::test::wait_for_task_to_finish,
         util::server::{configure_extractors, render_404, render_405},
@@ -565,7 +565,7 @@ mod tests {
     use serde_json::json;
     use std::path::Path;
 
-    async fn send_test_request<C: SimpleContext>(
+    async fn send_test_request<C: SimpleApplicationContext>(
         req: test::TestRequest,
         app_ctx: C,
     ) -> ServiceResponse {

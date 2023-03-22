@@ -657,7 +657,7 @@ pub enum WorkflowApiError {
 mod tests {
 
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::handlers::ErrorResponse;
     use crate::tasks::util::test::wait_for_task_to_finish;

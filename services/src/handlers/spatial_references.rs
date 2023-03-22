@@ -270,7 +270,7 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
 mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session};
-    use crate::contexts::{SessionContext, SimpleContext};
+    use crate::contexts::{SessionContext, SimpleApplicationContext};
     use crate::util::tests::send_test_request;
     use actix_web;
     use actix_web::http::header;

@@ -1,5 +1,5 @@
 use crate::{
-    contexts::{ApplicationContext, SimpleContext},
+    contexts::{ApplicationContext, SimpleApplicationContext},
     error::{self, Result},
     projects::{ProjectId, STRectangle},
     util::config,
@@ -8,7 +8,7 @@ use actix_web::{web, HttpResponse, Responder};
 
 pub(crate) fn init_session_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: SimpleContext,
+    C: SimpleApplicationContext,
 {
     cfg.service(web::resource("/anonymous").route(web::post().to(anonymous_handler::<C>)))
         .service(
@@ -37,7 +37,9 @@ where
         )
     )
 )]
-async fn anonymous_handler<C: SimpleContext>(app_ctx: web::Data<C>) -> Result<impl Responder> {
+async fn anonymous_handler<C: SimpleApplicationContext>(
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder> {
     if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
         return Err(error::Error::Authorization {
             source: Box::new(error::Error::AnonymousAccessDisabled),
@@ -86,7 +88,7 @@ pub(crate) async fn session_handler<C: ApplicationContext>(session: C::Session) 
         ("session_token" = [])
     )
 )]
-async fn session_project_handler<C: SimpleContext>(
+async fn session_project_handler<C: SimpleApplicationContext>(
     project: web::Path<ProjectId>,
     _session: C::Session,
     app_ctx: web::Data<C>,
@@ -109,7 +111,7 @@ async fn session_project_handler<C: SimpleContext>(
         ("session_token" = [])
     )
 )]
-async fn session_view_handler<C: SimpleContext>(
+async fn session_view_handler<C: SimpleApplicationContext>(
     _session: C::Session,
     app_ctx: web::Data<C>,
     view: web::Json<STRectangle>,

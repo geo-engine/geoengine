@@ -9,7 +9,7 @@ use crate::api::model::operators::RasterResultDescriptor;
 use crate::api::model::services::AddDataset;
 use crate::contexts::ApplicationContext;
 use crate::contexts::InMemorySessionContext;
-use crate::contexts::SimpleContext;
+use crate::contexts::SimpleApplicationContext;
 use crate::datasets::listing::Provenance;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
@@ -45,7 +45,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_project_helper<C: SimpleContext>(app_ctx: &C) -> ProjectId {
+pub async fn create_project_helper<C: SimpleApplicationContext>(app_ctx: &C) -> ProjectId {
     let project = app_ctx
         .default_session_context()
         .await
@@ -304,7 +304,7 @@ where
     check_allowed_http_methods2(test_helper, allowed_methods, |res| res)
 }
 
-pub async fn send_test_request<C: SimpleContext>(
+pub async fn send_test_request<C: SimpleApplicationContext>(
     req: test::TestRequest,
     app_ctx: C,
 ) -> ServiceResponse {

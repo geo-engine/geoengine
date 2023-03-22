@@ -166,7 +166,7 @@ mod tests {
 
     use crate::util::tests::read_body_json;
     use crate::{
-        contexts::{InMemoryContext, Session, SimpleContext},
+        contexts::{InMemoryContext, Session, SimpleApplicationContext},
         tasks::{
             util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
         },

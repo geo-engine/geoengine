@@ -674,7 +674,7 @@ mod tests {
     use super::*;
 
     use crate::api::model::datatypes::{DataId, DatasetId};
-    use crate::contexts::{Session, SimpleContext};
+    use crate::contexts::{Session, SimpleApplicationContext};
     use crate::datasets::storage::{DatasetDefinition, DatasetStore};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};

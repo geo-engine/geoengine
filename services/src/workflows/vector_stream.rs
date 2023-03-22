@@ -189,7 +189,7 @@ fn send_result(
 mod tests {
     use super::*;
     use crate::{
-        contexts::{InMemoryContext, InMemorySessionContext, SimpleContext},
+        contexts::{InMemoryContext, InMemorySessionContext, SimpleApplicationContext},
         workflows::workflow::Workflow,
     };
     use actix_http::error::PayloadError;

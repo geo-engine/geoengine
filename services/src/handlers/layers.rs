@@ -899,7 +899,7 @@ mod tests {
 
     use std::sync::Arc;
 
-    use crate::contexts::{SessionId, SimpleContext, SimpleSession};
+    use crate::contexts::{SessionId, SimpleApplicationContext, SimpleSession};
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::handlers::ErrorResponse;
     use crate::layers::layer::Layer;
@@ -1474,7 +1474,7 @@ mod tests {
         }
     }
 
-    async fn send_dataset_creation_test_request<C: SimpleContext>(
+    async fn send_dataset_creation_test_request<C: SimpleApplicationContext>(
         app_ctx: &C,
         layer: Layer,
         session_id: SessionId,
@@ -1490,7 +1490,7 @@ mod tests {
         send_test_request(req, app_ctx.clone()).await
     }
 
-    async fn create_dataset_request_with_result_success<C: SimpleContext>(
+    async fn create_dataset_request_with_result_success<C: SimpleApplicationContext>(
         ctx: &C,
         layer: Layer,
         session: SimpleSession,

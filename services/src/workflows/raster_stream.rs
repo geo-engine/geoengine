@@ -166,7 +166,7 @@ fn send_result(
 mod tests {
     use super::*;
     use crate::{
-        contexts::{InMemoryContext, InMemorySessionContext, SimpleContext},
+        contexts::{InMemoryContext, InMemorySessionContext, SimpleApplicationContext},
         util::tests::register_ndvi_workflow_helper,
     };
     use actix_http::error::PayloadError;

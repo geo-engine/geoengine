@@ -215,7 +215,7 @@ pub(crate) async fn delete_project_handler<C: ApplicationContext>(
 mod tests {
     use super::*;
     use crate::api::model::datatypes::Colorizer;
-    use crate::contexts::{Session, SimpleContext, SimpleSession};
+    use crate::contexts::{Session, SimpleApplicationContext, SimpleSession};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,

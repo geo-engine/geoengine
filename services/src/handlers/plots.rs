@@ -205,7 +205,7 @@ pub struct WrappedPlotOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
     use crate::util::tests::{
         check_allowed_http_methods, read_body_json, read_body_string, send_test_request,
     };
