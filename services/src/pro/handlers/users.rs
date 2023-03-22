@@ -2,7 +2,7 @@ use crate::contexts::ApplicationContext;
 use crate::contexts::SessionContext;
 use crate::error;
 use crate::error::Result;
-use crate::pro::contexts::OidcRequestDbProvider;
+use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::permissions::RoleId;
 use crate::pro::users::RoleDb;
@@ -29,7 +29,7 @@ use utoipa::ToSchema;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+    C: ProApplicationContext,
     C::Session: FromRequest,
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -184,11 +184,7 @@ where
     )
 )]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn session_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
-    session: C::Session,
-) -> impl Responder
+pub(crate) async fn session_handler<C: ProApplicationContext>(session: C::Session) -> impl Responder
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -282,9 +278,7 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn session_view_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+pub(crate) async fn session_view_handler<C: ProApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     view: web::Json<STRectangle>,
@@ -324,9 +318,7 @@ pub struct Quota {
         ("session_token" = [])
     )
 )]
-pub(crate) async fn quota_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+pub(crate) async fn quota_handler<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<web::Json<Quota>>
@@ -404,9 +396,7 @@ pub struct UpdateQuota {
         ("session_token" = [])
     )
 )]
-pub(crate) async fn update_user_quota_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+pub(crate) async fn update_user_quota_handler<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
     user: web::Path<UserId>,
@@ -446,7 +436,7 @@ where
 /// # Errors
 ///
 /// This call fails if Open ID Connect is disabled, misconfigured or the Id Provider is unreachable.
-pub(crate) async fn oidc_init<C: ApplicationContext + OidcRequestDbProvider>(
+pub(crate) async fn oidc_init<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
@@ -504,7 +494,7 @@ where
 /// if a previous oidcLogin call with the same state was already successfully or unsuccessfully resolved,
 /// if the Open Id Connect configuration is invalid,
 /// or if the Id Provider is unreachable.
-pub(crate) async fn oidc_login<C: ApplicationContext + OidcRequestDbProvider + UserAuth>(
+pub(crate) async fn oidc_login<C: ProApplicationContext>(
     response: web::Json<AuthCodeResponse>,
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
@@ -545,9 +535,7 @@ pub struct AddRole {
         ("session_token" = [])
     )
 )]
-pub(crate) async fn add_role_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+pub(crate) async fn add_role_handler<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
     add_role: web::Json<AddRole>,
@@ -581,9 +569,7 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn remove_role_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+pub(crate) async fn remove_role_handler<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
     role: web::Path<RoleId>,
@@ -618,9 +604,7 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn assign_role_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+pub(crate) async fn assign_role_handler<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
     user: web::Path<(UserId, RoleId)>,
@@ -655,9 +639,7 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn revoke_role_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+pub(crate) async fn revoke_role_handler<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
     user: web::Path<(UserId, RoleId)>,
@@ -708,9 +690,7 @@ mod tests {
     use serde_json::json;
     use serial_test::serial;
 
-    async fn register_test_helper<
-        C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
-    >(
+    async fn register_test_helper<C: ProApplicationContext>(
         app_ctx: C,
         method: Method,
         email: &str,

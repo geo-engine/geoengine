@@ -31,7 +31,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use super::{ExecutionContextImpl, OidcRequestDbProvider, ProGeoEngineDb, QuotaCheckerImpl};
+use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
@@ -167,7 +167,7 @@ impl ApplicationContext for ProInMemoryContext {
 }
 
 #[async_trait]
-impl OidcRequestDbProvider for ProInMemoryContext {
+impl ProApplicationContext for ProInMemoryContext {
     fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
         self.oidc_request_db.as_ref().as_ref()
     }

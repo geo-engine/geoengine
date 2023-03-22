@@ -2,12 +2,10 @@ use crate::contexts::ApplicationContext;
 use crate::contexts::SessionContext;
 use crate::error::Result;
 use crate::handlers;
-use crate::pro::contexts::OidcRequestDbProvider;
+use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::projects::LoadVersion;
 use crate::pro::projects::ProProjectDb;
-use crate::pro::users::UserAuth;
-use crate::pro::users::UserSession;
 use crate::projects::{ProjectId, ProjectVersionId};
 
 use actix_web::FromRequest;
@@ -15,7 +13,7 @@ use actix_web::{web, Responder};
 
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+    C: ProApplicationContext,
     C::Session: FromRequest,
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -96,9 +94,7 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn load_project_version_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+pub(crate) async fn load_project_version_handler<C: ProApplicationContext>(
     project: web::Path<(ProjectId, ProjectVersionId)>,
     session: C::Session,
     app_ctx: web::Data<C>,
@@ -164,9 +160,7 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn load_project_latest_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+pub(crate) async fn load_project_latest_handler<C: ProApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     app_ctx: web::Data<C>,
@@ -210,9 +204,7 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn project_versions_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+pub(crate) async fn project_versions_handler<C: ProApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     project: web::Path<ProjectId>,

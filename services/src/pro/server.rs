@@ -25,8 +25,7 @@ use tracing_actix_web::TracingLogger;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use super::contexts::{OidcRequestDbProvider, ProGeoEngineDb};
-use super::users::{UserAuth, UserSession};
+use super::contexts::{ProApplicationContext, ProGeoEngineDb};
 
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
@@ -36,7 +35,7 @@ async fn start<C>(
     app_ctx: C,
 ) -> Result<(), Error>
 where
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+    C: ProApplicationContext,
     C::Session: FromRequest,
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {

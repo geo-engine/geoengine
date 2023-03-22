@@ -5,14 +5,13 @@ use utoipa::ToSchema;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 
-use crate::pro::contexts::{OidcRequestDbProvider, ProGeoEngineDb};
+use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
-use crate::pro::users::{UserAuth, UserSession};
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+    C: ProApplicationContext,
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     C::Session: FromRequest,
 {
@@ -56,9 +55,7 @@ pub struct PermissionRequest {
         ("session_token" = [])
     )
 )]
-async fn add_permission_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+async fn add_permission_handler<C: ProApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     permission: web::Json<PermissionRequest>,
@@ -103,9 +100,7 @@ where
         ("session_token" = [])
     )
 )]
-async fn remove_permission_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+async fn remove_permission_handler<C: ProApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     permission: web::Json<PermissionRequest>,

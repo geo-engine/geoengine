@@ -23,7 +23,7 @@ pub use postgres::PostgresContext;
 use rayon::ThreadPool;
 use tokio::io::AsyncWriteExt;
 
-use crate::contexts::{GeoEngineDb, SessionContext};
+use crate::contexts::{ApplicationContext, GeoEngineDb, SessionContext};
 use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 
@@ -36,14 +36,13 @@ use async_trait::async_trait;
 
 use super::permissions::PermissionDb;
 use super::projects::ProProjectDb;
-use super::users::RoleDb;
+use super::users::{RoleDb, UserAuth, UserSession};
 
 pub use in_memory::ProInMemoryDb;
 pub use postgres::PostgresDb;
 
-/// A pro contexts that extends the default context.
-#[async_trait]
-pub trait OidcRequestDbProvider {
+/// A pro application contexts that extends the default context.
+pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + UserAuth {
     fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
 }
 

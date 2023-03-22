@@ -7,7 +7,7 @@ use crate::{
     },
     handlers, pro,
     pro::{
-        contexts::{OidcRequestDbProvider, ProGeoEngineDb, ProInMemoryContext},
+        contexts::{ProApplicationContext, ProGeoEngineDb, ProInMemoryContext},
         permissions::{Permission, PermissionDb, Role},
         users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
@@ -111,7 +111,7 @@ where
 
 pub async fn send_pro_test_request<C>(req: test::TestRequest, app_ctx: C) -> ServiceResponse
 where
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+    C: ProApplicationContext,
     C::Session: FromRequest,
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -395,11 +395,7 @@ pub async fn add_ndvi_to_datasets(app_ctx: &ProInMemoryContext) -> DatasetId {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn admin_login<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
-    ctx: &C,
-) -> UserSession
+pub async fn admin_login<C: ProApplicationContext>(ctx: &C) -> UserSession
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {

@@ -37,7 +37,7 @@ use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{ExecutionContextImpl, OidcRequestDbProvider, ProGeoEngineDb, QuotaCheckerImpl};
+use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 
 // TODO: do not report postgres error details to user
 
@@ -570,7 +570,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> OidcRequestDbProvider for PostgresContext<Tls>
+impl<Tls> ProApplicationContext for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

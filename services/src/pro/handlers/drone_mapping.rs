@@ -8,8 +8,7 @@ use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefiniti
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
-use crate::pro::contexts::{OidcRequestDbProvider, ProGeoEngineDb};
-use crate::pro::users::{UserAuth, UserSession};
+use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::pro::util::config::Odm;
 use crate::util::config::get_config_element;
 use crate::util::user_input::UserInput;
@@ -36,7 +35,7 @@ use uuid::Uuid;
 
 pub(crate) fn init_drone_mapping_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+    C: ProApplicationContext,
     C::Session: FromRequest,
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -92,9 +91,7 @@ pub struct CreateDatasetResponse {
 ///   "id": "aae098a4-3272-439b-bd93-40b6c39560cb",
 /// },
 /// ```
-async fn start_task_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+async fn start_task_handler<C: ProApplicationContext>(
     _session: C::Session,
     _app_ctx: web::Data<C>,
     task_start: web::Json<TaskStart>,
@@ -200,9 +197,7 @@ where
 ///   }
 /// }
 /// ```
-async fn dataset_from_drone_mapping_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+async fn dataset_from_drone_mapping_handler<C: ProApplicationContext>(
     task_id: web::Path<Uuid>,
     session: C::Session,
     app_ctx: web::Data<C>,

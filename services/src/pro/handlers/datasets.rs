@@ -17,9 +17,8 @@ use crate::{
         suggest_meta_data_handler,
     },
     pro::{
-        contexts::{OidcRequestDbProvider, ProGeoEngineDb},
+        contexts::{ProApplicationContext, ProGeoEngineDb},
         permissions::{Permission, PermissionDb, Role},
-        users::{UserAuth, UserSession},
     },
     util::{
         config::{get_config_element, Data},
@@ -30,7 +29,7 @@ use crate::{
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
+    C: ProApplicationContext,
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     C::Session: FromRequest,
 {
@@ -70,9 +69,7 @@ where
         ("session_token" = [])
     )
 )]
-async fn create_dataset_handler<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+async fn create_dataset_handler<C: ProApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
@@ -93,9 +90,7 @@ where
     }
 }
 
-async fn create_system_dataset<
-    C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
->(
+async fn create_system_dataset<C: ProApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     volume_name: VolumeName,
@@ -162,8 +157,8 @@ mod tests {
             upload::{UploadId, UploadRootPath, VolumeName},
         },
         pro::{
-            contexts::{OidcRequestDbProvider, ProInMemoryContext},
-            users::{UserAuth, UserSession},
+            contexts::ProInMemoryContext,
+            users::UserAuth,
             util::tests::{admin_login, send_pro_test_request},
         },
         util::tests::{SetMultipartBody, TestDataUploads},
@@ -171,9 +166,7 @@ mod tests {
 
     use super::*;
 
-    pub async fn upload_ne_10m_ports_files<
-        C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
-    >(
+    pub async fn upload_ne_10m_ports_files<C: ProApplicationContext>(
         app_ctx: C,
         session_id: SessionId,
     ) -> Result<UploadId>
@@ -206,9 +199,7 @@ mod tests {
         Ok(upload.id)
     }
 
-    pub async fn construct_dataset_from_upload<
-        C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
-    >(
+    pub async fn construct_dataset_from_upload<C: ProApplicationContext>(
         app_ctx: C,
         upload_id: UploadId,
         session_id: SessionId,
