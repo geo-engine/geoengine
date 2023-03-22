@@ -2,7 +2,7 @@ use crate::api::model::datatypes::TimeInterval;
 use crate::contexts::ApplicationContext;
 use crate::error;
 use crate::error::Result;
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::config;
 use crate::util::parsing::parse_spatial_resolution;

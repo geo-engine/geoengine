@@ -2,7 +2,7 @@ use crate::contexts::ApplicationContext;
 use crate::error::Result;
 use crate::tasks::{TaskListOptions, TaskManager};
 use crate::util::user_input::UserInput;
-use crate::{contexts::Context, tasks::TaskId};
+use crate::{contexts::SessionContext, tasks::TaskId};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};

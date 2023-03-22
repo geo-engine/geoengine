@@ -1,4 +1,4 @@
-use crate::{contexts::Context, error::Result};
+use crate::{contexts::SessionContext, error::Result};
 use actix::{
     fut::wrap_future, Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler,
 };
@@ -60,7 +60,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for VectorWebsocketSt
 }
 
 impl VectorWebsocketStreamHandler {
-    pub async fn new<C: Context>(
+    pub async fn new<C: SessionContext>(
         vector_operator: Box<dyn VectorOperator>,
         query_rectangle: VectorQueryRectangle,
         execution_ctx: C::ExecutionContext,

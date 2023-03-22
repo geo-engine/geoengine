@@ -123,7 +123,7 @@ async fn session_view_handler<C: SimpleContext>(
 mod tests {
     use super::*;
 
-    use crate::contexts::{Context, Session};
+    use crate::contexts::{Session, SessionContext};
     use crate::handlers::ErrorResponse;
     use crate::{
         contexts::{InMemoryContext, SimpleSession},

@@ -5,7 +5,7 @@ use crate::{
         datatypes::DatasetId,
         services::{CreateDataset, DataPath, DatasetDefinition},
     },
-    contexts::{ApplicationContext, Context},
+    contexts::{ApplicationContext, SessionContext},
     datasets::{
         storage::DatasetStore,
         upload::{Volume, VolumeName},
@@ -31,7 +31,7 @@ use crate::{
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -78,7 +78,7 @@ async fn create_dataset_handler<
     create: web::Json<CreateDataset>,
 ) -> Result<web::Json<IdResponse<DatasetId>>>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let create = create.into_inner();
     match create {
@@ -102,7 +102,7 @@ async fn create_system_dataset<
     mut definition: DatasetDefinition,
 ) -> Result<web::Json<IdResponse<DatasetId>>>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let volumes = get_config_element::<Data>()?.volumes;
     let volume_path = volumes
@@ -156,7 +156,7 @@ mod tests {
 
     use crate::{
         api::model::services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
-        contexts::{Context, Session, SessionId},
+        contexts::{Session, SessionContext, SessionId},
         datasets::{
             listing::DatasetProvider,
             upload::{UploadId, UploadRootPath, VolumeName},
@@ -178,7 +178,7 @@ mod tests {
         session_id: SessionId,
     ) -> Result<UploadId>
     where
-        <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+        <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     {
         let files = vec![
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").to_path_buf(),
@@ -214,7 +214,7 @@ mod tests {
         session_id: SessionId,
     ) -> DatasetId
     where
-        <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+        <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     {
         let s = json!({
             "dataPath": {

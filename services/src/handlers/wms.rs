@@ -14,7 +14,7 @@ use crate::api::model::datatypes::{SpatialReference, SpatialReferenceOption, Tim
 use crate::contexts::ApplicationContext;
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat};
 use crate::util::config;

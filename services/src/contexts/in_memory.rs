@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{ApplicationContext, Context, Db, GeoEngineDb, SimpleSession};
+use super::{ApplicationContext, Db, GeoEngineDb, SessionContext, SimpleSession};
 use super::{Session, SimpleContext};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDbBackend;
@@ -104,10 +104,10 @@ impl InMemoryContext {
 
 #[async_trait]
 impl ApplicationContext for InMemoryContext {
-    type Context = InMemorySessionContext;
+    type SessionContext = InMemorySessionContext;
     type Session = SimpleSession;
 
-    fn session_context(&self, session: Self::Session) -> Self::Context {
+    fn session_context(&self, session: Self::Session) -> Self::SessionContext {
         InMemorySessionContext {
             session,
             context: self.clone(),
@@ -134,7 +134,7 @@ pub struct InMemorySessionContext {
 }
 
 #[async_trait]
-impl Context for InMemorySessionContext {
+impl SessionContext for InMemorySessionContext {
     type Session = SimpleSession;
     type GeoEngineDB = InMemoryDb;
     type TaskContext = SimpleTaskManagerContext;

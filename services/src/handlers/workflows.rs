@@ -6,7 +6,7 @@ use crate::api::model::datatypes::{DataId, TimeInterval};
 use crate::contexts::ApplicationContext;
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
 use crate::error::Result;
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::layers::storage::LayerProviderDb;
 use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::parsing::{parse_spatial_partition, parse_spatial_resolution};
@@ -211,12 +211,13 @@ async fn get_workflow_metadata_handler<C: ApplicationContext>(
 
     let execution_context = ctx.execution_context()?;
 
-    let result_descriptor = workflow_metadata::<C::Context>(workflow, execution_context).await?;
+    let result_descriptor =
+        workflow_metadata::<C::SessionContext>(workflow, execution_context).await?;
 
     Ok(web::Json(result_descriptor))
 }
 
-async fn workflow_metadata<C: Context>(
+async fn workflow_metadata<C: SessionContext>(
     workflow: Workflow,
     execution_context: C::ExecutionContext,
 ) -> Result<TypedResultDescriptor> {
@@ -273,7 +274,7 @@ struct ProvenanceEntry {
     data: Vec<DataId>,
 }
 
-async fn workflow_provenance<C: Context>(
+async fn workflow_provenance<C: SessionContext>(
     workflow: &Workflow,
     ctx: &C,
 ) -> Result<Vec<ProvenanceEntry>> {
@@ -342,7 +343,7 @@ async fn get_workflow_all_metadata_zip_handler<C: ApplicationContext>(
     let workflow = ctx.db().load_workflow(&id).await?;
 
     let (metadata, provenance) = futures::try_join!(
-        workflow_metadata::<C::Context>(workflow.clone(), ctx.execution_context()?),
+        workflow_metadata::<C::SessionContext>(workflow.clone(), ctx.execution_context()?),
         workflow_provenance(&workflow, &ctx),
     )?;
 
@@ -409,7 +410,7 @@ async fn get_workflow_all_metadata_zip_handler<C: ApplicationContext>(
     Ok(response)
 }
 
-async fn resolve_provenance<C: Context>(
+async fn resolve_provenance<C: SessionContext>(
     db: &C::GeoEngineDB,
     id: &DataId,
 ) -> Result<ProvenanceOutput> {
@@ -540,7 +541,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         RasterStreamWebsocketResultType::Arrow
     ));
 
-    let stream_handler = RasterWebsocketStreamHandler::new::<C::Context>(
+    let stream_handler = RasterWebsocketStreamHandler::new::<C::SessionContext>(
         operator,
         query_rectangle,
         ctx.execution_context()?,
@@ -621,7 +622,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         RasterStreamWebsocketResultType::Arrow
     ));
 
-    let stream_handler = VectorWebsocketStreamHandler::new::<C::Context>(
+    let stream_handler = VectorWebsocketStreamHandler::new::<C::SessionContext>(
         operator,
         query_rectangle,
         ctx.execution_context()?,

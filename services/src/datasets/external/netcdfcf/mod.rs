@@ -1520,7 +1520,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use super::*;
 
-    use crate::contexts::{Context, SimpleContext};
+    use crate::contexts::{SessionContext, SimpleContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::layers::storage::LayerProviderDb;
     use crate::util::user_input::UserInput;

@@ -1,6 +1,6 @@
 use crate::contexts::ApplicationContext;
 use crate::error::Result;
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::projects::{CreateProject, ProjectDb, ProjectId, ProjectListOptions, UpdateProject};
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;

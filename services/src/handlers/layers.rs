@@ -18,7 +18,7 @@ use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
-use crate::{contexts::Context, layers::layer::LayerCollectionListOptions};
+use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use geoengine_datatypes::primitives::QueryRectangle;
 use serde::{Deserialize, Serialize};
@@ -1522,7 +1522,7 @@ mod tests {
         response
     }
 
-    async fn raster_operator_to_geotiff_bytes<C: Context>(
+    async fn raster_operator_to_geotiff_bytes<C: SessionContext>(
         ctx: &C,
         operator: Box<dyn RasterOperator>,
         query_rectangle: RasterQueryRectangle,

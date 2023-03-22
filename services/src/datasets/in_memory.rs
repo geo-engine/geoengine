@@ -500,7 +500,7 @@ impl DatasetLayerCollectionProvider for InMemoryDb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{Context, InMemoryContext, SimpleContext};
+    use crate::contexts::{InMemoryContext, SessionContext, SimpleContext};
     use crate::datasets::listing::OrderBy;
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;

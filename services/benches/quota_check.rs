@@ -13,7 +13,7 @@ use geoengine_operators::{
     source::{GdalSource, GdalSourceParameters},
 };
 use geoengine_services::{
-    contexts::{ApplicationContext, Context},
+    contexts::{ApplicationContext, SessionContext},
     pro::{
         contexts::ProInMemoryContext,
         users::{UserAuth, UserDb},

@@ -1,4 +1,4 @@
-use crate::contexts::{ApplicationContext, Context};
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::pro;
@@ -38,7 +38,7 @@ async fn start<C>(
 where
     C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
     C::Session: FromRequest,
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let wrapped_ctx = web::Data::new(app_ctx);
 

@@ -348,7 +348,7 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
 
     use crate::{
-        contexts::{ApplicationContext, Context, MockableSession},
+        contexts::{ApplicationContext, MockableSession, SessionContext},
         pro::{contexts::ProInMemoryContext, users::UserSession, util::tests::admin_login},
     };
 

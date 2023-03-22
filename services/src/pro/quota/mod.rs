@@ -99,7 +99,7 @@ mod tests {
     use geoengine_datatypes::util::Identifier;
 
     use crate::{
-        contexts::{ApplicationContext, Context},
+        contexts::{ApplicationContext, SessionContext},
         pro::{
             contexts::ProInMemoryContext,
             users::{UserAuth, UserCredentials, UserRegistration},

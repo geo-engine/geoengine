@@ -22,7 +22,7 @@ use crate::contexts::ApplicationContext;
 use crate::error::Result;
 use crate::error::{self, Error};
 use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::util::config;
@@ -484,7 +484,7 @@ fn default_time_from_config() -> TimeInterval {
 
 #[cfg(test)]
 mod tests {
-    use crate::contexts::{Context, InMemoryContext, Session, SimpleContext};
+    use crate::contexts::{InMemoryContext, Session, SessionContext, SimpleContext};
     use crate::util::tests::{read_body_string, register_ndvi_workflow_helper, send_test_request};
     use actix_web::http::header;
     use actix_web::test;

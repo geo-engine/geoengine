@@ -12,7 +12,7 @@ use crate::api::model::datatypes::TimeInterval;
 use crate::contexts::ApplicationContext;
 use crate::error;
 use crate::error::Result;
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature};
 use crate::util::config;

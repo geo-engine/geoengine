@@ -196,7 +196,7 @@ impl ProProjectDb for ProInMemoryDb {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::contexts::{ApplicationContext, Context};
+    use crate::contexts::{ApplicationContext, SessionContext};
     use crate::pro::contexts::ProInMemoryContext;
     use crate::pro::util::tests::create_random_user_session_helper;
     use crate::projects::STRectangle;

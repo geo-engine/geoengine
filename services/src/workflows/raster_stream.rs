@@ -1,4 +1,4 @@
-use crate::{contexts::Context, error::Result};
+use crate::{contexts::SessionContext, error::Result};
 use actix::{
     fut::wrap_future, Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler,
 };
@@ -62,7 +62,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RasterWebsocketSt
 }
 
 impl RasterWebsocketStreamHandler {
-    pub async fn new<C: Context>(
+    pub async fn new<C: SessionContext>(
         raster_operator: Box<dyn RasterOperator>,
         query_rectangle: RasterQueryRectangle,
         execution_ctx: C::ExecutionContext,

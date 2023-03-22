@@ -1,4 +1,4 @@
-use crate::contexts::Context;
+use crate::contexts::SessionContext;
 use crate::contexts::SessionId;
 use crate::error::{Error, Result};
 use actix_web::dev::ServiceResponse;

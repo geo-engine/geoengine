@@ -3,7 +3,7 @@ use crate::datasets::upload::{Volume, Volumes};
 use crate::error;
 
 use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDbBackend};
-use crate::pro::contexts::Context;
+use crate::pro::contexts::SessionContext;
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDbBackend};
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
@@ -148,10 +148,10 @@ impl ProInMemoryContext {
 
 #[async_trait]
 impl ApplicationContext for ProInMemoryContext {
-    type Context = ProInMemorySessionContext;
+    type SessionContext = ProInMemorySessionContext;
     type Session = UserSession;
 
-    fn session_context(&self, session: Self::Session) -> Self::Context {
+    fn session_context(&self, session: Self::Session) -> Self::SessionContext {
         ProInMemorySessionContext {
             session,
             context: self.clone(),
@@ -181,7 +181,7 @@ pub struct ProInMemorySessionContext {
 }
 
 #[async_trait]
-impl Context for ProInMemorySessionContext {
+impl SessionContext for ProInMemorySessionContext {
     type Session = UserSession;
     type GeoEngineDB = ProInMemoryDb;
 

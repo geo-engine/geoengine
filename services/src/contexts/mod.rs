@@ -39,22 +39,23 @@ pub use simple_context::SimpleContext;
 
 pub type Db<T> = Arc<RwLock<T>>;
 
-// TODO: rename AppContext?
-/// The application context bundles access to shared resources like databases and session specific information
+/// The application context bundles shared resources.
+/// It is passed to API handlers and allows creating a session context that provides access to resources.
 #[async_trait]
 pub trait ApplicationContext: 'static + Send + Sync + Clone {
-    type Context: Context;
+    type SessionContext: SessionContext;
     type Session: Session + Clone;
 
-    fn session_context(&self, session: Self::Session) -> Self::Context;
+    /// Create a new session context for the given session.
+    fn session_context(&self, session: Self::Session) -> Self::SessionContext;
 
+    /// Load a session by its id
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session>;
 }
 
-/// A context binds a session to the shared access to resources
-// TODO: rename to SessionContext?
+/// The session context bundles resources that are specific to a session.
 #[async_trait]
-pub trait Context: 'static + Send + Sync + Clone {
+pub trait SessionContext: 'static + Send + Sync + Clone {
     type Session: Session + Clone;
     type GeoEngineDB: GeoEngineDb;
     type QueryContext: QueryContext;
@@ -62,19 +63,26 @@ pub trait Context: 'static + Send + Sync + Clone {
     type TaskContext: TaskContext;
     type TaskManager: TaskManager<Self::TaskContext>;
 
+    /// Get the db for accessing resources
     fn db(&self) -> Self::GeoEngineDB;
 
+    /// Get the task manager for accessing tasks
     fn tasks(&self) -> Self::TaskManager;
 
+    /// Create a new query context for executing queries on processors
     fn query_context(&self) -> Result<Self::QueryContext>;
 
+    /// Create a new execution context initializing operators
     fn execution_context(&self) -> Result<Self::ExecutionContext>;
 
+    /// Get the list of available data volumes
     fn volumes(&self) -> Result<Vec<Volume>>;
 
+    /// Get the current session
     fn session(&self) -> &Self::Session;
 }
 
+/// The trait for accessing all resources
 pub trait GeoEngineDb:
     DatasetDb
     + LayerDb
@@ -397,7 +405,7 @@ mod tests {
     use serial_test::serial;
 
     use crate::{
-        contexts::{Context, InMemoryContext},
+        contexts::{InMemoryContext, SessionContext},
         util::config::set_config,
     };
 

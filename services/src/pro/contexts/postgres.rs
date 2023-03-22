@@ -1,5 +1,5 @@
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId};
-use crate::contexts::{Context, GeoEngineDb};
+use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::datasets::upload::{Volume, Volumes};
 use crate::error::{self, Result};
@@ -551,10 +551,10 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    type Context = PostgresSessionContext<Tls>;
+    type SessionContext = PostgresSessionContext<Tls>;
     type Session = UserSession;
 
-    fn session_context(&self, session: Self::Session) -> Self::Context {
+    fn session_context(&self, session: Self::Session) -> Self::SessionContext {
         PostgresSessionContext {
             session,
             context: self.clone(),
@@ -595,7 +595,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> Context for PostgresSessionContext<Tls>
+impl<Tls> SessionContext for PostgresSessionContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

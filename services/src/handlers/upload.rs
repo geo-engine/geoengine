@@ -9,7 +9,7 @@ use crate::contexts::ApplicationContext;
 use crate::datasets::upload::{FileId, FileUpload, Upload, UploadDb, UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::util::IdResponse;
 use snafu::ResultExt;
 use utoipa::ToSchema;

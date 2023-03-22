@@ -23,7 +23,7 @@ pub use postgres::PostgresContext;
 use rayon::ThreadPool;
 use tokio::io::AsyncWriteExt;
 
-use crate::contexts::{Context, GeoEngineDb};
+use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 
@@ -337,7 +337,7 @@ mod tests {
     use serial_test::serial;
 
     use crate::{
-        contexts::{ApplicationContext, Context},
+        contexts::{ApplicationContext, SessionContext},
         pro::util::tests::create_session_helper,
         util::config::set_config,
     };

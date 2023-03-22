@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::api::model::datatypes::DatasetId;
 use crate::api::model::services::AddDataset;
-use crate::contexts::{ApplicationContext, Context};
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
@@ -38,7 +38,7 @@ pub(crate) fn init_drone_mapping_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
     C::Session: FromRequest,
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     cfg.service(web::resource("/droneMapping/task").route(web::post().to(start_task_handler::<C>)))
         .service(
@@ -100,7 +100,7 @@ async fn start_task_handler<
     task_start: web::Json<TaskStart>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let base_url = get_config_element::<Odm>()?.endpoint;
 
@@ -208,7 +208,7 @@ async fn dataset_from_drone_mapping_handler<
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let base_url = get_config_element::<Odm>()?.endpoint;
 
@@ -379,7 +379,7 @@ mod tests {
     use zip::write::FileOptions;
 
     use super::*;
-    use crate::contexts::{Context, Session};
+    use crate::contexts::{Session, SessionContext};
     use crate::error::Result;
     use crate::test_data;
     use crate::util::tests::TestDataUploads;

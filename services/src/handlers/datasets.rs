@@ -19,7 +19,7 @@ use crate::{
     api::model::services::{AddDataset, CreateDataset, MetaDataDefinition, MetaDataSuggestion},
     util::config::{get_config_element, Data},
 };
-use crate::{contexts::Context, datasets::storage::AutoCreateDataset};
+use crate::{contexts::SessionContext, datasets::storage::AutoCreateDataset};
 use crate::{datasets::upload::VolumeName, error::Result};
 use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},

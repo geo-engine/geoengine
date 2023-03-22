@@ -14,7 +14,7 @@ use crate::layers::external::DataProvider;
 use crate::layers::storage::LayerProviderDb;
 use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatusInfo};
 use crate::util::apidoc::OpenApiServerInfo;
-use crate::{contexts::Context, datasets::external::netcdfcf::NetCdfCfDataProvider};
+use crate::{contexts::SessionContext, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
     FromRequest, Responder,
@@ -123,7 +123,7 @@ where
 
 /// returns the `EbvPortalDataProvider` if it is defined, otherwise the `NetCdfCfDataProvider` if it is defined.
 /// Otherwise an erorr is returned.
-async fn with_netcdfcf_provider<C: Context, T, F>(
+async fn with_netcdfcf_provider<C: SessionContext, T, F>(
     ctx: &C,
     f: F,
 ) -> Result<T, NetCdfCf4DProviderError>
@@ -203,7 +203,7 @@ async fn create_overviews<C: ApplicationContext>(
 ) -> Result<impl Responder> {
     let ctx = Arc::new(app_ctx.into_inner().session_context(session.clone()));
 
-    let task = EvbMultiOverviewTask::<C::Context> {
+    let task = EvbMultiOverviewTask::<C::SessionContext> {
         ctx: ctx.clone(),
         resampling_method: params.as_ref().and_then(|p| p.resampling_method),
         current_subtask_id: Arc::new(Mutex::new(None)),
@@ -215,13 +215,13 @@ async fn create_overviews<C: ApplicationContext>(
     Ok(web::Json(TaskResponse::new(task_id)))
 }
 
-struct EvbMultiOverviewTask<C: Context> {
+struct EvbMultiOverviewTask<C: SessionContext> {
     ctx: Arc<C>,
     resampling_method: Option<ResamplingMethod>,
     current_subtask_id: Arc<Mutex<Option<TaskId>>>,
 }
 
-impl<C: Context> EvbMultiOverviewTask<C> {
+impl<C: SessionContext> EvbMultiOverviewTask<C> {
     fn update_pct(task_ctx: Arc<C::TaskContext>, pct: f64, status: NetCdfCfOverviewResponse) {
         crate::util::spawn(async move {
             task_ctx.set_completion(pct, status.boxed()).await;
@@ -230,7 +230,7 @@ impl<C: Context> EvbMultiOverviewTask<C> {
 }
 
 #[async_trait::async_trait]
-impl<C: Context> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
     async fn run(
         &self,
         task_ctx: C::TaskContext,
@@ -378,7 +378,7 @@ async fn create_overview<C: ApplicationContext>(
 ) -> Result<impl Responder> {
     let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
-    let task = EvbOverviewTask::<C::Context> {
+    let task = EvbOverviewTask::<C::SessionContext> {
         ctx: ctx.clone(),
         file: path.into_inner(),
         params: params.map(web::Json::into_inner).unwrap_or_default(),
@@ -390,14 +390,14 @@ async fn create_overview<C: ApplicationContext>(
     Ok(web::Json(TaskResponse::new(task_id)))
 }
 
-struct EvbOverviewTask<C: Context> {
+struct EvbOverviewTask<C: SessionContext> {
     ctx: Arc<C>,
     file: PathBuf,
     params: CreateOverviewParams,
 }
 
 #[async_trait::async_trait]
-impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for EvbOverviewTask<C> {
     async fn run(
         &self,
         ctx: C::TaskContext,
@@ -495,7 +495,7 @@ async fn remove_overview<C: ApplicationContext>(
 ) -> Result<impl Responder> {
     let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
-    let task = EvbRemoveOverviewTask::<C::Context> {
+    let task = EvbRemoveOverviewTask::<C::SessionContext> {
         ctx: ctx.clone(),
         file: path.into_inner(),
         params: params.into_inner(),
@@ -507,14 +507,14 @@ async fn remove_overview<C: ApplicationContext>(
     Ok(web::Json(TaskResponse::new(task_id)))
 }
 
-struct EvbRemoveOverviewTask<C: Context> {
+struct EvbRemoveOverviewTask<C: SessionContext> {
     ctx: Arc<C>,
     file: PathBuf,
     params: RemoveOverviewParams,
 }
 
 #[async_trait::async_trait]
-impl<C: Context> Task<C::TaskContext> for EvbRemoveOverviewTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for EvbRemoveOverviewTask<C> {
     async fn run(
         &self,
         _ctx: C::TaskContext,

@@ -1,6 +1,6 @@
 use crate::{
     api::model::{datatypes::DatasetId, services::AddDataset},
-    contexts::{ApplicationContext, Context, MockableSession, SessionId},
+    contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
@@ -77,7 +77,7 @@ pub async fn create_project_helper<C: ApplicationContext<Session = UserSession> 
     app_ctx: &C,
 ) -> (UserSession, ProjectId)
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let session = create_session_helper(app_ctx).await;
 
@@ -113,7 +113,7 @@ pub async fn send_pro_test_request<C>(req: test::TestRequest, app_ctx: C) -> Ser
 where
     C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
     C::Session: FromRequest,
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     #[allow(unused_mut)]
     let mut app = App::new()
@@ -401,7 +401,7 @@ pub async fn admin_login<
     ctx: &C,
 ) -> UserSession
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let user_config = get_config_element::<super::config::User>().unwrap();
 

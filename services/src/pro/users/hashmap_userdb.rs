@@ -480,7 +480,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        contexts::{ApplicationContext, Context},
+        contexts::{ApplicationContext, SessionContext},
         pro::util::tests::admin_login,
         util::user_input::UserInput,
     };

@@ -1,5 +1,5 @@
 use crate::contexts::ApplicationContext;
-use crate::contexts::Context;
+use crate::contexts::SessionContext;
 use crate::error::Result;
 use crate::handlers;
 use crate::pro::contexts::OidcRequestDbProvider;
@@ -17,7 +17,7 @@ pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
     C::Session: FromRequest,
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     cfg.service(
         web::resource("/projects")
@@ -104,7 +104,7 @@ pub(crate) async fn load_project_version_handler<
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let project = project.into_inner();
     let id = app_ctx
@@ -172,7 +172,7 @@ pub(crate) async fn load_project_latest_handler<
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let id = app_ctx
         .session_context(session)
@@ -218,7 +218,7 @@ pub(crate) async fn project_versions_handler<
     project: web::Path<ProjectId>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let versions = app_ctx
         .session_context(session)
@@ -237,7 +237,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::util::test::TestDefault;
 
-    use crate::contexts::Context;
+    use crate::contexts::SessionContext;
     use crate::{
         handlers::ErrorResponse,
         pro::{

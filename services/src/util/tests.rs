@@ -25,7 +25,7 @@ use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
-    contexts::{Context, InMemoryContext},
+    contexts::{InMemoryContext, SessionContext},
     datasets::storage::{DatasetDefinition, MetaDataDefinition},
     handlers,
 };

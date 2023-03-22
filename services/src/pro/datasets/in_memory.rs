@@ -553,7 +553,7 @@ impl DatasetLayerCollectionProvider for ProInMemoryDb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{ApplicationContext, Context, MockableSession};
+    use crate::contexts::{ApplicationContext, MockableSession, SessionContext};
     use crate::datasets::listing::OrderBy;
     use crate::datasets::upload::{FileId, FileUpload};
     use crate::pro::contexts::ProInMemoryContext;

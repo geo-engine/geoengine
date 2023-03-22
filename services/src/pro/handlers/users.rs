@@ -1,5 +1,5 @@
 use crate::contexts::ApplicationContext;
-use crate::contexts::Context;
+use crate::contexts::SessionContext;
 use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::OidcRequestDbProvider;
@@ -31,7 +31,7 @@ pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ApplicationContext<Session = UserSession> + UserAuth + OidcRequestDbProvider,
     C::Session: FromRequest,
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     cfg.service(web::resource("/user").route(web::post().to(register_user_handler::<C>)))
         .service(web::resource("/anonymous").route(web::post().to(anonymous_handler::<C>)))
@@ -78,7 +78,7 @@ pub(crate) async fn register_user_handler<C: ApplicationContext + UserAuth>(
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
         config::get_config_element::<crate::pro::util::config::User>()?.user_registration,
@@ -121,7 +121,7 @@ pub(crate) async fn login_handler<C: ApplicationContext + UserAuth>(
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let session = app_ctx
         .login(user.into_inner())
@@ -148,7 +148,7 @@ pub(crate) async fn logout_handler<C: ApplicationContext<Session = UserSession>>
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     app_ctx.session_context(session).db().logout().await?;
     Ok(HttpResponse::Ok())
@@ -190,7 +190,7 @@ pub(crate) async fn session_handler<
     session: C::Session,
 ) -> impl Responder
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     web::Json(session)
 }
@@ -225,7 +225,7 @@ pub(crate) async fn anonymous_handler<C: ApplicationContext + UserAuth>(
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
         return Err(error::Error::Authorization {
@@ -258,7 +258,7 @@ pub(crate) async fn session_project_handler<C: ApplicationContext<Session = User
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     app_ctx
         .session_context(session)
@@ -290,7 +290,7 @@ pub(crate) async fn session_view_handler<
     view: web::Json<STRectangle>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     app_ctx
         .session_context(session)
@@ -331,7 +331,7 @@ pub(crate) async fn quota_handler<
     session: C::Session,
 ) -> Result<web::Json<Quota>>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let db = app_ctx.session_context(session).db();
     let available = db.quota_available().await?;
@@ -366,7 +366,7 @@ pub(crate) async fn get_user_quota_handler<C: ApplicationContext<Session = UserS
     user: web::Path<UserId>,
 ) -> Result<web::Json<Quota>>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let user = user.into_inner();
 
@@ -413,7 +413,7 @@ pub(crate) async fn update_user_quota_handler<
     update: web::Json<UpdateQuota>,
 ) -> Result<HttpResponse>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let user = user.into_inner();
 
@@ -450,7 +450,7 @@ pub(crate) async fn oidc_init<C: ApplicationContext + OidcRequestDbProvider>(
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
@@ -509,7 +509,7 @@ pub(crate) async fn oidc_login<C: ApplicationContext + OidcRequestDbProvider + U
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
@@ -553,7 +553,7 @@ pub(crate) async fn add_role_handler<
     add_role: web::Json<AddRole>,
 ) -> Result<web::Json<IdResponse<RoleId>>>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let add_role = add_role.into_inner();
 
@@ -589,7 +589,7 @@ pub(crate) async fn remove_role_handler<
     role: web::Path<RoleId>,
 ) -> Result<HttpResponse>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let role = role.into_inner();
 
@@ -626,7 +626,7 @@ pub(crate) async fn assign_role_handler<
     user: web::Path<(UserId, RoleId)>,
 ) -> Result<HttpResponse>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let (user, role) = user.into_inner();
 
@@ -663,7 +663,7 @@ pub(crate) async fn revoke_role_handler<
     user: web::Path<(UserId, RoleId)>,
 ) -> Result<HttpResponse>
 where
-    <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let (user, role) = user.into_inner();
 
@@ -680,7 +680,7 @@ where
 mod tests {
     use super::*;
 
-    use crate::contexts::{Context, Session};
+    use crate::contexts::{Session, SessionContext};
     use crate::handlers::ErrorResponse;
     use crate::pro::util::tests::mock_oidc::{
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
@@ -716,7 +716,7 @@ mod tests {
         email: &str,
     ) -> ServiceResponse
     where
-        <<C as ApplicationContext>::Context as Context>::GeoEngineDB: ProGeoEngineDb,
+        <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     {
         let user = UserRegistration {
             email: email.to_string(),
