@@ -1,5 +1,5 @@
 use crate::apidoc::ApiDoc;
-use crate::contexts::{InMemoryContext, SimpleContext};
+use crate::contexts::{InMemoryContext, SimpleApplicationContext};
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::util::config;
@@ -74,7 +74,7 @@ async fn start<C>(
     app_ctx: C,
 ) -> Result<(), Error>
 where
-    C: SimpleContext,
+    C: SimpleApplicationContext,
 {
     let wrapped_ctx = web::Data::new(app_ctx);
 
