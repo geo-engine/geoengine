@@ -1,15 +1,15 @@
 use crate::{
     api::model::{datatypes::DatasetId, services::AddDataset},
-    contexts::{Context, MockableSession, SessionId},
+    contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
     },
     handlers, pro,
     pro::{
-        contexts::{ProContext, ProGeoEngineDb, ProInMemoryContext},
+        contexts::{ProApplicationContext, ProGeoEngineDb, ProInMemoryContext},
         permissions::{Permission, PermissionDb, Role},
-        users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
+        users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
     util::server::{configure_extractors, render_404, render_405},
@@ -19,7 +19,7 @@ use crate::{
         workflow::{Workflow, WorkflowId},
     },
 };
-use actix_web::dev::ServiceResponse;
+use actix_web::{dev::ServiceResponse, FromRequest};
 use actix_web::{http, middleware, test, web, App};
 use geoengine_datatypes::{
     primitives::DateTime, spatial_reference::SpatialReferenceOption, util::Identifier,
@@ -31,28 +31,27 @@ use geoengine_operators::{
 };
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession
-where
-    C::GeoEngineDB: ProGeoEngineDb,
-{
-    ctx.register_user(
-        UserRegistration {
+pub async fn create_session_helper<C: UserAuth>(app_ctx: &C) -> UserSession {
+    app_ctx
+        .register_user(
+            UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+                real_name: "Foo Bar".to_string(),
+            }
+            .validated()
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    app_ctx
+        .login(UserCredentials {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
-            real_name: "Foo Bar".to_string(),
-        }
-        .validated()
-        .unwrap(),
-    )
-    .await
-    .unwrap();
-
-    ctx.login(UserCredentials {
-        email: "foo@example.com".to_string(),
-        password: "secret123".to_string(),
-    })
-    .await
-    .unwrap()
+        })
+        .await
+        .unwrap()
 }
 
 pub fn create_random_user_session_helper() -> UserSession {
@@ -74,14 +73,17 @@ pub fn create_random_user_session_helper() -> UserSession {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, ProjectId)
+pub async fn create_project_helper<C: ApplicationContext<Session = UserSession> + UserAuth>(
+    app_ctx: &C,
+) -> (UserSession, ProjectId)
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    let session = create_session_helper(ctx).await;
+    let session = create_session_helper(app_ctx).await;
 
-    let project = ctx
-        .db(session.clone())
+    let project = app_ctx
+        .session_context(session.clone())
+        .db()
         .create_project(
             CreateProject {
                 name: "Test".to_string(),
@@ -107,14 +109,15 @@ where
     (session, project)
 }
 
-pub async fn send_pro_test_request<C>(req: test::TestRequest, ctx: C) -> ServiceResponse
+pub async fn send_pro_test_request<C>(req: test::TestRequest, app_ctx: C) -> ServiceResponse
 where
-    C: ProContext,
-    C::GeoEngineDB: ProGeoEngineDb,
+    C: ProApplicationContext,
+    C::Session: FromRequest,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     #[allow(unused_mut)]
     let mut app = App::new()
-        .app_data(web::Data::new(ctx))
+        .app_data(web::Data::new(app_ctx))
         .wrap(
             middleware::ErrorHandlers::default()
                 .handler(http::StatusCode::NOT_FOUND, render_404)
@@ -318,8 +321,8 @@ pub(in crate::pro) mod mock_oidc {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper(ctx: &ProInMemoryContext) -> (Workflow, WorkflowId) {
-    let dataset = add_ndvi_to_datasets(ctx).await;
+pub async fn register_ndvi_workflow_helper(app_ctx: &ProInMemoryContext) -> (Workflow, WorkflowId) {
+    let dataset = add_ndvi_to_datasets(app_ctx).await;
 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
@@ -334,8 +337,9 @@ pub async fn register_ndvi_workflow_helper(ctx: &ProInMemoryContext) -> (Workflo
 
     let session = UserSession::mock();
 
-    let id = ctx
-        .db(session)
+    let id = app_ctx
+        .session_context(session)
+        .db()
         .register_workflow(workflow.clone())
         .await
         .unwrap();
@@ -344,7 +348,7 @@ pub async fn register_ndvi_workflow_helper(ctx: &ProInMemoryContext) -> (Workflo
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
+pub async fn add_ndvi_to_datasets(app_ctx: &ProInMemoryContext) -> DatasetId {
     let ndvi = DatasetDefinition {
         properties: AddDataset {
             id: None,
@@ -363,7 +367,7 @@ pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
 
     let system_session = UserSession::admin_session();
 
-    let db = ctx.db(system_session);
+    let db = app_ctx.session_context(system_session).db();
 
     let dataset_id = db
         .add_dataset(
@@ -391,9 +395,9 @@ pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn admin_login<C: ProContext>(ctx: &C) -> UserSession
+pub async fn admin_login<C: ProApplicationContext>(ctx: &C) -> UserSession
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let user_config = get_config_element::<super::config::User>().unwrap();
 

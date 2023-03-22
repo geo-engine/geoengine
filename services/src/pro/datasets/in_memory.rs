@@ -553,7 +553,7 @@ impl DatasetLayerCollectionProvider for ProInMemoryDb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{Context, MockableSession};
+    use crate::contexts::{ApplicationContext, MockableSession, SessionContext};
     use crate::datasets::listing::OrderBy;
     use crate::datasets::upload::{FileId, FileUpload};
     use crate::pro::contexts::ProInMemoryContext;
@@ -568,7 +568,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_ogr_and_list() -> Result<()> {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let session = UserSession::mock(); // TODO: find suitable way for public data
 
@@ -607,11 +607,13 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let db = ctx.db(session.clone());
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
 
         let id = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
-        let exe_ctx = ctx.execution_context(session.clone())?;
+        let exe_ctx = ctx.execution_context()?;
 
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -660,7 +662,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_lists_only_permitted_datasets() -> Result<()> {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();
@@ -700,8 +702,8 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let db1 = ctx.db(session1.clone());
-        let db2 = ctx.db(session2.clone());
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
 
         let _id = db1.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
@@ -738,7 +740,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_shows_only_permitted_provenance() -> Result<()> {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();
@@ -778,8 +780,8 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let db1 = ctx.db(session1.clone());
-        let db2 = ctx.db(session2.clone());
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
 
         let id = db1.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
@@ -792,7 +794,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_updates_permissions() -> Result<()> {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();
@@ -832,8 +834,8 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let db1 = ctx.db(session1.clone());
-        let db2 = ctx.db(session2.clone());
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
 
         let id = db1.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
@@ -851,7 +853,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_uses_roles_for_permissions() -> Result<()> {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();
@@ -891,8 +893,8 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let db1 = ctx.db(session1.clone());
-        let db2 = ctx.db(session2.clone());
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
 
         let id = db1.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
@@ -910,7 +912,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_secures_meta_data() -> Result<()> {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();
@@ -950,8 +952,8 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let db1 = ctx.db(session1.clone());
-        let db2 = ctx.db(session2.clone());
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
 
         let id = db1.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
@@ -981,7 +983,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_secures_uploads() -> Result<()> {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let session1 = UserSession::mock();
         let session2 = UserSession::mock();
@@ -997,8 +999,8 @@ mod tests {
             }],
         };
 
-        let db1 = ctx.db(session1.clone());
-        let db2 = ctx.db(session2.clone());
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
 
         db1.create_upload(upload).await?;
 

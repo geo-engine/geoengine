@@ -196,7 +196,7 @@ impl ProProjectDb for ProInMemoryDb {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::contexts::Context;
+    use crate::contexts::{ApplicationContext, SessionContext};
     use crate::pro::contexts::ProInMemoryContext;
     use crate::pro::util::tests::create_random_user_session_helper;
     use crate::projects::STRectangle;
@@ -218,15 +218,15 @@ mod test {
 
     #[tokio::test]
     async fn list_permitted() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let session1 = create_random_user_session_helper();
         let session2 = create_random_user_session_helper();
         let session3 = create_random_user_session_helper();
 
-        let db1 = ctx.db(session1.clone());
-        let db2 = ctx.db(session2);
-        let db3 = ctx.db(session3);
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
+        let db3 = app_ctx.session_context(session3.clone()).db();
 
         let create = CreateProject {
             name: "Own".into(),
@@ -299,10 +299,10 @@ mod test {
 
     #[tokio::test]
     async fn list() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
         let session = create_random_user_session_helper();
 
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session).db();
 
         for i in 0..10 {
             let create = CreateProject {
@@ -341,10 +341,10 @@ mod test {
 
     #[tokio::test]
     async fn load() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
         let session = create_random_user_session_helper();
 
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session).db();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -360,7 +360,7 @@ mod test {
         assert!(db.load_project(id).await.is_ok());
 
         let session2 = create_random_user_session_helper();
-        let db2 = ctx.db(session2);
+        let db2 = app_ctx.session_context(session2).db();
         let id = db2.create_project(create).await.unwrap();
         assert!(db.load_project(id).await.is_err());
 
@@ -369,10 +369,10 @@ mod test {
 
     #[tokio::test]
     async fn create() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
         let session = create_random_user_session_helper();
 
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session).db();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -391,10 +391,10 @@ mod test {
 
     #[tokio::test]
     async fn update() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
         let session = create_random_user_session_helper();
 
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session).db();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -427,10 +427,10 @@ mod test {
 
     #[tokio::test]
     async fn delete() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
         let session = create_random_user_session_helper();
 
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session).db();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -449,10 +449,10 @@ mod test {
 
     #[tokio::test]
     async fn versions() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
         let session = create_random_user_session_helper();
 
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session).db();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -490,15 +490,15 @@ mod test {
 
     #[tokio::test]
     async fn permissions() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let session1 = create_random_user_session_helper();
         let session2 = create_random_user_session_helper();
         let session3 = create_random_user_session_helper();
 
-        let db1 = ctx.db(session1.clone());
-        let db2 = ctx.db(session2.clone());
-        let db3 = ctx.db(session3.clone());
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
+        let db3 = app_ctx.session_context(session3.clone()).db();
 
         let create = CreateProject {
             name: "Test".into(),
