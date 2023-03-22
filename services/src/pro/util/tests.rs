@@ -7,7 +7,7 @@ use crate::{
     },
     handlers, pro,
     pro::{
-        contexts::{ProApplicationContext, ProGeoEngineDb, ProInMemoryContext},
+        contexts::{ProApplicationContext, ProGeoEngineDb},
         permissions::{Permission, PermissionDb, Role},
         users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
@@ -321,7 +321,12 @@ pub(in crate::pro) mod mock_oidc {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper(app_ctx: &ProInMemoryContext) -> (Workflow, WorkflowId) {
+pub async fn register_ndvi_workflow_helper<C: ProApplicationContext>(
+    app_ctx: &C,
+) -> (Workflow, WorkflowId)
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
     let dataset = add_ndvi_to_datasets(app_ctx).await;
 
     let workflow = Workflow {
@@ -348,7 +353,10 @@ pub async fn register_ndvi_workflow_helper(app_ctx: &ProInMemoryContext) -> (Wor
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn add_ndvi_to_datasets(app_ctx: &ProInMemoryContext) -> DatasetId {
+pub async fn add_ndvi_to_datasets<C: ProApplicationContext>(app_ctx: &C) -> DatasetId
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
     let ndvi = DatasetDefinition {
         properties: AddDataset {
             id: None,
@@ -374,7 +382,7 @@ pub async fn add_ndvi_to_datasets(app_ctx: &ProInMemoryContext) -> DatasetId {
             ndvi.properties
                 .validated()
                 .expect("valid dataset description"),
-            Box::new(ndvi.meta_data),
+            db.wrap_meta_data(ndvi.meta_data),
         )
         .await
         .expect("dataset db access");
