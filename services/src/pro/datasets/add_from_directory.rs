@@ -4,11 +4,11 @@ use std::{
     path::PathBuf,
 };
 
+use crate::datasets::storage::DatasetDefinition;
 use crate::{
     datasets::storage::DatasetDb,
     pro::permissions::{Permission, Role},
 };
-use crate::{datasets::storage::DatasetDefinition, util::user_input::UserInput};
 use crate::{error::Result, pro::permissions::PermissionDb};
 
 use log::warn;
@@ -26,7 +26,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
 
         let dataset_id = db
             .add_dataset(
-                def.properties.clone().validated()?,
+                def.properties.clone(),
                 db.wrap_meta_data(def.meta_data.clone()),
             )
             .await?;

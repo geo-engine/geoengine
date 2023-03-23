@@ -14,8 +14,6 @@ use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::contexts::InMemoryDb;
 use crate::error::{Error, Result};
 
-use crate::util::user_input::UserInput;
-use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, RwLockWriteGuard};
@@ -31,18 +29,14 @@ pub const INTERNAL_LAYER_DB_ROOT_COLLECTION_ID: Uuid =
 /// Storage for layers and layer collections
 pub trait LayerDb: Send + Sync {
     /// add new `layer` to the given `collection`
-    async fn add_layer(
-        &self,
-        layer: Validated<AddLayer>,
-        collection: &LayerCollectionId,
-    ) -> Result<LayerId>;
+    async fn add_layer(&self, layer: AddLayer, collection: &LayerCollectionId) -> Result<LayerId>;
 
     /// add new `layer` with fixed `id` to the given `collection`
     /// TODO: remove this method and allow stable names instead
     async fn add_layer_with_id(
         &self,
         id: &LayerId,
-        layer: Validated<AddLayer>,
+        layer: AddLayer,
         collection: &LayerCollectionId,
     ) -> Result<()>;
 
@@ -57,7 +51,7 @@ pub trait LayerDb: Send + Sync {
     // TODO: remove once stable names are available
     async fn add_layer_collection(
         &self,
-        collection: Validated<AddLayerCollection>,
+        collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId>;
 
@@ -66,7 +60,7 @@ pub trait LayerDb: Send + Sync {
     async fn add_layer_collection_with_id(
         &self,
         id: &LayerCollectionId,
-        collection: Validated<AddLayerCollection>,
+        collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<()>;
 
@@ -114,16 +108,10 @@ pub struct LayerProviderListing {
     pub description: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
+// TODO: validate user input
 pub struct LayerProviderListingOptions {
     pub offset: u32,
     pub limit: u32,
-}
-
-impl UserInput for LayerProviderListingOptions {
-    fn validate(&self) -> Result<()> {
-        // TODO
-        Ok(())
-    }
 }
 
 #[async_trait]
@@ -135,7 +123,7 @@ pub trait LayerProviderDb: Send + Sync + 'static {
 
     async fn list_layer_providers(
         &self,
-        options: Validated<LayerProviderListingOptions>,
+        options: LayerProviderListingOptions,
     ) -> Result<Vec<LayerProviderListing>>;
 
     async fn load_layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>>;
@@ -248,15 +236,11 @@ pub struct HashMapLayerDb {
 
 #[async_trait]
 impl LayerDb for HashMapLayerDb {
-    async fn add_layer(
-        &self,
-        layer: Validated<AddLayer>,
-        collection: &LayerCollectionId,
-    ) -> Result<LayerId> {
+    async fn add_layer(&self, layer: AddLayer, collection: &LayerCollectionId) -> Result<LayerId> {
         let id = LayerId(uuid::Uuid::new_v4().to_string());
 
         let mut backend = self.backend.write().await;
-        backend.layers.insert(id.clone(), layer.user_input);
+        backend.layers.insert(id.clone(), layer);
         backend
             .collection_layers
             .entry(collection.clone())
@@ -268,11 +252,11 @@ impl LayerDb for HashMapLayerDb {
     async fn add_layer_with_id(
         &self,
         id: &LayerId,
-        layer: Validated<AddLayer>,
+        layer: AddLayer,
         collection: &LayerCollectionId,
     ) -> Result<()> {
         let mut backend = self.backend.write().await;
-        backend.layers.insert(id.clone(), layer.user_input);
+        backend.layers.insert(id.clone(), layer);
         backend
             .collection_layers
             .entry(collection.clone())
@@ -307,15 +291,13 @@ impl LayerDb for HashMapLayerDb {
 
     async fn add_layer_collection(
         &self,
-        collection: Validated<AddLayerCollection>,
+        collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId> {
         let id = LayerCollectionId(uuid::Uuid::new_v4().to_string());
 
         let mut backend = self.backend.write().await;
-        backend
-            .collections
-            .insert(id.clone(), collection.user_input);
+        backend.collections.insert(id.clone(), collection);
         backend
             .collection_children
             .entry(parent.clone())
@@ -328,13 +310,11 @@ impl LayerDb for HashMapLayerDb {
     async fn add_layer_collection_with_id(
         &self,
         id: &LayerCollectionId,
-        collection: Validated<AddLayerCollection>,
+        collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<()> {
         let mut backend = self.backend.write().await;
-        backend
-            .collections
-            .insert(id.clone(), collection.user_input);
+        backend.collections.insert(id.clone(), collection);
         backend
             .collection_children
             .entry(parent.clone())
@@ -471,10 +451,8 @@ impl LayerCollectionProvider for HashMapLayerDb {
     async fn load_layer_collection(
         &self,
         collection_id: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
-        let options = options.user_input;
-
         let backend = self.backend.read().await;
 
         let empty = vec![];
@@ -590,7 +568,7 @@ impl LayerCollectionProvider for InMemoryDb {
     async fn load_layer_collection(
         &self,
         collection_id: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         self.backend
             .layer_db
@@ -632,10 +610,8 @@ impl LayerProviderDb for InMemoryDb {
 
     async fn list_layer_providers(
         &self,
-        options: Validated<LayerProviderListingOptions>,
+        options: LayerProviderListingOptions,
     ) -> Result<Vec<LayerProviderListing>> {
-        let options = options.user_input;
-
         let mut listing = self
             .backend
             .layer_provider_db
@@ -676,18 +652,14 @@ impl LayerProviderDb for InMemoryDb {
 
 #[async_trait]
 impl LayerDb for InMemoryDb {
-    async fn add_layer(
-        &self,
-        layer: Validated<AddLayer>,
-        collection: &LayerCollectionId,
-    ) -> Result<LayerId> {
+    async fn add_layer(&self, layer: AddLayer, collection: &LayerCollectionId) -> Result<LayerId> {
         self.backend.layer_db.add_layer(layer, collection).await
     }
 
     async fn add_layer_with_id(
         &self,
         id: &LayerId,
-        layer: Validated<AddLayer>,
+        layer: AddLayer,
         collection: &LayerCollectionId,
     ) -> Result<()> {
         self.backend
@@ -709,7 +681,7 @@ impl LayerDb for InMemoryDb {
 
     async fn add_layer_collection(
         &self,
-        collection: Validated<AddLayerCollection>,
+        collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId> {
         self.backend
@@ -721,7 +693,7 @@ impl LayerDb for InMemoryDb {
     async fn add_layer_collection_with_id(
         &self,
         id: &LayerCollectionId,
-        collection: Validated<AddLayerCollection>,
+        collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<()> {
         self.backend
@@ -774,7 +746,7 @@ impl LayerDb for InMemoryDb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{util::user_input::UserInput, workflows::workflow::Workflow};
+    use crate::workflows::workflow::Workflow;
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_operators::{
         engine::{TypedOperator, VectorOperator},
@@ -801,8 +773,7 @@ mod tests {
             symbology: None,
             metadata: [("meta".to_string(), "datum".to_string())].into(),
             properties: vec![("proper".to_string(), "tee".to_string()).into()],
-        }
-        .validated()?;
+        };
 
         let root_collection = &db.get_root_layer_collection_id().await?;
 
@@ -812,8 +783,7 @@ mod tests {
             name: "top collection".to_string(),
             description: "description".to_string(),
             properties: Default::default(),
-        }
-        .validated()?;
+        };
 
         let top_c_id = db.add_layer_collection(collection, root_collection).await?;
         db.add_layer_to_collection(&l_id, &top_c_id).await?;
@@ -822,8 +792,7 @@ mod tests {
             name: "empty collection".to_string(),
             description: "description".to_string(),
             properties: Default::default(),
-        }
-        .validated()?;
+        };
 
         let empty_c_id = db.add_layer_collection(collection, &top_c_id).await?;
 
@@ -833,8 +802,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()?,
+                },
             )
             .await?;
 
@@ -896,9 +864,7 @@ mod tests {
             symbology: None,
             metadata: Default::default(),
             properties: Default::default(),
-        }
-        .validated()
-        .unwrap();
+        };
 
         let root_collection = &db.get_root_layer_collection_id().await.unwrap();
 
@@ -906,9 +872,7 @@ mod tests {
             name: "top collection".to_string(),
             description: "description".to_string(),
             properties: Default::default(),
-        }
-        .validated()
-        .unwrap();
+        };
 
         let top_c_id = db
             .add_layer_collection(collection, root_collection)
@@ -921,9 +885,7 @@ mod tests {
             name: "empty collection".to_string(),
             description: "description".to_string(),
             properties: Default::default(),
-        }
-        .validated()
-        .unwrap();
+        };
 
         let empty_c_id = db
             .add_layer_collection(collection, &top_c_id)
@@ -936,9 +898,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -986,9 +946,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -1024,9 +982,7 @@ mod tests {
             LayerCollectionListOptions {
                 offset: 0,
                 limit: 20,
-            }
-            .validated()
-            .unwrap(),
+            },
         )
         .await
         .unwrap_err();
@@ -1043,9 +999,7 @@ mod tests {
             LayerCollectionListOptions {
                 offset: 0,
                 limit: 20,
-            }
-            .validated()
-            .unwrap(),
+            },
         )
         .await
         .unwrap();
@@ -1064,9 +1018,7 @@ mod tests {
                     name: "mid collection".to_string(),
                     description: "description".to_string(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 root_collection_id,
             )
             .await
@@ -1078,9 +1030,7 @@ mod tests {
                     name: "bottom collection".to_string(),
                     description: "description".to_string(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &mid_collection_id,
             )
             .await
@@ -1104,9 +1054,7 @@ mod tests {
                     symbology: None,
                     metadata: Default::default(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &mid_collection_id,
             )
             .await
@@ -1118,31 +1066,22 @@ mod tests {
             .unwrap();
 
         // …should remove itself
-        db.load_layer_collection(
-            &mid_collection_id,
-            LayerCollectionListOptions::default().validated().unwrap(),
-        )
-        .await
-        .unwrap_err();
+        db.load_layer_collection(&mid_collection_id, LayerCollectionListOptions::default())
+            .await
+            .unwrap_err();
 
         // …should remove the bottom collection
-        db.load_layer_collection(
-            &bottom_collection_id,
-            LayerCollectionListOptions::default().validated().unwrap(),
-        )
-        .await
-        .unwrap_err();
+        db.load_layer_collection(&bottom_collection_id, LayerCollectionListOptions::default())
+            .await
+            .unwrap_err();
 
         // … and should remove the layer of the bottom collection
         db.load_layer(&layer_id).await.unwrap_err();
 
         // the root collection is still there
-        db.load_layer_collection(
-            root_collection_id,
-            LayerCollectionListOptions::default().validated().unwrap(),
-        )
-        .await
-        .unwrap();
+        db.load_layer_collection(root_collection_id, LayerCollectionListOptions::default())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -1158,9 +1097,7 @@ mod tests {
                     name: "top collection".to_string(),
                     description: "description".to_string(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 root_collection,
             )
             .await
@@ -1184,9 +1121,7 @@ mod tests {
                     symbology: None,
                     metadata: Default::default(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &another_collection,
             )
             .await
@@ -1210,9 +1145,7 @@ mod tests {
                     symbology: None,
                     metadata: Default::default(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &another_collection,
             )
             .await
@@ -1234,9 +1167,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap()
@@ -1261,9 +1192,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap()
@@ -1289,9 +1218,7 @@ mod tests {
                     name: "top collection".to_string(),
                     description: "description".to_string(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 root_collection_id,
             )
             .await
@@ -1310,9 +1237,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();

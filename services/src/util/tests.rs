@@ -20,7 +20,6 @@ use crate::projects::{
     Symbology, UpdateProject,
 };
 use crate::util::server::{configure_extractors, render_404, render_405};
-use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -50,25 +49,13 @@ pub async fn create_project_helper<C: SimpleApplicationContext>(app_ctx: &C) -> 
         .default_session_context()
         .await
         .db()
-        .create_project(
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                bounds: STRectangle::new(
-                    SpatialReferenceOption::Unreferenced,
-                    0.,
-                    0.,
-                    1.,
-                    1.,
-                    0,
-                    1,
-                )
+        .create_project(CreateProject {
+            name: "Test".to_string(),
+            description: "Foo".to_string(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
-                time_step: None,
-            }
-            .validated()
-            .unwrap(),
-        )
+            time_step: None,
+        })
         .await
         .unwrap();
 
@@ -143,12 +130,7 @@ pub async fn add_ndvi_to_datasets(app_ctx: &InMemoryContext) -> DatasetId {
         .default_session_context()
         .await
         .db()
-        .add_dataset(
-            ndvi.properties
-                .validated()
-                .expect("valid dataset description"),
-            Box::new(ndvi.meta_data),
-        )
+        .add_dataset(ndvi.properties, Box::new(ndvi.meta_data))
         .await
         .expect("dataset db access")
         .into()
@@ -251,12 +233,7 @@ pub async fn add_land_cover_to_datasets(ctx: &InMemorySessionContext) -> Dataset
     };
 
     ctx.db()
-        .add_dataset(
-            ndvi.properties
-                .validated()
-                .expect("valid dataset description"),
-            Box::new(ndvi.meta_data),
-        )
+        .add_dataset(ndvi.properties, Box::new(ndvi.meta_data))
         .await
         .expect("dataset db access")
         .into()

@@ -4,7 +4,6 @@ use crate::pro::permissions::RoleId;
 use crate::pro::users::oidc::ExternalUserClaims;
 use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
-use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::Duration;
 
@@ -16,7 +15,7 @@ pub trait UserAuth {
     ///
     /// This call fails if the `UserRegistration` is invalid.
     ///
-    async fn register_user(&self, user: Validated<UserRegistration>) -> Result<UserId>;
+    async fn register_user(&self, user: UserRegistration) -> Result<UserId>;
 
     /// Creates session for anonymous user
     ///

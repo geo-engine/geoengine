@@ -7,7 +7,6 @@ use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
 };
 use crate::projects::{ProjectId, STRectangle};
-use crate::util::user_input::Validated;
 use crate::util::Identifier;
 use crate::{error, pro::contexts::PostgresContext};
 use async_trait::async_trait;
@@ -32,12 +31,12 @@ where
 {
     // TODO: clean up expired sessions?
 
-    async fn register_user(&self, user: Validated<UserRegistration>) -> Result<UserId> {
+    async fn register_user(&self, user: UserRegistration) -> Result<UserId> {
         let mut conn = self.pool.get().await?;
 
         let tx = conn.build_transaction().start().await?;
 
-        let user = User::from(user.user_input);
+        let user = User::from(user);
 
         let stmt = tx
             .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")

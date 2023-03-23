@@ -15,7 +15,6 @@ pub mod parsing;
 pub mod postgres;
 pub mod server;
 pub mod tests;
-pub mod user_input;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, ToSchema)]
 pub struct IdResponse<T> {

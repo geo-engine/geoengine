@@ -8,7 +8,6 @@ use crate::{
         SimpleTaskManagerBackend, SimpleTaskManagerContext, Task, TaskError, TaskId,
         TaskListOptions, TaskManager, TaskStatus, TaskStatusWithId,
     },
-    util::user_input::{UserInput, Validated},
 };
 
 use super::users::UserSession;
@@ -102,24 +101,18 @@ impl TaskManager<SimpleTaskManagerContext> for ProTaskManager {
 
     async fn list_tasks(
         &self,
-        options: Validated<TaskListOptions>,
+        options: TaskListOptions,
     ) -> Result<Vec<TaskStatusWithId>, TaskError> {
         // TODO: check permissions for user tasks
-
-        let options = options.user_input;
 
         let tasks = self
             .backend
             .simple_task_manager
-            .list_tasks(
-                TaskListOptions {
-                    filter: options.filter,
-                    offset: 0,
-                    limit: u32::MAX,
-                }
-                .validated()
-                .expect("should be valid because input options were valid"),
-            )
+            .list_tasks(TaskListOptions {
+                filter: options.filter,
+                offset: 0,
+                limit: u32::MAX,
+            })
             .await?;
 
         let task_types = self.backend.task_type_by_id.read().await;

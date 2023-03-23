@@ -21,7 +21,6 @@ use crate::pro::contexts::ProInMemoryDb;
 use crate::pro::permissions::{Permission, PermissionDb};
 use crate::pro::users::UserId;
 use crate::util::operators::source_operator_from_dataset;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use futures::{stream, StreamExt};
@@ -181,12 +180,11 @@ impl ProHashMapStorable for GdalMetaDataList {
 impl DatasetStore for ProInMemoryDb {
     async fn add_dataset(
         &self,
-        dataset: Validated<AddDataset>,
+        dataset: AddDataset,
         meta_data: Box<dyn ProHashMapStorable>,
     ) -> Result<DatasetId> {
-        info!("Add dataset {:?}", dataset.user_input.name);
+        info!("Add dataset {:?}", dataset.name);
 
-        let dataset = dataset.user_input;
         let id = dataset.id.unwrap_or_else(DatasetId::new);
         let result_descriptor = meta_data.store(id, self).await;
 
@@ -248,12 +246,7 @@ impl DatasetStore for ProInMemoryDb {
 
 #[async_trait]
 impl DatasetProvider for ProInMemoryDb {
-    async fn list_datasets(
-        &self,
-        options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>> {
-        let options = options.user_input;
-
+    async fn list_datasets(&self, options: DatasetListOptions) -> Result<Vec<DatasetListing>> {
         let backend = self.backend.dataset_db.read().await;
 
         let mut list = stream::iter(backend.datasets.values())
@@ -465,15 +458,13 @@ impl DatasetLayerCollectionProvider for ProInMemoryDb {
     async fn load_dataset_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         ensure!(
             self.has_permission(collection.clone(), Permission::Read)
                 .await?,
             error::PermissionDenied
         );
-
-        let options = options.user_input;
 
         let backend = self.backend.dataset_db.read().await;
 
@@ -559,7 +550,7 @@ mod tests {
     use crate::pro::contexts::ProInMemoryContext;
     use crate::pro::permissions::Role;
     use crate::pro::users::UserSession;
-    use crate::util::user_input::UserInput;
+
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
@@ -611,7 +602,7 @@ mod tests {
 
         let db = ctx.db();
 
-        let id = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
+        let id = db.add_dataset(ds, Box::new(meta)).await?;
 
         let exe_ctx = ctx.execution_context()?;
 
@@ -631,15 +622,12 @@ mod tests {
         );
 
         let ds = db
-            .list_datasets(
-                DatasetListOptions {
-                    filter: None,
-                    order: OrderBy::NameAsc,
-                    offset: 0,
-                    limit: 1,
-                }
-                .validated()?,
-            )
+            .list_datasets(DatasetListOptions {
+                filter: None,
+                order: OrderBy::NameAsc,
+                offset: 0,
+                limit: 1,
+            })
             .await?;
 
         assert_eq!(ds.len(), 1);
@@ -705,32 +693,26 @@ mod tests {
         let db1 = app_ctx.session_context(session1.clone()).db();
         let db2 = app_ctx.session_context(session2.clone()).db();
 
-        let _id = db1.add_dataset(ds.validated()?, Box::new(meta)).await?;
+        let _id = db1.add_dataset(ds, Box::new(meta)).await?;
 
         let list1 = db1
-            .list_datasets(
-                DatasetListOptions {
-                    filter: None,
-                    order: OrderBy::NameAsc,
-                    offset: 0,
-                    limit: 1,
-                }
-                .validated()?,
-            )
+            .list_datasets(DatasetListOptions {
+                filter: None,
+                order: OrderBy::NameAsc,
+                offset: 0,
+                limit: 1,
+            })
             .await?;
 
         assert_eq!(list1.len(), 1);
 
         let list2 = db2
-            .list_datasets(
-                DatasetListOptions {
-                    filter: None,
-                    order: OrderBy::NameAsc,
-                    offset: 0,
-                    limit: 1,
-                }
-                .validated()?,
-            )
+            .list_datasets(DatasetListOptions {
+                filter: None,
+                order: OrderBy::NameAsc,
+                offset: 0,
+                limit: 1,
+            })
             .await?;
 
         assert_eq!(list2.len(), 0);
@@ -783,7 +765,7 @@ mod tests {
         let db1 = app_ctx.session_context(session1.clone()).db();
         let db2 = app_ctx.session_context(session2.clone()).db();
 
-        let id = db1.add_dataset(ds.validated()?, Box::new(meta)).await?;
+        let id = db1.add_dataset(ds, Box::new(meta)).await?;
 
         assert!(db1.load_provenance(&id).await.is_ok());
 
@@ -837,7 +819,7 @@ mod tests {
         let db1 = app_ctx.session_context(session1.clone()).db();
         let db2 = app_ctx.session_context(session2.clone()).db();
 
-        let id = db1.add_dataset(ds.validated()?, Box::new(meta)).await?;
+        let id = db1.add_dataset(ds, Box::new(meta)).await?;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -896,7 +878,7 @@ mod tests {
         let db1 = app_ctx.session_context(session1.clone()).db();
         let db2 = app_ctx.session_context(session2.clone()).db();
 
-        let id = db1.add_dataset(ds.validated()?, Box::new(meta)).await?;
+        let id = db1.add_dataset(ds, Box::new(meta)).await?;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -955,7 +937,7 @@ mod tests {
         let db1 = app_ctx.session_context(session1.clone()).db();
         let db2 = app_ctx.session_context(session2.clone()).db();
 
-        let id = db1.add_dataset(ds.validated()?, Box::new(meta)).await?;
+        let id = db1.add_dataset(ds, Box::new(meta)).await?;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,

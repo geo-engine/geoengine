@@ -6,12 +6,12 @@ use std::{
     path::PathBuf,
 };
 
+use crate::layers::storage::LayerDb;
 use crate::layers::{
     layer::{AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerDefinition},
     storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
 };
 use crate::{error::Result, layers::listing::LayerCollectionId};
-use crate::{layers::storage::LayerDb, util::user_input::UserInput};
 
 use log::{info, warn};
 use uuid::Uuid;
@@ -36,8 +36,7 @@ pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: 
                     symbology: def.symbology,
                     metadata: def.metadata,
                     properties: def.properties,
-                }
-                .validated()?,
+                },
                 &LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
             )
             .await?;
@@ -86,8 +85,7 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
             name: def.name.clone(),
             description: def.description.clone(),
             properties: def.properties.clone(),
-        }
-        .validated()?;
+        };
 
         db.add_layer_collection_with_id(
             &def.id,

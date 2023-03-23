@@ -17,18 +17,11 @@ use crate::layers::storage::{
 use crate::pro::contexts::ProInMemoryDb;
 use crate::pro::permissions::{Permission, PermissionDb};
 
-use crate::util::user_input::Validated;
-
 use crate::api::model::datatypes::{DataProviderId, LayerId};
-use crate::util::user_input::UserInput;
 
 #[async_trait]
 impl LayerDb for ProInMemoryDb {
-    async fn add_layer(
-        &self,
-        layer: Validated<AddLayer>,
-        collection: &LayerCollectionId,
-    ) -> Result<LayerId> {
+    async fn add_layer(&self, layer: AddLayer, collection: &LayerCollectionId) -> Result<LayerId> {
         ensure!(
             self.has_permission(collection.clone(), Permission::Owner)
                 .await?,
@@ -47,7 +40,7 @@ impl LayerDb for ProInMemoryDb {
     async fn add_layer_with_id(
         &self,
         id: &LayerId,
-        layer: Validated<AddLayer>,
+        layer: AddLayer,
         collection: &LayerCollectionId,
     ) -> Result<()> {
         ensure!(
@@ -85,7 +78,7 @@ impl LayerDb for ProInMemoryDb {
 
     async fn add_layer_collection(
         &self,
-        collection: Validated<AddLayerCollection>,
+        collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId> {
         ensure!(
@@ -108,7 +101,7 @@ impl LayerDb for ProInMemoryDb {
     async fn add_layer_collection_with_id(
         &self,
         id: &LayerCollectionId,
-        collection: Validated<AddLayerCollection>,
+        collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<()> {
         ensure!(
@@ -212,7 +205,7 @@ impl LayerCollectionProvider for ProInMemoryDb {
     async fn load_layer_collection(
         &self,
         collection_id: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         ensure!(
             self.has_permission(collection_id.clone(), Permission::Read)
@@ -222,17 +215,13 @@ impl LayerCollectionProvider for ProInMemoryDb {
 
         let backend = &self.backend.layer_db;
 
-        let options = options.user_input;
-
         let mut collection = backend
             .load_layer_collection(
                 collection_id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: u32::MAX,
-                }
-                .validated()
-                .expect("should be valid because of the selection of offset and limit"),
+                },
             )
             .await?;
 
@@ -301,10 +290,8 @@ impl LayerProviderDb for ProInMemoryDb {
 
     async fn list_layer_providers(
         &self,
-        options: Validated<LayerProviderListingOptions>,
+        options: LayerProviderListingOptions,
     ) -> Result<Vec<LayerProviderListing>> {
-        let options = options.user_input;
-
         let mut listing = self
             .backend
             .layer_provider_db
@@ -374,9 +361,7 @@ mod tests {
                     name: "admin collection".to_string(),
                     description: String::new(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &root,
             )
             .await
@@ -389,9 +374,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 10,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -417,9 +400,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 10,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -436,9 +417,7 @@ mod tests {
                     name: "user layer".to_string(),
                     description: String::new(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &new_collection_id,
             )
             .await;
@@ -461,9 +440,7 @@ mod tests {
                 name: "user layer".to_string(),
                 description: String::new(),
                 properties: Default::default(),
-            }
-            .validated()
-            .unwrap(),
+            },
             &new_collection_id,
         )
         .await
@@ -494,9 +471,7 @@ mod tests {
                     name: "user layer".to_string(),
                     description: String::new(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &root,
             )
             .await;
@@ -509,9 +484,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 10,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();

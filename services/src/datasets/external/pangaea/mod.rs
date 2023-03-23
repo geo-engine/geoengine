@@ -14,7 +14,6 @@ use reqwest::Client;
 use url::Url;
 
 use crate::error::{Error, Result};
-use crate::util::user_input::Validated;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use serde::{Deserialize, Serialize};
 
@@ -113,7 +112,7 @@ impl LayerCollectionProvider for PangaeaDataProvider {
     async fn load_layer_collection(
         &self,
         _collection: &LayerCollectionId,
-        _options: Validated<LayerCollectionListOptions>,
+        _options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         Err(Error::NotYetImplemented)
     }

@@ -1,5 +1,6 @@
 use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
+use crate::error;
 use crate::error::Error;
 use crate::error::Result;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -11,7 +12,6 @@ use crate::layers::layer::{
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::parsing::{deserialize_base_url, string_or_string_array};
 use crate::workflows::workflow::Workflow;
-use crate::{error, util::user_input::Validated};
 use async_trait::async_trait;
 use futures::future::join_all;
 use gdal::DatasetOptions;
@@ -155,7 +155,7 @@ impl LayerCollectionProvider for Nature40DataProvider {
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        _options: Validated<LayerCollectionListOptions>,
+        _options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.get_root_layer_collection_id().await?,
@@ -529,7 +529,7 @@ mod tests {
     };
     use serde_json::json;
 
-    use crate::{layers::layer::ProviderLayerCollectionId, test_data, util::user_input::UserInput};
+    use crate::{layers::layer::ProviderLayerCollectionId, test_data};
 
     use super::*;
 
@@ -803,9 +803,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 10,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();

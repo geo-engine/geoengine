@@ -5,22 +5,17 @@ pub mod util;
 
 use self::time_estimation::TimeEstimation;
 use crate::identifier;
-use crate::{
-    error::Result,
-    util::{
-        config::get_config_element,
-        user_input::{UserInput, Validated},
-    },
-};
+use crate::{error::Result, util::config::get_config_element};
 pub use error::TaskError;
 use futures::channel::oneshot;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::{error::ErrorSource, util::AsAnyArc};
 pub use in_memory::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
-use snafu::ensure;
+use std::borrow::Cow;
 use std::{fmt, sync::Arc};
 use utoipa::{IntoParams, ToSchema};
+use validator::{Validate, ValidationError};
 
 /// A database that allows scheduling and retrieving tasks.
 #[async_trait::async_trait]
@@ -38,7 +33,7 @@ pub trait TaskManager<C: TaskContext>: Send + Sync {
     #[must_use]
     async fn list_tasks(
         &self,
-        options: Validated<TaskListOptions>,
+        options: TaskListOptions,
     ) -> Result<Vec<TaskStatusWithId>, TaskError>;
 
     /// Abort a running task.
@@ -349,7 +344,7 @@ erased_serde::serialize_trait_object!(TaskStatusInfo);
 impl TaskStatusInfo for () {}
 impl TaskStatusInfo for String {}
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, IntoParams)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, IntoParams, Validate)]
 pub struct TaskListOptions {
     #[serde(default)]
     pub filter: Option<TaskFilter>,
@@ -358,21 +353,21 @@ pub struct TaskListOptions {
     pub offset: u32,
     #[serde(default = "task_list_limit_default")]
     #[param(example = 20)]
+    #[validate(custom = "validate_list_limit")]
     pub limit: u32,
 }
 
-impl UserInput for TaskListOptions {
-    fn validate(&self) -> Result<()> {
-        let limit = get_config_element::<crate::util::config::TaskManager>()?.list_limit;
-        ensure!(
-            self.limit <= limit,
-            crate::error::InvalidListLimit {
-                limit: limit as usize
-            }
-        );
-
-        Ok(())
+fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
+    let limit = get_config_element::<crate::util::config::TaskManager>()
+        .expect("should exist because it is defined in the default config")
+        .list_limit;
+    if value <= limit {
+        return Ok(());
     }
+
+    let mut err = ValidationError::new("Invalid limit");
+    err.add_param::<u32>(Cow::Borrowed("max limit"), &limit);
+    Err(err)
 }
 
 fn task_list_limit_default() -> u32 {

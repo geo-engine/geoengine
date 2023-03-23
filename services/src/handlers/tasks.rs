@@ -1,7 +1,6 @@
 use crate::contexts::ApplicationContext;
 use crate::error::Result;
 use crate::tasks::{TaskListOptions, TaskManager};
-use crate::util::user_input::UserInput;
 use crate::{contexts::SessionContext, tasks::TaskId};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
@@ -102,9 +101,9 @@ async fn status_handler<C: ApplicationContext>(
 async fn list_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    task_list_options: web::Query<TaskListOptions>,
+    task_list_options: actix_web_validator::Query<TaskListOptions>,
 ) -> Result<impl Responder> {
-    let task_list_options = task_list_options.into_inner().validated()?;
+    let task_list_options = task_list_options.into_inner();
 
     let task = app_ctx
         .session_context(session)
@@ -758,15 +757,11 @@ mod tests {
                 let task_manager = tasks.clone();
                 async move {
                     let task_list = task_manager
-                        .list_tasks(
-                            TaskListOptions {
-                                filter: None,
-                                offset: 0,
-                                limit: 10,
-                            }
-                            .validated()
-                            .unwrap(),
-                        )
+                        .list_tasks(TaskListOptions {
+                            filter: None,
+                            offset: 0,
+                            limit: 10,
+                        })
                         .await
                         .unwrap();
 
@@ -797,15 +792,11 @@ mod tests {
         // 5. check results
 
         let list = tasks
-            .list_tasks(
-                TaskListOptions {
-                    filter: None,
-                    offset: 0,
-                    limit: 10,
-                }
-                .validated()
-                .unwrap(),
-            )
+            .list_tasks(TaskListOptions {
+                filter: None,
+                offset: 0,
+                limit: 10,
+            })
             .await
             .unwrap();
 

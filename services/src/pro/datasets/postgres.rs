@@ -27,7 +27,6 @@ use crate::pro::contexts::PostgresDb;
 use crate::pro::permissions::{Permission, PermissionDb, RoleId};
 use crate::projects::Symbology;
 use crate::util::operators::source_operator_from_dataset;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 
@@ -68,10 +67,7 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn list_datasets(
-        &self,
-        _options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>> {
+    async fn list_datasets(&self, _options: DatasetListOptions) -> Result<Vec<DatasetListing>> {
         // TODO: use options
 
         let conn = self.conn_pool.get().await?;
@@ -426,10 +422,9 @@ where
 {
     async fn add_dataset(
         &self,
-        dataset: Validated<AddDataset>,
+        dataset: AddDataset,
         meta_data: Box<dyn PostgresStorable<Tls>>,
     ) -> Result<DatasetId> {
-        let dataset = dataset.user_input;
         let id = dataset.id.unwrap_or_else(DatasetId::new);
 
         let meta_data_json = meta_data.to_json()?;
@@ -604,11 +599,9 @@ where
     async fn load_dataset_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         let conn = self.conn_pool.get().await?;
-
-        let options = options.user_input;
 
         let stmt = conn
             .prepare(

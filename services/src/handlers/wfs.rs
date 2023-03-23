@@ -678,7 +678,6 @@ mod tests {
     use crate::datasets::storage::{DatasetDefinition, DatasetStore};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
-    use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use actix_web::dev::ServiceResponse;
     use actix_web::http::header;
@@ -1130,7 +1129,7 @@ x;y
 
         let db = app_ctx.default_session_context().await.db();
 
-        db.add_dataset(def.properties.validated().unwrap(), Box::new(def.meta_data))
+        db.add_dataset(def.properties, Box::new(def.meta_data))
             .await
             .unwrap()
     }

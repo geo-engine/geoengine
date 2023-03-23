@@ -237,10 +237,7 @@ mod tests {
             util::tests::{create_project_helper, send_pro_test_request},
         },
         projects::{Project, ProjectDb, ProjectVersion},
-        util::{
-            tests::{check_allowed_http_methods, update_project_helper},
-            user_input::UserInput,
-        },
+        util::tests::{check_allowed_http_methods, update_project_helper},
     };
 
     #[tokio::test]
@@ -253,7 +250,7 @@ mod tests {
 
         let db = ctx.db();
 
-        db.update_project(update_project_helper(project).validated().unwrap())
+        db.update_project(update_project_helper(project))
             .await
             .unwrap();
 
@@ -310,7 +307,7 @@ mod tests {
 
         let db = ctx.db();
 
-        db.update_project(update_project_helper(project).validated().unwrap())
+        db.update_project(update_project_helper(project))
             .await
             .unwrap();
 
@@ -346,7 +343,7 @@ mod tests {
 
         let db = ctx.db();
 
-        db.update_project(update_project_helper(project).validated().unwrap())
+        db.update_project(update_project_helper(project))
             .await
             .unwrap();
 

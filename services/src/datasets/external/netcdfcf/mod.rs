@@ -25,7 +25,6 @@ use crate::layers::listing::LayerCollectionProvider;
 use crate::projects::RasterSymbology;
 use crate::projects::Symbology;
 use crate::tasks::TaskContext;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use gdal::raster::{Dimension, GdalDataType, Group};
@@ -1371,7 +1370,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> crate::error::Result<LayerCollection> {
         let id = NetCdfLayerCollectionId::from_str(&collection.0)?;
         Ok(match id {
@@ -1385,7 +1384,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     &self.overviews,
                     &self.path,
                     &path,
-                    &options.user_input,
+                    &options,
                 )
                 .await?
             }
@@ -1399,7 +1398,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     &[],
                     self.path.clone(),
                     self.overviews.clone(),
-                    &options.user_input,
+                    &options,
                 )
                 .await?
             }
@@ -1413,7 +1412,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     &groups,
                     self.path.clone(),
                     self.overviews.clone(),
-                    &options.user_input,
+                    &options,
                 )
                 .await?
             }
@@ -1526,7 +1525,7 @@ mod tests {
     use crate::contexts::{SessionContext, SimpleApplicationContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::layers::storage::LayerProviderDb;
-    use crate::util::user_input::UserInput;
+
     use crate::{
         contexts::InMemoryContext, tasks::util::NopTaskContext,
         util::tests::add_land_cover_to_datasets,
@@ -1728,9 +1727,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -1798,9 +1795,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -1856,9 +1851,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -2158,9 +2151,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();

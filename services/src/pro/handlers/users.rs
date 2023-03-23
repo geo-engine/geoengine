@@ -15,7 +15,6 @@ use crate::pro::users::{AuthCodeResponse, UserCredentials};
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use crate::util::config;
-use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
 use crate::pro::users::OidcError::OidcDisabled;
@@ -74,7 +73,7 @@ where
         )
     ))]
 pub(crate) async fn register_user_handler<C: ApplicationContext + UserAuth>(
-    user: web::Json<UserRegistration>,
+    user: actix_web_validator::Json<UserRegistration>,
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
@@ -85,7 +84,7 @@ where
         error::UserRegistrationDisabled
     );
 
-    let user = user.into_inner().validated()?;
+    let user = user.into_inner();
     let id = app_ctx.register_user(user).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -117,7 +116,7 @@ responses(
     )
 ))]
 pub(crate) async fn login_handler<C: ApplicationContext + UserAuth>(
-    user: web::Json<UserCredentials>,
+    user: actix_web_validator::Json<UserCredentials>,
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
@@ -673,7 +672,6 @@ mod tests {
     };
     use crate::pro::{contexts::ProInMemoryContext, users::UserId};
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
-    use crate::util::user_input::Validated;
 
     use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb, UserAuth};
     use crate::pro::util::config::Oidc;
@@ -836,12 +834,10 @@ mod tests {
     async fn login_test_helper(method: Method, password: &str) -> ServiceResponse {
         let app_ctx = ProInMemoryContext::test_default();
 
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret123".to_string(),
-                real_name: " Foo Bar".to_string(),
-            },
+        let user = UserRegistration {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+            real_name: " Foo Bar".to_string(),
         };
 
         app_ctx.register_user(user).await.unwrap();
@@ -870,7 +866,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_fail() {
-        let res = login_test_helper(Method::POST, "wrong").await;
+        let res = login_test_helper(Method::POST, "wrongpassword").await;
 
         ErrorResponse::assert(
             res,
@@ -914,12 +910,10 @@ mod tests {
     async fn login_missing_fields() {
         let app_ctx = ProInMemoryContext::test_default();
 
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret123".to_string(),
-                real_name: " Foo Bar".to_string(),
-            },
+        let user = UserRegistration {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+            real_name: " Foo Bar".to_string(),
         };
 
         app_ctx.register_user(user).await.unwrap();
@@ -946,12 +940,10 @@ mod tests {
     async fn logout_test_helper(method: Method) -> ServiceResponse {
         let app_ctx = ProInMemoryContext::test_default();
 
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret123".to_string(),
-                real_name: " Foo Bar".to_string(),
-            },
+        let user = UserRegistration {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+            real_name: " Foo Bar".to_string(),
         };
 
         app_ctx.register_user(user).await.unwrap();
@@ -1494,12 +1486,10 @@ mod tests {
     async fn it_gets_quota() {
         let app_ctx = ProInMemoryContext::test_default();
 
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret123".to_string(),
-                real_name: "Foo Bar".to_string(),
-            },
+        let user = UserRegistration {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+            real_name: "Foo Bar".to_string(),
         };
 
         app_ctx.register_user(user).await.unwrap();
@@ -1558,12 +1548,10 @@ mod tests {
     async fn it_updates_quota() {
         let app_ctx = ProInMemoryContext::test_default();
 
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret123".to_string(),
-                real_name: "Foo Bar".to_string(),
-            },
+        let user = UserRegistration {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+            real_name: "Foo Bar".to_string(),
         };
 
         let user_id = app_ctx.register_user(user).await.unwrap();
@@ -1735,15 +1723,11 @@ mod tests {
         let admin_session = admin_login(&app_ctx).await;
 
         let user_id = app_ctx
-            .register_user(
-                UserRegistration {
-                    email: "foo@example.com".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
+            .register_user(UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+                real_name: "Foo Bar".to_string(),
+            })
             .await
             .unwrap();
 
