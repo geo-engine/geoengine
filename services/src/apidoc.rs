@@ -355,7 +355,7 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
     use crate::util::tests::send_test_request;
     use geoengine_datatypes::util::test::TestDefault;
 
