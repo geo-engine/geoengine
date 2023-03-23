@@ -310,6 +310,8 @@ pub struct LineSymbology {
     pub stroke: StrokeParam,
 
     pub text: Option<TextSymbology>,
+
+    pub auto_simplified: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
@@ -320,6 +322,8 @@ pub struct PolygonSymbology {
     pub stroke: StrokeParam,
 
     pub text: Option<TextSymbology>,
+
+    pub auto_simplified: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
