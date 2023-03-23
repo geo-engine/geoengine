@@ -20,9 +20,9 @@ use snafu::{ensure, OptionExt, ResultExt};
 use xgboost_rs::{Booster, DMatrix, XGBError};
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, MultipleRasterSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, TypedRasterQueryProcessor,
+    ExecutionContext, InitializedRasterOperator, MultipleRasterSources, Operator, OperatorName,
+    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    TypedRasterQueryProcessor,
 };
 use crate::util::stream_zip::StreamVectorZip;
 use crate::util::Result;
@@ -30,7 +30,6 @@ use futures::stream::BoxStream;
 use RasterDataType::F32 as RasterOut;
 
 use snafu::Snafu;
-use tracing::{span, Level};
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 #[derive(Debug, Snafu)]
