@@ -2,6 +2,7 @@ mod circle_merging_quadtree;
 mod column_range_filter;
 mod expression;
 mod interpolation;
+mod line_simplification;
 mod map_query;
 mod meteosat;
 mod neighborhood_aggregate;
@@ -18,6 +19,9 @@ mod vector_join;
 
 pub use expression::{Expression, ExpressionError, ExpressionParams, ExpressionSources};
 pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
+pub use line_simplification::{
+    LineSimplification, LineSimplificationError, LineSimplificationParams,
+};
 pub use neighborhood_aggregate::{
     NeighborhoodAggregate, NeighborhoodAggregateError, NeighborhoodAggregateParams,
 };
