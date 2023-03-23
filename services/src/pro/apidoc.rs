@@ -384,8 +384,9 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pro::contexts::{ProContext, ProInMemoryContext};
-    use crate::pro::users::UserDb;
+    use crate::contexts::Session;
+    use crate::pro::contexts::ProInMemoryContext;
+    use crate::pro::users::UserAuth;
     use crate::pro::util::tests::send_pro_test_request;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -400,7 +401,7 @@ mod tests {
             ApiDoc::openapi(),
             move || async move {
                 let ctx = ProInMemoryContext::test_default();
-                let session_id = ctx.user_db_ref().anonymous().await.unwrap().id;
+                let session_id = ctx.create_anonymous_session().await.unwrap().id();
                 (ctx, session_id)
             },
             send_pro_test_request,

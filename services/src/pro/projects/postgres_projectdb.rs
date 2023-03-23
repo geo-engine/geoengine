@@ -157,7 +157,7 @@ where
         FROM user_permitted_projects u JOIN project_versions p ON (u.project_id = p.project_id)
         WHERE
             u.user_id = $1
-            AND latest IS TRUE
+            AND p.changed >= ALL (SELECT changed FROM project_versions WHERE project_id = p.project_id)
         ORDER BY p.{}
         LIMIT $2
         OFFSET $3;",
@@ -231,9 +231,8 @@ where
                     bounds,
                     time_step,
                     author_user_id,
-                    changed,
-                    latest)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, TRUE);",
+                    changed)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP);",
             )
             .await?;
 
@@ -290,11 +289,6 @@ where
 
         let project = self.load_project(update.id).await?; // TODO: move inside transaction?
 
-        let stmt = trans
-            .prepare("UPDATE project_versions SET latest = FALSE WHERE project_id = $1 AND latest IS TRUE;")
-            .await?;
-        trans.execute(&stmt, &[&project.id]).await?;
-
         let project = project.update_project(update)?;
 
         let stmt = trans
@@ -308,9 +302,8 @@ where
                     bounds,
                     time_step,
                     author_user_id,
-                    changed,
-                    latest)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, TRUE);",
+                    changed)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP);",
             )
             .await?;
 
@@ -440,7 +433,9 @@ where
                 p.changed,
                 p.author_user_id
             FROM project_versions p
-            WHERE project_id = $1 AND latest IS TRUE",
+            WHERE project_id = $1 AND p.changed >= ALL(
+                SELECT changed FROM project_versions WHERE project_id = $1
+            )",
                 )
                 .await?;
 
@@ -507,7 +502,7 @@ where
                 "
                 SELECT id, changed, author_user_id
                 FROM project_versions WHERE project_id = $1 
-                ORDER BY latest DESC, changed DESC, author_user_id DESC",
+                ORDER BY changed DESC, author_user_id DESC",
             )
             .await?;
 

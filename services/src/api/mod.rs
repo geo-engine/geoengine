@@ -105,15 +105,15 @@ where
     F: Fn(TestRequest, C) -> Fut,
     Fut: Future<Output = ServiceResponse>,
 {
-    pub schemas: &'a BTreeMap<String, RefOr<Schema>>,
-    pub http_method: &'a PathItemType,
-    pub uri: &'a str,
-    pub parameters: &'a Option<Vec<Parameter>>,
-    pub body: serde_json::Value,
-    pub with_auth: bool,
-    pub ctx: C,
-    pub session_id: SessionId,
-    pub send_test_request: &'a F,
+    schemas: &'a BTreeMap<String, RefOr<Schema>>,
+    http_method: &'a PathItemType,
+    uri: &'a str,
+    parameters: &'a Option<Vec<Parameter>>,
+    body: serde_json::Value,
+    with_auth: bool,
+    ctx: C,
+    session_id: SessionId,
+    send_test_request: &'a F,
 }
 
 impl<'a, C, F, Fut> RunnableExample<'a, C, F, Fut>
@@ -347,7 +347,7 @@ pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
     use crate::datasets::upload::Volume;
     use crate::util::server::{configure_extractors, render_404, render_405};
     use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
@@ -599,7 +599,7 @@ mod tests {
         HttpResponse::Ok()
     }
 
-    async fn dummy_send_test_request<C: SimpleContext>(
+    async fn dummy_send_test_request<C: SimpleApplicationContext>(
         req: TestRequest,
         ctx: C,
     ) -> ServiceResponse {

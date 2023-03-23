@@ -1,17 +1,21 @@
+use crate::contexts::ApplicationContext;
+use crate::contexts::SessionContext;
 use crate::error::Result;
 use crate::handlers;
-use crate::pro::contexts::ProContext;
+use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::projects::LoadVersion;
 use crate::pro::projects::ProProjectDb;
 use crate::projects::{ProjectId, ProjectVersionId};
 
+use actix_web::FromRequest;
 use actix_web::{web, Responder};
 
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ProContext,
-    C::GeoEngineDB: ProGeoEngineDb,
+    C: ProApplicationContext,
+    C::Session: FromRequest,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     cfg.service(
         web::resource("/projects")
@@ -90,17 +94,18 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn load_project_version_handler<C: ProContext>(
+pub(crate) async fn load_project_version_handler<C: ProApplicationContext>(
     project: web::Path<(ProjectId, ProjectVersionId)>,
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let project = project.into_inner();
-    let id = ctx
-        .db(session)
+    let id = app_ctx
+        .session_context(session)
+        .db()
         .load_project_version(project.0, LoadVersion::Version(project.1))
         .await?;
     Ok(web::Json(id))
@@ -155,16 +160,17 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn load_project_latest_handler<C: ProContext>(
+pub(crate) async fn load_project_latest_handler<C: ProApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    let id = ctx
-        .db(session)
+    let id = app_ctx
+        .session_context(session)
+        .db()
         .load_project_version(project.into_inner(), LoadVersion::Latest)
         .await?;
     Ok(web::Json(id))
@@ -198,16 +204,17 @@ where
         ("session_token" = [])
     )
 )]
-pub(crate) async fn project_versions_handler<C: ProContext>(
+pub(crate) async fn project_versions_handler<C: ProApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     project: web::Path<ProjectId>,
 ) -> Result<impl Responder>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    let versions = ctx
-        .db(session)
+    let versions = app_ctx
+        .session_context(session)
+        .db()
         .list_project_versions(project.into_inner())
         .await?;
     Ok(web::Json(versions))
@@ -222,7 +229,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::util::test::TestDefault;
 
-    use crate::contexts::Context;
+    use crate::contexts::SessionContext;
     use crate::{
         handlers::ErrorResponse,
         pro::{
@@ -238,11 +245,13 @@ mod tests {
 
     #[tokio::test]
     async fn load_version() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let (session, project) = create_project_helper(&app_ctx).await;
 
-        let db = ctx.db(session.clone());
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
 
         db.update_project(update_project_helper(project).validated().unwrap())
             .await
@@ -252,7 +261,7 @@ mod tests {
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -267,7 +276,7 @@ mod tests {
             .uri(&format!("/project/{project}/{version_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -277,9 +286,9 @@ mod tests {
 
     #[tokio::test]
     async fn load_version_not_found() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let (session, project) = create_project_helper(&app_ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!(
@@ -287,17 +296,19 @@ mod tests {
             ))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 400, "ProjectLoadFailed", "The project failed to load.").await;
     }
 
     async fn versions_test_helper(method: Method) -> ServiceResponse {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let (session, project) = create_project_helper(&app_ctx).await;
 
-        let db = ctx.db(session.clone());
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
 
         db.update_project(update_project_helper(project).validated().unwrap())
             .await
@@ -308,7 +319,7 @@ mod tests {
             .uri(&format!("/project/{project}/versions"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-        send_pro_test_request(req, ctx).await
+        send_pro_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -327,11 +338,13 @@ mod tests {
 
     #[tokio::test]
     async fn versions_missing_header() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let (session, project) = create_project_helper(&app_ctx).await;
 
-        let db = ctx.db(session.clone());
+        let ctx = app_ctx.session_context(session);
+
+        let db = ctx.db();
 
         db.update_project(update_project_helper(project).validated().unwrap())
             .await
@@ -341,7 +354,7 @@ mod tests {
             .uri(&format!("/project/{project}/versions"))
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(project);
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,

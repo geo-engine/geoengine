@@ -500,7 +500,7 @@ impl DatasetLayerCollectionProvider for InMemoryDb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{Context, InMemoryContext, SimpleSession};
+    use crate::contexts::{InMemoryContext, SessionContext, SimpleApplicationContext};
     use crate::datasets::listing::OrderBy;
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;
@@ -511,9 +511,9 @@ mod tests {
 
     #[tokio::test]
     async fn add_ogr_and_list() -> Result<()> {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session = SimpleSession::default();
+        let ctx = app_ctx.default_session_context().await;
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -550,10 +550,10 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let db = ctx.db(session.clone());
+        let db = ctx.db();
         let id = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
-        let exe_ctx = ctx.execution_context(session.clone())?;
+        let exe_ctx = ctx.execution_context()?;
 
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,

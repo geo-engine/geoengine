@@ -1,9 +1,9 @@
-use crate::contexts::{GeoEngineDb, QueryContextImpl};
+use crate::contexts::{ApplicationContext, GeoEngineDb, QueryContextImpl, SessionId};
 use crate::datasets::upload::{Volume, Volumes};
 use crate::error;
 
 use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDbBackend};
-use crate::pro::contexts::{Context, ProContext};
+use crate::pro::contexts::SessionContext;
 use crate::pro::datasets::{add_datasets_from_directory, ProHashMapDatasetDbBackend};
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
@@ -31,7 +31,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use super::{ExecutionContextImpl, ProGeoEngineDb, QuotaCheckerImpl};
+use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
@@ -78,7 +78,7 @@ impl ProInMemoryContext {
         let db = ProInMemoryDb::new(db_backend.clone(), session.clone());
         let quota = initialize_quota_tracking(db);
 
-        let ctx = Self {
+        let app_ctx = Self {
             db: db_backend,
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -89,7 +89,7 @@ impl ProInMemoryContext {
             volumes: Default::default(),
         };
 
-        let mut db = ctx.db(session);
+        let mut db = app_ctx.session_context(session).db();
 
         add_layers_from_directory(&mut db, layer_defs_path).await;
         add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
@@ -103,7 +103,7 @@ impl ProInMemoryContext {
         )
         .await;
 
-        ctx
+        app_ctx
     }
 
     pub fn new_with_context_spec(
@@ -147,14 +147,41 @@ impl ProInMemoryContext {
 }
 
 #[async_trait]
-impl ProContext for ProInMemoryContext {
+impl ApplicationContext for ProInMemoryContext {
+    type SessionContext = ProInMemorySessionContext;
+    type Session = UserSession;
+
+    fn session_context(&self, session: Self::Session) -> Self::SessionContext {
+        ProInMemorySessionContext {
+            session,
+            context: self.clone(),
+        }
+    }
+
+    async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {
+        self.user_session_by_id(session_id)
+            .await
+            .map_err(Box::new)
+            .context(error::Authorization)
+    }
+}
+
+#[async_trait]
+impl ProApplicationContext for ProInMemoryContext {
     fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
         self.oidc_request_db.as_ref().as_ref()
     }
 }
 
+// TODO: use one single SessionContext struct for both free and pro? would have to be generic though
+#[derive(Clone)]
+pub struct ProInMemorySessionContext {
+    session: UserSession,
+    context: ProInMemoryContext,
+}
+
 #[async_trait]
-impl Context for ProInMemoryContext {
+impl SessionContext for ProInMemorySessionContext {
     type Session = UserSession;
     type GeoEngineDB = ProInMemoryDb;
 
@@ -163,51 +190,46 @@ impl Context for ProInMemoryContext {
     type TaskContext = SimpleTaskManagerContext;
     type TaskManager = ProTaskManager;
 
-    fn db(&self, session: Self::Session) -> Self::GeoEngineDB {
-        ProInMemoryDb::new(self.db.clone(), session)
+    fn db(&self) -> Self::GeoEngineDB {
+        ProInMemoryDb::new(self.context.db.clone(), self.session.clone())
     }
 
-    fn tasks(&self, session: UserSession) -> Self::TaskManager {
-        ProTaskManager::new(self.task_manager.clone(), session)
+    fn tasks(&self) -> Self::TaskManager {
+        ProTaskManager::new(self.context.task_manager.clone(), self.session.clone())
     }
 
-    fn query_context(&self, session: UserSession) -> Result<Self::QueryContext> {
+    fn query_context(&self) -> Result<Self::QueryContext> {
         let mut extensions = QueryContextExtensions::default();
         extensions.insert(
-            self.quota
-                .create_quota_tracking(&session, ComputationContext::new()),
+            self.context
+                .quota
+                .create_quota_tracking(&self.session, ComputationContext::new()),
         );
-        extensions.insert(Box::new(QuotaCheckerImpl {
-            user_db: self.db(session),
-        }) as QuotaChecker);
+        extensions.insert(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker);
 
         Ok(QueryContextImpl::new_with_extensions(
-            self.query_ctx_chunk_size,
-            self.thread_pool.clone(),
+            self.context.query_ctx_chunk_size,
+            self.context.thread_pool.clone(),
             extensions,
         ))
     }
 
-    fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
+    fn execution_context(&self) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<Self::GeoEngineDB>::new(
-            self.db(session),
-            self.thread_pool.clone(),
-            self.exe_ctx_tiling_spec,
+            self.db(),
+            self.context.thread_pool.clone(),
+            self.context.exe_ctx_tiling_spec,
         ))
     }
 
-    // TODO: remove this method?! it is replaced by the session() method
-    async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
-        self.user_session_by_id(session_id)
-            .await
-            .map_err(Box::new)
-            .context(error::Authorization)
+    fn volumes(&self) -> Result<Vec<Volume>> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        Ok(self.context.volumes.volumes.clone())
     }
 
-    fn volumes(&self, session: UserSession) -> Result<Vec<Volume>> {
-        ensure!(session.is_admin(), error::PermissionDenied);
-
-        Ok(self.volumes.volumes.clone())
+    fn session(&self) -> &Self::Session {
+        &self.session
     }
 }
 

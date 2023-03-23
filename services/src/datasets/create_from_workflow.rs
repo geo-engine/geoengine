@@ -1,6 +1,6 @@
 use crate::api::model::datatypes::DatasetId;
 use crate::api::model::services::AddDataset;
-use crate::contexts::Context;
+use crate::contexts::SessionContext;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
@@ -56,9 +56,8 @@ pub struct RasterDatasetFromWorkflowResult {
 
 impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
 
-pub struct RasterDatasetFromWorkflowTask<C: Context> {
+pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
     pub workflow: Workflow,
-    pub session: C::Session,
     pub ctx: Arc<C>,
     pub info: RasterDatasetFromWorkflow,
     pub upload: UploadId,
@@ -66,13 +65,13 @@ pub struct RasterDatasetFromWorkflowTask<C: Context> {
     pub compression_num_threads: GdalCompressionNumThreads,
 }
 
-impl<C: Context> RasterDatasetFromWorkflowTask<C> {
+impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
     async fn process(&self) -> error::Result<RasterDatasetFromWorkflowResult> {
         let operator = self.workflow.operator.clone();
 
         let operator = operator.get_raster().context(crate::error::Operator)?;
 
-        let execution_context = self.ctx.execution_context(self.session.clone())?;
+        let execution_context = self.ctx.execution_context()?;
         let initialized = operator
             .initialize(&execution_context)
             .await
@@ -85,7 +84,7 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
             .context(crate::error::Operator)?;
 
         let query_rect = self.info.query;
-        let query_ctx = self.ctx.query_context(self.session.clone())?;
+        let query_ctx = self.ctx.query_context()?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
@@ -120,7 +119,6 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
             result_descriptor,
             query_rect,
             self.ctx.as_ref(),
-            self.session.clone(),
         )
         .await?;
 
@@ -132,7 +130,7 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
 }
 
 #[async_trait::async_trait]
-impl<C: Context> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
     async fn run(
         &self,
         _ctx: C::TaskContext,
@@ -167,9 +165,8 @@ impl<C: Context> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
     }
 }
 
-pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
+pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
     workflow: Workflow,
-    session: C::Session,
     ctx: Arc<C>,
     info: RasterDatasetFromWorkflow,
     compression_num_threads: GdalCompressionNumThreads,
@@ -183,7 +180,6 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
 
     let task = RasterDatasetFromWorkflowTask {
         workflow,
-        session: session.clone(),
         ctx: ctx.clone(),
         info,
         upload,
@@ -192,18 +188,17 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
     }
     .boxed();
 
-    let task_id = ctx.tasks(session).schedule_task(task, None).await?;
+    let task_id = ctx.tasks().schedule_task(task, None).await?;
 
     Ok(task_id)
 }
 
-async fn create_dataset<C: Context>(
+async fn create_dataset<C: SessionContext>(
     info: RasterDatasetFromWorkflow,
     mut slice_info: Vec<GdalLoadingInfoTemporalSlice>,
     origin_result_descriptor: &RasterResultDescriptor,
     query_rectangle: RasterQueryRectangle,
     ctx: &C,
-    session: <C as Context>::Session,
 ) -> error::Result<DatasetId> {
     ensure!(!slice_info.is_empty(), error::EmptyDatasetCannotBeImported);
 
@@ -259,7 +254,7 @@ async fn create_dataset<C: Context>(
         meta_data,
     };
 
-    let db = ctx.db(session);
+    let db = ctx.db();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
     let dataset = db
         .add_dataset(dataset_definition.properties.validated()?, meta)
