@@ -22,7 +22,6 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::marker::PhantomData;
 
-
 /// A neighborhood aggregate operator applies an aggregate function to each raster pixel and its surrounding.
 /// For each output pixel, the aggregate function is applied to an input pixel plus its neighborhood.
 pub type NeighborhoodAggregate = Operator<NeighborhoodAggregateParams, SingleRasterSource>;

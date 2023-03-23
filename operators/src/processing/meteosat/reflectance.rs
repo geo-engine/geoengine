@@ -23,7 +23,6 @@ use geoengine_datatypes::raster::{
 };
 use serde::{Deserialize, Serialize};
 
-
 // Output type is always f32
 type PixelOut = f32;
 use crate::processing::meteosat::satellite::{Channel, Satellite};

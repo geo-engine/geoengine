@@ -26,7 +26,6 @@ use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct InterpolationParams {

@@ -21,7 +21,6 @@ use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
 
-
 /// Projection of time information in queries and data
 ///
 /// This operator changes the temporal validity of the queried data.

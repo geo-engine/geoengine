@@ -19,7 +19,6 @@ use geoengine_datatypes::raster::{
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 
-
 // Output type is always f32
 type PixelOut = f32;
 use crate::error::Error;

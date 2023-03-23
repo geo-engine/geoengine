@@ -55,7 +55,6 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-
 mod error;
 mod loading_info;
 

@@ -1,9 +1,9 @@
-use crate::engine::{QueryProcessor, SingleVectorSource};
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, OperatorName,
     PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, TypedPlotQueryProcessor,
     TypedVectorQueryProcessor,
 };
+use crate::engine::{QueryProcessor, SingleVectorSource};
 use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -14,7 +14,6 @@ use geoengine_datatypes::primitives::{FeatureDataRef, Measurement, VectorQueryRe
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::collections::HashMap;
-
 
 pub const PIE_CHART_OPERATOR_NAME: &str = "PieChart";
 

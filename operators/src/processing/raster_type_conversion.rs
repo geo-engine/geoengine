@@ -6,7 +6,6 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 
-
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
     QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,

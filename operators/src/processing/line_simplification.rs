@@ -246,7 +246,7 @@ where
     >,
 {
     fn simplify(collection: &FeatureCollection<G>, epsilon: f64) -> Result<FeatureCollection<G>> {
-        // TODO: chunk within parallelization to reduce overhead
+        // TODO: chunk within parallelization to reduce overhead if necessary
 
         let simplified_geometries = collection
             .geometries()
@@ -314,8 +314,23 @@ pub enum LineSimplificationError {
 #[cfg(test)]
 mod tests {
 
-    #[test]
-    fn test_name() {
+    #[tokio::test]
+    async fn test_ser_de() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_errors() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_line_simplification() {
+        todo!()
+    }
+
+    #[tokio::test]
+    async fn test_polygon_simplification() {
         todo!()
     }
 }

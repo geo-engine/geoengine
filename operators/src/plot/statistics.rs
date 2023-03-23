@@ -25,7 +25,6 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
 
-
 pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 
 /// A plot that outputs basic statistics about its inputs

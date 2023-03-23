@@ -4,7 +4,6 @@ use snafu::ensure;
 
 use geoengine_datatypes::collections::VectorDataType;
 
-
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, OperatorData, OperatorName,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,

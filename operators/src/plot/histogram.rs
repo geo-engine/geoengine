@@ -1,4 +1,4 @@
-use crate::engine::{QueryProcessor};
+use crate::engine::QueryProcessor;
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
@@ -29,7 +29,6 @@ use geoengine_datatypes::{
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt};
 use std::convert::TryFrom;
-
 
 pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
 

@@ -12,7 +12,6 @@ use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,

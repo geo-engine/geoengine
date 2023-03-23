@@ -1,8 +1,8 @@
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-    OperatorName, QueryContext, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    ResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
+    QueryContext, RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
@@ -21,7 +21,6 @@ use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-
 
 /// Project the query rectangle to a new time interval.
 pub type TimeShift = Operator<TimeShiftParams, SingleRasterOrVectorSource>;

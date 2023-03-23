@@ -4,9 +4,9 @@ mod non_aggregated;
 mod util;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-    OperatorName, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
+    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error::{self, Error};
 use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
@@ -20,7 +20,6 @@ use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::raster::{Pixel, RasterDataType};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-
 
 use self::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,

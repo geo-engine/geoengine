@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::adapters::FeatureCollectionStreamExt;
-use crate::engine::{OperatorName};
+use crate::engine::OperatorName;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
     SingleVectorSource, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
@@ -30,7 +30,6 @@ use super::aggregates::{AttributeAggregate, AttributeAggregateType, StringSample
 use super::circle_radius_model::CircleRadiusModel;
 use super::grid::Grid;
 use super::quadtree::CircleMergingQuadtree;
-
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
