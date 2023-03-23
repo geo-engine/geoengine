@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
+    ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
     SingleVectorSource, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor,
 };
@@ -20,7 +20,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
-use tracing::{span, Level};
+
 
 /// Projection of time information in queries and data
 ///

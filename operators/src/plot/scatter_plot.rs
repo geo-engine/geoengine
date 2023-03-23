@@ -6,14 +6,14 @@ use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{Histogram2D, HistogramDimension, Plot, PlotData};
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator,
+    ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator,
     OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
     QueryProcessor, SingleVectorSource, TypedPlotQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error::Error;
 use crate::util::Result;
 use geoengine_datatypes::primitives::{Coordinate2D, VectorQueryRectangle};
-use tracing::{span, Level};
+
 
 pub const SCATTERPLOT_OPERATOR_NAME: &str = "ScatterPlot";
 

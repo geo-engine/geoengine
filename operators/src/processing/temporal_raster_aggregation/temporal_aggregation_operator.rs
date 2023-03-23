@@ -9,7 +9,7 @@ use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
 use crate::engine::{
-    CreateSpan, ExecutionContext, Operator, QueryProcessor, RasterOperator, SingleRasterSource,
+    ExecutionContext, Operator, QueryProcessor, RasterOperator, SingleRasterSource,
 };
 use crate::{
     adapters::SubQueryTileAggregator,
@@ -28,7 +28,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
-use tracing::{span, Level};
+
 use typetag;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]

@@ -1,4 +1,4 @@
-use crate::engine::{CreateSpan, QueryProcessor, SingleVectorSource};
+use crate::engine::{QueryProcessor, SingleVectorSource};
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, OperatorName,
     PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, TypedPlotQueryProcessor,
@@ -14,7 +14,7 @@ use geoengine_datatypes::primitives::{FeatureDataRef, Measurement, VectorQueryRe
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::collections::HashMap;
-use tracing::{span, Level};
+
 
 pub const PIE_CHART_OPERATOR_NAME: &str = "PieChart";
 

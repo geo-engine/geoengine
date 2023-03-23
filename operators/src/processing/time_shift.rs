@@ -1,5 +1,5 @@
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
+    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
     OperatorName, QueryContext, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
     ResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
@@ -21,7 +21,7 @@ use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use tracing::{span, Level};
+
 
 /// Project the query rectangle to a new time interval.
 pub type TimeShift = Operator<TimeShiftParams, SingleRasterOrVectorSource>;

@@ -4,7 +4,7 @@ mod non_aggregated;
 mod util;
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
+    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
     OperatorName, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo,
     VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
@@ -20,7 +20,7 @@ use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::raster::{Pixel, RasterDataType};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use tracing::{span, Level};
+
 
 use self::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,

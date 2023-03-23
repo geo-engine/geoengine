@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crate::engine::QueryContext;
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName,
-    ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName, ResultDescriptor,
+    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -20,7 +20,6 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
-use tracing::{span, Level};
 
 pub struct MockFeatureCollectionSourceProcessor<G>
 where

@@ -5,10 +5,10 @@ use geoengine_datatypes::{
     raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
-use tracing::{span, Level};
+
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
+    ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
     QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
     SingleRasterSource, TypedRasterQueryProcessor,
 };

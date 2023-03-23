@@ -5,7 +5,7 @@ use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
+    ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
     QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
     SingleRasterSource, TypedRasterQueryProcessor,
 };
@@ -25,7 +25,7 @@ use geoengine_datatypes::raster::{
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
-use tracing::{span, Level};
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]

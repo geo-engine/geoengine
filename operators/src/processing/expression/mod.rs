@@ -1,7 +1,7 @@
 use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser};
 use crate::{
     engine::{
-        CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorData,
+        ExecutionContext, InitializedRasterOperator, Operator, OperatorData,
         OperatorName, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
         TypedRasterQueryProcessor,
     },
@@ -17,7 +17,7 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use tracing::{span, Level};
+
 
 pub use self::error::ExpressionError;
 
