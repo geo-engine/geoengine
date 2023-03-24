@@ -1,6 +1,6 @@
 use super::listing::LayerCollectionId;
 use crate::api::model::datatypes::{DataProviderId, LayerId};
-use crate::{error::Result, projects::Symbology, workflows::workflow::Workflow};
+use crate::{projects::Symbology, workflows::workflow::Workflow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use utoipa::openapi::{ArrayBuilder, ObjectBuilder, SchemaType};
