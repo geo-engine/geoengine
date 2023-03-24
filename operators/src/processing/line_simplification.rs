@@ -19,7 +19,7 @@ use geoengine_datatypes::{
     },
     util::arrow::ArrowTyped,
 };
-use rayon::prelude::{ParallelBridge, ParallelIterator};
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
@@ -171,7 +171,7 @@ pub trait LineSimplificationAlgorithmImpl<In, Out: Geometry>: Send + Sync {
     fn simplify(geometry_ref: In, epsilon: f64) -> Out;
 
     fn derive_epsilon(spatial_resolution: SpatialResolution) -> f64 {
-        f64::max(spatial_resolution.x, spatial_resolution.y)
+        f64::sqrt(spatial_resolution.x.powi(2) + spatial_resolution.y.powi(2)) / f64::sqrt(2.)
     }
 }
 
@@ -210,11 +210,9 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiLineStringRef<'c>, MultiLineString
     }
 
     fn derive_epsilon(spatial_resolution: SpatialResolution) -> f64 {
-        let epsilon = f64::max(spatial_resolution.x, spatial_resolution.y);
-
         // for visvalingam, the epsilon is squared since it reflects some triangle area
         // this is a heuristic, though
-        epsilon * epsilon
+        spatial_resolution.x * spatial_resolution.y
     }
 }
 
@@ -228,11 +226,9 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiPolygonRef<'c>, MultiPolygon> for 
     }
 
     fn derive_epsilon(spatial_resolution: SpatialResolution) -> f64 {
-        let epsilon = f64::max(spatial_resolution.x, spatial_resolution.y);
-
         // for visvalingam, the epsilon is squared since it reflects some triangle area
         // this is a heuristic, though
-        epsilon * epsilon
+        spatial_resolution.x * spatial_resolution.y
     }
 }
 
@@ -252,7 +248,7 @@ where
 
         let simplified_geometries = collection
             .geometries()
-            .par_bridge()
+            .into_par_iter()
             .map(|geometry| A::simplify(geometry, epsilon))
             .collect();
 

@@ -5,6 +5,7 @@ use arrow::{
     array::{Array, ArrayData},
     buffer::Buffer,
 };
+use rayon::prelude::IntoParallelIterator;
 use std::sync::Arc;
 
 use super::feature_collection::struct_array_from_data;
@@ -12,7 +13,9 @@ use super::FeatureCollection;
 
 /// This trait allows iterating over the geometries of a feature collection
 pub trait IntoGeometryIterator<'a> {
-    type GeometryIterator: Iterator<Item = Self::GeometryType> + Send;
+    type GeometryIterator: Iterator<Item = Self::GeometryType>
+        + Send
+        + IntoParallelIterator<Item = Self::GeometryType>;
     type GeometryType: GeometryRef + Send;
 
     /// Return an iterator over geometries
