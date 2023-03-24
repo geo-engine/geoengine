@@ -73,7 +73,7 @@ impl VectorOperator for LineSimplification {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct LineSimplificationParams {
-    pub algorithm: LineSimplificationAlgorithms,
+    pub algorithm: LineSimplificationAlgorithm,
     /// The epsilon parameter is used to determine the maximum distance between the original and the simplified geometry.
     /// If `None` is provided, the epsilon is derived by the query's [`SpatialResolution`].
     pub epsilon: Option<f64>,
@@ -81,7 +81,7 @@ pub struct LineSimplificationParams {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
-pub enum LineSimplificationAlgorithms {
+pub enum LineSimplificationAlgorithm {
     DouglasPeucker,
     Visvalingam,
 }
@@ -89,7 +89,7 @@ pub enum LineSimplificationAlgorithms {
 pub struct InitializedLineSimplification {
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedVectorOperator>,
-    algorithm: LineSimplificationAlgorithms,
+    algorithm: LineSimplificationAlgorithm,
     epsilon: Option<f64>,
 }
 
@@ -106,7 +106,7 @@ impl InitializedVectorOperator for InitializedLineSimplification {
             ) => Err(LineSimplificationError::InvalidGeometryType.into()),
             (
                 TypedVectorQueryProcessor::MultiLineString(source),
-                LineSimplificationAlgorithms::DouglasPeucker,
+                LineSimplificationAlgorithm::DouglasPeucker,
             ) => Ok(TypedVectorQueryProcessor::MultiLineString(
                 LineSimplificationProcessor {
                     source,
@@ -117,7 +117,7 @@ impl InitializedVectorOperator for InitializedLineSimplification {
             )),
             (
                 TypedVectorQueryProcessor::MultiLineString(source),
-                LineSimplificationAlgorithms::Visvalingam,
+                LineSimplificationAlgorithm::Visvalingam,
             ) => Ok(TypedVectorQueryProcessor::MultiLineString(
                 LineSimplificationProcessor {
                     source,
@@ -128,7 +128,7 @@ impl InitializedVectorOperator for InitializedLineSimplification {
             )),
             (
                 TypedVectorQueryProcessor::MultiPolygon(source),
-                LineSimplificationAlgorithms::DouglasPeucker,
+                LineSimplificationAlgorithm::DouglasPeucker,
             ) => Ok(TypedVectorQueryProcessor::MultiPolygon(
                 LineSimplificationProcessor {
                     source,
@@ -139,7 +139,7 @@ impl InitializedVectorOperator for InitializedLineSimplification {
             )),
             (
                 TypedVectorQueryProcessor::MultiPolygon(source),
-                LineSimplificationAlgorithms::Visvalingam,
+                LineSimplificationAlgorithm::Visvalingam,
             ) => Ok(TypedVectorQueryProcessor::MultiPolygon(
                 LineSimplificationProcessor {
                     source,
@@ -157,7 +157,7 @@ where
     P: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
     G: Geometry,
     for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>,
-    for<'c> A: LineSimplificationAlgorithm<
+    for<'c> A: LineSimplificationAlgorithmImpl<
         <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
         G,
     >,
@@ -167,7 +167,7 @@ where
     epsilon: Option<f64>,
 }
 
-pub trait LineSimplificationAlgorithm<In, Out: Geometry>: Send + Sync {
+pub trait LineSimplificationAlgorithmImpl<In, Out: Geometry>: Send + Sync {
     fn simplify(geometry_ref: In, epsilon: f64) -> Out;
 
     fn derive_epsilon(spatial_resolution: SpatialResolution) -> f64 {
@@ -178,7 +178,9 @@ pub trait LineSimplificationAlgorithm<In, Out: Geometry>: Send + Sync {
 struct DouglasPeucker;
 struct Visvalingam;
 
-impl<'c> LineSimplificationAlgorithm<MultiLineStringRef<'c>, MultiLineString> for DouglasPeucker {
+impl<'c> LineSimplificationAlgorithmImpl<MultiLineStringRef<'c>, MultiLineString>
+    for DouglasPeucker
+{
     fn simplify(geometry: MultiLineStringRef<'c>, epsilon: f64) -> MultiLineString {
         use geo::Simplify;
 
@@ -188,7 +190,7 @@ impl<'c> LineSimplificationAlgorithm<MultiLineStringRef<'c>, MultiLineString> fo
     }
 }
 
-impl<'c> LineSimplificationAlgorithm<MultiPolygonRef<'c>, MultiPolygon> for DouglasPeucker {
+impl<'c> LineSimplificationAlgorithmImpl<MultiPolygonRef<'c>, MultiPolygon> for DouglasPeucker {
     fn simplify(geometry: MultiPolygonRef<'c>, epsilon: f64) -> MultiPolygon {
         use geo::Simplify;
 
@@ -198,7 +200,7 @@ impl<'c> LineSimplificationAlgorithm<MultiPolygonRef<'c>, MultiPolygon> for Doug
     }
 }
 
-impl<'c> LineSimplificationAlgorithm<MultiLineStringRef<'c>, MultiLineString> for Visvalingam {
+impl<'c> LineSimplificationAlgorithmImpl<MultiLineStringRef<'c>, MultiLineString> for Visvalingam {
     fn simplify(geometry: MultiLineStringRef<'c>, epsilon: f64) -> MultiLineString {
         use geo::SimplifyVWPreserve;
 
@@ -216,7 +218,7 @@ impl<'c> LineSimplificationAlgorithm<MultiLineStringRef<'c>, MultiLineString> fo
     }
 }
 
-impl<'c> LineSimplificationAlgorithm<MultiPolygonRef<'c>, MultiPolygon> for Visvalingam {
+impl<'c> LineSimplificationAlgorithmImpl<MultiPolygonRef<'c>, MultiPolygon> for Visvalingam {
     fn simplify(geometry: MultiPolygonRef<'c>, epsilon: f64) -> MultiPolygon {
         use geo::SimplifyVWPreserve;
 
@@ -240,7 +242,7 @@ where
     G: Geometry,
     for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>
         + GeoFeatureCollectionModifications<G, Output = FeatureCollection<G>>,
-    for<'c> A: LineSimplificationAlgorithm<
+    for<'c> A: LineSimplificationAlgorithmImpl<
         <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
         G,
     >,
@@ -267,7 +269,7 @@ where
     G: Geometry + ArrowTyped + 'static,
     for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>
         + GeoFeatureCollectionModifications<G, Output = FeatureCollection<G>>,
-    for<'c> A: LineSimplificationAlgorithm<
+    for<'c> A: LineSimplificationAlgorithmImpl<
         <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
         G,
     >,
@@ -313,24 +315,297 @@ pub enum LineSimplificationError {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{
+        engine::{MockExecutionContext, MockQueryContext, StaticMetaData},
+        mock::MockFeatureCollectionSource,
+        source::{
+            OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
+            OgrSourceErrorSpec, OgrSourceParameters,
+        },
+    };
+    use geoengine_datatypes::{
+        collections::{
+            FeatureCollectionInfos, GeometryCollection, MultiLineStringCollection,
+            MultiPointCollection, MultiPolygonCollection,
+        },
+        dataset::{DataId, DatasetId},
+        primitives::{FeatureData, MultiLineString, MultiPoint, TimeInterval},
+        spatial_reference::SpatialReference,
+        test_data,
+        util::{test::TestDefault, Identifier},
+    };
 
     #[tokio::test]
     async fn test_ser_de() {
-        todo!()
+        let operator = LineSimplification {
+            params: LineSimplificationParams {
+                epsilon: Some(1.0),
+                algorithm: LineSimplificationAlgorithm::DouglasPeucker,
+            },
+            sources: MockFeatureCollectionSource::<MultiPolygon>::multiple(vec![])
+                .boxed()
+                .into(),
+        }
+        .boxed();
+
+        let serialized = serde_json::to_value(&operator).unwrap();
+
+        assert_eq!(
+            serialized,
+            serde_json::json!({
+                "type": "LineSimplification",
+                "params": {
+                    "epsilon": 1.0,
+                    "algorithm": "douglasPeucker",
+                },
+                "sources": {
+                    "vector": {
+                        "type": "MockFeatureCollectionSourceMultiPolygon",
+                        "params": {
+                            "collections": [],
+                            "spatialReference": "EPSG:4326",
+                            "measurements": null,
+                        }
+                    }
+                },
+            })
+        );
+
+        let _operator: Box<dyn VectorOperator> = serde_json::from_value(serialized).unwrap();
     }
 
     #[tokio::test]
     async fn test_errors() {
-        todo!()
+        // zero epsilon
+        assert!(LineSimplification {
+            params: LineSimplificationParams {
+                epsilon: Some(0.0),
+                algorithm: LineSimplificationAlgorithm::DouglasPeucker,
+            },
+            sources: MockFeatureCollectionSource::<MultiPolygon>::single(
+                MultiPolygonCollection::empty()
+            )
+            .boxed()
+            .into(),
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::test_default())
+        .await
+        .is_err());
+
+        // invalid epsilon
+        assert!(LineSimplification {
+            params: LineSimplificationParams {
+                epsilon: Some(f64::NAN),
+                algorithm: LineSimplificationAlgorithm::Visvalingam,
+            },
+            sources: MockFeatureCollectionSource::<MultiPolygon>::single(
+                MultiPolygonCollection::empty()
+            )
+            .boxed()
+            .into(),
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::test_default())
+        .await
+        .is_err());
+
+        // not lines or polygons
+        assert!(LineSimplification {
+            params: LineSimplificationParams {
+                epsilon: None,
+                algorithm: LineSimplificationAlgorithm::DouglasPeucker,
+            },
+            sources: MockFeatureCollectionSource::<MultiPoint>::single(
+                MultiPointCollection::empty()
+            )
+            .boxed()
+            .into(),
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::test_default())
+        .await
+        .is_err());
     }
 
     #[tokio::test]
     async fn test_line_simplification() {
-        todo!()
+        let collection = MultiLineStringCollection::from_data(
+            vec![
+                MultiLineString::new(vec![vec![
+                    (0.0, 0.0).into(),
+                    (5.0, 4.0).into(),
+                    (11.0, 5.5).into(),
+                    (17.3, 3.2).into(),
+                    (27.8, 0.1).into(),
+                ]])
+                .unwrap(),
+                MultiLineString::new(vec![vec![(0.0, 0.0).into(), (5.0, 4.0).into()]]).unwrap(),
+            ],
+            vec![TimeInterval::new(0, 1).unwrap(); 2],
+            [("foo".to_string(), FeatureData::Float(vec![0., 1.]))]
+                .iter()
+                .cloned()
+                .collect(),
+        )
+        .unwrap();
+
+        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
+
+        let simplification = LineSimplification {
+            params: LineSimplificationParams {
+                epsilon: Some(1.0),
+                algorithm: LineSimplificationAlgorithm::DouglasPeucker,
+            },
+            sources: source.into(),
+        }
+        .boxed();
+
+        let initialized = simplification
+            .initialize(&MockExecutionContext::test_default())
+            .await
+            .unwrap();
+
+        let processor = initialized
+            .query_processor()
+            .unwrap()
+            .multi_line_string()
+            .unwrap();
+
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let query_ctx = MockQueryContext::test_default();
+
+        let stream = processor.query(query_rectangle, &query_ctx).await.unwrap();
+
+        let collections: Vec<MultiLineStringCollection> =
+            stream.map(Result::unwrap).collect().await;
+
+        assert_eq!(collections.len(), 1);
+
+        let expected = MultiLineStringCollection::from_data(
+            vec![
+                MultiLineString::new(vec![vec![
+                    (0.0, 0.0).into(),
+                    (5.0, 4.0).into(),
+                    (11.0, 5.5).into(),
+                    (27.8, 0.1).into(),
+                ]])
+                .unwrap(),
+                MultiLineString::new(vec![vec![(0.0, 0.0).into(), (5.0, 4.0).into()]]).unwrap(),
+            ],
+            vec![TimeInterval::new(0, 1).unwrap(); 2],
+            [("foo".to_string(), FeatureData::Float(vec![0., 1.]))]
+                .iter()
+                .cloned()
+                .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(collections[0], expected);
     }
 
     #[tokio::test]
     async fn test_polygon_simplification() {
-        todo!()
+        let id: DataId = DatasetId::new().into();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+            id.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: test_data!("vector/data/germany_polygon.gpkg").into(),
+                    layer_name: "test_germany".to_owned(),
+                    data_type: Some(VectorDataType::MultiPolygon),
+                    time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
+                    columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
+                        x: String::new(),
+                        y: None,
+                        int: vec![],
+                        float: vec![],
+                        text: vec![],
+                        bool: vec![],
+                        datetime: vec![],
+                        rename: None,
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPolygon,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
+                    time: None,
+                    bbox: None,
+                },
+                phantom: Default::default(),
+            }),
+        );
+
+        let simplification = LineSimplification {
+            params: LineSimplificationParams {
+                epsilon: None,
+                algorithm: LineSimplificationAlgorithm::Visvalingam,
+            },
+            sources: OgrSource {
+                params: OgrSourceParameters {
+                    data: id,
+                    attribute_projection: None,
+                    attribute_filters: None,
+                },
+            }
+            .boxed()
+            .into(),
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            simplification.result_descriptor().data_type,
+            VectorDataType::MultiPolygon
+        );
+
+        let query_processor = simplification
+            .query_processor()
+            .unwrap()
+            .multi_polygon()
+            .unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
+
+        let query_context = MockQueryContext::test_default();
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: query_bbox,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &query_context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPolygonCollection> = query.try_collect().await.unwrap();
+
+        assert_eq!(result.len(), 1);
+        let result = result.into_iter().next().unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result.feature_offsets().len(), 2);
+        assert_eq!(result.polygon_offsets().len(), 23);
+        assert_eq!(result.ring_offsets().len(), 23);
+        assert_eq!(result.coordinates().len(), 98 /* was 3027 */);
     }
 }
