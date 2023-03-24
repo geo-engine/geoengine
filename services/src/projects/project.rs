@@ -582,7 +582,7 @@ fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
         return Ok(());
     }
 
-    let mut err = ValidationError::new("Invalid limit");
+    let mut err = ValidationError::new("limit (too large)");
     err.add_param::<u32>(Cow::Borrowed("max limit"), &limit);
     Err(err)
 }

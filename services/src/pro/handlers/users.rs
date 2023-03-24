@@ -18,6 +18,7 @@ use crate::util::config;
 use crate::util::IdResponse;
 
 use crate::pro::users::OidcError::OidcDisabled;
+use crate::util::extractors::ValidatedJson;
 use actix_web::FromRequest;
 use actix_web::{web, HttpResponse, Responder};
 use serde::Deserialize;
@@ -73,7 +74,7 @@ where
         )
     ))]
 pub(crate) async fn register_user_handler<C: ApplicationContext + UserAuth>(
-    user: actix_web_validator::Json<UserRegistration>,
+    user: ValidatedJson<UserRegistration>,
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
@@ -116,7 +117,7 @@ responses(
     )
 ))]
 pub(crate) async fn login_handler<C: ApplicationContext + UserAuth>(
-    user: actix_web_validator::Json<UserCredentials>,
+    user: ValidatedJson<UserCredentials>,
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder>
 where
@@ -728,13 +729,7 @@ mod tests {
 
         let res = register_test_helper(app_ctx, Method::POST, "notanemail").await;
 
-        ErrorResponse::assert(
-            res,
-            400,
-            "RegistrationFailed",
-            "Registration failed: Invalid e-mail address",
-        )
-        .await;
+        ErrorResponse::assert(res, 400, "ValidationError", "email: invalid email\n").await;
     }
 
     #[tokio::test]

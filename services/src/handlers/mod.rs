@@ -37,7 +37,7 @@ impl ErrorResponse {
     /// Panics if `status` or `error` do not match.
     ///
     pub async fn assert(res: ServiceResponse, status: u16, error: &str, message: &str) {
-        // assert_eq!(res.status(), status);
+        assert_eq!(res.status(), status);
 
         let body: Self = test::read_body_json(res).await;
         assert_eq!(

@@ -14,6 +14,7 @@ use crate::layers::listing::{
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
+use crate::util::extractors::ValidatedQuery;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
@@ -129,7 +130,7 @@ where
 async fn list_root_collections_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    options: actix_web_validator::Query<LayerCollectionListOptions>,
+    options: ValidatedQuery<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
     let root_collection = get_layer_providers(session, options, app_ctx).await?;
 
@@ -138,7 +139,7 @@ async fn list_root_collections_handler<C: ApplicationContext>(
 
 async fn get_layer_providers<C: ApplicationContext>(
     session: C::Session,
-    mut options: actix_web_validator::Query<LayerCollectionListOptions>,
+    mut options: ValidatedQuery<LayerCollectionListOptions>,
     app_ctx: web::Data<C>,
 ) -> Result<LayerCollection> {
     let mut providers = vec![];
@@ -275,7 +276,7 @@ async fn get_layer_providers<C: ApplicationContext>(
 async fn list_collection_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerCollectionId)>,
-    options: actix_web_validator::Query<LayerCollectionListOptions>,
+    options: ValidatedQuery<LayerCollectionListOptions>,
     session: C::Session,
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();

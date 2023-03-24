@@ -4,8 +4,10 @@ use std::{
     path::Path,
 };
 
-use crate::datasets::upload::{AdjustFilePath, Upload, UploadRootPath, Volume};
-use crate::{api::model::datatypes::DatasetId, contexts::ApplicationContext};
+use crate::{
+    api::model::datatypes::DatasetId, contexts::ApplicationContext,
+    util::extractors::ValidatedQuery,
+};
 use crate::{
     api::model::services::DataPath,
     datasets::{
@@ -20,6 +22,10 @@ use crate::{
 };
 use crate::{contexts::SessionContext, datasets::storage::AutoCreateDataset};
 use crate::{datasets::upload::VolumeName, error::Result};
+use crate::{
+    datasets::upload::{AdjustFilePath, Upload, UploadRootPath, Volume},
+    util::extractors::ValidatedJson,
+};
 use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
@@ -130,7 +136,7 @@ pub async fn list_volumes_handler<C: ApplicationContext>(
 pub async fn list_datasets_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    options: actix_web_validator::Query<DatasetListOptions>,
+    options: ValidatedQuery<DatasetListOptions>,
 ) -> Result<impl Responder> {
     let options = options.into_inner();
     let list = app_ctx
@@ -400,7 +406,7 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
 pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    create: actix_web_validator::Json<AutoCreateDataset>,
+    create: ValidatedJson<AutoCreateDataset>,
 ) -> Result<impl Responder> {
     let db = app_ctx.session_context(session).db();
     let upload = db.load_upload(create.upload).await?;

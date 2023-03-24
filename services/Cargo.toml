@@ -30,7 +30,6 @@ actix-rt = "2.6"
 actix-web = "4.2"
 actix-web-actors = "4.2"
 actix-web-httpauth = "0.8"
-actix-web-validator = "5.0"
 aruna-rust-api = { version = "1.0.0-rc.6", optional = true }
 async-trait = "0.1"
 base64 = "0.21"

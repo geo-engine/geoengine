@@ -101,40 +101,9 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
             }
         }
     }));
-    cfg.app_data(
-        actix_web_validator::QueryConfig::default()
-            .error_handler(|err, _| handle_validation_error(err)),
-    );
-    cfg.app_data(
-        actix_web_validator::JsonConfig::default()
-            .content_type(|mime| dbg!(mime) == mime::APPLICATION_JSON)
-            .error_handler(|err, _| handle_validation_error(err)),
-    );
 }
 
-fn handle_validation_error(err: actix_web_validator::Error) -> actix_web::Error {
-    dbg!("handle_validation_error");
-    match err {
-        actix_web_validator::Error::Validate(error) => ErrorResponse {
-            error: "ValidationError".to_string(),
-            // TODO: format better error message
-            message: error
-                .field_errors()
-                .iter()
-                .map(|(field, error)| format!("{field}:, {error:?}"))
-                .collect(),
-        }
-        .into(),
-        actix_web_validator::Error::JsonPayloadError(err) => handle_json_payload_error(err),
-        _ => ErrorResponse {
-            error: "ValidationError".to_string(),
-            message: "Unknown Error".to_string(),
-        }
-        .into(),
-    }
-}
-
-fn handle_json_payload_error(err: actix_web::error::JsonPayloadError) -> actix_web::Error {
+pub fn handle_json_payload_error(err: actix_web::error::JsonPayloadError) -> actix_web::Error {
     match err {
         JsonPayloadError::ContentType => InternalError::from_response(
             err,
