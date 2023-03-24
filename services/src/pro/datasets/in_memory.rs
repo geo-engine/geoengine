@@ -467,12 +467,6 @@ impl DatasetLayerCollectionProvider for ProInMemoryDb {
         collection: &LayerCollectionId,
         options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
-        ensure!(
-            self.has_permission(collection.clone(), Permission::Read)
-                .await?,
-            error::PermissionDenied
-        );
-
         let options = options.user_input;
 
         let backend = self.backend.dataset_db.read().await;

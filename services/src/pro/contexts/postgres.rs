@@ -518,10 +518,10 @@ where
                             (role_id, layer_collection_id, permission)  
                         VALUES 
                             ({admin_role_id}, {root_layer_collection_id}, 'Owner'),
-                            ({admin_role_id}, {unsorted_layer_collection_id}, 'Owner'),
                             ({user_role_id}, {root_layer_collection_id}, 'Read'),
-                            ({user_role_id}, {unsorted_layer_collection_id}, 'Read'),
                             ({anonymous_role_id}, {root_layer_collection_id}, 'Read'),
+                            ({admin_role_id}, {unsorted_layer_collection_id}, 'Owner'),
+                            ({user_role_id}, {unsorted_layer_collection_id}, 'Read'),
                             ({anonymous_role_id}, {unsorted_layer_collection_id}, 'Read');
                         "#
                     ,
