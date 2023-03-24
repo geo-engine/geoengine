@@ -357,6 +357,16 @@ pub struct TaskListOptions {
     pub limit: u32,
 }
 
+impl Default for TaskListOptions {
+    fn default() -> Self {
+        Self {
+            filter: None,
+            offset: 0,
+            limit: 20,
+        }
+    }
+}
+
 fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
     let limit = get_config_element::<crate::util::config::TaskManager>()
         .expect("should exist because it is defined in the default config")

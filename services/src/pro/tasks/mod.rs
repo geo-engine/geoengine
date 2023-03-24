@@ -150,3 +150,26 @@ impl TaskManager<SimpleTaskManagerContext> for ProTaskManager {
             .await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use geoengine_datatypes::util::test::TestDefault;
+
+    use crate::{
+        contexts::{ApplicationContext, SessionContext},
+        pro::{contexts::ProInMemoryContext, users::UserAuth},
+        tasks::{TaskListOptions, TaskManager},
+    };
+
+    #[tokio::test]
+    async fn it_lists() {
+        let app_ctx = ProInMemoryContext::test_default();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let ctx = app_ctx.session_context(session);
+
+        let tasks = ctx.tasks();
+
+        tasks.list_tasks(TaskListOptions::default()).await.unwrap();
+    }
+}
