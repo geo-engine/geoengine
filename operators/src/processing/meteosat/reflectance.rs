@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
+    ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
     QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
     SingleRasterSource, TypedRasterQueryProcessor,
 };
@@ -22,7 +22,6 @@ use geoengine_datatypes::raster::{
     GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
-use tracing::{span, Level};
 
 // Output type is always f32
 type PixelOut = f32;

@@ -3,10 +3,9 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use geoengine_datatypes::collections::VectorDataType;
-use tracing::{span, Level};
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedVectorOperator, Operator, OperatorData, OperatorName,
+    ExecutionContext, InitializedVectorOperator, Operator, OperatorData, OperatorName,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;

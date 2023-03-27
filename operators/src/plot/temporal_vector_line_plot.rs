@@ -1,7 +1,7 @@
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator,
-    OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
-    SingleVectorSource, TypedPlotQueryProcessor, VectorQueryProcessor,
+    ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, OperatorName,
+    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, SingleVectorSource,
+    TypedPlotQueryProcessor, VectorQueryProcessor,
 };
 use crate::engine::{QueryProcessor, VectorColumnInfo};
 use crate::error;
@@ -28,7 +28,6 @@ use std::{
     cmp::Ordering,
     collections::hash_map::Entry::{Occupied, Vacant},
 };
-use tracing::{span, Level};
 
 pub const FEATURE_ATTRIBUTE_OVER_TIME_NAME: &str = "Feature Attribute over Time";
 const MAX_FEATURES: usize = 20;

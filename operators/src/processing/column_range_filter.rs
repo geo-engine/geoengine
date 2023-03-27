@@ -1,5 +1,5 @@
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
+    ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
     QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor,
 };
@@ -20,7 +20,6 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::ops::RangeInclusive;
-use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]

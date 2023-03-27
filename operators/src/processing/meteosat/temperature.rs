@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
+    ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
     QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
     SingleRasterSource, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use rayon::ThreadPool;
-use tracing::{span, Level};
+
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;

@@ -12,7 +12,7 @@ use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
 use geoengine_datatypes::raster::GridOrEmpty;
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
     PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
@@ -22,7 +22,6 @@ use crate::util::input::MultiRasterOrVectorOperator;
 use crate::util::statistics::PSquareQuantileEstimator;
 use crate::util::Result;
 use snafu::ensure;
-use tracing::{span, Level};
 
 pub const BOXPLOT_OPERATOR_NAME: &str = "BoxPlot";
 const EXACT_CALC_BOUND: usize = 10_000;

@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
+use crate::error::Error::ProviderDoesNotSupportBrowsing;
 use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
@@ -277,19 +278,9 @@ impl GfbioCollectionsDataProvider {
     }
 
     fn get_collections() -> Result<LayerCollection> {
-        // return an empty collection because we do not support browsing the collections
+        // return an error because we do not support browsing the collections
         // but rather accessing them directly via their ID
-        Ok(LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
-                collection_id: GfBioCollectionId::Collections.try_into()?,
-            },
-            name: "GFBio Collections".to_owned(),
-            description: String::new(),
-            items: vec![],
-            entry_label: None,
-            properties: vec![],
-        })
+        Err(ProviderDoesNotSupportBrowsing)
     }
 
     async fn get_collection(
@@ -597,7 +588,9 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
     }
 
     async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
-        GfBioCollectionId::Collections.try_into()
+        // return an error because we do not support browsing the collections
+        // but rather accessing them directly via their ID
+        Err(ProviderDoesNotSupportBrowsing)
     }
 
     async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
@@ -939,24 +932,10 @@ mod tests {
             .await
             .unwrap();
 
-            let root_id = provider.get_root_layer_collection_id().await.unwrap();
+            let root_id = provider.get_root_layer_collection_id().await;
 
-            let collection = provider
-                .load_layer_collection(
-                    &root_id,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
-                .await;
-
-            let collection = collection.unwrap();
-
-            // root collection should be empty because we don't support browsing
-            assert_eq!(collection.items.len(), 0);
+            // root collection id should be an error because we don't support browsing
+            assert!(root_id.is_err());
 
             let collection = provider
                 .load_layer_collection(

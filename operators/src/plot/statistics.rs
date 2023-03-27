@@ -1,5 +1,5 @@
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
     PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
@@ -24,7 +24,6 @@ use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
-use tracing::{span, Level};
 
 pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 

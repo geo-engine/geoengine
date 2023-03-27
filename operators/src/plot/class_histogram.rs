@@ -1,4 +1,4 @@
-use crate::engine::{CreateSpan, QueryProcessor};
+use crate::engine::QueryProcessor;
 use crate::error;
 use crate::error::Error;
 use crate::util::Result;
@@ -23,7 +23,6 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt};
 use std::collections::HashMap;
-use tracing::{span, Level};
 
 pub const CLASS_HISTOGRAM_OPERATOR_NAME: &str = "ClassHistogram";
 

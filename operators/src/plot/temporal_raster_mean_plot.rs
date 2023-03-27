@@ -1,7 +1,7 @@
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, Operator,
-    OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
-    QueryProcessor, RasterQueryProcessor, SingleRasterSource, TypedPlotQueryProcessor,
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, Operator, OperatorName,
+    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
+    RasterQueryProcessor, SingleRasterSource, TypedPlotQueryProcessor,
 };
 use crate::util::math::average_floor;
 use crate::util::Result;
@@ -15,7 +15,6 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use tracing::{span, Level};
 
 pub const MEAN_RASTER_PIXEL_VALUES_OVER_TIME_NAME: &str = "Mean Raster Pixel Values over Time";
 
