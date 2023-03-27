@@ -932,24 +932,10 @@ mod tests {
             .await
             .unwrap();
 
-            let root_id = provider.get_root_layer_collection_id().await.unwrap();
+            let root_id = provider.get_root_layer_collection_id().await;
 
-            let collection = provider
-                .load_layer_collection(
-                    &root_id,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
-                .await;
-
-            let collection = collection.unwrap();
-
-            // root collection should be empty because we don't support browsing
-            assert_eq!(collection.items.len(), 0);
+            // root collection id should be an error because we don't support browsing
+            assert!(root_id.is_err());
 
             let collection = provider
                 .load_layer_collection(
