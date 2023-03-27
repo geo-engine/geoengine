@@ -28,6 +28,7 @@ fn throw_if_invalid_ref(reference: &Ref, schemas: &BTreeMap<String, RefOr<Schema
     );
 }
 
+/// Recursively checks that schemas referenced in the given schema object exist in the provided map.
 fn can_resolve_schema(schema: RefOr<Schema>, schemas: &BTreeMap<String, RefOr<Schema>>) {
     match schema {
         RefOr::Ref(reference) => {
@@ -62,6 +63,8 @@ fn can_resolve_schema(schema: RefOr<Schema>, schemas: &BTreeMap<String, RefOr<Sc
     }
 }
 
+/// Loops through all registered HTTP handlers and ensures that the referenced schemas
+/// (inside of request bodies, parameters or responses) exist and can be resolved.
 pub fn can_resolve_api(api: OpenApi) {
     let schemas = api
         .components
@@ -270,6 +273,10 @@ where
     }
 }
 
+/// Runs all example requests against the provided test server to check for bad documentation,
+/// for example due to incompatible schema changes between the time of writing the request body
+/// and now. It can also detect if the query parameters are not documented correctly or the
+/// request path changed.
 #[allow(clippy::unimplemented)]
 pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
     api: OpenApi,
