@@ -22,7 +22,7 @@ pub async fn subquery_all_tiles_fold_fn<P: Pixel, F: TemporalRasterPixelAggregat
 ) -> Result<TileAccumulator<P, F>> {
     crate::util::spawn_blocking_with_thread_pool(accu.pool.clone(), || {
         let mut accu = accu;
-        accu.add_tile(tile)?;
+        accu.add_tile(tile);
         Ok(accu)
     })
     .await?
@@ -44,7 +44,7 @@ where
     P: Pixel,
     F: TemporalRasterPixelAggregator<P> + 'static,
 {
-    pub fn add_tile(&mut self, in_tile: RasterTile2D<P>) -> Result<()> {
+    pub fn add_tile(&mut self, in_tile: RasterTile2D<P>) {
         // we do no time modification here since the result represents the aggreate over query time
 
         // the tile must intersect the time of the query otherwise it includes wrong data
@@ -61,7 +61,7 @@ where
             GridOrEmpty::Grid(g) => g,
             GridOrEmpty::Empty(_) => {
                 self.prestine = false;
-                return Ok(());
+                return;
             }
         };
 
@@ -92,7 +92,6 @@ where
         }
 
         self.prestine = false;
-        Ok(())
     }
 }
 
