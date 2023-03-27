@@ -463,6 +463,7 @@ pub struct CreateProject {
     #[validate(length(min = 1))]
     #[validate(length(max = 256))]
     pub name: String,
+    #[validate(length(min = 1))]
     pub description: String,
     pub bounds: STRectangle,
     pub time_step: Option<TimeStep>,

@@ -1,9 +1,9 @@
-POST http://localhost:3030/api/user
+POST http://localhost:3030/user
 Content-Type: application/json
 
 {
-  "email": "fooxample.com",
-  "password": "se3",
+  "email": "foo@example.com",
+  "password": "secret123",
   "realName": "Foo Bar"
 }
 
