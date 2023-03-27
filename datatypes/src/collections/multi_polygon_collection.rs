@@ -15,6 +15,8 @@ use arrow::{
     buffer::Buffer,
     datatypes::DataType,
 };
+use rayon::iter::plumbing::Producer;
+use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use std::{slice, sync::Arc};
 
 use super::geo_feature_collection::ReplaceRawArrayCoords;
@@ -130,12 +132,15 @@ impl<'a> IntoIterator for &'a MultiPolygonCollection {
     }
 }
 
-/// A collection iterator for multi points
+/// A collection iterator for [`MultiPolygon`]s.
 pub struct MultiPolygonIterator<'l> {
     geometry_column: &'l ListArray,
     index: usize,
     length: usize,
 }
+
+/// A parallel collection iterator for [`MultiPolygon`]s
+pub struct MultiPolygonParIterator<'l>(MultiPolygonIterator<'l>);
 
 impl<'l> MultiPolygonIterator<'l> {
     pub fn new(geometry_column: &'l ListArray, length: usize) -> Self {
@@ -201,6 +206,127 @@ impl<'l> Iterator for MultiPolygonIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
+    }
+}
+
+impl<'l> DoubleEndedIterator for MultiPolygonIterator<'l> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.index >= self.length {
+            return None;
+        }
+
+        let polygon_array_ref = self.geometry_column.value(self.length - 1);
+        let polygon_array: &ListArray = downcast_array(&polygon_array_ref);
+
+        let number_of_polygons = polygon_array.len();
+        let mut polygon_refs = Vec::with_capacity(number_of_polygons);
+
+        for polygon_index in 0..number_of_polygons {
+            let ring_array_ref = polygon_array.value(polygon_index);
+            let ring_array: &ListArray = downcast_array(&ring_array_ref);
+
+            let number_of_rings = ring_array.len();
+            let mut ring_refs = Vec::with_capacity(number_of_rings);
+
+            for ring_index in 0..number_of_rings {
+                let coordinate_array_ref = ring_array.value(ring_index);
+                let coordinate_array: &FixedSizeListArray = downcast_array(&coordinate_array_ref);
+
+                let number_of_coordinates = coordinate_array.len();
+
+                let float_array_ref = coordinate_array.value(0);
+                let float_array: &Float64Array = downcast_array(&float_array_ref);
+
+                ring_refs.push(unsafe {
+                    #[allow(clippy::cast_ptr_alignment)]
+                    slice::from_raw_parts(
+                        float_array.values().as_ptr().cast::<Coordinate2D>(),
+                        number_of_coordinates,
+                    )
+                });
+            }
+
+            polygon_refs.push(ring_refs);
+        }
+
+        self.length -= 1; // decrement!
+
+        Some(MultiPolygonRef::new_unchecked(polygon_refs))
+    }
+}
+
+impl<'l> ExactSizeIterator for MultiPolygonIterator<'l> {}
+
+impl<'l> IntoParallelIterator for MultiPolygonIterator<'l> {
+    type Item = MultiPolygonRef<'l>;
+    type Iter = MultiPolygonParIterator<'l>;
+
+    fn into_par_iter(self) -> Self::Iter {
+        MultiPolygonParIterator(self)
+    }
+}
+
+impl<'l> ParallelIterator for MultiPolygonParIterator<'l> {
+    type Item = MultiPolygonRef<'l>;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        rayon::iter::plumbing::bridge(self, consumer)
+    }
+}
+
+impl<'l> Producer for MultiPolygonParIterator<'l> {
+    type Item = MultiPolygonRef<'l>;
+
+    type IntoIter = MultiPolygonIterator<'l>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        // Example:
+        //   Index: 0, Length 3
+        //   Split at 1
+        //   Left: Index: 0, Length: 1 -> Elements: 0
+        //   Right: Index: 1, Length: 3 -> Elements: 1, 2
+
+        // The index is between self.0.index and self.0.length,
+        // so we have to transform it to a global index
+        let global_index = self.0.index + index;
+
+        let left = Self(Self::IntoIter {
+            geometry_column: self.0.geometry_column,
+            index: self.0.index,
+            length: global_index,
+        });
+
+        let right = Self(Self::IntoIter {
+            geometry_column: self.0.geometry_column,
+            index: global_index,
+            length: self.0.length,
+        });
+
+        (left, right)
+    }
+}
+
+impl<'l> IndexedParallelIterator for MultiPolygonParIterator<'l> {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn drive<C: rayon::iter::plumbing::Consumer<Self::Item>>(self, consumer: C) -> C::Result {
+        rayon::iter::plumbing::bridge(self, consumer)
+    }
+
+    fn with_producer<CB: rayon::iter::plumbing::ProducerCallback<Self::Item>>(
+        self,
+        callback: CB,
+    ) -> CB::Output {
+        callback.callback(self)
     }
 }
 
@@ -405,7 +531,7 @@ mod tests {
     use super::*;
 
     use crate::collections::{BuilderProvider, FeatureCollectionModifications};
-    use crate::primitives::{FeatureDataRef, TimeInterval};
+    use crate::primitives::{FeatureData, FeatureDataRef, TimeInterval};
 
     #[test]
     fn single_polygons() {
@@ -977,5 +1103,216 @@ mod tests {
         .unwrap();
 
         assert_eq!(collection, from_geo);
+    }
+
+    #[test]
+    fn test_geo_iter() {
+        use crate::util::well_known_data::{
+            COLOGNE_EPSG_4326, HAMBURG_EPSG_4326, MARBURG_EPSG_4326,
+        };
+
+        let collection = MultiPolygonCollection::from_slices(
+            &[
+                MultiPolygon::new(vec![
+                    vec![vec![
+                        HAMBURG_EPSG_4326,
+                        MARBURG_EPSG_4326,
+                        COLOGNE_EPSG_4326,
+                        HAMBURG_EPSG_4326,
+                    ]],
+                    vec![vec![
+                        COLOGNE_EPSG_4326,
+                        HAMBURG_EPSG_4326,
+                        MARBURG_EPSG_4326,
+                        COLOGNE_EPSG_4326,
+                    ]],
+                ])
+                .unwrap(),
+                MultiPolygon::new(vec![vec![vec![
+                    MARBURG_EPSG_4326,
+                    COLOGNE_EPSG_4326,
+                    HAMBURG_EPSG_4326,
+                    MARBURG_EPSG_4326,
+                ]]])
+                .unwrap(),
+            ],
+            &[TimeInterval::default(), TimeInterval::default()],
+            &[] as &[(&str, FeatureData)],
+        )
+        .unwrap();
+        let mut iter = collection.geometries();
+
+        assert_eq!(iter.len(), 2);
+
+        let geometry = iter.next().unwrap();
+        assert_eq!(
+            MultiPolygon::new(vec![
+                vec![vec![
+                    HAMBURG_EPSG_4326,
+                    MARBURG_EPSG_4326,
+                    COLOGNE_EPSG_4326,
+                    HAMBURG_EPSG_4326,
+                ]],
+                vec![vec![
+                    COLOGNE_EPSG_4326,
+                    HAMBURG_EPSG_4326,
+                    MARBURG_EPSG_4326,
+                    COLOGNE_EPSG_4326,
+                ]],
+            ])
+            .unwrap(),
+            geometry.into()
+        );
+
+        assert_eq!(iter.len(), 1);
+
+        let geometry = iter.next().unwrap();
+        assert_eq!(
+            MultiPolygon::new(vec![vec![vec![
+                MARBURG_EPSG_4326,
+                COLOGNE_EPSG_4326,
+                HAMBURG_EPSG_4326,
+                MARBURG_EPSG_4326,
+            ]]])
+            .unwrap(),
+            geometry.into()
+        );
+
+        assert_eq!(iter.len(), 0);
+
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_geo_iter_reverse() {
+        use crate::util::well_known_data::{
+            COLOGNE_EPSG_4326, HAMBURG_EPSG_4326, MARBURG_EPSG_4326,
+        };
+
+        let collection = MultiPolygonCollection::from_slices(
+            &[
+                MultiPolygon::new(vec![
+                    vec![vec![
+                        HAMBURG_EPSG_4326,
+                        MARBURG_EPSG_4326,
+                        COLOGNE_EPSG_4326,
+                        HAMBURG_EPSG_4326,
+                    ]],
+                    vec![vec![
+                        COLOGNE_EPSG_4326,
+                        HAMBURG_EPSG_4326,
+                        MARBURG_EPSG_4326,
+                        COLOGNE_EPSG_4326,
+                    ]],
+                ])
+                .unwrap(),
+                MultiPolygon::new(vec![vec![vec![
+                    MARBURG_EPSG_4326,
+                    COLOGNE_EPSG_4326,
+                    HAMBURG_EPSG_4326,
+                    MARBURG_EPSG_4326,
+                ]]])
+                .unwrap(),
+            ],
+            &[TimeInterval::default(), TimeInterval::default()],
+            &[] as &[(&str, FeatureData)],
+        )
+        .unwrap();
+        let mut iter = collection.geometries();
+
+        assert_eq!(iter.len(), 2);
+
+        let geometry = iter.next_back().unwrap();
+        assert_eq!(
+            MultiPolygon::new(vec![vec![vec![
+                MARBURG_EPSG_4326,
+                COLOGNE_EPSG_4326,
+                HAMBURG_EPSG_4326,
+                MARBURG_EPSG_4326,
+            ]]])
+            .unwrap(),
+            geometry.into()
+        );
+
+        assert_eq!(iter.len(), 1);
+
+        let geometry = iter.next_back().unwrap();
+
+        assert_eq!(
+            MultiPolygon::new(vec![
+                vec![vec![
+                    HAMBURG_EPSG_4326,
+                    MARBURG_EPSG_4326,
+                    COLOGNE_EPSG_4326,
+                    HAMBURG_EPSG_4326,
+                ]],
+                vec![vec![
+                    COLOGNE_EPSG_4326,
+                    HAMBURG_EPSG_4326,
+                    MARBURG_EPSG_4326,
+                    COLOGNE_EPSG_4326,
+                ]],
+            ])
+            .unwrap(),
+            geometry.into()
+        );
+
+        assert_eq!(iter.len(), 0);
+
+        assert!(iter.next_back().is_none());
+    }
+
+    #[test]
+    fn test_par_iter() {
+        use crate::util::well_known_data::{
+            COLOGNE_EPSG_4326, HAMBURG_EPSG_4326, MARBURG_EPSG_4326,
+        };
+
+        let collection = MultiPolygonCollection::from_slices(
+            &[
+                MultiPolygon::new(vec![
+                    vec![vec![
+                        HAMBURG_EPSG_4326,
+                        MARBURG_EPSG_4326,
+                        COLOGNE_EPSG_4326,
+                        HAMBURG_EPSG_4326,
+                    ]],
+                    vec![vec![
+                        COLOGNE_EPSG_4326,
+                        HAMBURG_EPSG_4326,
+                        MARBURG_EPSG_4326,
+                        COLOGNE_EPSG_4326,
+                    ]],
+                ])
+                .unwrap(),
+                MultiPolygon::new(vec![vec![vec![
+                    MARBURG_EPSG_4326,
+                    COLOGNE_EPSG_4326,
+                    HAMBURG_EPSG_4326,
+                    MARBURG_EPSG_4326,
+                ]]])
+                .unwrap(),
+            ],
+            &[TimeInterval::default(), TimeInterval::default()],
+            &[] as &[(&str, FeatureData)],
+        )
+        .unwrap();
+
+        //  check splitting
+        let iter = collection.geometries().into_par_iter();
+
+        let (iter_left, iter_right) = iter.split_at(1);
+
+        assert_eq!(iter_left.count(), 1);
+        assert_eq!(iter_right.count(), 1);
+
+        // new iter
+        let iter = collection.geometries().into_par_iter();
+
+        let result = iter
+            .map(|geometry| geometry.polygons().len())
+            .collect::<Vec<_>>();
+
+        assert_eq!(result, vec![2, 1]);
     }
 }

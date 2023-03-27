@@ -7,8 +7,8 @@ use crate::{
         TileReprojectionSubQuery,
     },
     engine::{
-        CreateSpan, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
-        Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+        ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
+        OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
         RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
         TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
@@ -33,7 +33,6 @@ use geoengine_datatypes::{
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
-use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]

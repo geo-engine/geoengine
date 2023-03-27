@@ -177,8 +177,8 @@ pub type CreateSpan = fn() -> Span;
 /// Macro for creating a span-fn for a given type, e.g. `span_fn!(MyType)`
 macro_rules! span_fn {
     ($op: ty) => {
-        fn span(&self) -> CreateSpan {
-            || span!(Level::TRACE, <$op>::TYPE_NAME)
+        fn span(&self) -> crate::engine::CreateSpan {
+            || tracing::span!(tracing::Level::TRACE, <$op>::TYPE_NAME)
         }
     };
 }

@@ -11,11 +11,10 @@ use geoengine_datatypes::primitives::VectorQueryRectangle;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use tracing::{span, Level};
 
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
+    ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::engine::{OperatorData, QueryProcessor};

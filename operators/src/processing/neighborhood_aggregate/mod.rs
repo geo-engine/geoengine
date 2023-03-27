@@ -5,7 +5,7 @@ use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
 use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
 use crate::adapters::RasterSubQueryAdapter;
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
+    ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
     QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
     SingleRasterSource, TypedRasterQueryProcessor,
 };
@@ -21,7 +21,6 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::marker::PhantomData;
-use tracing::{span, Level};
 
 /// A neighborhood aggregate operator applies an aggregate function to each raster pixel and its surrounding.
 /// For each output pixel, the aggregate function is applied to an input pixel plus its neighborhood.

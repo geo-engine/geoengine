@@ -369,6 +369,12 @@ pub enum Error {
 
     // TODO: wrap this somehow, because it's pro
     PermissionDenied,
+
+    #[snafu(context(false))]
+    #[snafu(display("LineSimplification error: {}", source))]
+    LineSimplification {
+        source: crate::processing::LineSimplificationError,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
