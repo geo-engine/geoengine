@@ -421,6 +421,8 @@ pub enum Error {
         field: String,
         cause: String,
     },
+
+    ProviderDoesNotSupportBrowsing,
 }
 
 impl actix_web::error::ResponseError for Error {

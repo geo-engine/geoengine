@@ -11,7 +11,6 @@ use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
-use tracing::{span, Level};
 
 use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
@@ -21,7 +20,7 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 
-use crate::engine::{CreateSpan, QueryProcessor};
+use crate::engine::QueryProcessor;
 use crate::engine::{
     InitializedVectorOperator, OperatorData, OperatorName, QueryContext, SourceOperator,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,

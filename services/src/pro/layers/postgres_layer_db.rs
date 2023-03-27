@@ -1,6 +1,7 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 
 use crate::error;
+use crate::layers::layer::Property;
 use crate::pro::contexts::PostgresDb;
 use crate::pro::permissions::{Permission, PermissionDb, RoleId};
 
@@ -29,7 +30,7 @@ use bb8_postgres::tokio_postgres::{
 };
 
 use snafu::{ensure, ResultExt};
-use std::{collections::HashMap, str::FromStr};
+use std::str::FromStr;
 use uuid::Uuid;
 
 /// delete all collections without parent collection
@@ -112,13 +113,15 @@ where
         let layer_id = Uuid::new_v4();
         let symbology = serde_json::to_value(&layer.symbology).context(crate::error::SerdeJson)?;
 
+        let metadata = serde_json::to_value(&layer.metadata).context(crate::error::SerdeJson)?;
+
         let trans = conn.build_transaction().start().await?;
 
         let stmt = trans
             .prepare(
                 "
-            INSERT INTO layers (id, name, description, workflow, symbology)
-            VALUES ($1, $2, $3, $4, $5);",
+            INSERT INTO layers (id, name, description, workflow, symbology, properties, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7);",
             )
             .await?;
 
@@ -131,6 +134,8 @@ where
                     &layer.description,
                     &serde_json::to_value(&layer.workflow).context(crate::error::SerdeJson)?,
                     &symbology,
+                    &layer.properties,
+                    &metadata,
                 ],
             )
             .await?;
@@ -320,15 +325,20 @@ where
         let stmt = trans
             .prepare(
                 "
-            INSERT INTO layer_collections (id, name, description)
-            VALUES ($1, $2, $3);",
+            INSERT INTO layer_collections (id, name, description, properties)
+            VALUES ($1, $2, $3, $4);",
             )
             .await?;
 
         trans
             .execute(
                 &stmt,
-                &[&collection_id, &collection.name, &collection.description],
+                &[
+                    &collection_id,
+                    &collection.name,
+                    &collection.description,
+                    &collection.properties,
+                ],
             )
             .await?;
 
@@ -655,7 +665,7 @@ where
         let stmt = conn
             .prepare(
                 "
-        SELECT DISTINCT name, description
+        SELECT DISTINCT name, description, properties
         FROM user_permitted_layer_collections p 
             JOIN layer_collections c ON (p.layer_collection_id = c.id) 
         WHERE p.user_id = $1 AND layer_collection_id = $2;",
@@ -668,16 +678,18 @@ where
 
         let name: String = row.get(0);
         let description: String = row.get(1);
+        let properties: Vec<Property> = row.get(2);
 
         let stmt = conn
             .prepare(
                 "
-        SELECT DISTINCT id, name, description, is_layer
+        SELECT DISTINCT id, name, description, properties, is_layer
         FROM (
             SELECT 
                 concat(id, '') AS id, 
                 name, 
                 description, 
+                properties, 
                 FALSE AS is_layer
             FROM user_permitted_layer_collections u 
                 JOIN layer_collections lc ON (u.layer_collection_id = lc.id)
@@ -688,7 +700,8 @@ where
                 concat(id, '') AS id, 
                 name, 
                 description, 
-                TRUE As is_layer
+                properties, 
+                TRUE AS is_layer
             FROM user_permitted_layers ul
                 JOIN layers uc ON (ul.layer_id = uc.id) 
                 JOIN collection_layers cl ON (layer_id = cl.layer)
@@ -716,30 +729,31 @@ where
         let items = rows
             .into_iter()
             .map(|row| {
-                let is_layer: bool = row.get(3);
+                let is_layer: bool = row.get(4);
 
                 if is_layer {
-                    CollectionItem::Layer(LayerListing {
+                    Ok(CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: LayerId(row.get(0)),
                         },
                         name: row.get(1),
                         description: row.get(2),
-                        properties: vec![],
-                    })
+                        properties: row.get(3),
+                    }))
                 } else {
-                    CollectionItem::Collection(LayerCollectionListing {
+                    Ok(CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(row.get(0)),
                         },
                         name: row.get(1),
                         description: row.get(2),
-                    })
+                        properties: row.get(3),
+                    }))
                 }
             })
-            .collect();
+            .collect::<Result<Vec<CollectionItem>>>()?;
 
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
@@ -750,7 +764,7 @@ where
             description,
             items,
             entry_label: None,
-            properties: vec![],
+            properties,
         })
     }
 
@@ -780,7 +794,9 @@ where
                 name,
                 description,
                 workflow,
-                symbology         
+                symbology,
+                properties,
+                metadata
             FROM layers l
             WHERE l.id = $1;",
             )
@@ -800,8 +816,8 @@ where
             description: row.get(1),
             workflow: serde_json::from_value(row.get(2)).context(crate::error::SerdeJson)?,
             symbology: serde_json::from_value(row.get(3)).context(crate::error::SerdeJson)?,
-            properties: vec![],
-            metadata: HashMap::new(),
+            properties: row.get(4),
+            metadata: serde_json::from_value(row.get(5)).context(crate::error::SerdeJson)?,
         })
     }
 }

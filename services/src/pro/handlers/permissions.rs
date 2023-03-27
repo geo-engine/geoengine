@@ -2,16 +2,17 @@ use actix_web::{web, FromRequest, HttpResponse};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 
-use crate::pro::contexts::{ProContext, ProGeoEngineDb};
+use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ProContext,
-    C::GeoEngineDB: ProGeoEngineDb,
+    C: ProApplicationContext,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -54,17 +55,19 @@ pub struct PermissionRequest {
         ("session_token" = [])
     )
 )]
-async fn add_permission_handler<C: ProContext>(
+async fn add_permission_handler<C: ProApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     permission: web::Json<PermissionRequest>,
 ) -> Result<HttpResponse>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let permission = permission.into_inner();
 
-    ctx.db(session)
+    app_ctx
+        .session_context(session)
+        .db()
         .add_permission(
             permission.role_id,
             permission.resource_id,
@@ -97,17 +100,19 @@ where
         ("session_token" = [])
     )
 )]
-async fn remove_permission_handler<C: ProContext>(
+async fn remove_permission_handler<C: ProApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     permission: web::Json<PermissionRequest>,
 ) -> Result<HttpResponse>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let permission = permission.into_inner();
 
-    ctx.db(session)
+    app_ctx
+        .session_context(session)
+        .db()
         .remove_permission(
             permission.role_id,
             permission.resource_id,

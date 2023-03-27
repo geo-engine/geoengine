@@ -1,7 +1,7 @@
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{
-    CreateSpan, InitializedRasterOperator, OperatorData, OperatorName, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+    InitializedRasterOperator, OperatorData, OperatorName, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -13,7 +13,6 @@ use geoengine_datatypes::raster::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use tracing::{span, Level};
 
 #[derive(Debug, Snafu)]
 pub enum MockRasterSourceError {

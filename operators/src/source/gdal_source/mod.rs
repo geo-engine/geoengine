@@ -1,5 +1,5 @@
 use crate::adapters::SparseTilesFillAdapter;
-use crate::engine::{CreateSpan, MetaData, OperatorData, OperatorName, QueryProcessor};
+use crate::engine::{MetaData, OperatorData, OperatorName, QueryProcessor};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::util::retry::retry;
@@ -54,7 +54,6 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use tracing::{span, Level};
 
 mod error;
 mod loading_info;

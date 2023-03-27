@@ -1,4 +1,4 @@
-use crate::{contexts::Context, error::Result};
+use crate::{contexts::SessionContext, error::Result};
 use actix::{
     fut::wrap_future, Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler,
 };
@@ -60,7 +60,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for VectorWebsocketSt
 }
 
 impl VectorWebsocketStreamHandler {
-    pub async fn new<C: Context>(
+    pub async fn new<C: SessionContext>(
         vector_operator: Box<dyn VectorOperator>,
         query_rectangle: VectorQueryRectangle,
         execution_ctx: C::ExecutionContext,
@@ -189,7 +189,7 @@ fn send_result(
 mod tests {
     use super::*;
     use crate::{
-        contexts::{InMemoryContext, SimpleContext},
+        contexts::{InMemoryContext, InMemorySessionContext, SimpleApplicationContext},
         workflows::workflow::Workflow,
     };
     use actix_http::error::PayloadError;
@@ -246,11 +246,11 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = InMemoryContext::new_with_context_spec(
+        let app_ctx = InMemoryContext::new_with_context_spec(
             TestDefault::test_default(),
             usize::MAX.into(), // ensure that we get one chunk per input
         );
-        let session = ctx.default_session_ref().await.clone();
+        let ctx = app_ctx.default_session_context().await;
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(
@@ -274,11 +274,11 @@ mod tests {
             spatial_resolution: SpatialResolution::one(),
         };
 
-        let handler = VectorWebsocketStreamHandler::new::<InMemoryContext>(
+        let handler = VectorWebsocketStreamHandler::new::<InMemorySessionContext>(
             workflow.operator.get_vector().unwrap(),
             query_rectangle,
-            ctx.execution_context(session.clone()).unwrap(),
-            ctx.query_context(session).unwrap(),
+            ctx.execution_context().unwrap(),
+            ctx.query_context().unwrap(),
         )
         .await
         .unwrap();

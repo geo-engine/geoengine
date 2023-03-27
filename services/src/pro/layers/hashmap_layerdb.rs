@@ -348,7 +348,7 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
 
     use crate::{
-        contexts::{Context, MockableSession},
+        contexts::{ApplicationContext, MockableSession, SessionContext},
         pro::{contexts::ProInMemoryContext, users::UserSession, util::tests::admin_login},
     };
 
@@ -357,13 +357,13 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn it_restricts_permissions() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let admin_session = admin_login(&ctx).await;
+        let admin_session = admin_login(&app_ctx).await;
         let session1 = UserSession::mock();
 
-        let admin_db = ctx.db(admin_session.clone());
-        let db1 = ctx.db(session1.clone());
+        let admin_db = app_ctx.session_context(admin_session.clone()).db();
+        let db1 = app_ctx.session_context(session1.clone()).db();
 
         let root = admin_db.get_root_layer_collection_id().await.unwrap();
 
@@ -373,6 +373,7 @@ mod tests {
                 AddLayerCollection {
                     name: "admin collection".to_string(),
                     description: String::new(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -434,6 +435,7 @@ mod tests {
                 AddLayerCollection {
                     name: "user layer".to_string(),
                     description: String::new(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -458,6 +460,7 @@ mod tests {
             AddLayerCollection {
                 name: "user layer".to_string(),
                 description: String::new(),
+                properties: Default::default(),
             }
             .validated()
             .unwrap(),
@@ -490,6 +493,7 @@ mod tests {
                 AddLayerCollection {
                     name: "user layer".to_string(),
                     description: String::new(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),

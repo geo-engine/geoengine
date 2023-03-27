@@ -1,14 +1,15 @@
+use crate::contexts::ApplicationContext;
 use crate::error::Result;
 use crate::tasks::{TaskListOptions, TaskManager};
 use crate::util::user_input::UserInput;
-use crate::{contexts::Context, tasks::TaskId};
+use crate::{contexts::SessionContext, tasks::TaskId};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
 pub(crate) fn init_task_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -57,14 +58,18 @@ impl TaskResponse {
         ("session_token" = [])
     )
 )]
-async fn status_handler<C: Context>(
+async fn status_handler<C: ApplicationContext>(
     session: C::Session, // TODO: check for session auth
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     task_id: web::Path<TaskId>,
 ) -> Result<impl Responder> {
     let task_id = task_id.into_inner();
 
-    let task = ctx.tasks(session).get_task_status(task_id).await?;
+    let task = app_ctx
+        .session_context(session)
+        .tasks()
+        .get_task_status(task_id)
+        .await?;
 
     Ok(web::Json(task))
 }
@@ -94,14 +99,18 @@ async fn status_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-async fn list_handler<C: Context>(
+async fn list_handler<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     task_list_options: web::Query<TaskListOptions>,
 ) -> Result<impl Responder> {
     let task_list_options = task_list_options.into_inner().validated()?;
 
-    let task = ctx.tasks(session).list_tasks(task_list_options).await?;
+    let task = app_ctx
+        .session_context(session)
+        .tasks()
+        .list_tasks(task_list_options)
+        .await?;
 
     Ok(web::Json(task))
 }
@@ -133,15 +142,17 @@ pub struct TaskAbortOptions {
         ("session_token" = [])
     )
 )]
-async fn abort_handler<C: Context>(
+async fn abort_handler<C: ApplicationContext>(
     session: C::Session, // TODO: check for session auth
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     task_id: web::Path<TaskId>,
     options: web::Query<TaskAbortOptions>,
 ) -> Result<impl Responder> {
     let task_id = task_id.into_inner();
 
-    ctx.tasks(session)
+    app_ctx
+        .session_context(session)
+        .tasks()
         .abort_tasks(task_id, options.force)
         .await?;
 
@@ -155,7 +166,7 @@ mod tests {
 
     use crate::util::tests::read_body_json;
     use crate::{
-        contexts::{InMemoryContext, Session, SimpleContext},
+        contexts::{InMemoryContext, Session, SimpleApplicationContext},
         tasks::{
             util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
         },
@@ -322,13 +333,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_status() {
-        let ctx = InMemoryContext::test_default();
-        let session = ctx.default_session_ref().await.clone();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
         let (task, complete_tx) = NopTask::new_with_sender();
 
-        let tasks = Arc::new(ctx.tasks(session));
+        let tasks = Arc::new(ctx.tasks());
         let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 1. initially, we should get a running status
@@ -338,7 +351,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -363,9 +376,9 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let ctx_clone = ctx.clone();
+        let app_ctx_clone = app_ctx.clone();
 
-        let res = send_test_request(req, ctx_clone).await;
+        let res = send_test_request(req, app_ctx_clone).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -385,16 +398,14 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = InMemoryContext::test_default();
-        let session = ctx.default_session_ref().await.clone();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
         let (task, _complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx
-            .tasks(session)
-            .schedule_task(task.boxed(), None)
-            .await
-            .unwrap();
+        let task_id = ctx.tasks().schedule_task(task.boxed(), None).await.unwrap();
 
         // 1. initially, we should get a running status
 
@@ -403,7 +414,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -418,11 +429,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_list() {
-        let ctx = InMemoryContext::test_default();
-        let session = ctx.default_session_ref().await.clone();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
-        let tasks = Arc::new(ctx.tasks(session));
+        let tasks = Arc::new(ctx.tasks());
 
         let (task, complete_tx) = NopTask::new_with_sender();
         let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
@@ -436,7 +449,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -452,11 +465,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_abort_task() {
-        let ctx = InMemoryContext::test_default();
-        let session = ctx.default_session_ref().await.clone();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
-        let tasks = Arc::new(ctx.tasks(session));
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. Create task
 
@@ -470,7 +485,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -487,7 +502,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -507,11 +522,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_force_abort_task() {
-        let ctx = InMemoryContext::test_default();
-        let session = ctx.default_session_ref().await.clone();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
-        let tasks = Arc::new(ctx.tasks(session));
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. Create task
 
@@ -525,7 +542,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -540,7 +557,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -559,11 +576,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_abort_after_abort() {
-        let ctx = InMemoryContext::test_default();
-        let session = ctx.default_session_ref().await.clone();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
-        let tasks = Arc::new(ctx.tasks(session));
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. Create task
 
@@ -577,7 +596,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -590,7 +609,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 400, "{:?}", res.response().error());
 
@@ -611,7 +630,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -622,7 +641,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -642,11 +661,11 @@ mod tests {
     #[tokio::test]
     async fn test_duplicate() {
         let unique_id = "highlander".to_string();
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session = ctx.default_session_ref().await.clone();
+        let session = app_ctx.default_session_ref().await.clone();
 
-        let tasks = ctx.tasks(session);
+        let tasks = app_ctx.session_context(session).tasks();
 
         let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
         tasks.schedule_task(task.boxed(), None).await.unwrap();
@@ -660,11 +679,11 @@ mod tests {
     #[tokio::test]
     async fn test_duplicate_after_finish() {
         let unique_id = "highlander".to_string();
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session = ctx.default_session_ref().await.clone();
+        let ctx = app_ctx.default_session_context().await;
 
-        let tasks = Arc::new(ctx.tasks(session));
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. start first task
 
@@ -687,11 +706,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_notify() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session = ctx.default_session_ref().await.clone();
+        let session = app_ctx.default_session_ref().await.clone();
 
-        let tasks = ctx.tasks(session);
+        let tasks = app_ctx.session_context(session).tasks();
 
         // 1. start first task
 
@@ -716,11 +735,11 @@ mod tests {
 
     #[tokio::test]
     async fn abort_subtasks() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session = ctx.default_session_ref().await.clone();
+        let ctx = app_ctx.default_session_context().await;
 
-        let tasks = Arc::new(ctx.tasks(session));
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. start super task
 
@@ -816,10 +835,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_failing_task_with_failing_cleanup() {
-        let ctx = InMemoryContext::test_default();
-        let session = ctx.default_session_ref().await.clone();
+        let app_ctx = InMemoryContext::test_default();
 
-        let tasks = Arc::new(ctx.tasks(session));
+        let ctx = app_ctx.default_session_context().await;
+
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. start task
 

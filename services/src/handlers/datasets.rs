@@ -4,11 +4,11 @@ use std::{
     path::Path,
 };
 
-use crate::api::model::datatypes::DatasetId;
 use crate::error::{self, Result};
 use crate::handlers::ErrorResponse;
 use crate::util::user_input::UserInput;
 use crate::{
+    api::model::datatypes::DatasetId,
     api::model::services::{
         AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
         MetaDataSuggestion,
@@ -23,7 +23,7 @@ use crate::{
         IdResponse,
     },
 };
-use crate::{contexts::Context, datasets::storage::AutoCreateDataset};
+use crate::{contexts::SessionContext, contexts::ApplicationContext, datasets::storage::AutoCreateDataset};
 use actix_web::http::StatusCode;
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use gdal::{
@@ -48,7 +48,7 @@ use strum::IntoStaticStr;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -87,11 +87,11 @@ where
     )
 )]
 #[allow(clippy::unused_async)]
-pub async fn list_volumes_handler<C: Context>(
-    ctx: web::Data<C>,
+pub async fn list_volumes_handler<C: ApplicationContext>(
+    app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<impl Responder> {
-    let volumes = ctx.volumes(session)?;
+    let volumes = app_ctx.session_context(session).volumes()?;
     Ok(web::Json(volumes))
 }
 
@@ -131,13 +131,17 @@ pub async fn list_volumes_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-pub async fn list_datasets_handler<C: Context>(
+pub async fn list_datasets_handler<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     options: web::Query<DatasetListOptions>,
 ) -> Result<impl Responder> {
     let options = options.into_inner().validated()?;
-    let list = ctx.db(session).list_datasets(options).await?;
+    let list = app_ctx
+        .session_context(session)
+        .db()
+        .list_datasets(options)
+        .await?;
     Ok(web::Json(list))
 }
 
@@ -194,13 +198,14 @@ impl actix_web::error::ResponseError for GetDatasetError {
         ("session_token" = [])
     )
 )]
-pub async fn get_dataset_handler<C: Context>(
+pub async fn get_dataset_handler<C: ApplicationContext>(
     dataset: web::Path<DatasetId>,
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder, GetDatasetError> {
-    let dataset = ctx
-        .db(session)
+    let dataset = app_ctx
+        .session_context(session)
+        .db()
         .load_dataset(&dataset.into_inner())
         .await
         .context(CannotLoadDatasetSnafu)?;
@@ -376,9 +381,9 @@ impl actix_web::error::ResponseError for CreateDatasetError {
         ("session_token" = [])
     )
 )]
-pub async fn create_dataset_handler<C: Context>(
+pub async fn create_dataset_handler<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
 ) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
     let create = create.into_inner();
@@ -386,21 +391,21 @@ pub async fn create_dataset_handler<C: Context>(
         CreateDataset {
             data_path: DataPath::Upload(upload),
             definition,
-        } => create_upload_dataset(session, ctx, upload, definition).await,
+        } => create_upload_dataset(session, app_ctx, upload, definition).await,
         CreateDataset {
             data_path: DataPath::Volume(volume),
             definition,
-        } => create_volume_dataset(session, ctx, volume, definition).await,
+        } => create_volume_dataset(session, app_ctx, volume, definition).await,
     }
 }
 
-pub async fn create_upload_dataset<C: Context>(
+pub async fn create_upload_dataset<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     upload_id: UploadId,
     mut definition: DatasetDefinition,
 ) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
-    let db = ctx.db(session);
+    let db = app_ctx.session_context(session).db();
     let upload = db.load_upload(upload_id).await.context(UploadNotFound)?;
 
     adjust_meta_data_path(&mut definition.meta_data, &upload)
@@ -421,9 +426,9 @@ pub async fn create_upload_dataset<C: Context>(
     Ok(web::Json(IdResponse::from(id)))
 }
 
-async fn create_volume_dataset<C: Context>(
+async fn create_volume_dataset<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
 ) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
@@ -441,7 +446,7 @@ async fn create_volume_dataset<C: Context>(
     adjust_meta_data_path(&mut definition.meta_data, &volume)
         .context(CannotResolveUploadFilePath)?;
 
-    let db = ctx.db(session);
+    let db = app_ctx.session_context(session).db();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let id = db
@@ -534,12 +539,12 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
         ("session_token" = [])
     )
 )]
-pub async fn auto_create_dataset_handler<C: Context>(
+pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     create: web::Json<AutoCreateDataset>,
 ) -> Result<impl Responder> {
-    let db = ctx.db(session);
+    let db = app_ctx.session_context(session).db();
     let upload = db.load_upload(create.upload).await?;
 
     let create = create.into_inner().validated()?.user_input;
@@ -643,12 +648,16 @@ pub async fn auto_create_dataset_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-pub async fn suggest_meta_data_handler<C: Context>(
+pub async fn suggest_meta_data_handler<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     suggest: web::Query<SuggestMetaData>,
 ) -> Result<impl Responder> {
-    let upload = ctx.db(session).load_upload(suggest.upload).await?;
+    let upload = app_ctx
+        .session_context(session)
+        .db()
+        .load_upload(suggest.upload)
+        .await?;
 
     let main_file = suggest
         .into_inner()
@@ -1075,12 +1084,16 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
         ("session_token" = [])
     )
 )]
-pub async fn delete_dataset_handler<C: Context>(
+pub async fn delete_dataset_handler<C: ApplicationContext>(
     dataset: web::Path<DatasetId>,
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<HttpResponse> {
-    ctx.db(session).delete_dataset(dataset.into_inner()).await?;
+    app_ctx
+        .session_context(session)
+        .db()
+        .delete_dataset(dataset.into_inner())
+        .await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -1090,7 +1103,9 @@ mod tests {
     use super::*;
     use crate::api::model::datatypes::DatasetId;
     use crate::api::model::services::DatasetDefinition;
-    use crate::contexts::{InMemoryContext, Session, SessionId, SimpleContext, SimpleSession};
+    use crate::contexts::{
+        ApplicationContext, InMemoryContext, Session, SessionId, SimpleApplicationContext,
+    };
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
     use crate::error::Result;
@@ -1124,9 +1139,11 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_list_datasets() -> Result<()> {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session_id = app_ctx.default_session_ref().await.id();
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,
@@ -1164,7 +1181,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let db = ctx.db(SimpleSession::default());
+        let db = ctx.db();
         let _id = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
         let id2 = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
@@ -1210,7 +1227,7 @@ mod tests {
             ))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1273,8 +1290,8 @@ mod tests {
         Ok(())
     }
 
-    async fn upload_ne_10m_ports_files<C: SimpleContext>(
-        ctx: C,
+    async fn upload_ne_10m_ports_files<C: SimpleApplicationContext>(
+        app_ctx: C,
         session_id: SessionId,
     ) -> Result<UploadId> {
         let files = vec![
@@ -1289,7 +1306,7 @@ mod tests {
             .uri("/upload")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart_files(&files);
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200);
 
         let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
@@ -1303,8 +1320,8 @@ mod tests {
         Ok(upload.id)
     }
 
-    async fn construct_dataset_from_upload<C: SimpleContext>(
-        ctx: C,
+    async fn construct_dataset_from_upload<C: SimpleApplicationContext>(
+        app_ctx: C,
         upload_id: UploadId,
         session_id: SessionId,
     ) -> DatasetId {
@@ -1387,7 +1404,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_json(s);
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200);
 
         let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
@@ -1421,24 +1438,27 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(
+        let app_ctx = InMemoryContext::new_with_context_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
         );
 
-        let session = ctx.default_session_ref().await;
+        let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
-        let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
+        let ctx = app_ctx.session_context(session);
+
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
 
-        let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
-        let exe_ctx = ctx.execution_context(session.clone())?;
+        let dataset_id =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
+        let exe_ctx = ctx.execution_context()?;
 
         let source = make_ogr_source(&exe_ctx, dataset_id).await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
-        let query_ctx = ctx.query_context(session.clone())?;
+        let query_ctx = ctx.query_context()?;
 
         let query = query_processor
             .query(
@@ -1477,9 +1497,11 @@ mod tests {
 
     #[tokio::test]
     async fn it_creates_system_dataset() -> Result<()> {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session_id = ctx.session().id();
 
         let volume = VolumeName("test_data".to_string());
 
@@ -1510,7 +1532,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
         let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
@@ -1524,7 +1546,7 @@ mod tests {
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
         Ok(())
@@ -1995,9 +2017,11 @@ mod tests {
 
     #[tokio::test]
     async fn get_dataset() -> Result<()> {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session_id = ctx.session().id();
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -2034,14 +2058,14 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let db = ctx.db(ctx.default_session_ref().await.clone());
+        let db = ctx.db();
         let id = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
@@ -2075,8 +2099,10 @@ mod tests {
     async fn it_suggests_metadata() -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
 
         let body = vec![(
             "test.json",
@@ -2120,7 +2146,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart(body.clone());
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -2136,7 +2162,7 @@ mod tests {
             .uri(&format!("/dataset/suggest?upload={}", upload.id))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -2208,18 +2234,21 @@ mod tests {
     async fn it_deletes_dataset() -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session = ctx.default_session_ref().await.clone();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = app_ctx.default_session_ref().await.clone();
 
         let session_id = session.id();
 
-        let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
 
-        let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
+        let dataset_id =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
 
-        let db = ctx.db(session);
+        let db = ctx.db();
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
@@ -2228,7 +2257,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -2239,7 +2268,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_deletes_system_dataset() -> Result<()> {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
 
         let volume = VolumeName("test_data".to_string());
 
@@ -2263,7 +2294,7 @@ mod tests {
             },
         };
 
-        let session = ctx.default_session_ref().await;
+        let session = app_ctx.default_session_ref().await;
 
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
@@ -2271,12 +2302,12 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
         let dataset_id = dataset_id.id;
 
-        let db = ctx.db(session.clone());
+        let db = ctx.db();
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
@@ -2285,7 +2316,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 

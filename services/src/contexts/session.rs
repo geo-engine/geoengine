@@ -1,4 +1,4 @@
-use crate::contexts::{Context, InMemoryContext};
+use crate::contexts::InMemoryContext;
 use crate::error::{self};
 use crate::handlers::get_token;
 use crate::identifier;
@@ -13,6 +13,8 @@ use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::util::Identifier;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+use super::ApplicationContext;
 
 identifier!(SessionId);
 

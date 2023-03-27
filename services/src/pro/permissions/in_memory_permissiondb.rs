@@ -17,52 +17,30 @@ pub struct InMemoryPermissionDbBackend {
 impl Default for InMemoryPermissionDbBackend {
     fn default() -> Self {
         // create the default permissions
-        Self {
-            permissions: vec![
-                InMemoryPermission {
-                    role: Role::admin_role_id(),
-                    resource: ResourceId::LayerCollection(LayerCollectionId(
-                        INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
-                    )),
-                    permission: Permission::Owner,
-                },
-                InMemoryPermission {
-                    role: Role::admin_role_id(),
-                    resource: ResourceId::LayerCollection(LayerCollectionId(
-                        UNSORTED_COLLECTION_ID.to_string(),
-                    )),
-                    permission: Permission::Owner,
-                },
-                InMemoryPermission {
-                    role: Role::registered_user_role_id(),
-                    resource: ResourceId::LayerCollection(LayerCollectionId(
-                        INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
-                    )),
-                    permission: Permission::Read,
-                },
-                InMemoryPermission {
-                    role: Role::registered_user_role_id(),
-                    resource: ResourceId::LayerCollection(LayerCollectionId(
-                        UNSORTED_COLLECTION_ID.to_string(),
-                    )),
-                    permission: Permission::Read,
-                },
-                InMemoryPermission {
-                    role: Role::anonymous_role_id(),
-                    resource: ResourceId::LayerCollection(LayerCollectionId(
-                        INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
-                    )),
-                    permission: Permission::Read,
-                },
-                InMemoryPermission {
-                    role: Role::anonymous_role_id(),
-                    resource: ResourceId::LayerCollection(LayerCollectionId(
-                        UNSORTED_COLLECTION_ID.to_string(),
-                    )),
-                    permission: Permission::Read,
-                },
-            ],
+        let mut permissions = vec![];
+        for collection_id in [
+            INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+            UNSORTED_COLLECTION_ID,
+            INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+        ] {
+            permissions.push(InMemoryPermission {
+                role: Role::admin_role_id(),
+                resource: ResourceId::LayerCollection(LayerCollectionId(collection_id.to_string())),
+                permission: Permission::Owner,
+            });
+            permissions.push(InMemoryPermission {
+                role: Role::registered_user_role_id(),
+                resource: ResourceId::LayerCollection(LayerCollectionId(collection_id.to_string())),
+                permission: Permission::Read,
+            });
+            permissions.push(InMemoryPermission {
+                role: Role::anonymous_role_id(),
+                resource: ResourceId::LayerCollection(LayerCollectionId(collection_id.to_string())),
+                permission: Permission::Read,
+            });
         }
+
+        Self { permissions }
     }
 }
 

@@ -1,5 +1,5 @@
-use crate::contexts::QueryContextImpl;
-use crate::contexts::{Context, GeoEngineDb};
+use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId};
+use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::datasets::upload::{Volume, Volumes};
 use crate::error::{self, Result};
@@ -37,7 +37,7 @@ use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{ExecutionContextImpl, ProContext, ProGeoEngineDb, QuotaCheckerImpl};
+use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 
 // TODO: do not report postgres error details to user
 
@@ -114,7 +114,7 @@ where
         let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
 
-        let ctx = PostgresContext {
+        let app_ctx = PostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -125,7 +125,7 @@ where
             volumes: Default::default(),
         };
 
-        let mut db = ctx.db(UserSession::admin_session());
+        let mut db = app_ctx.session_context(UserSession::admin_session()).db();
 
         add_layers_from_directory(&mut db, layer_defs_path).await;
         add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
@@ -139,7 +139,7 @@ where
         )
         .await;
 
-        Ok(ctx)
+        Ok(app_ctx)
     }
 
     async fn schema_version(
@@ -299,12 +299,11 @@ where
                             bounds "STRectangle" NOT NULL,
                             time_step "TimeStep" NOT NULL,
                             changed timestamp with time zone,
-                            author_user_id UUID REFERENCES users(id) NOT NULL,
-                            latest boolean
+                            author_user_id UUID REFERENCES users(id) NOT NULL
                         );
 
-                        CREATE INDEX project_version_latest_idx 
-                        ON project_versions (project_id, latest DESC, changed DESC, author_user_id DESC);
+                        CREATE INDEX project_version_idx
+                        ON project_versions (project_id, changed DESC, author_user_id DESC);
 
                         CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
                         
@@ -373,32 +372,42 @@ where
                             'Read', 'Owner'
                         );  
 
+                        CREATE TYPE "PropertyType" AS (
+                            key text,
+                            value text
+                        );
+
                         CREATE TABLE layer_collections (
                             id UUID PRIMARY KEY,
                             name text NOT NULL,
-                            description text NOT NULL
+                            description text NOT NULL,
+                            properties "PropertyType"[] NOT NULL
                         );
 
                         -- insert the root layer collection
                         INSERT INTO layer_collections (
                             id,
                             name,
-                            description
+                            description,
+                            properties
                         ) VALUES (
                             {root_layer_collection_id},
                             'Layers',
-                            'All available Geo Engine layers'
+                            'All available Geo Engine layers',
+                            ARRAY[]::"PropertyType"[]
                         );
 
                         -- insert the unsorted layer collection
                         INSERT INTO layer_collections (
                             id,
                             name,
-                            description
+                            description,
+                            properties
                         ) VALUES (
                             {unsorted_layer_collection_id},
                             'Unsorted',
-                            'Unsorted Layers'
+                            'Unsorted Layers',
+                            ARRAY[]::"PropertyType"[]
                         );
     
 
@@ -407,7 +416,9 @@ where
                             name text NOT NULL,
                             description text NOT NULL,
                             workflow json NOT NULL,
-                            symbology json 
+                            symbology json,
+                            properties "PropertyType"[] NOT NULL,
+                            metadata json NOT NULL
                         );
 
                         CREATE TABLE collection_layers (
@@ -507,10 +518,10 @@ where
                             (role_id, layer_collection_id, permission)  
                         VALUES 
                             ({admin_role_id}, {root_layer_collection_id}, 'Owner'),
-                            ({admin_role_id}, {unsorted_layer_collection_id}, 'Owner'),
                             ({user_role_id}, {root_layer_collection_id}, 'Read'),
-                            ({user_role_id}, {unsorted_layer_collection_id}, 'Read'),
                             ({anonymous_role_id}, {root_layer_collection_id}, 'Read'),
+                            ({admin_role_id}, {unsorted_layer_collection_id}, 'Owner'),
+                            ({user_role_id}, {unsorted_layer_collection_id}, 'Read'),
                             ({anonymous_role_id}, {unsorted_layer_collection_id}, 'Read');
                         "#
                     ,
@@ -544,7 +555,33 @@ where
 }
 
 #[async_trait]
-impl<Tls> ProContext for PostgresContext<Tls>
+impl<Tls> ApplicationContext for PostgresContext<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    type SessionContext = PostgresSessionContext<Tls>;
+    type Session = UserSession;
+
+    fn session_context(&self, session: Self::Session) -> Self::SessionContext {
+        PostgresSessionContext {
+            session,
+            context: self.clone(),
+        }
+    }
+
+    async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {
+        self.user_session_by_id(session_id)
+            .await
+            .map_err(Box::new)
+            .context(error::Unauthorized)
+    }
+}
+
+#[async_trait]
+impl<Tls> ProApplicationContext for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -556,8 +593,20 @@ where
     }
 }
 
+#[derive(Clone)]
+pub struct PostgresSessionContext<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    session: UserSession,
+    context: PostgresContext<Tls>,
+}
+
 #[async_trait]
-impl<Tls> Context for PostgresContext<Tls>
+impl<Tls> SessionContext for PostgresSessionContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -572,52 +621,48 @@ where
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
-    fn db(&self, session: Self::Session) -> Self::GeoEngineDB {
-        PostgresDb::new(self.pool.clone(), session)
+    fn db(&self) -> Self::GeoEngineDB {
+        PostgresDb::new(self.context.pool.clone(), self.session.clone())
     }
 
-    fn tasks(&self, session: UserSession) -> Self::TaskManager {
-        ProTaskManager::new(self.task_manager.clone(), session)
+    fn tasks(&self) -> Self::TaskManager {
+        ProTaskManager::new(self.context.task_manager.clone(), self.session.clone())
     }
 
-    fn query_context(&self, session: UserSession) -> Result<Self::QueryContext> {
+    fn query_context(&self) -> Result<Self::QueryContext> {
         // TODO: load config only once
 
         let mut extensions = QueryContextExtensions::default();
         extensions.insert(
-            self.quota
-                .create_quota_tracking(&session, ComputationContext::new()),
+            self.context
+                .quota
+                .create_quota_tracking(&self.session, ComputationContext::new()),
         );
-        extensions.insert(Box::new(QuotaCheckerImpl {
-            user_db: self.db(session),
-        }) as QuotaChecker);
+        extensions.insert(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker);
 
         Ok(QueryContextImpl::new_with_extensions(
-            self.query_ctx_chunk_size,
-            self.thread_pool.clone(),
+            self.context.query_ctx_chunk_size,
+            self.context.thread_pool.clone(),
             extensions,
         ))
     }
 
-    fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
+    fn execution_context(&self) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<PostgresDb<Tls>>::new(
-            self.db(session),
-            self.thread_pool.clone(),
-            self.exe_ctx_tiling_spec,
+            self.db(),
+            self.context.thread_pool.clone(),
+            self.context.exe_ctx_tiling_spec,
         ))
     }
 
-    async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
-        self.user_session_by_id(session_id)
-            .await
-            .map_err(Box::new)
-            .context(error::Unauthorized)
+    fn volumes(&self) -> Result<Vec<Volume>> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        Ok(self.context.volumes.volumes.clone())
     }
 
-    fn volumes(&self, session: UserSession) -> Result<Vec<Volume>> {
-        ensure!(session.is_admin(), error::PermissionDenied);
-
-        Ok(self.volumes.volumes.clone())
+    fn session(&self) -> &Self::Session {
+        &self.session
     }
 }
 
@@ -664,7 +709,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::str::FromStr;
 
     use super::*;
@@ -690,7 +734,7 @@ mod tests {
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
     };
-    use crate::pro::util::tests::admin_login;
+    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::projects::{
         CreateProject, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
         ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
@@ -702,7 +746,7 @@ mod tests {
     use crate::workflows::workflow::Workflow;
     use bb8_postgres::bb8::ManageConnection;
     use bb8_postgres::tokio_postgres::{self, NoTls};
-    use futures::Future;
+    use futures::{join, Future};
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
@@ -725,6 +769,7 @@ mod tests {
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use openidconnect::SubjectIdentifier;
     use rand::RngCore;
+    use serde_json::json;
     use tokio::runtime::Handle;
 
     /// Setup database schema and return its name.
@@ -806,12 +851,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test() {
-        with_temp_context(|ctx, _| async move {
-            anonymous(&ctx).await;
+        with_temp_context(|app_ctx, _| async move {
+            anonymous(&app_ctx).await;
 
-            let _user_id = user_reg_login(&ctx).await;
+            let _user_id = user_reg_login(&app_ctx).await;
 
-            let session = ctx
+            let session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".into(),
                     password: "secret123".into(),
@@ -819,101 +864,101 @@ mod tests {
                 .await
                 .unwrap();
 
-            create_projects(&ctx, &session).await;
+            create_projects(&app_ctx, &session).await;
 
-            let projects = list_projects(&ctx, &session).await;
+            let projects = list_projects(&app_ctx, &session).await;
 
-            set_session(&ctx, &projects).await;
+            set_session(&app_ctx, &projects).await;
 
             let project_id = projects[0].id;
 
-            update_projects(&ctx, &session, project_id).await;
+            update_projects(&app_ctx, &session, project_id).await;
 
-            add_permission(&ctx, &session, project_id).await;
+            add_permission(&app_ctx, &session, project_id).await;
 
-            delete_project(&ctx, &session, project_id).await;
+            delete_project(&app_ctx, &session, project_id).await;
         })
         .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_external() {
-        with_temp_context(|ctx, _| async move {
-            anonymous(&ctx).await;
+        with_temp_context(|app_ctx, _| async move {
+            anonymous(&app_ctx).await;
 
-            let session = external_user_login_twice(&ctx).await;
+            let session = external_user_login_twice(&app_ctx).await;
 
-            create_projects(&ctx, &session).await;
+            create_projects(&app_ctx, &session).await;
 
-            let projects = list_projects(&ctx, &session).await;
+            let projects = list_projects(&app_ctx, &session).await;
 
-            set_session_external(&ctx, &projects).await;
+            set_session_external(&app_ctx, &projects).await;
 
             let project_id = projects[0].id;
 
-            update_projects(&ctx, &session, project_id).await;
+            update_projects(&app_ctx, &session, project_id).await;
 
-            add_permission(&ctx, &session, project_id).await;
+            add_permission(&app_ctx, &session, project_id).await;
 
-            delete_project(&ctx, &session, project_id).await;
+            delete_project(&app_ctx, &session, project_id).await;
         })
         .await;
     }
 
-    async fn set_session(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+    async fn set_session(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let credentials = UserCredentials {
             email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
-        let session = ctx.login(credentials).await.unwrap();
+        let session = app_ctx.login(credentials).await.unwrap();
 
-        set_session_in_database(ctx, projects, session).await;
+        set_session_in_database(app_ctx, projects, session).await;
     }
 
-    async fn set_session_external(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+    async fn set_session_external(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let external_user_claims = ExternalUserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
             real_name: "Foo Bar".into(),
         };
 
-        let session = ctx
+        let session = app_ctx
             .login_external(external_user_claims, Duration::minutes(10))
             .await
             .unwrap();
 
-        set_session_in_database(ctx, projects, session).await;
+        set_session_in_database(app_ctx, projects, session).await;
     }
 
     async fn set_session_in_database(
-        ctx: &PostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         projects: &[ProjectListing],
         session: UserSession,
     ) {
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session.clone()).db();
 
         db.set_session_project(projects[0].id).await.unwrap();
 
         assert_eq!(
-            ctx.session_by_id(session.id).await.unwrap().project,
+            app_ctx.session_by_id(session.id).await.unwrap().project,
             Some(projects[0].id)
         );
 
         let rect = STRectangle::new_unchecked(SpatialReference::epsg_4326(), 0., 1., 2., 3., 1, 2);
         db.set_session_view(rect.clone()).await.unwrap();
         assert_eq!(
-            ctx.session_by_id(session.id).await.unwrap().view,
+            app_ctx.session_by_id(session.id).await.unwrap().view,
             Some(rect)
         );
     }
 
     async fn delete_project(
-        ctx: &PostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session.clone()).db();
 
         db.delete_project(project_id).await.unwrap();
 
@@ -921,18 +966,18 @@ mod tests {
     }
 
     async fn add_permission(
-        ctx: &PostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session.clone()).db();
 
         assert!(db
             .has_permission(project_id, Permission::Owner)
             .await
             .unwrap());
 
-        let user2 = ctx
+        let user2 = app_ctx
             .register_user(
                 UserRegistration {
                     email: "user2@example.com".into(),
@@ -945,7 +990,7 @@ mod tests {
             .await
             .unwrap();
 
-        let session2 = ctx
+        let session2 = app_ctx
             .login(UserCredentials {
                 email: "user2@example.com".into(),
                 password: "12345678".into(),
@@ -953,7 +998,7 @@ mod tests {
             .await
             .unwrap();
 
-        let db2 = ctx.db(session2.clone());
+        let db2 = app_ctx.session_context(session2.clone()).db();
         assert!(!db2
             .has_permission(project_id, Permission::Owner)
             .await
@@ -971,11 +1016,11 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     async fn update_projects(
-        ctx: &PostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session.clone()).db();
 
         let project = db
             .load_project_version(project_id, LoadVersion::Latest)
@@ -1091,7 +1136,7 @@ mod tests {
     }
 
     async fn list_projects(
-        ctx: &PostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
@@ -1103,7 +1148,7 @@ mod tests {
         .validated()
         .unwrap();
 
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session.clone()).db();
 
         let projects = db.list_projects(options).await.unwrap();
 
@@ -1113,8 +1158,8 @@ mod tests {
         projects
     }
 
-    async fn create_projects(ctx: &PostgresContext<NoTls>, session: &UserSession) {
-        let db = ctx.db(session.clone());
+    async fn create_projects(app_ctx: &PostgresContext<NoTls>, session: &UserSession) {
+        let db = app_ctx.session_context(session.clone()).db();
 
         for i in 0..10 {
             let create = CreateProject {
@@ -1138,7 +1183,7 @@ mod tests {
         }
     }
 
-    async fn user_reg_login(ctx: &PostgresContext<NoTls>) -> UserId {
+    async fn user_reg_login(app_ctx: &PostgresContext<NoTls>) -> UserId {
         let user_registration = UserRegistration {
             email: "foo@example.com".into(),
             password: "secret123".into(),
@@ -1147,28 +1192,28 @@ mod tests {
         .validated()
         .unwrap();
 
-        let user_id = ctx.register_user(user_registration).await.unwrap();
+        let user_id = app_ctx.register_user(user_registration).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
-        let session = ctx.login(credentials).await.unwrap();
+        let session = app_ctx.login(credentials).await.unwrap();
 
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session.clone()).db();
 
-        ctx.session_by_id(session.id).await.unwrap();
+        app_ctx.session_by_id(session.id).await.unwrap();
 
         db.logout().await.unwrap();
 
-        assert!(ctx.session_by_id(session.id).await.is_err());
+        assert!(app_ctx.session_by_id(session.id).await.is_err());
 
         user_id
     }
 
     //TODO: No duplicate tests for postgres and hashmap implementation possible?
-    async fn external_user_login_twice(ctx: &PostgresContext<NoTls>) -> UserSession {
+    async fn external_user_login_twice(app_ctx: &PostgresContext<NoTls>) -> UserSession {
         let external_user_claims = ExternalUserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -1177,7 +1222,7 @@ mod tests {
         let duration = Duration::minutes(30);
 
         //NEW
-        let login_result = ctx
+        let login_result = app_ctx
             .login_external(external_user_claims.clone(), duration)
             .await;
         assert!(login_result.is_ok());
@@ -1185,7 +1230,7 @@ mod tests {
         let session_1 = login_result.unwrap();
         let user_id = session_1.user.id; //TODO: Not a deterministic test.
 
-        let db1 = ctx.db(session_1.clone());
+        let db1 = app_ctx.session_context(session_1.clone()).db();
 
         assert!(session_1.user.email.is_some());
         assert_eq!(session_1.user.email.unwrap(), "foo@bar.de");
@@ -1195,14 +1240,14 @@ mod tests {
         let expected_duration = session_1.created + duration;
         assert_eq!(session_1.valid_until, expected_duration);
 
-        assert!(ctx.session_by_id(session_1.id).await.is_ok());
+        assert!(app_ctx.session_by_id(session_1.id).await.is_ok());
 
         assert!(db1.logout().await.is_ok());
 
-        assert!(ctx.session_by_id(session_1.id).await.is_err());
+        assert!(app_ctx.session_by_id(session_1.id).await.is_err());
 
         let duration = Duration::minutes(10);
-        let login_result = ctx
+        let login_result = app_ctx
             .login_external(external_user_claims.clone(), duration)
             .await;
         assert!(login_result.is_ok());
@@ -1219,31 +1264,31 @@ mod tests {
         let expected_duration = session_2.created + duration;
         assert_eq!(session_2.valid_until, expected_duration);
 
-        assert!(ctx.session_by_id(session_2.id).await.is_ok());
+        assert!(app_ctx.session_by_id(session_2.id).await.is_ok());
 
         result
     }
 
-    async fn anonymous(ctx: &PostgresContext<NoTls>) {
+    async fn anonymous(app_ctx: &PostgresContext<NoTls>) {
         let now: DateTime = chrono::offset::Utc::now().into();
-        let session = ctx.create_anonymous_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
         let then: DateTime = chrono::offset::Utc::now().into();
 
         assert!(session.created >= now && session.created <= then);
         assert!(session.valid_until > session.created);
 
-        let session = ctx.session_by_id(session.id).await.unwrap();
+        let session = app_ctx.session_by_id(session.id).await.unwrap();
 
-        let db = ctx.db(session.clone());
+        let db = app_ctx.session_context(session.clone()).db();
 
         db.logout().await.unwrap();
 
-        assert!(ctx.session_by_id(session.id).await.is_err());
+        assert!(app_ctx.session_by_id(session.id).await.is_err());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_workflows() {
-        with_temp_context(|ctx, _pg_config| async move {
+        with_temp_context(|app_ctx, _pg_config| async move {
             let workflow = Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
@@ -1255,10 +1300,11 @@ mod tests {
                 ),
             };
 
-            let session = ctx.create_anonymous_session().await.unwrap();
+            let session = app_ctx.create_anonymous_session().await.unwrap();
+let ctx = app_ctx.session_context(session);
 
             let db = ctx
-                .db(session);
+                .db();
             let id = db
                 .register_workflow(workflow)
                 .await
@@ -1277,7 +1323,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_datasets() {
-        with_temp_context(|ctx, _| async move {
+        with_temp_context(|app_ctx, _| async move {
             let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
 
             let loading_info = OgrSourceDataset {
@@ -1334,9 +1380,9 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let session = ctx.create_anonymous_session().await.unwrap();
+            let session = app_ctx.create_anonymous_session().await.unwrap();
 
-            let db = ctx.db(session.clone());
+            let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
             db.add_dataset(
                 AddDataset {
@@ -1439,7 +1485,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_uploads() {
-        with_temp_context(|ctx, _| async move {
+        with_temp_context(|app_ctx, _| async move {
             let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
             let input = Upload {
                 id,
@@ -1450,9 +1496,9 @@ mod tests {
                 }],
             };
 
-            let session = ctx.create_anonymous_session().await.unwrap();
+            let session = app_ctx.create_anonymous_session().await.unwrap();
 
-            let db = ctx.db(session.clone());
+            let db = app_ctx.session_context(session.clone()).db();
 
             db.create_upload(input.clone()).await.unwrap();
 
@@ -1466,8 +1512,8 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_layer_providers() {
-        with_temp_context(|ctx, _| async move {
-            let db = ctx.db(UserSession::admin_session());
+        with_temp_context(|app_ctx, _| async move {
+            let db = app_ctx.session_context(UserSession::admin_session()).db();
 
             let provider_id =
                 DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
@@ -1591,12 +1637,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_only_permitted_datasets() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.create_anonymous_session().await.unwrap();
-            let session2 = ctx.create_anonymous_session().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
-            let db1 = ctx.db(session1.clone());
-            let db2 = ctx.db(session2.clone());
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1677,12 +1723,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_shows_only_permitted_provenance() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.create_anonymous_session().await.unwrap();
-            let session2 = ctx.create_anonymous_session().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
-            let db1 = ctx.db(session1.clone());
-            let db2 = ctx.db(session2.clone());
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1735,12 +1781,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_updates_permissions() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.create_anonymous_session().await.unwrap();
-            let session2 = ctx.create_anonymous_session().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
-            let db1 = ctx.db(session1.clone());
-            let db2 = ctx.db(session2.clone());
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1799,12 +1845,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_uses_roles_for_permissions() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.create_anonymous_session().await.unwrap();
-            let session2 = ctx.create_anonymous_session().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
-            let db1 = ctx.db(session1.clone());
-            let db2 = ctx.db(session2.clone());
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1863,12 +1909,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_meta_data() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.create_anonymous_session().await.unwrap();
-            let session2 = ctx.create_anonymous_session().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
-            let db1 = ctx.db(session1.clone());
-            let db2 = ctx.db(session2.clone());
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1939,12 +1985,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_uploads() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.create_anonymous_session().await.unwrap();
-            let session2 = ctx.create_anonymous_session().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
-            let db1 = ctx.db(session1.clone());
-            let db2 = ctx.db(session2.clone());
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let upload_id = UploadId::new();
 
@@ -1969,10 +2015,10 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_collects_layers() {
-        with_temp_context(|ctx, _| async move {
-            let session = admin_login(&ctx).await;
+        with_temp_context(|app_ctx, _| async move {
+            let session = admin_login(&app_ctx).await;
 
-            let layer_db = ctx.db(session);
+            let layer_db = app_ctx.session_context(session).db();
 
             let workflow = Workflow {
                 operator: TypedOperator::Vector(
@@ -1994,6 +2040,8 @@ mod tests {
                         description: "Layer 1".to_string(),
                         symbology: None,
                         workflow: workflow.clone(),
+                        metadata: [("meta".to_string(), "datum".to_string())].into(),
+                        properties: vec![("proper".to_string(), "tee".to_string()).into()],
                     }
                     .validated()
                     .unwrap(),
@@ -2013,8 +2061,8 @@ mod tests {
                     description: "Layer 1".to_string(),
                     symbology: None,
                     workflow: workflow.clone(),
-                    properties: vec![],
-                    metadata: HashMap::new(),
+                    metadata: [("meta".to_string(), "datum".to_string())].into(),
+                    properties: vec![("proper".to_string(), "tee".to_string()).into()],
                 }
             );
 
@@ -2023,6 +2071,7 @@ mod tests {
                     AddLayerCollection {
                         name: "Collection1".to_string(),
                         description: "Collection 1".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2038,6 +2087,8 @@ mod tests {
                         description: "Layer 2".to_string(),
                         symbology: None,
                         workflow: workflow.clone(),
+                        metadata: Default::default(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2051,6 +2102,7 @@ mod tests {
                     AddLayerCollection {
                         name: "Collection2".to_string(),
                         description: "Collection 2".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2094,6 +2146,7 @@ mod tests {
                             },
                             name: "Collection1".to_string(),
                             description: "Collection 1".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -2104,6 +2157,7 @@ mod tests {
                             },
                             name: "Unsorted".to_string(),
                             description: "Unsorted Layers".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
@@ -2112,7 +2166,7 @@ mod tests {
                             },
                             name: "Layer1".to_string(),
                             description: "Layer 1".to_string(),
-                            properties: vec![],
+                            properties: vec![("proper".to_string(), "tee".to_string()).into()],
                         })
                     ],
                     entry_label: None,
@@ -2150,6 +2204,7 @@ mod tests {
                             },
                             name: "Collection2".to_string(),
                             description: "Collection 2".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
@@ -2171,8 +2226,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_tracks_used_quota_in_postgres() {
-        with_temp_context(|ctx, _| async move {
-            let _user = ctx
+        with_temp_context(|app_ctx, _| async move {
+            let _user = app_ctx
                 .register_user(
                     UserRegistration {
                         email: "foo@example.com".to_string(),
@@ -2185,7 +2240,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let session = ctx
+            let session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".to_string(),
                     password: "secret1234".to_string(),
@@ -2193,16 +2248,16 @@ mod tests {
                 .await
                 .unwrap();
 
-            let admin_session = admin_login(&ctx).await;
+            let admin_session = admin_login(&app_ctx).await;
 
-            let quota = initialize_quota_tracking(ctx.db(admin_session));
+            let quota = initialize_quota_tracking(app_ctx.session_context(admin_session).db());
 
             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
             tracking.work_unit_done();
             tracking.work_unit_done();
 
-            let db = ctx.db(session);
+            let db = app_ctx.session_context(session).db();
 
             // wait for quota to be recorded
             let mut success = false;
@@ -2223,8 +2278,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_tracks_available_quota() {
-        with_temp_context(|ctx, _| async move {
-            let user = ctx
+        with_temp_context(|app_ctx, _| async move {
+            let user = app_ctx
                 .register_user(
                     UserRegistration {
                         email: "foo@example.com".to_string(),
@@ -2237,7 +2292,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let session = ctx
+            let session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".to_string(),
                     password: "secret1234".to_string(),
@@ -2245,21 +2300,23 @@ mod tests {
                 .await
                 .unwrap();
 
-            let admin_session = admin_login(&ctx).await;
+            let admin_session = admin_login(&app_ctx).await;
 
-            ctx.db(admin_session.clone())
+            app_ctx
+                .session_context(admin_session.clone())
+                .db()
                 .update_quota_available_by_user(&user, 1)
                 .await
                 .unwrap();
 
-            let quota = initialize_quota_tracking(ctx.db(admin_session));
+            let quota = initialize_quota_tracking(app_ctx.session_context(admin_session).db());
 
             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
             tracking.work_unit_done();
             tracking.work_unit_done();
 
-            let db = ctx.db(session);
+            let db = app_ctx.session_context(session).db();
 
             // wait for quota to be recorded
             let mut success = false;
@@ -2280,8 +2337,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_updates_quota_in_postgres() {
-        with_temp_context(|ctx, _| async move {
-            let user = ctx
+        with_temp_context(|app_ctx, _| async move {
+            let user = app_ctx
                 .register_user(
                     UserRegistration {
                         email: "foo@example.com".to_string(),
@@ -2294,7 +2351,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let session = ctx
+            let session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".to_string(),
                     password: "secret1234".to_string(),
@@ -2302,8 +2359,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            let db = ctx.db(session.clone());
-            let admin_db = ctx.db(UserSession::admin_session());
+            let db = app_ctx.session_context(session.clone()).db();
+            let admin_db = app_ctx.session_context(UserSession::admin_session()).db();
 
             assert_eq!(
                 db.quota_available().await.unwrap(),
@@ -2334,10 +2391,10 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_removes_layer_collections() {
-        with_temp_context(|ctx, _| async move {
-            let session = admin_login(&ctx).await;
+        with_temp_context(|app_ctx, _| async move {
+            let session = admin_login(&app_ctx).await;
 
-            let layer_db = ctx.db(session);
+            let layer_db = app_ctx.session_context(session).db();
 
             let layer = AddLayer {
                 name: "layer".to_string(),
@@ -2353,6 +2410,8 @@ mod tests {
                     ),
                 },
                 symbology: None,
+                metadata: Default::default(),
+                properties: Default::default(),
             }
             .validated()
             .unwrap();
@@ -2362,6 +2421,7 @@ mod tests {
             let collection = AddLayerCollection {
                 name: "top collection".to_string(),
                 description: "description".to_string(),
+                properties: Default::default(),
             }
             .validated()
             .unwrap();
@@ -2376,6 +2436,7 @@ mod tests {
             let collection = AddLayerCollection {
                 name: "empty collection".to_string(),
                 description: "description".to_string(),
+                properties: Default::default(),
             }
             .validated()
             .unwrap();
@@ -2415,6 +2476,7 @@ mod tests {
                             },
                             name: "empty collection".to_string(),
                             description: "description".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
@@ -2513,10 +2575,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_removes_collections_from_collections() {
-        with_temp_context(|ctx, _| async move {
-            let session = admin_login(&ctx).await;
+        with_temp_context(|app_ctx, _| async move {
+            let session = admin_login(&app_ctx).await;
 
-            let db = ctx.db(session);
+            let db = app_ctx.session_context(session).db();
 
             let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
 
@@ -2525,6 +2587,7 @@ mod tests {
                     AddLayerCollection {
                         name: "mid collection".to_string(),
                         description: "description".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2538,6 +2601,7 @@ mod tests {
                     AddLayerCollection {
                         name: "bottom collection".to_string(),
                         description: "description".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2562,6 +2626,8 @@ mod tests {
                             ),
                         },
                         symbology: None,
+                        metadata: Default::default(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2608,10 +2674,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_removes_layers_from_collections() {
-        with_temp_context(|ctx, _| async move {
-            let session = admin_login(&ctx).await;
+        with_temp_context(|app_ctx, _| async move {
+            let session = admin_login(&app_ctx).await;
 
-            let db = ctx.db(session);
+            let db = app_ctx.session_context(session).db();
 
             let root_collection = &db.get_root_layer_collection_id().await.unwrap();
 
@@ -2620,6 +2686,7 @@ mod tests {
                     AddLayerCollection {
                         name: "top collection".to_string(),
                         description: "description".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2644,6 +2711,8 @@ mod tests {
                             ),
                         },
                         symbology: None,
+                        metadata: Default::default(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2668,6 +2737,8 @@ mod tests {
                             ),
                         },
                         symbology: None,
+                        metadata: Default::default(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2740,7 +2811,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_deletes_dataset() {
-        with_temp_context(|ctx, _| async move {
+        with_temp_context(|app_ctx, _| async move {
             let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
 
             let loading_info = OgrSourceDataset {
@@ -2797,9 +2868,9 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let session = ctx.create_anonymous_session().await.unwrap();
+            let session = app_ctx.create_anonymous_session().await.unwrap();
 
-            let db = ctx.db(session.clone());
+            let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
             db.add_dataset(
                 AddDataset {
@@ -2833,7 +2904,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_deletes_admin_dataset() {
-        with_temp_context(|ctx, _| async move {
+        with_temp_context(|app_ctx, _| async move {
             let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
 
             let loading_info = OgrSourceDataset {
@@ -2890,9 +2961,9 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let session = admin_login(&ctx).await;
+            let session = admin_login(&app_ctx).await;
 
-            let db = ctx.db(session);
+            let db = app_ctx.session_context(session).db();
             let wrap = db.wrap_meta_data(meta_data);
             db.add_dataset(
                 AddDataset {
@@ -2925,9 +2996,9 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_missing_layer_dataset_in_collection_listing() {
-        with_temp_context(|ctx, _| async move {
-            let session = admin_login(&ctx).await;
-            let db = ctx.db(session);
+        with_temp_context(|app_ctx, _| async move {
+            let session = admin_login(&app_ctx).await;
+            let db = app_ctx.session_context(session).db();
 
             let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
 
@@ -2936,6 +3007,7 @@ mod tests {
                     AddLayerCollection {
                         name: "top collection".to_string(),
                         description: "description".to_string(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -2987,12 +3059,12 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_restricts_layer_permissions() {
-        with_temp_context(|ctx, _| async move {
-            let admin_session = admin_login(&ctx).await;
-            let session1 = ctx.create_anonymous_session().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let admin_session = admin_login(&app_ctx).await;
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
 
-            let admin_db = ctx.db(admin_session.clone());
-            let db1 = ctx.db(session1.clone());
+            let admin_db = app_ctx.session_context(admin_session.clone()).db();
+            let db1 = app_ctx.session_context(session1.clone()).db();
 
             let root = admin_db.get_root_layer_collection_id().await.unwrap();
 
@@ -3002,6 +3074,7 @@ mod tests {
                     AddLayerCollection {
                         name: "admin collection".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -3063,6 +3136,7 @@ mod tests {
                     AddLayerCollection {
                         name: "user layer".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -3087,6 +3161,7 @@ mod tests {
                 AddLayerCollection {
                     name: "user layer".to_string(),
                     description: String::new(),
+                    properties: Default::default(),
                 }
                 .validated()
                 .unwrap(),
@@ -3119,6 +3194,7 @@ mod tests {
                     AddLayerCollection {
                         name: "user layer".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }
                     .validated()
                     .unwrap(),
@@ -3151,9 +3227,9 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_handles_user_roles() {
-        with_temp_context(|ctx, _| async move {
-            let admin_session = admin_login(&ctx).await;
-            let user_id = ctx
+        with_temp_context(|app_ctx, _| async move {
+            let admin_session = admin_login(&app_ctx).await;
+            let user_id = app_ctx
                 .register_user(
                     UserRegistration {
                         email: "foo@example.com".to_string(),
@@ -3166,12 +3242,12 @@ mod tests {
                 .await
                 .unwrap();
 
-            let admin_db = ctx.db(admin_session.clone());
+            let admin_db = app_ctx.session_context(admin_session.clone()).db();
 
             // create a new role
             let role_id = admin_db.add_role("foo").await.unwrap();
 
-            let user_session = ctx
+            let user_session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".to_string(),
                     password: "secret123".to_string(),
@@ -3186,7 +3262,7 @@ mod tests {
             // we assign the role to the user
             admin_db.assign_role(&role_id, &user_id).await.unwrap();
 
-            let user_session = ctx
+            let user_session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".to_string(),
                     password: "secret123".to_string(),
@@ -3200,7 +3276,7 @@ mod tests {
             // we revoke it
             admin_db.revoke_role(&role_id, &user_id).await.unwrap();
 
-            let user_session = ctx
+            let user_session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".to_string(),
                     password: "secret123".to_string(),
@@ -3217,7 +3293,7 @@ mod tests {
 
             admin_db.remove_role(&role_id).await.unwrap();
 
-            let user_session = ctx
+            let user_session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".to_string(),
                     password: "secret123".to_string(),
@@ -3226,6 +3302,317 @@ mod tests {
                 .unwrap();
 
             assert!(!user_session.roles.contains(&role_id));
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_updates_project_layer_symbology() {
+        with_temp_context(|app_ctx, _| async move {
+            let session = app_ctx.create_anonymous_session().await.unwrap();
+
+            let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
+
+            let db = app_ctx.session_context(session.clone()).db();
+
+            let create_project: CreateProject = serde_json::from_value(json!({
+                "name": "Default",
+                "description": "Default project",
+                "bounds": {
+                    "boundingBox": {
+                        "lowerLeftCoordinate": {
+                            "x": -180,
+                            "y": -90
+                        },
+                        "upperRightCoordinate": {
+                            "x": 180,
+                            "y": 90
+                        }
+                    },
+                    "spatialReference": "EPSG:4326",
+                    "timeInterval": {
+                        "start": 1_396_353_600_000i64,
+                        "end": 1_396_353_600_000i64
+                    }
+                },
+                "timeStep": {
+                    "step": 1,
+                    "granularity": "months"
+                }
+            }))
+            .unwrap();
+
+            let project_id = db
+                .create_project(create_project.validated().unwrap())
+                .await
+                .unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 0, 255]
+                            }, {
+                                "value": 255,
+                                "color": [255, 255, 255, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            db.update_project(update.validated().unwrap())
+                .await
+                .unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 4, 255]
+                            }, {
+                                "value": 17.866_666_666_666_667,
+                                "color": [11, 9, 36, 255]
+                            }, {
+                                "value": 34.733_333_333_333_334,
+                                "color": [32, 17, 75, 255]
+                            }, {
+                                "value": 51.6,
+                                "color": [59, 15, 112, 255]
+                            }, {
+                                "value": 68.466_666_666_666_67,
+                                "color": [87, 21, 126, 255]
+                            }, {
+                                "value": 85.333_333_333_333_33,
+                                "color": [114, 31, 129, 255]
+                            }, {
+                                "value": 102.199_999_999_999_99,
+                                "color": [140, 41, 129, 255]
+                            }, {
+                                "value": 119.066_666_666_666_65,
+                                "color": [168, 50, 125, 255]
+                            }, {
+                                "value": 135.933_333_333_333_34,
+                                "color": [196, 60, 117, 255]
+                            }, {
+                                "value": 152.799_999_999_999_98,
+                                "color": [222, 73, 104, 255]
+                            }, {
+                                "value": 169.666_666_666_666_66,
+                                "color": [241, 96, 93, 255]
+                            }, {
+                                "value": 186.533_333_333_333_33,
+                                "color": [250, 127, 94, 255]
+                            }, {
+                                "value": 203.399_999_999_999_98,
+                                "color": [254, 159, 109, 255]
+                            }, {
+                                "value": 220.266_666_666_666_65,
+                                "color": [254, 191, 132, 255]
+                            }, {
+                                "value": 237.133_333_333_333_3,
+                                "color": [253, 222, 160, 255]
+                            }, {
+                                "value": 254,
+                                "color": [252, 253, 191, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            db.update_project(update.validated().unwrap())
+                .await
+                .unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 4, 255]
+                            }, {
+                                "value": 17.866_666_666_666_667,
+                                "color": [11, 9, 36, 255]
+                            }, {
+                                "value": 34.733_333_333_333_334,
+                                "color": [32, 17, 75, 255]
+                            }, {
+                                "value": 51.6,
+                                "color": [59, 15, 112, 255]
+                            }, {
+                                "value": 68.466_666_666_666_67,
+                                "color": [87, 21, 126, 255]
+                            }, {
+                                "value": 85.333_333_333_333_33,
+                                "color": [114, 31, 129, 255]
+                            }, {
+                                "value": 102.199_999_999_999_99,
+                                "color": [140, 41, 129, 255]
+                            }, {
+                                "value": 119.066_666_666_666_65,
+                                "color": [168, 50, 125, 255]
+                            }, {
+                                "value": 135.933_333_333_333_34,
+                                "color": [196, 60, 117, 255]
+                            }, {
+                                "value": 152.799_999_999_999_98,
+                                "color": [222, 73, 104, 255]
+                            }, {
+                                "value": 169.666_666_666_666_66,
+                                "color": [241, 96, 93, 255]
+                            }, {
+                                "value": 186.533_333_333_333_33,
+                                "color": [250, 127, 94, 255]
+                            }, {
+                                "value": 203.399_999_999_999_98,
+                                "color": [254, 159, 109, 255]
+                            }, {
+                                "value": 220.266_666_666_666_65,
+                                "color": [254, 191, 132, 255]
+                            }, {
+                                "value": 237.133_333_333_333_3,
+                                "color": [253, 222, 160, 255]
+                            }, {
+                                "value": 254,
+                                "color": [252, 253, 191, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            db.update_project(update.validated().unwrap())
+                .await
+                .unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 4, 255]
+                            }, {
+                                "value": 17.933_333_333_333_334,
+                                "color": [11, 9, 36, 255]
+                            }, {
+                                "value": 34.866_666_666_666_67,
+                                "color": [32, 17, 75, 255]
+                            }, {
+                                "value": 51.800_000_000_000_004,
+                                "color": [59, 15, 112, 255]
+                            }, {
+                                "value": 68.733_333_333_333_33,
+                                "color": [87, 21, 126, 255]
+                            }, {
+                                "value": 85.666_666_666_666_66,
+                                "color": [114, 31, 129, 255]
+                            }, {
+                                "value": 102.6,
+                                "color": [140, 41, 129, 255]
+                            }, {
+                                "value": 119.533_333_333_333_32,
+                                "color": [168, 50, 125, 255]
+                            }, {
+                                "value": 136.466_666_666_666_67,
+                                "color": [196, 60, 117, 255]
+                            }, {
+                                "value": 153.4,
+                                "color": [222, 73, 104, 255]
+                            }, {
+                                "value": 170.333_333_333_333_31,
+                                "color": [241, 96, 93, 255]
+                            }, {
+                                "value": 187.266_666_666_666_65,
+                                "color": [250, 127, 94, 255]
+                            }, {
+                                "value": 204.2,
+                                "color": [254, 159, 109, 255]
+                            }, {
+                                "value": 221.133_333_333_333_33,
+                                "color": [254, 191, 132, 255]
+                            }, {
+                                "value": 238.066_666_666_666_63,
+                                "color": [253, 222, 160, 255]
+                            }, {
+                                "value": 255,
+                                "color": [252, 253, 191, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            let update = update.validated().unwrap();
+
+            // run two updates concurrently
+            let (r0, r1) = join!(db.update_project(update.clone()), db.update_project(update));
+
+            assert!(r0.is_ok());
+            assert!(r1.is_ok());
         })
         .await;
     }

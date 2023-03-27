@@ -18,10 +18,11 @@ use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
 use utoipa::ToSchema;
 
 use crate::api::model::datatypes::TimeInterval;
+use crate::contexts::ApplicationContext;
 use crate::error::Result;
 use crate::error::{self, Error};
 use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::util::config;
@@ -36,7 +37,7 @@ use geoengine_operators::processing::{InitializedRasterReprojection, Reprojectio
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -86,10 +87,10 @@ fn wcs_url(workflow: WorkflowId) -> Result<Url> {
     )
 )]
 #[allow(clippy::unused_async)]
-async fn wcs_capabilities_handler<C: Context>(
+async fn wcs_capabilities_handler<C: ApplicationContext>(
     workflow: web::Path<WorkflowId>,
     request: web::Query<GetCapabilities>,
-    _ctx: web::Data<C>,
+    _app_ctx: web::Data<C>,
     _session: C::Session,
 ) -> Result<HttpResponse> {
     let workflow = workflow.into_inner();
@@ -177,10 +178,10 @@ async fn wcs_capabilities_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-async fn wcs_describe_coverage_handler<C: Context>(
+async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     workflow: web::Path<WorkflowId>,
     request: web::Query<DescribeCoverage>,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
     let endpoint = workflow.into_inner();
@@ -201,9 +202,11 @@ async fn wcs_describe_coverage_handler<C: Context>(
 
     let wcs_url = wcs_url(identifiers)?;
 
-    let workflow = ctx.db(session.clone()).load_workflow(&identifiers).await?;
+    let ctx = app_ctx.session_context(session);
 
-    let exe_ctx = ctx.execution_context(session)?;
+    let workflow = ctx.db().load_workflow(&identifiers).await?;
+
+    let exe_ctx = ctx.execution_context()?;
     let operator = workflow
         .operator
         .get_raster()
@@ -304,11 +307,11 @@ async fn wcs_describe_coverage_handler<C: Context>(
     )
 )]
 #[allow(clippy::too_many_lines)]
-async fn wcs_get_coverage_handler<C: Context>(
+async fn wcs_get_coverage_handler<C: ApplicationContext>(
     req: HttpRequest,
     workflow: web::Path<WorkflowId>,
     request: web::Query<GetCoverage>,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
     let endpoint = workflow.into_inner();
@@ -353,11 +356,13 @@ async fn wcs_get_coverage_handler<C: Context>(
         );
     }
 
-    let workflow = ctx.db(session.clone()).load_workflow(&identifier).await?;
+    let ctx = app_ctx.session_context(session);
+
+    let workflow = ctx.db().load_workflow(&identifier).await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session.clone())?;
+    let execution_context = ctx.execution_context()?;
 
     let initialized = operator
         .clone()
@@ -413,7 +418,7 @@ async fn wcs_get_coverage_handler<C: Context>(
         spatial_resolution,
     };
 
-    let query_ctx = ctx.query_context(session)?;
+    let query_ctx = ctx.query_context()?;
 
     let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_multiband_geotiff_bytes(
@@ -479,7 +484,7 @@ fn default_time_from_config() -> TimeInterval {
 
 #[cfg(test)]
 mod tests {
-    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::contexts::{InMemoryContext, Session, SessionContext, SimpleApplicationContext};
     use crate::util::tests::{read_body_string, register_ndvi_workflow_helper, send_test_request};
     use actix_web::http::header;
     use actix_web::test;
@@ -489,10 +494,12 @@ mod tests {
 
     #[tokio::test]
     async fn get_capabilities() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (_, workflow_id) = register_ndvi_workflow_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let params = &[
             ("service", "WCS"),
@@ -507,7 +514,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
         let body = read_body_string(res).await;
@@ -572,10 +579,12 @@ mod tests {
 
     #[tokio::test]
     async fn describe_coverage() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (_, workflow_id) = register_ndvi_workflow_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let params = &[
             ("service", "WCS"),
@@ -591,7 +600,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
         let body = read_body_string(res).await;
@@ -641,13 +650,14 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(
+        let app_ctx = InMemoryContext::new_with_context_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
         );
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let params = &[
             ("service", "WCS"),
@@ -673,7 +683,7 @@ mod tests {
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(

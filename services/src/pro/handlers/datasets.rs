@@ -6,6 +6,7 @@ use crate::{
         datatypes::DatasetId,
         services::{CreateDataset, DataPath, DatasetDefinition},
     },
+    contexts::{ApplicationContext, SessionContext},
     datasets::{
         storage::DatasetStore,
         upload::{Volume, VolumeName},
@@ -17,7 +18,7 @@ use crate::{
         suggest_meta_data_handler, CreateDatasetError,
     },
     pro::{
-        contexts::{ProContext, ProGeoEngineDb},
+        contexts::{ProApplicationContext, ProGeoEngineDb},
         permissions::{Permission, PermissionDb, Role},
     },
     util::{
@@ -29,8 +30,8 @@ use crate::{
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ProContext,
-    C::GeoEngineDB: ProGeoEngineDb,
+    C: ProApplicationContext,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -63,35 +64,35 @@ where
         ("session_token" = [])
     )
 )]
-async fn create_dataset_handler<C: ProContext>(
+async fn create_dataset_handler<C: ProApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
 ) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let create = create.into_inner();
     match create {
         CreateDataset {
             data_path: DataPath::Volume(upload),
             definition,
-        } => create_system_dataset(session, ctx, upload, definition).await,
+        } => create_system_dataset(session, app_ctx, upload, definition).await,
         CreateDataset {
             data_path: DataPath::Upload(volume),
             definition,
-        } => create_upload_dataset(session, ctx, volume, definition).await,
+        } => create_upload_dataset(session, app_ctx, volume, definition).await,
     }
 }
 
-async fn create_system_dataset<C: ProContext>(
+async fn create_system_dataset<C: ProApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
 ) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError>
 where
-    C::GeoEngineDB: ProGeoEngineDb,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let volumes = get_config_element::<Data>()
         .context(datasets::CannotAccessConfig)?
@@ -107,7 +108,7 @@ where
     adjust_meta_data_path(&mut definition.meta_data, &volume)
         .context(datasets::CannotResolveUploadFilePath)?;
 
-    let db = ctx.db(session);
+    let db = app_ctx.session_context(session).db();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let dataset_id = db
@@ -157,7 +158,7 @@ mod tests {
 
     use crate::{
         api::model::services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
-        contexts::{Context, Session, SessionId},
+        contexts::{Session, SessionContext, SessionId},
         datasets::{
             listing::DatasetProvider,
             upload::{UploadId, UploadRootPath, VolumeName},
@@ -172,12 +173,12 @@ mod tests {
 
     use super::*;
 
-    pub async fn upload_ne_10m_ports_files<C: ProContext>(
-        ctx: C,
+    pub async fn upload_ne_10m_ports_files<C: ProApplicationContext>(
+        app_ctx: C,
         session_id: SessionId,
     ) -> Result<UploadId>
     where
-        C::GeoEngineDB: ProGeoEngineDb,
+        <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     {
         let files = vec![
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").to_path_buf(),
@@ -191,7 +192,7 @@ mod tests {
             .uri("/upload")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart_files(&files);
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200);
 
         let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
@@ -205,13 +206,13 @@ mod tests {
         Ok(upload.id)
     }
 
-    pub async fn construct_dataset_from_upload<C: ProContext>(
-        ctx: C,
+    pub async fn construct_dataset_from_upload<C: ProApplicationContext>(
+        app_ctx: C,
         upload_id: UploadId,
         session_id: SessionId,
     ) -> DatasetId
     where
-        C::GeoEngineDB: ProGeoEngineDb,
+        <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     {
         let s = json!({
             "dataPath": {
@@ -291,7 +292,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(s);
-        let res = send_pro_test_request(req, ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200);
 
         let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
@@ -325,25 +326,27 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = ProInMemoryContext::new_with_context_spec(
+        let app_ctx = ProInMemoryContext::new_with_context_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
         );
 
-        let session = ctx.create_anonymous_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
-        let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
 
-        let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
-        let exe_ctx = ctx.execution_context(session.clone())?;
+        let dataset_id =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
+        let exe_ctx = ctx.execution_context()?;
 
         let source = make_ogr_source(&exe_ctx, dataset_id).await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
-        let query_ctx = ctx.query_context(session.clone())?;
+        let query_ctx = ctx.query_context()?;
 
         let query = query_processor
             .query(
@@ -382,8 +385,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_creates_volume_dataset() -> Result<()> {
-        let ctx = ProInMemoryContext::test_default();
-        let session = ctx.create_anonymous_session().await.unwrap();
+        let app_ctx = ProInMemoryContext::test_default();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let volume = VolumeName("test_data".to_string());
 
@@ -408,7 +411,7 @@ mod tests {
         };
 
         // create via admin session
-        let admin_session = admin_login(&ctx).await;
+        let admin_session = admin_login(&app_ctx).await;
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
@@ -418,7 +421,7 @@ mod tests {
             ))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_json(create);
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
         let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
@@ -429,7 +432,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
 
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
         Ok(())
@@ -439,17 +442,19 @@ mod tests {
     async fn it_deletes_dataset() -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let session = ctx.create_anonymous_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
         let session_id = session.id();
+        let ctx = app_ctx.session_context(session);
 
-        let upload_id = upload_ne_10m_ports_files(ctx.clone(), session_id).await?;
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
 
-        let dataset_id = construct_dataset_from_upload(ctx.clone(), upload_id, session_id).await;
+        let dataset_id =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
 
-        let db = ctx.db(session.clone());
+        let db = ctx.db();
 
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
@@ -459,7 +464,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
 
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -470,7 +475,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_deletes_volume_dataset() -> Result<()> {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
         let volume = VolumeName("test_data".to_string());
 
@@ -494,9 +499,10 @@ mod tests {
             },
         };
 
-        let session = admin_login(&ctx).await;
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let db = ctx.db(session.clone());
+        let db = ctx.db();
 
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
@@ -504,7 +510,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
         let dataset_id = dataset_id.id;
@@ -517,7 +523,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
 
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
