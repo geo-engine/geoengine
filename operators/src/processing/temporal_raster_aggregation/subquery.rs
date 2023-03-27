@@ -45,7 +45,15 @@ where
     F: TemporalRasterPixelAggregator<P> + 'static,
 {
     pub fn add_tile(&mut self, in_tile: RasterTile2D<P>) -> Result<()> {
-        self.time = self.time.union(&in_tile.time)?;
+        // we do no time modification here since the result represents the aggreate over query time
+
+        // the tile must intersect the time of the query otherwise it includes wrong data
+        debug_assert!(
+            self.time.intersects(&in_tile.time),
+            "Tile time {:?} does not intersect the accumulator/query time {:?}",
+            in_tile.time,
+            self.time
+        );
 
         debug_assert!(self.state_grid.grid_shape() == in_tile.grid_shape());
 
