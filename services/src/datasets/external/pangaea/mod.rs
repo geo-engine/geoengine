@@ -115,11 +115,11 @@ impl LayerCollectionProvider for PangaeaDataProvider {
         _collection: &LayerCollectionId,
         _options: Validated<LayerCollectionListOptions>,
     ) -> Result<LayerCollection> {
-        Err(Error::NotYetImplemented)
+        Err(Error::ProviderDoesNotSupportBrowsing)
     }
 
     async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
-        Err(Error::NotYetImplemented)
+        Err(Error::ProviderDoesNotSupportBrowsing)
     }
 
     async fn load_layer(&self, _id: &LayerId) -> Result<Layer> {
