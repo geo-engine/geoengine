@@ -45,9 +45,10 @@ where
     F: TemporalRasterPixelAggregator<P> + 'static,
 {
     pub fn add_tile(&mut self, in_tile: RasterTile2D<P>) {
-        // we do no time modification here since the result represents the aggreate over query time
+        // Add a tile to the accumulator, which represents the aggregate over a time interval that contains the in_tile.
+        // TODO: for tiles which are only partially contained in the aggregate time interval, investigate whether the pixels have to be scaled (e.g. if the pixel is a count, assume uniform distribution and divide it by the fraction of time that is contained in the aggregate)".
 
-        // the tile must intersect the time of the query otherwise it includes wrong data
+        // The tile must intersect the time of the query otherwise it includes wrong data
         debug_assert!(
             self.time.intersects(&in_tile.time),
             "Tile time {:?} does not intersect the accumulator/query time {:?}",
