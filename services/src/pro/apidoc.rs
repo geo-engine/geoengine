@@ -33,6 +33,7 @@ use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
+use crate::handlers::workflows::RasterStreamWebsocketResultType;
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
@@ -325,6 +326,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             Plot,
             ProjectLayer,
             LayerVisibility,
+            RasterStreamWebsocketResultType,
 
             PermissionRequest,
             ResourceId,
@@ -376,5 +378,34 @@ impl Modify for ApiDocInfo {
                 ))
                 .build(),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contexts::Session;
+    use crate::pro::contexts::ProInMemoryContext;
+    use crate::pro::users::UserAuth;
+    use crate::pro::util::tests::send_pro_test_request;
+    use geoengine_datatypes::util::test::TestDefault;
+
+    #[test]
+    fn can_resolve_api() {
+        crate::api::can_resolve_api(ApiDoc::openapi());
+    }
+
+    #[tokio::test]
+    async fn can_run_examples() {
+        crate::api::can_run_examples(
+            ApiDoc::openapi(),
+            move || async move {
+                let ctx = ProInMemoryContext::test_default();
+                let session_id = ctx.create_anonymous_session().await.unwrap().id();
+                (ctx, session_id)
+            },
+            send_pro_test_request,
+        )
+        .await;
     }
 }

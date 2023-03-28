@@ -33,6 +33,7 @@ use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
+use crate::handlers::workflows::RasterStreamWebsocketResultType;
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
@@ -300,7 +301,8 @@ use utoipa::{Modify, OpenApi};
             LayerVisibility,
             ProjectFilter,
             Plot,
-            ProjectVersion
+            ProjectVersion,
+            RasterStreamWebsocketResultType
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
@@ -347,5 +349,32 @@ impl Modify for ApiDocInfo {
                 ))
                 .build(),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
+    use crate::util::tests::send_test_request;
+    use geoengine_datatypes::util::test::TestDefault;
+
+    #[test]
+    fn can_resolve_api() {
+        crate::api::can_resolve_api(ApiDoc::openapi());
+    }
+
+    #[tokio::test]
+    async fn can_run_examples() {
+        crate::api::can_run_examples(
+            ApiDoc::openapi(),
+            move || async move {
+                let ctx = InMemoryContext::test_default();
+                let session_id = ctx.default_session_ref().await.id();
+                (ctx, session_id)
+            },
+            send_test_request,
+        )
+        .await;
     }
 }
