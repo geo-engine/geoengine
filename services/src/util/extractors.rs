@@ -1,17 +1,13 @@
-use futures::future::Ready;
 use std::fmt;
 
 use actix_http::Payload;
-use actix_web::dev::JsonBody;
-use actix_web::{FromRequest, HttpRequest};
+use actix_web::{web, FromRequest, HttpRequest};
 use futures::future::LocalBoxFuture;
 use futures::FutureExt;
 use serde::de::DeserializeOwned;
 use validator::Validate;
 
 use crate::handlers::ErrorResponse;
-
-use super::server::handle_json_payload_error;
 
 /// A Json extractor that validates the content after deserialization
 #[derive(Debug)]
@@ -47,21 +43,19 @@ where
 
     #[inline]
     fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
-        JsonBody::new(req, payload, None, true)
-            .limit(2_097_152) // Default limit is 2MB in actix-web
-            .map(|res: Result<T, _>| match res {
-                Ok(data) => {
-                    data.validate()
-                        .map(|_| ValidatedJson(data))
-                        .map_err(|validation_errors| {
-                            ErrorResponse {
-                                error: "ValidationError".to_string(),
-                                message: validation_errors_to_string(&validation_errors),
-                            }
-                            .into()
-                        })
-                }
-                Err(e) => Err(handle_json_payload_error(e)),
+        web::Json::<T>::from_request(req, payload)
+            .map(|res: Result<web::Json<T>, _>| match res {
+                Ok(data) => data
+                    .validate()
+                    .map(|_| ValidatedJson(data.into_inner()))
+                    .map_err(|validation_errors| {
+                        ErrorResponse {
+                            error: "ValidationError".to_string(),
+                            message: validation_errors_to_string(&validation_errors),
+                        }
+                        .into()
+                    }),
+                Err(e) => Err(e),
             })
             .boxed_local()
     }
@@ -115,33 +109,31 @@ where
 
 impl<T> FromRequest for ValidatedQuery<T>
 where
-    T: DeserializeOwned + Validate,
+    T: DeserializeOwned + Validate + 'static,
 {
     type Error = actix_web::Error;
-    type Future = Ready<Result<Self, Self::Error>>;
+    type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
 
     #[inline]
-    fn from_request(req: &actix_web::HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
-        serde_urlencoded::from_str::<T>(req.query_string())
-            .map_err(|e| {
-                ErrorResponse {
-                    error: "UnableToParseQueryString".to_string(),
-                    message: format!("Unable to parse query string: {e}"),
-                }
-                .into()
+    fn from_request(
+        req: &actix_web::HttpRequest,
+        payload: &mut actix_web::dev::Payload,
+    ) -> Self::Future {
+        web::Query::<T>::from_request(req, payload)
+            .map(|res: Result<web::Query<T>, _>| match res {
+                Ok(data) => data
+                    .validate()
+                    .map(|_| ValidatedQuery(data.into_inner()))
+                    .map_err(|validation_errors| {
+                        ErrorResponse {
+                            error: "ValidationError".to_string(),
+                            message: validation_errors_to_string(&validation_errors),
+                        }
+                        .into()
+                    }),
+                Err(e) => Err(e),
             })
-            .and_then(|value| {
-                value.validate().map(move |_| value).map_err(|e| {
-                    ErrorResponse {
-                        error: "ValidationError".to_string(),
-                        message: validation_errors_to_string(&e),
-                    }
-                    .into()
-                })
-            })
-            .map_or_else(futures::future::err, |value| {
-                futures::future::ok(ValidatedQuery(value))
-            })
+            .boxed_local()
     }
 }
 
