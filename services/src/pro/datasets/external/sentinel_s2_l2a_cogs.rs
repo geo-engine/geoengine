@@ -10,7 +10,6 @@ use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
 use crate::util::operators::source_operator_from_dataset;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
@@ -252,7 +251,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.get_root_layer_collection_id().await?,
@@ -260,8 +259,6 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                 id: collection.clone()
             }
         );
-
-        let options = options.user_input;
 
         let mut items = self
             .datasets

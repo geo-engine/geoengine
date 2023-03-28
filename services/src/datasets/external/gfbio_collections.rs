@@ -15,7 +15,6 @@ use crate::layers::layer::{
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::parsing::string_or_string_array;
 use crate::util::postgres::DatabaseConnectionConfig;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::bb8::Pool;
@@ -571,11 +570,9 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         let collection = GfBioCollectionId::from_str(&collection.0)?;
-
-        let options = options.user_input;
 
         match collection {
             GfBioCollectionId::Collections => Self::get_collections(),
@@ -803,7 +800,7 @@ mod tests {
     use rand::RngCore;
     use tokio_postgres::Config;
 
-    use crate::{datasets::listing::Provenance, util::config, util::user_input::UserInput};
+    use crate::{datasets::listing::Provenance, util::config};
 
     use super::*;
 
@@ -945,9 +942,7 @@ mod tests {
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();

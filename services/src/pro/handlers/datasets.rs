@@ -22,7 +22,6 @@ use crate::{
     },
     util::{
         config::{get_config_element, Data},
-        user_input::UserInput,
         IdResponse,
     },
 };
@@ -113,9 +112,7 @@ where
     let db = app_ctx.session_context(session).db();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
-    let dataset_id = db
-        .add_dataset(definition.properties.validated()?, meta_data)
-        .await?;
+    let dataset_id = db.add_dataset(definition.properties, meta_data).await?;
 
     db.add_permission(
         Role::registered_user_role_id(),

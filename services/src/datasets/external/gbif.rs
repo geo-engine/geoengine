@@ -32,7 +32,6 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::postgres::DatabaseConnectionConfig;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 
 pub const GBIF_PROVIDER_ID: DataProviderId =
@@ -125,7 +124,7 @@ impl GbifDataProvider {
 
     async fn get_datasets_items(
         &self,
-        options: &Validated<LayerCollectionListOptions>,
+        options: &LayerCollectionListOptions,
         path: &str,
     ) -> Result<Vec<CollectionItem>> {
         let taxonrank = path
@@ -182,7 +181,7 @@ impl GbifDataProvider {
 
     async fn get_filter_items(
         &self,
-        options: &Validated<LayerCollectionListOptions>,
+        options: &LayerCollectionListOptions,
         path: &str,
     ) -> Result<Vec<CollectionItem>> {
         let column = GbifDataProvider::level_name(path);
@@ -295,7 +294,7 @@ impl LayerCollectionProvider for GbifDataProvider {
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         let selector = collection.0.split_once('/').map_or_else(
             || collection.clone().0,
@@ -952,7 +951,6 @@ mod tests {
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
     use crate::util::config::{get_config_element, Postgres};
-    use crate::util::user_input::UserInput;
 
     use super::*;
 
@@ -1057,9 +1055,7 @@ mod tests {
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 
@@ -1139,9 +1135,7 @@ mod tests {
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 
@@ -1239,9 +1233,7 @@ mod tests {
                         LayerCollectionListOptions {
                             offset: 0,
                             limit: 10,
-                        }
-                        .validated()
-                        .unwrap(),
+                        },
                     )
                     .await;
 
@@ -1315,9 +1307,7 @@ mod tests {
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 
@@ -1368,9 +1358,7 @@ mod tests {
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 
@@ -1413,9 +1401,7 @@ mod tests {
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 
@@ -1466,9 +1452,7 @@ mod tests {
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 

@@ -12,8 +12,8 @@ use crate::{
         users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
+    util::config::get_config_element,
     util::server::{configure_extractors, render_404, render_405},
-    util::{config::get_config_element, user_input::UserInput},
     workflows::{
         registry::WorkflowRegistry,
         workflow::{Workflow, WorkflowId},
@@ -33,15 +33,11 @@ use geoengine_operators::{
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: UserAuth>(app_ctx: &C) -> UserSession {
     app_ctx
-        .register_user(
-            UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret123".to_string(),
-                real_name: "Foo Bar".to_string(),
-            }
-            .validated()
-            .unwrap(),
-        )
+        .register_user(UserRegistration {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+            real_name: "Foo Bar".to_string(),
+        })
         .await
         .unwrap();
 
@@ -84,25 +80,13 @@ where
     let project = app_ctx
         .session_context(session.clone())
         .db()
-        .create_project(
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                bounds: STRectangle::new(
-                    SpatialReferenceOption::Unreferenced,
-                    0.,
-                    0.,
-                    1.,
-                    1.,
-                    0,
-                    1,
-                )
+        .create_project(CreateProject {
+            name: "Test".to_string(),
+            description: "Foo".to_string(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
-                time_step: None,
-            }
-            .validated()
-            .unwrap(),
-        )
+            time_step: None,
+        })
         .await
         .unwrap();
 
@@ -378,12 +362,7 @@ where
     let db = app_ctx.session_context(system_session).db();
 
     let dataset_id = db
-        .add_dataset(
-            ndvi.properties
-                .validated()
-                .expect("valid dataset description"),
-            db.wrap_meta_data(ndvi.meta_data),
-        )
+        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
         .await
         .expect("dataset db access");
 

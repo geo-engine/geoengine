@@ -11,7 +11,7 @@ use crate::projects::{
     CreateProject, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject,
 };
-use crate::util::user_input::Validated;
+
 use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
@@ -141,12 +141,8 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn list_projects(
-        &self,
-        options: Validated<ProjectListOptions>,
-    ) -> Result<Vec<ProjectListing>> {
+    async fn list_projects(&self, options: ProjectListOptions) -> Result<Vec<ProjectListing>> {
         // TODO: project filters
-        let options = options.user_input;
 
         let conn = self.conn_pool.get().await?;
 
@@ -208,10 +204,10 @@ where
         Ok(project_listings)
     }
 
-    async fn create_project(&self, create: Validated<CreateProject>) -> Result<ProjectId> {
+    async fn create_project(&self, create: CreateProject) -> Result<ProjectId> {
         let mut conn = self.conn_pool.get().await?;
 
-        let project: Project = Project::from_create_project(create.user_input);
+        let project: Project = Project::from_create_project(create);
 
         let trans = conn.build_transaction().start().await?;
 
@@ -275,8 +271,8 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn update_project(&self, update: Validated<UpdateProject>) -> Result<()> {
-        let update = update.user_input;
+    async fn update_project(&self, update: UpdateProject) -> Result<()> {
+        let update = update;
 
         let mut conn = self.conn_pool.get().await?;
 

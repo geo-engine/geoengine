@@ -5,7 +5,6 @@ use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefiniti
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
-use crate::util::user_input::UserInput;
 use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
@@ -256,9 +255,7 @@ async fn create_dataset<C: SessionContext>(
 
     let db = ctx.db();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
-    let dataset = db
-        .add_dataset(dataset_definition.properties.validated()?, meta)
-        .await?;
+    let dataset = db.add_dataset(dataset_definition.properties, meta).await?;
 
     Ok(dataset)
 }

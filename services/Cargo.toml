@@ -89,6 +89,7 @@ url = { version = "2.2", features = ["serde"] }
 utoipa = { version = "3.0", features = ["actix_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "=3.0.2", features = ["actix-web"] }
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
+validator = { version = "0.16", features = ["derive"] }
 walkdir = "2.3"
 zip = "0.6"
 

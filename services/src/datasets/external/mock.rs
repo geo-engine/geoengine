@@ -11,7 +11,7 @@ use crate::layers::layer::{
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::projects::Symbology;
 use crate::workflows::workflow::Workflow;
-use crate::{datasets::storage::MetaDataDefinition, error, util::user_input::Validated};
+use crate::{datasets::storage::MetaDataDefinition, error};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::{
@@ -134,10 +134,8 @@ impl LayerCollectionProvider for MockExternalDataProvider {
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
-        let options = options.user_input;
-
         let collection =
             self.collection(collection)
                 .ok_or(error::Error::UnknownLayerCollectionId {

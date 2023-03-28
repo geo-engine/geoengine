@@ -15,7 +15,6 @@ use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
 };
 use crate::projects::{ProjectId, STRectangle};
-use crate::util::user_input::Validated;
 use geoengine_datatypes::util::Identifier;
 
 use super::userdb::{RoleDb, UserAuth};
@@ -65,11 +64,8 @@ impl Default for HashMapUserDbBackend {
 #[async_trait]
 impl UserAuth for ProInMemoryContext {
     /// Register a user
-    async fn register_user(
-        &self,
-        user_registration: Validated<UserRegistration>,
-    ) -> Result<UserId> {
-        let user_registration = user_registration.user_input;
+    async fn register_user(&self, user_registration: UserRegistration) -> Result<UserId> {
+        let user_registration = user_registration;
 
         let mut backend = self.db.user_db.write().await;
 
@@ -482,7 +478,6 @@ mod tests {
     use crate::{
         contexts::{ApplicationContext, SessionContext},
         pro::util::tests::admin_login,
-        util::user_input::UserInput,
     };
 
     #[tokio::test]
@@ -493,9 +488,7 @@ mod tests {
             email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
-        }
-        .validated()
-        .unwrap();
+        };
 
         assert!(app_ctx.register_user(user_registration).await.is_ok());
     }
@@ -508,9 +501,7 @@ mod tests {
             email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
-        }
-        .validated()
-        .unwrap();
+        };
 
         assert!(app_ctx.register_user(user_registration).await.is_ok());
 
@@ -530,9 +521,7 @@ mod tests {
             email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
-        }
-        .validated()
-        .unwrap();
+        };
 
         assert!(app_ctx.register_user(user_registration).await.is_ok());
 
@@ -556,9 +545,7 @@ mod tests {
             email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
-        }
-        .validated()
-        .unwrap();
+        };
 
         assert!(app_ctx.register_user(user_registration).await.is_ok());
 
@@ -638,15 +625,11 @@ mod tests {
 
         let admin_session = admin_login(&app_ctx).await;
         let user_id = app_ctx
-            .register_user(
-                UserRegistration {
-                    email: "foo@example.com".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
+            .register_user(UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+                real_name: "Foo Bar".to_string(),
+            })
             .await
             .unwrap();
 

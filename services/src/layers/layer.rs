@@ -1,12 +1,11 @@
 use super::listing::LayerCollectionId;
 use crate::api::model::datatypes::{DataProviderId, LayerId};
-use crate::{
-    error::Result, projects::Symbology, util::user_input::UserInput, workflows::workflow::Workflow,
-};
+use crate::{projects::Symbology, workflows::workflow::Workflow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use utoipa::openapi::{ArrayBuilder, ObjectBuilder, SchemaType};
 use utoipa::{IntoParams, ToSchema};
+use validator::Validate;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +47,7 @@ pub struct LayerListing {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+// TODO: validate user input
 pub struct AddLayer {
     #[schema(example = "Example Layer")]
     pub name: String,
@@ -61,13 +61,6 @@ pub struct AddLayer {
     /// metadata used for loading the data
     #[serde(default)]
     pub metadata: HashMap<String, String>,
-}
-
-impl UserInput for AddLayer {
-    fn validate(&self) -> Result<()> {
-        // TODO
-        Ok(())
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -250,6 +243,7 @@ impl CollectionItem {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+// TODO: validate user input
 pub struct AddLayerCollection {
     #[schema(example = "Example Collection")]
     pub name: String,
@@ -259,18 +253,13 @@ pub struct AddLayerCollection {
     pub properties: Vec<Property>,
 }
 
-impl UserInput for AddLayerCollection {
-    fn validate(&self) -> Result<()> {
-        // TODO
-        Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, IntoParams)]
+#[derive(Debug, Serialize, Deserialize, Clone, IntoParams, Validate)]
+// TODO: validate user input
 pub struct LayerCollectionListOptions {
     #[param(example = 0)]
     pub offset: u32,
     #[param(example = 20)]
+    #[validate(range(max = 20))]
     pub limit: u32,
 }
 
@@ -280,13 +269,6 @@ impl Default for LayerCollectionListOptions {
             offset: 0,
             limit: 20,
         }
-    }
-}
-
-impl UserInput for LayerCollectionListOptions {
-    fn validate(&self) -> Result<()> {
-        // TODO
-        Ok(())
     }
 }
 

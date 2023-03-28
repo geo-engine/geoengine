@@ -14,7 +14,7 @@ use crate::layers::listing::{
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
-use crate::util::user_input::UserInput;
+use crate::util::extractors::ValidatedQuery;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
@@ -130,7 +130,7 @@ where
 async fn list_root_collections_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    options: web::Query<LayerCollectionListOptions>,
+    options: ValidatedQuery<LayerCollectionListOptions>,
 ) -> Result<impl Responder> {
     let root_collection = get_layer_providers(session, options, app_ctx).await?;
 
@@ -139,7 +139,7 @@ async fn list_root_collections_handler<C: ApplicationContext>(
 
 async fn get_layer_providers<C: ApplicationContext>(
     session: C::Session,
-    mut options: web::Query<LayerCollectionListOptions>,
+    mut options: ValidatedQuery<LayerCollectionListOptions>,
     app_ctx: web::Data<C>,
 ) -> Result<LayerCollection> {
     let mut providers = vec![];
@@ -175,13 +175,10 @@ async fn get_layer_providers<C: ApplicationContext>(
     }
     let external = app_ctx.session_context(session).db();
     for provider_listing in external
-        .list_layer_providers(
-            LayerProviderListingOptions {
-                offset: options.offset,
-                limit: options.limit,
-            }
-            .validated()?,
-        )
+        .list_layer_providers(LayerProviderListingOptions {
+            offset: options.offset,
+            limit: options.limit,
+        })
         .await?
     {
         // TODO: resolve providers in parallel
@@ -279,7 +276,7 @@ async fn get_layer_providers<C: ApplicationContext>(
 async fn list_collection_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerCollectionId)>,
-    options: web::Query<LayerCollectionListOptions>,
+    options: ValidatedQuery<LayerCollectionListOptions>,
     session: C::Session,
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();
@@ -293,7 +290,7 @@ async fn list_collection_handler<C: ApplicationContext>(
 
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID {
         let collection = db
-            .load_dataset_layer_collection(&item, options.into_inner().validated()?)
+            .load_dataset_layer_collection(&item, options.into_inner())
             .await?;
 
         return Ok(web::Json(collection));
@@ -301,7 +298,7 @@ async fn list_collection_handler<C: ApplicationContext>(
 
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
         let collection = db
-            .load_layer_collection(&item, options.into_inner().validated()?)
+            .load_layer_collection(&item, options.into_inner())
             .await?;
 
         return Ok(web::Json(collection));
@@ -310,7 +307,7 @@ async fn list_collection_handler<C: ApplicationContext>(
     let collection = db
         .load_layer_provider(provider)
         .await?
-        .load_layer_collection(&item, options.into_inner().validated()?)
+        .load_layer_collection(&item, options.into_inner())
         .await?;
 
     Ok(web::Json(collection))
@@ -680,7 +677,7 @@ async fn add_layer<C: ApplicationContext>(
 ) -> Result<web::Json<IdResponse<LayerId>>> {
     let request = request.into_inner();
 
-    let add_layer = request.validated()?;
+    let add_layer = request;
 
     let id = app_ctx
         .session_context(session)
@@ -717,7 +714,7 @@ async fn add_collection<C: ApplicationContext>(
     collection: web::Path<LayerCollectionId>,
     request: web::Json<AddLayerCollection>,
 ) -> Result<web::Json<IdResponse<LayerCollectionId>>> {
-    let add_collection = request.into_inner().validated()?;
+    let add_collection = request.into_inner();
 
     let id = app_ctx
         .into_inner()
@@ -984,10 +981,7 @@ mod tests {
 
         let collection = ctx
             .db()
-            .load_layer_collection(
-                &collection_id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
+            .load_layer_collection(&collection_id, LayerCollectionListOptions::default())
             .await
             .unwrap();
 
@@ -1026,9 +1020,7 @@ mod tests {
                     symbology: None,
                     metadata: Default::default(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &root_collection_id,
             )
             .await
@@ -1041,9 +1033,7 @@ mod tests {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &root_collection_id,
             )
             .await
@@ -1060,10 +1050,7 @@ mod tests {
 
         let collection = ctx
             .db()
-            .load_layer_collection(
-                &collection_id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
+            .load_layer_collection(&collection_id, LayerCollectionListOptions::default())
             .await
             .unwrap();
         assert_eq!(collection.items.len(), 1);
@@ -1094,10 +1081,7 @@ mod tests {
         let result: IdResponse<LayerCollectionId> = test::read_body_json(response).await;
 
         ctx.db()
-            .load_layer_collection(
-                &result.id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
+            .load_layer_collection(&result.id, LayerCollectionListOptions::default())
             .await
             .unwrap();
     }
@@ -1120,9 +1104,7 @@ mod tests {
                     name: "Foo".to_string(),
                     description: "Foo".to_string(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &root_collection_id,
             )
             .await
@@ -1135,9 +1117,7 @@ mod tests {
                     name: "Bar".to_string(),
                     description: "Bar".to_string(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &root_collection_id,
             )
             .await
@@ -1154,10 +1134,7 @@ mod tests {
 
         let collection_a = ctx
             .db()
-            .load_layer_collection(
-                &collection_a_id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
+            .load_layer_collection(&collection_a_id, LayerCollectionListOptions::default())
             .await
             .unwrap();
 
@@ -1182,9 +1159,7 @@ mod tests {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &root_collection_id,
             )
             .await
@@ -1208,9 +1183,7 @@ mod tests {
                     symbology: None,
                     metadata: Default::default(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &collection_id,
             )
             .await
@@ -1252,9 +1225,7 @@ mod tests {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &root_collection_id,
             )
             .await
@@ -1268,10 +1239,7 @@ mod tests {
         assert!(response.status().is_success(), "{response:?}");
 
         ctx.db()
-            .load_layer_collection(
-                &collection_id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
+            .load_layer_collection(&collection_id, LayerCollectionListOptions::default())
             .await
             .unwrap_err();
 
@@ -1303,9 +1271,7 @@ mod tests {
                     name: "Foo".to_string(),
                     description: "Bar".to_string(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &root_collection_id,
             )
             .await
@@ -1322,10 +1288,7 @@ mod tests {
 
         let root_collection = ctx
             .db()
-            .load_layer_collection(
-                &root_collection_id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
+            .load_layer_collection(&root_collection_id, LayerCollectionListOptions::default())
             .await
             .unwrap();
 
@@ -1460,9 +1423,7 @@ mod tests {
                         name: self.collection_name.clone(),
                         description: self.collection_description.clone(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &root_collection_id,
                 )
                 .await
@@ -1478,9 +1439,7 @@ mod tests {
                         symbology: None,
                         metadata: Default::default(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &collection_id,
                 )
                 .await

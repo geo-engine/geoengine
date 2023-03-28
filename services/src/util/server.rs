@@ -81,61 +81,9 @@ pub(crate) fn calculate_max_blocking_threads_per_worker() -> usize {
 }
 
 pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
-    cfg.app_data(web::JsonConfig::default().error_handler(|err, _req| {
-        match err {
-            JsonPayloadError::ContentType => InternalError::from_response(
-                err,
-                HttpResponse::UnsupportedMediaType().json(ErrorResponse {
-                    error: "UnsupportedMediaType".to_string(),
-                    message: "Unsupported content type header.".to_string(),
-                }),
-            )
-            .into(),
-            JsonPayloadError::Overflow { limit } => InternalError::from_response(
-                err,
-                HttpResponse::PayloadTooLarge().json(ErrorResponse {
-                    error: "Overflow".to_string(),
-                    message: format!("JSON payload has exceeded limit ({limit} bytes)."),
-                }),
-            )
-            .into(),
-            JsonPayloadError::OverflowKnownLength { length, limit } => {
-                InternalError::from_response(
-                    err,
-                    HttpResponse::PayloadTooLarge().json(ErrorResponse {
-                        error: "Overflow".to_string(),
-                        message: format!(
-                            "JSON payload ({length} bytes) is larger than allowed (limit: {limit} bytes)."
-                        ),
-                    }),
-                )
-                .into()
-            }
-            JsonPayloadError::Payload(err) => ErrorResponse {
-                error: "Payload".to_string(),
-                message: err.to_string(),
-            }
-            .into(),
-            JsonPayloadError::Deserialize(err) => ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: err.to_string(),
-            }
-            .into(),
-            JsonPayloadError::Serialize(err) => ErrorResponse {
-                error: "BodySerializeError".to_string(),
-                message: err.to_string(),
-            }
-            .into(),
-            _ => {
-                debug!("Unknown JsonPayloadError variant");
-                ErrorResponse {
-                    error: "UnknownError".to_string(),
-                    message: "Unknown Error".to_string(),
-                }
-                .into()
-            }
-        }
-    }));
+    cfg.app_data(
+        web::JsonConfig::default().error_handler(|err, _req| handle_json_payload_error(err)),
+    );
     cfg.app_data(web::QueryConfig::default().error_handler(|err, _req| {
         match err {
             QueryPayloadError::Deserialize(err) => ErrorResponse {
@@ -153,6 +101,60 @@ pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
             }
         }
     }));
+}
+
+pub fn handle_json_payload_error(err: actix_web::error::JsonPayloadError) -> actix_web::Error {
+    match err {
+        JsonPayloadError::ContentType => InternalError::from_response(
+            err,
+            HttpResponse::UnsupportedMediaType().json(ErrorResponse {
+                error: "UnsupportedMediaType".to_string(),
+                message: "Unsupported content type header.".to_string(),
+            }),
+        )
+        .into(),
+        JsonPayloadError::Overflow { limit } => InternalError::from_response(
+            err,
+            HttpResponse::PayloadTooLarge().json(ErrorResponse {
+                error: "Overflow".to_string(),
+                message: format!("JSON payload has exceeded limit ({limit} bytes)."),
+            }),
+        )
+        .into(),
+        JsonPayloadError::OverflowKnownLength { length, limit } => InternalError::from_response(
+            err,
+            HttpResponse::PayloadTooLarge().json(ErrorResponse {
+                error: "Overflow".to_string(),
+                message: format!(
+                    "JSON payload ({length} bytes) is larger than allowed (limit: {limit} bytes)."
+                ),
+            }),
+        )
+        .into(),
+        JsonPayloadError::Payload(err) => ErrorResponse {
+            error: "Payload".to_string(),
+            message: err.to_string(),
+        }
+        .into(),
+        JsonPayloadError::Deserialize(err) => ErrorResponse {
+            error: "BodyDeserializeError".to_string(),
+            message: err.to_string(),
+        }
+        .into(),
+        JsonPayloadError::Serialize(err) => ErrorResponse {
+            error: "BodySerializeError".to_string(),
+            message: err.to_string(),
+        }
+        .into(),
+        _ => {
+            debug!("Unknown JsonPayloadError variant");
+            ErrorResponse {
+                error: "UnknownError".to_string(),
+                message: "Unknown Error".to_string(),
+            }
+            .into()
+        }
+    }
 }
 
 #[derive(serde::Serialize, ToSchema)]
