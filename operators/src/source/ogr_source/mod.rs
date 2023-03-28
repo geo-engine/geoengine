@@ -23,7 +23,6 @@ use postgres_protocol::escape::{escape_identifier, escape_literal};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tokio::sync::Mutex;
-use tracing::{span, Level};
 
 use geoengine_datatypes::collections::{
     BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
@@ -37,7 +36,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::{CreateSpan, OperatorData, OperatorName, QueryProcessor};
+use crate::engine::{OperatorData, OperatorName, QueryProcessor};
 use crate::error::Error;
 use crate::util::input::StringOrNumberRange;
 use crate::util::Result;

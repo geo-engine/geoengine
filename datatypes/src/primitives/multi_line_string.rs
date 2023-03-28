@@ -84,6 +84,23 @@ impl From<&MultiLineString> for geo::MultiLineString<f64> {
     }
 }
 
+impl From<geo::MultiLineString<f64>> for MultiLineString {
+    fn from(geo_geometry: geo::MultiLineString<f64>) -> MultiLineString {
+        let coordinates = geo_geometry
+            .0
+            .into_iter()
+            .map(|geo_line_string| {
+                geo_line_string
+                    .0
+                    .into_iter()
+                    .map(Into::into)
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        MultiLineString::new_unchecked(coordinates)
+    }
+}
+
 impl TryFrom<TypedGeometry> for MultiLineString {
     type Error = Error;
 
@@ -354,6 +371,20 @@ impl<'g> From<&'g MultiLineString> for MultiLineStringRef<'g> {
     }
 }
 
+impl<'g> From<&MultiLineStringRef<'g>> for geo::MultiLineString<f64> {
+    fn from(geometry: &MultiLineStringRef<'g>) -> Self {
+        let line_strings = geometry
+            .point_coordinates
+            .iter()
+            .map(|coordinates| {
+                let geo_coordinates = coordinates.iter().map(Into::into).collect();
+                geo::LineString(geo_coordinates)
+            })
+            .collect();
+        geo::MultiLineString(line_strings)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use float_cmp::approx_eq;
@@ -462,5 +493,21 @@ mod tests {
             a_ref.wkt_string(),
             "MULTILINESTRING((0.1 0.1,0.5 0.5),(0.5 0.5,0.6 0.6,0.7 0.7),(0.7 0.7,0.9 0.9))"
         );
+    }
+
+    #[test]
+    fn test_to_geo_and_back() {
+        let line_string = MultiLineString::new(vec![
+            vec![(0.1, 0.1).into(), (0.5, 0.5).into()],
+            vec![(0.5, 0.5).into(), (0.6, 0.6).into(), (0.7, 0.7).into()],
+            vec![(0.7, 0.7).into(), (0.9, 0.9).into()],
+        ])
+        .unwrap();
+
+        let geo_line_string = geo::MultiLineString::<f64>::from(&line_string);
+
+        let line_string_back = MultiLineString::from(geo_line_string);
+
+        assert_eq!(line_string, line_string_back);
     }
 }

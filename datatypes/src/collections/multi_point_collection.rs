@@ -3,6 +3,10 @@ use arrow::{
     buffer::Buffer,
     datatypes::DataType,
 };
+use rayon::{
+    iter::plumbing::Producer,
+    prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
+};
 
 use crate::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator, FeatureCollectionRow,
@@ -50,6 +54,9 @@ pub struct MultiPointIterator<'l> {
     length: usize,
 }
 
+/// A parallel collection iterator for multi points
+pub struct MultiPointParIterator<'l>(MultiPointIterator<'l>);
+
 impl<'l> MultiPointIterator<'l> {
     pub fn new(geometry_column: &'l ListArray, length: usize) -> Self {
         Self {
@@ -95,6 +102,108 @@ impl<'l> Iterator for MultiPointIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
+    }
+}
+
+impl<'l> DoubleEndedIterator for MultiPointIterator<'l> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.index >= self.length {
+            return None;
+        }
+
+        let multi_point_array_ref = self.geometry_column.value(self.length - 1);
+        let multi_point_array: &FixedSizeListArray = downcast_array(&multi_point_array_ref);
+
+        let number_of_points = multi_point_array.len();
+
+        let floats_ref = multi_point_array.value(0);
+        let floats: &Float64Array = downcast_array(&floats_ref);
+
+        let multi_point = MultiPointRef::new_unchecked(unsafe {
+            slice::from_raw_parts(
+                floats.values().as_ptr().cast::<Coordinate2D>(),
+                number_of_points,
+            )
+        });
+
+        self.length -= 1; // decrement!
+
+        Some(multi_point)
+    }
+}
+
+impl<'l> ExactSizeIterator for MultiPointIterator<'l> {}
+
+impl<'l> IntoParallelIterator for MultiPointIterator<'l> {
+    type Item = MultiPointRef<'l>;
+    type Iter = MultiPointParIterator<'l>;
+
+    fn into_par_iter(self) -> Self::Iter {
+        MultiPointParIterator(self)
+    }
+}
+
+impl<'l> ParallelIterator for MultiPointParIterator<'l> {
+    type Item = MultiPointRef<'l>;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        rayon::iter::plumbing::bridge(self, consumer)
+    }
+}
+
+impl<'l> Producer for MultiPointParIterator<'l> {
+    type Item = MultiPointRef<'l>;
+
+    type IntoIter = MultiPointIterator<'l>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        // Example:
+        //   Index: 0, Length 3
+        //   Split at 1
+        //   Left: Index: 0, Length: 1 -> Elements: 0
+        //   Right: Index: 1, Length: 3 -> Elements: 1, 2
+
+        // The index is between self.0.index and self.0.length,
+        // so we have to transform it to a global index
+        let global_index = self.0.index + index;
+
+        let left = Self(Self::IntoIter {
+            geometry_column: self.0.geometry_column,
+            index: self.0.index,
+            length: global_index,
+        });
+
+        let right = Self(Self::IntoIter {
+            geometry_column: self.0.geometry_column,
+            index: global_index,
+            length: self.0.length,
+        });
+
+        (left, right)
+    }
+}
+
+impl<'l> IndexedParallelIterator for MultiPointParIterator<'l> {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn drive<C: rayon::iter::plumbing::Consumer<Self::Item>>(self, consumer: C) -> C::Result {
+        rayon::iter::plumbing::bridge(self, consumer)
+    }
+
+    fn with_producer<CB: rayon::iter::plumbing::ProducerCallback<Self::Item>>(
+        self,
+        callback: CB,
+    ) -> CB::Output {
+        callback.callback(self)
     }
 }
 
@@ -1340,5 +1449,97 @@ mod tests {
         );
 
         assert_eq!(new_collection.time_intervals(), new_time_intervals);
+    }
+
+    #[test]
+    fn test_geo_iter() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 3],
+            Default::default(),
+        )
+        .unwrap();
+        let mut iter = collection.geometries();
+
+        assert_eq!(iter.len(), 3);
+
+        let geometry = iter.next().unwrap();
+        assert_eq!(&[Coordinate2D::new(0.0, 0.1)], geometry.points());
+
+        assert_eq!(iter.len(), 2);
+
+        let geometry = iter.next().unwrap();
+        assert_eq!(&[Coordinate2D::new(1.0, 1.1)], geometry.points());
+
+        assert_eq!(iter.len(), 1);
+
+        let geometry = iter.next().unwrap();
+        assert_eq!(&[Coordinate2D::new(2.0, 3.1)], geometry.points());
+
+        assert_eq!(iter.len(), 0);
+
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_geo_iter_reverse() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 3],
+            Default::default(),
+        )
+        .unwrap();
+        let mut iter = collection.geometries();
+
+        assert_eq!(iter.len(), 3);
+
+        let geometry = iter.next_back().unwrap();
+        assert_eq!(&[Coordinate2D::new(2.0, 3.1)], geometry.points());
+
+        assert_eq!(iter.len(), 2);
+
+        let geometry = iter.next_back().unwrap();
+        assert_eq!(&[Coordinate2D::new(1.0, 1.1)], geometry.points());
+
+        assert_eq!(iter.len(), 1);
+
+        let geometry = iter.next_back().unwrap();
+        assert_eq!(&[Coordinate2D::new(0.0, 0.1)], geometry.points());
+
+        assert_eq!(iter.len(), 0);
+
+        assert!(iter.next_back().is_none());
+    }
+
+    #[test]
+    fn test_par_iter() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![(0.0, 0.1)],
+                vec![(1.0, 1.1), (1.2, 1.3)],
+                vec![(2.0, 3.1)],
+            ])
+            .unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 3],
+            Default::default(),
+        )
+        .unwrap();
+
+        //  check splitting
+        let iter = collection.geometries().into_par_iter();
+
+        let (iter_left, iter_right) = iter.split_at(1);
+
+        assert_eq!(iter_left.count(), 1);
+        assert_eq!(iter_right.count(), 2);
+
+        // new iter
+        let iter = collection.geometries().into_par_iter();
+
+        let result = iter
+            .map(|geometry| geometry.points().len())
+            .collect::<Vec<_>>();
+
+        assert_eq!(result, vec![1, 2, 1]);
     }
 }

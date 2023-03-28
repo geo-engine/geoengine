@@ -1,1 +1,3 @@
 avoid-breaking-exported-api = false
+# Adding "OpenAPI" is necessary because the word is used in a doc string in geoengine_services::api.
+doc-valid-idents = ["OpenAPI", ".."]

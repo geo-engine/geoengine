@@ -1,4 +1,4 @@
-use crate::engine::{CreateSpan, OperatorData, QueryContext};
+use crate::engine::{OperatorData, QueryContext};
 use crate::{
     engine::{
         ExecutionContext, InitializedVectorOperator, OperatorName, SourceOperator,
@@ -18,7 +18,6 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{span, Level};
 
 pub struct MockPointSourceProcessor {
     points: Vec<Coordinate2D>,

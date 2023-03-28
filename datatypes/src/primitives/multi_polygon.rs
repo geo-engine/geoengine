@@ -122,6 +122,33 @@ impl From<&MultiPolygon> for geo::MultiPolygon<f64> {
     }
 }
 
+impl From<geo::MultiPolygon<f64>> for MultiPolygon {
+    fn from(geometry: geo::MultiPolygon<f64>) -> MultiPolygon {
+        let geo::MultiPolygon(geo_polygons) = geometry;
+
+        let mut polygons = Vec::with_capacity(geo_polygons.len());
+
+        for geo_polygon in geo_polygons {
+            let (exterior, interiors) = geo_polygon.into_inner();
+
+            let mut rings = Vec::with_capacity(1 + interiors.len());
+
+            let geo::LineString(exterior_coords) = exterior;
+            let ring: Ring = exterior_coords.into_iter().map(Into::into).collect();
+            rings.push(ring);
+
+            for geo::LineString(interior_coords) in interiors {
+                let ring: Ring = interior_coords.into_iter().map(Into::into).collect();
+                rings.push(ring);
+            }
+
+            polygons.push(rings);
+        }
+
+        MultiPolygon::new_unchecked(polygons)
+    }
+}
+
 impl TryFrom<TypedGeometry> for MultiPolygon {
     type Error = Error;
 
@@ -449,6 +476,26 @@ impl<'g> From<&'g MultiPolygon> for MultiPolygonRef<'g> {
     }
 }
 
+impl<'g> From<&MultiPolygonRef<'g>> for geo::MultiPolygon<f64> {
+    fn from(geometry: &MultiPolygonRef<'g>) -> Self {
+        let polygons: Vec<geo::Polygon<f64>> = geometry
+            .polygons()
+            .iter()
+            .map(|polygon| {
+                let mut line_strings: Vec<geo::LineString<f64>> = polygon
+                    .iter()
+                    .map(|ring| geo::LineString(ring.iter().map(Into::into).collect()))
+                    .collect();
+
+                let exterior = line_strings.remove(0);
+
+                geo::Polygon::new(exterior, line_strings)
+            })
+            .collect();
+        geo::MultiPolygon(polygons)
+    }
+}
+
 impl ApproxEq for &MultiPolygon {
     type Margin = F64Margin;
 
@@ -768,5 +815,46 @@ mod tests {
             a_ref.wkt_string(),
             "MULTIPOLYGON(((0.1 0.1,0.8 0.1,0.8 0.8,0.1 0.1),(0.2 0.2,0.9 0.2,0.9 0.9,0.2 0.2)),((1.1 1.1,1.8 1.1,1.8 1.8,1.1 1.1),(1.2 1.2,1.9 1.2,1.9 1.9,1.2 1.2)))"
         );
+    }
+
+    #[test]
+    fn test_to_geo_and_back() {
+        let polygon = MultiPolygon::new(vec![
+            vec![
+                vec![
+                    (0.1, 0.1).into(),
+                    (0.8, 0.1).into(),
+                    (0.8, 0.8).into(),
+                    (0.1, 0.1).into(),
+                ],
+                vec![
+                    (0.2, 0.2).into(),
+                    (0.9, 0.2).into(),
+                    (0.9, 0.9).into(),
+                    (0.2, 0.2).into(),
+                ],
+            ],
+            vec![
+                vec![
+                    (1.1, 1.1).into(),
+                    (1.8, 1.1).into(),
+                    (1.8, 1.8).into(),
+                    (1.1, 1.1).into(),
+                ],
+                vec![
+                    (1.2, 1.2).into(),
+                    (1.9, 1.2).into(),
+                    (1.9, 1.9).into(),
+                    (1.2, 1.2).into(),
+                ],
+            ],
+        ])
+        .unwrap();
+
+        let geo_polygon = geo::MultiPolygon::<f64>::from(&polygon);
+
+        let polygon_back = MultiPolygon::from(geo_polygon);
+
+        assert_eq!(polygon, polygon_back);
     }
 }

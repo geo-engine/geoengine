@@ -1,9 +1,8 @@
 use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleVectorSource, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor,
+    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
+    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
 
@@ -33,8 +32,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::util::{spawn_blocking, spawn_blocking_with_thread_pool};
-use tracing::span;
-use tracing::Level;
+
 use typetag::serde;
 
 /// An operator that rasterizes vector data
