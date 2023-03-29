@@ -148,3 +148,54 @@ jobs:
           #cache-on-failure: ""
       - name: Build
         run: cargo build ${{ matrix.features }} ${{ matrix.build }} --verbose
+      - name: Run the server
+        run: |
+          PID=$(cargo run ${{ matrix.features }} ${{ matrix.build }} > output.log 2>&1 & echo $!)
+          echo "PID=$PID" >> $GITHUB_ENV
+      - name: Wait for output to stop
+        run: |
+          # Set the path to the file to monitor
+          FILE_PATH="output.log"
+
+          # Set the timeout period in seconds
+          CHECK_INTERVAL=10
+
+          # Set the maximum number of runs
+          MAX_RUNS=30
+
+          # Get the initial modification time of the file
+          LAST_MODIFIED=$(stat -c %Y "$FILE_PATH")
+
+          # Loop until the file hasn't changed for the CHECK_INTERVAL period
+          while true; do
+            sleep $CHECK_INTERVAL
+
+            # Get the current modification time of the file
+            CURRENT_MODIFIED=$(stat -c %Y "$FILE_PATH")
+
+            # If the file hasn't changed, stop monitoring
+            if [[ $CURRENT_MODIFIED -eq $LAST_MODIFIED ]]; then
+              break
+            # If the file has changed, update the last modification time and continue monitoring
+            else
+              LAST_MODIFIED=$CURRENT_MODIFIED
+            fi
+
+            # Check if the maximum number of runs has been reached
+            if [[ $MAX_RUNS -eq 0 ]]; then
+              echo "Server did not stop outputting, exiting with error."
+              exit 1
+            fi
+
+            # Decrement the maximum number of runs
+            ((MAX_RUNS--))
+          done
+      - name: Kill the server
+        run: kill ${{ env.PID }}
+      - name: Ensure no warnings were printed
+        run: |
+          cat output.log
+          if grep -q "WARNING" output.log; then
+            echo "WARNINGS FOUND"
+            exit 1
+          fi
