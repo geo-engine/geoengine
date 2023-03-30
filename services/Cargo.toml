@@ -97,13 +97,14 @@ zip = "0.6"
 nix = "0.26"
 
 [dev-dependencies]
+assert_cmd = "2.0"
 httptest = "0.15.2"
-rand = "0.8.4"
-tempfile = "3.1"
-prost = "0.11.6"
 hyper = "0.14.24"
-xml-rs = "0.8.3"
+prost = "0.11.6"
+rand = "0.8.4"
 serial_test = "1.0"
+tempfile = "3.1"
+xml-rs = "0.8.3"
 
 [build-dependencies]
 vergen = "7"
