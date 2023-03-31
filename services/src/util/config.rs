@@ -219,6 +219,15 @@ impl ConfigElement for DatasetService {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct LayerService {
+    pub list_limit: u32,
+}
+
+impl ConfigElement for LayerService {
+    const KEY: &'static str = "layer_service";
+}
+
+#[derive(Debug, Deserialize)]
 pub struct TaskManager {
     pub list_limit: u32,
     pub list_default_limit: u32,
