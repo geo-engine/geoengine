@@ -11,7 +11,6 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::util::operators::source_operator_from_dataset;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataId;
@@ -176,10 +175,9 @@ impl HashMapStorable for GdalMetaDataList {
 impl DatasetStore for InMemoryDb {
     async fn add_dataset(
         &self,
-        dataset: Validated<AddDataset>,
+        dataset: AddDataset,
         meta_data: Box<dyn HashMapStorable>,
     ) -> Result<DatasetId> {
-        let dataset = dataset.user_input;
         let id = dataset.id.unwrap_or_else(DatasetId::new);
         let result_descriptor = meta_data.store(id, self).await;
 
@@ -238,12 +236,7 @@ impl DatasetStore for InMemoryDb {
 
 #[async_trait]
 impl DatasetProvider for InMemoryDb {
-    async fn list_datasets(
-        &self,
-        options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>> {
-        let options = options.user_input;
-
+    async fn list_datasets(&self, options: DatasetListOptions) -> Result<Vec<DatasetListing>> {
         let backend = self.backend.dataset_db.read().await;
 
         let mut list: Vec<_> = if let Some(filter) = &options.filter {
@@ -420,7 +413,7 @@ impl DatasetLayerCollectionProvider for InMemoryDb {
     async fn load_dataset_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.get_dataset_root_layer_collection_id().await?,
@@ -428,8 +421,6 @@ impl DatasetLayerCollectionProvider for InMemoryDb {
                 id: collection.clone()
             }
         );
-
-        let options = options.user_input;
 
         let backend = self.backend.dataset_db.read().await;
 
@@ -502,7 +493,6 @@ mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, SessionContext, SimpleApplicationContext};
     use crate::datasets::listing::OrderBy;
-    use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
@@ -551,7 +541,7 @@ mod tests {
         };
 
         let db = ctx.db();
-        let id = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
+        let id = db.add_dataset(ds, Box::new(meta)).await?;
 
         let exe_ctx = ctx.execution_context()?;
 
@@ -571,15 +561,12 @@ mod tests {
         );
 
         let ds = db
-            .list_datasets(
-                DatasetListOptions {
-                    filter: None,
-                    order: OrderBy::NameAsc,
-                    offset: 0,
-                    limit: 1,
-                }
-                .validated()?,
-            )
+            .list_datasets(DatasetListOptions {
+                filter: None,
+                order: OrderBy::NameAsc,
+                offset: 0,
+                limit: 1,
+            })
             .await?;
 
         assert_eq!(ds.len(), 1);

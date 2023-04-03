@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use utoipa::ToSchema;
 
 use crate::error::Result;
-use crate::util::user_input::Validated;
 
 use super::layer::{Layer, LayerCollection, LayerCollectionListOptions};
 
@@ -31,7 +30,7 @@ pub trait LayerCollectionProvider {
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection>;
 
     /// get the id of the root collection
@@ -48,7 +47,7 @@ pub trait DatasetLayerCollectionProvider {
     async fn load_dataset_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection>;
 
     /// get the id of the root collection

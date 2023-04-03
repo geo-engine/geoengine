@@ -8,7 +8,6 @@ use crate::layers::layer::{
     ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use aruna_rust_api::api::storage::models::v1::{
     CollectionOverview, KeyValue, LabelFilter, LabelOrIdQuery, Object,
@@ -646,7 +645,7 @@ impl LayerCollectionProvider for ArunaDataProvider {
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        _options: Validated<LayerCollectionListOptions>,
+        _options: LayerCollectionListOptions,
     ) -> crate::error::Result<LayerCollection> {
         ensure!(
             *collection == self.get_root_layer_collection_id().await?,
@@ -909,7 +908,6 @@ mod tests {
     use crate::layers::external::DataProvider;
     use crate::layers::layer::LayerCollectionListOptions;
     use crate::layers::listing::LayerCollectionProvider;
-    use crate::util::user_input::UserInput;
     use aruna_rust_api::api::storage::models::v1::{
         CollectionOverview, CollectionOverviews, KeyValue, Object, ObjectGroupOverview,
         ObjectGroupOverviews,
@@ -1690,9 +1688,7 @@ mod tests {
         let opts = LayerCollectionListOptions {
             limit: 100,
             offset: 0,
-        }
-        .validated()
-        .unwrap();
+        };
 
         let res = aruna_mock_server
             .provider

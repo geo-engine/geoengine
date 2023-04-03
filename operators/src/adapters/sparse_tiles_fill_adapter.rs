@@ -340,8 +340,9 @@ where
                         }
                         // 4. The received tile has a TimeInterval that starts after the current TimeInterval and is not directly connected to the current TimeInterval.
                         else {
+                            debug_assert!(this.sc.current_time.end() <= tile.time.start());
                             // if the current_idx is the first in a new grid run then it is the first one with a new TimeInterval.
-                            // We need to generate a fill TimeInterval since current and tile TimeInterval are not connedted.
+                            // We need to generate a fill TimeInterval since current and tile TimeInterval are not connected.
                             if this.sc.current_idx_is_first_in_grid_run() {
                                 this.sc.current_time = TimeInterval::new(
                                     this.sc.current_time.end(),

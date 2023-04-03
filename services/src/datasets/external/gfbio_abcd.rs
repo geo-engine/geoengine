@@ -12,7 +12,6 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::postgres::DatabaseConnectionConfig;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::bb8::{Pool, PooledConnection};
@@ -186,7 +185,7 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         ensure!(
             *collection == self.get_root_layer_collection_id().await?,
@@ -196,8 +195,6 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
         );
 
         let conn = self.pool.get().await?;
-
-        let options = options.user_input;
 
         let stmt = conn
             .prepare(&format!(
@@ -477,7 +474,7 @@ mod tests {
 
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
-    use crate::util::{config, user_input::UserInput};
+    use crate::util::config;
     use std::{fs::File, io::Read, path::PathBuf};
 
     use super::*;
@@ -557,9 +554,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 10,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await;
 

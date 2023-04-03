@@ -2,7 +2,7 @@ use super::{
     RunningTaskStatusInfo, Task, TaskCleanUpStatus, TaskContext, TaskError, TaskFilter, TaskId,
     TaskListOptions, TaskManager, TaskStatus, TaskStatusInfo, TaskStatusWithId,
 };
-use crate::{contexts::Db, error::Result, util::user_input::Validated};
+use crate::{contexts::Db, error::Result};
 use futures::channel::oneshot;
 use futures::StreamExt;
 use geoengine_datatypes::{error::ErrorSource, util::Identifier};
@@ -159,7 +159,7 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManagerBackend {
 
     async fn list_tasks(
         &self,
-        options: Validated<TaskListOptions>,
+        options: TaskListOptions,
     ) -> Result<Vec<TaskStatusWithId>, TaskError> {
         let lock = self.status_list.read().await;
 
@@ -477,7 +477,7 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
 
     async fn list_tasks(
         &self,
-        options: Validated<TaskListOptions>,
+        options: TaskListOptions,
     ) -> Result<Vec<TaskStatusWithId>, TaskError> {
         self.backend.list_tasks(options).await
     }

@@ -8,7 +8,7 @@ use crate::error;
 use crate::error::Result;
 
 use crate::projects::Symbology;
-use crate::util::user_input::{UserInput, Validated};
+
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::MetaData;
@@ -17,10 +17,11 @@ use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::ResultExt;
 use std::fmt::Debug;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
+use validator::{Validate, ValidationError};
 
 use super::listing::Provenance;
 
@@ -63,7 +64,7 @@ pub struct DatasetDefinition {
     pub meta_data: MetaDataDefinition,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
 #[schema(example = json!({
     "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
@@ -73,24 +74,19 @@ pub struct DatasetDefinition {
 }))]
 pub struct AutoCreateDataset {
     pub upload: UploadId,
+    #[validate(length(min = 1))]
     pub dataset_name: String,
     pub dataset_description: String,
+    #[validate(custom = "validate_main_file")]
     pub main_file: String,
 }
 
-impl UserInput for AutoCreateDataset {
-    fn validate(&self) -> Result<()> {
-        // TODO: more sophisticated input validation
-        ensure!(!self.dataset_name.is_empty(), error::InvalidDatasetName);
-        ensure!(
-            !self.main_file.is_empty()
-                && !self.main_file.contains('/')
-                && !self.main_file.contains(".."),
-            error::InvalidUploadFileName
-        );
-
-        Ok(())
+fn validate_main_file(main_file: &String) -> Result<(), ValidationError> {
+    if main_file.is_empty() || main_file.contains('/') || main_file.contains("..") {
+        return Err(ValidationError::new("Invalid upload file name"));
     }
+
+    Ok(())
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, IntoParams)]
@@ -190,7 +186,7 @@ pub trait DatasetStorer: Send + Sync {
 pub trait DatasetStore: DatasetStorer {
     async fn add_dataset(
         &self,
-        dataset: Validated<AddDataset>,
+        dataset: AddDataset,
         meta_data: Self::StorageType,
     ) -> Result<DatasetId>;
 

@@ -24,7 +24,6 @@ use crate::{
     },
     util::{
         config::{get_config_element, Data},
-        user_input::UserInput,
         IdResponse,
     },
 };
@@ -113,13 +112,7 @@ where
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let dataset_id = db
-        .add_dataset(
-            definition
-                .properties
-                .validated()
-                .context(JsonValidationFailed)?,
-            meta_data,
-        )
+        .add_dataset(definition.properties, meta_data)
         .await
         .context(DatabaseAccess)?;
 

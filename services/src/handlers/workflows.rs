@@ -24,7 +24,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor};
 use serde::{Deserialize, Serialize};
-use utoipa::IntoParams;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::handlers::tasks::TaskResponse;
@@ -479,7 +479,7 @@ pub struct RasterStreamWebsocketQuery {
 }
 
 /// The stream result type for `raster_stream_websocket`.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum RasterStreamWebsocketResultType {
     Arrow,

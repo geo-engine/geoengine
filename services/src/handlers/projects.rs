@@ -2,7 +2,7 @@ use crate::contexts::ApplicationContext;
 use crate::error::Result;
 use crate::handlers::SessionContext;
 use crate::projects::{CreateProject, ProjectDb, ProjectId, ProjectListOptions, UpdateProject};
-use crate::util::user_input::UserInput;
+use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use crate::util::IdResponse;
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 
@@ -37,9 +37,9 @@ where
 pub(crate) async fn create_project_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    create: web::Json<CreateProject>,
+    create: ValidatedJson<CreateProject>,
 ) -> Result<impl Responder> {
-    let create = create.into_inner().validated()?;
+    let create = create.into_inner();
     let id = app_ctx
         .session_context(session)
         .db()
@@ -75,9 +75,9 @@ pub(crate) async fn create_project_handler<C: ApplicationContext>(
 pub(crate) async fn list_projects_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    options: web::Query<ProjectListOptions>,
+    options: ValidatedQuery<ProjectListOptions>,
 ) -> Result<impl Responder> {
-    let options = options.into_inner().validated()?;
+    let options = options.into_inner();
     let listing = app_ctx
         .session_context(session)
         .db()
@@ -169,10 +169,10 @@ pub(crate) async fn update_project_handler<C: ApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     app_ctx: web::Data<C>,
-    mut update: web::Json<UpdateProject>,
+    update: ValidatedJson<UpdateProject>,
 ) -> Result<impl Responder> {
+    let mut update = update.into_inner();
     update.id = project.into_inner(); // TODO: avoid passing project id in path AND body
-    let update = update.into_inner().validated()?;
     app_ctx
         .session_context(session)
         .db()

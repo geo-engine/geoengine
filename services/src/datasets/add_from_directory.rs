@@ -10,7 +10,6 @@ use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 use crate::layers::external::DataProviderDefinition;
 use crate::layers::storage::LayerProviderDb;
-use crate::util::user_input::UserInput;
 
 use super::storage::DatasetDefinition;
 
@@ -25,7 +24,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb>(dataset_db: &mut D, file_
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
         db.add_dataset(
-            def.properties.clone().validated()?,
+            def.properties.clone(),
             db.wrap_meta_data(def.meta_data.clone()),
         )
         .await?;

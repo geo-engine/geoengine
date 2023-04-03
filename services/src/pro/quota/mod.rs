@@ -105,7 +105,6 @@ mod tests {
             users::{UserAuth, UserCredentials, UserRegistration},
             util::tests::admin_login,
         },
-        util::user_input::UserInput,
     };
 
     use super::*;
@@ -115,15 +114,11 @@ mod tests {
         let app_ctx = ProInMemoryContext::test_default();
 
         let _user = app_ctx
-            .register_user(
-                UserRegistration {
-                    email: "foo@example.com".to_string(),
-                    password: "secret1234".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
+            .register_user(UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret1234".to_string(),
+                real_name: "Foo Bar".to_string(),
+            })
             .await
             .unwrap();
 

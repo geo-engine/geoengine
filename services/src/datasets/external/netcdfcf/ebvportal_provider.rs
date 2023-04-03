@@ -23,7 +23,6 @@ use crate::{
         },
         listing::{LayerCollectionId, LayerCollectionProvider},
     },
-    util::user_input::Validated,
 };
 
 use super::{
@@ -541,11 +540,9 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         let id: EbvCollectionId = EbvCollectionId::from_str(&collection.0)?;
-
-        let options = options.user_input;
 
         Ok(match id {
             EbvCollectionId::Classes => self.get_classes_collection(collection, &options).await?,
@@ -670,8 +667,6 @@ mod tests {
 
     use geoengine_datatypes::test_data;
     use httptest::{matchers::request, responders::status_code, Expectation};
-
-    use crate::util::user_input::UserInput;
 
     use super::*;
 
@@ -837,9 +832,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -975,9 +968,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -1143,9 +1134,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -1381,9 +1370,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -1543,9 +1530,7 @@ mod tests {
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();

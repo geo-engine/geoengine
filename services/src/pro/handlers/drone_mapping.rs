@@ -11,7 +11,6 @@ use crate::error::Result;
 use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::pro::util::config::Odm;
 use crate::util::config::get_config_element;
-use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use actix_web::{web, FromRequest, Responder};
 use futures_util::StreamExt;
@@ -270,9 +269,7 @@ where
     let db = app_ctx.session_context(session).db();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
 
-    let dataset = db
-        .add_dataset(dataset_definition.properties.validated()?, meta)
-        .await?;
+    let dataset = db.add_dataset(dataset_definition.properties, meta).await?;
 
     Ok(web::Json(CreateDatasetResponse {
         upload: upload_id,

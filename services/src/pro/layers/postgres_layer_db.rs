@@ -21,7 +21,6 @@ use crate::{
         },
         LayerDbError,
     },
-    util::user_input::Validated,
 };
 use async_trait::async_trait;
 use bb8_postgres::tokio_postgres::{
@@ -90,11 +89,7 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn add_layer(
-        &self,
-        layer: Validated<AddLayer>,
-        collection: &LayerCollectionId,
-    ) -> Result<LayerId> {
+    async fn add_layer(&self, layer: AddLayer, collection: &LayerCollectionId) -> Result<LayerId> {
         ensure!(
             self.has_permission(collection.clone(), Permission::Owner)
                 .await?,
@@ -108,7 +103,7 @@ where
 
         let mut conn = self.conn_pool.get().await?;
 
-        let layer = layer.user_input;
+        let layer = layer;
 
         let layer_id = Uuid::new_v4();
         let symbology = serde_json::to_value(&layer.symbology).context(crate::error::SerdeJson)?;
@@ -180,7 +175,7 @@ where
     async fn add_layer_with_id(
         &self,
         id: &LayerId,
-        layer: Validated<AddLayer>,
+        layer: AddLayer,
         collection: &LayerCollectionId,
     ) -> Result<()> {
         ensure!(
@@ -201,17 +196,19 @@ where
 
         let mut conn = self.conn_pool.get().await?;
 
-        let layer = layer.user_input;
+        let layer = layer;
 
         let symbology = serde_json::to_value(&layer.symbology).context(crate::error::SerdeJson)?;
+
+        let metadata = serde_json::to_value(&layer.metadata).context(crate::error::SerdeJson)?;
 
         let trans = conn.build_transaction().start().await?;
 
         let stmt = trans
             .prepare(
                 "
-            INSERT INTO layers (id, name, description, workflow, symbology)
-            VALUES ($1, $2, $3, $4, $5);",
+            INSERT INTO layers (id, name, description, workflow, symbology, properties, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7);",
             )
             .await?;
 
@@ -224,6 +221,8 @@ where
                     &layer.description,
                     &serde_json::to_value(&layer.workflow).context(crate::error::SerdeJson)?,
                     &symbology,
+                    &layer.properties,
+                    &metadata,
                 ],
             )
             .await?;
@@ -300,7 +299,7 @@ where
 
     async fn add_layer_collection(
         &self,
-        collection: Validated<AddLayerCollection>,
+        collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId> {
         ensure!(
@@ -316,7 +315,7 @@ where
 
         let mut conn = self.conn_pool.get().await?;
 
-        let collection = collection.user_input;
+        let collection = collection;
 
         let collection_id = Uuid::new_v4();
 
@@ -379,7 +378,7 @@ where
     async fn add_layer_collection_with_id(
         &self,
         id: &LayerCollectionId,
-        collection: Validated<AddLayerCollection>,
+        collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<()> {
         ensure!(
@@ -400,22 +399,25 @@ where
 
         let mut conn = self.conn_pool.get().await?;
 
-        let collection = collection.user_input;
-
         let trans = conn.build_transaction().start().await?;
 
         let stmt = trans
             .prepare(
                 "
-            INSERT INTO layer_collections (id, name, description)
-            VALUES ($1, $2, $3);",
+            INSERT INTO layer_collections (id, name, description, properties)
+            VALUES ($1, $2, $3, $4);",
             )
             .await?;
 
         trans
             .execute(
                 &stmt,
-                &[&collection_id, &collection.name, &collection.description],
+                &[
+                    &collection_id,
+                    &collection.name,
+                    &collection.description,
+                    &collection.properties,
+                ],
             )
             .await?;
 
@@ -645,7 +647,7 @@ where
     async fn load_layer_collection(
         &self,
         collection_id: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         ensure!(
             self.has_permission(collection_id.clone(), Permission::Read)
@@ -659,8 +661,6 @@ where
         })?;
 
         let conn = self.conn_pool.get().await?;
-
-        let options = options.user_input;
 
         let stmt = conn
             .prepare(
@@ -867,12 +867,10 @@ where
 
     async fn list_layer_providers(
         &self,
-        options: Validated<LayerProviderListingOptions>,
+        options: LayerProviderListingOptions,
     ) -> Result<Vec<LayerProviderListing>> {
         // TODO: permission
         let conn = self.conn_pool.get().await?;
-
-        let options = options.user_input;
 
         let stmt = conn
             .prepare(

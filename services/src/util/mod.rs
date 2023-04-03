@@ -8,13 +8,13 @@ pub use geoengine_operators::util::{spawn, spawn_blocking, spawn_blocking_with_t
 
 pub mod apidoc;
 pub mod config;
+pub mod extractors;
 pub mod identifiers;
 pub mod operators;
 pub mod parsing;
 pub mod postgres;
 pub mod server;
 pub mod tests;
-pub mod user_input;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct IdResponse<T> {

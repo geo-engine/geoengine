@@ -8,7 +8,6 @@ use crate::{
         SimpleTaskManagerBackend, SimpleTaskManagerContext, Task, TaskError, TaskId,
         TaskListOptions, TaskManager, TaskStatus, TaskStatusWithId,
     },
-    util::user_input::{UserInput, Validated},
 };
 
 use super::users::UserSession;
@@ -102,24 +101,18 @@ impl TaskManager<SimpleTaskManagerContext> for ProTaskManager {
 
     async fn list_tasks(
         &self,
-        options: Validated<TaskListOptions>,
+        options: TaskListOptions,
     ) -> Result<Vec<TaskStatusWithId>, TaskError> {
         // TODO: check permissions for user tasks
-
-        let options = options.user_input;
 
         let tasks = self
             .backend
             .simple_task_manager
-            .list_tasks(
-                TaskListOptions {
-                    filter: options.filter,
-                    offset: 0,
-                    limit: u32::MAX,
-                }
-                .validated()
-                .expect("should be valid because input options were valid"),
-            )
+            .list_tasks(TaskListOptions {
+                filter: options.filter,
+                offset: 0,
+                limit: u32::MAX,
+            })
             .await?;
 
         let task_types = self.backend.task_type_by_id.read().await;
@@ -155,5 +148,28 @@ impl TaskManager<SimpleTaskManagerContext> for ProTaskManager {
             .simple_task_manager
             .abort_tasks(task_id, force)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use geoengine_datatypes::util::test::TestDefault;
+
+    use crate::{
+        contexts::{ApplicationContext, SessionContext},
+        pro::{contexts::ProInMemoryContext, users::UserAuth},
+        tasks::{TaskListOptions, TaskManager},
+    };
+
+    #[tokio::test]
+    async fn it_lists() {
+        let app_ctx = ProInMemoryContext::test_default();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let ctx = app_ctx.session_context(session);
+
+        let tasks = ctx.tasks();
+
+        tasks.list_tasks(TaskListOptions::default()).await.unwrap();
     }
 }

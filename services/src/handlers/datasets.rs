@@ -4,8 +4,6 @@ use std::{
     path::Path,
 };
 
-use crate::error::{self, Result};
-use crate::util::user_input::UserInput;
 use crate::{
     api::model::datatypes::DatasetId,
     api::model::responses::datasets::errors::*,
@@ -13,18 +11,18 @@ use crate::{
         AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
         MetaDataSuggestion,
     },
+    contexts::{ApplicationContext, SessionContext},
     datasets::{
         listing::{DatasetListOptions, DatasetProvider},
-        storage::{DatasetStore, SuggestMetaData},
+        storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
         upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName},
     },
+    error::{self, Result},
     util::{
         config::{get_config_element, Data},
+        extractors::{ValidatedJson, ValidatedQuery},
         IdResponse,
     },
-};
-use crate::{
-    contexts::ApplicationContext, contexts::SessionContext, datasets::storage::AutoCreateDataset,
 };
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use gdal::{
@@ -134,9 +132,9 @@ pub async fn list_volumes_handler<C: ApplicationContext>(
 pub async fn list_datasets_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    options: web::Query<DatasetListOptions>,
+    options: ValidatedQuery<DatasetListOptions>,
 ) -> Result<impl Responder> {
-    let options = options.into_inner().validated()?;
+    let options = options.into_inner();
     let list = app_ctx
         .session_context(session)
         .db()
@@ -369,13 +367,7 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
 
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
     let id = db
-        .add_dataset(
-            definition
-                .properties
-                .validated()
-                .context(JsonValidationFailed)?,
-            meta_data,
-        )
+        .add_dataset(definition.properties, meta_data)
         .await
         .context(DatabaseAccess)?;
 
@@ -406,13 +398,7 @@ async fn create_volume_dataset<C: ApplicationContext>(
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let id = db
-        .add_dataset(
-            definition
-                .properties
-                .validated()
-                .context(JsonValidationFailed)?,
-            meta_data,
-        )
+        .add_dataset(definition.properties, meta_data)
         .await
         .context(DatabaseAccess)?;
 
@@ -498,12 +484,12 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
 pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    create: web::Json<AutoCreateDataset>,
+    create: ValidatedJson<AutoCreateDataset>,
 ) -> Result<impl Responder> {
     let db = app_ctx.session_context(session).db();
     let upload = db.load_upload(create.upload).await?;
 
-    let create = create.into_inner().validated()?.user_input;
+    let create = create.into_inner();
 
     let main_file_path = upload.id.root_path()?.join(&create.main_file);
     let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
@@ -518,7 +504,7 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     };
 
     let meta_data = db.wrap_meta_data(meta_data);
-    let id = db.add_dataset(properties.validated()?, meta_data).await?;
+    let id = db.add_dataset(properties, meta_data).await?;
 
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -1138,7 +1124,7 @@ mod tests {
         };
 
         let db = ctx.db();
-        let _id = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
+        let _id = db.add_dataset(ds, Box::new(meta)).await?;
 
         let id2 = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
 
@@ -1169,7 +1155,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let _id2 = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
+        let _id2 = db.add_dataset(ds, Box::new(meta)).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
@@ -2015,7 +2001,7 @@ mod tests {
         };
 
         let db = ctx.db();
-        let id = db.add_dataset(ds.validated()?, Box::new(meta)).await?;
+        let id = db.add_dataset(ds, Box::new(meta)).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{id}"))

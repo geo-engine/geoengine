@@ -29,7 +29,7 @@ use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
-use log::{debug, warn};
+use log::{debug, info};
 use postgres_protocol::escape::escape_literal;
 use pwhash::bcrypt;
 use rayon::ThreadPool;
@@ -109,7 +109,9 @@ where
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
-        Self::update_schema(pool.get().await?).await?;
+        let conn = pool.get().await?;
+        let uninitialized = Self::schema_version(&conn).await? == 0;
+        Self::update_schema(conn).await?;
 
         let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
@@ -125,19 +127,23 @@ where
             volumes: Default::default(),
         };
 
-        let mut db = app_ctx.session_context(UserSession::admin_session()).db();
+        if uninitialized {
+            info!("Populating database with initial data...");
 
-        add_layers_from_directory(&mut db, layer_defs_path).await;
-        add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
+            let mut db = app_ctx.session_context(UserSession::admin_session()).db();
 
-        add_datasets_from_directory(&mut db, dataset_defs_path).await;
+            add_layers_from_directory(&mut db, layer_defs_path).await;
+            add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
 
-        add_providers_from_directory(
-            &mut db,
-            provider_defs_path.clone(),
-            &[provider_defs_path.join("pro")],
-        )
-        .await;
+            add_datasets_from_directory(&mut db, dataset_defs_path).await;
+
+            add_providers_from_directory(
+                &mut db,
+                provider_defs_path.clone(),
+                &[provider_defs_path.join("pro")],
+            )
+            .await;
+        }
 
         Ok(app_ctx)
     }
@@ -150,7 +156,7 @@ where
             Err(e) => {
                 if let Some(code) = e.code() {
                     if *code == SqlState::UNDEFINED_TABLE {
-                        warn!("UserDB: Uninitialized schema");
+                        info!("Version table not found. Initializing schema.");
                         return Ok(0);
                     }
                 }
@@ -164,9 +170,10 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
+    /// Updates the schema, returns the new schema version
     async fn update_schema(
         conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<()> {
+    ) -> Result<i32> {
         let mut version = Self::schema_version(&conn).await?;
 
         loop {
@@ -547,7 +554,7 @@ where
                 // .await?;
                 // eprintln!("Updated user database to schema version {}", version + 1);
                 // }
-                _ => return Ok(()),
+                _ => return Ok(version),
             }
             version += 1;
         }
@@ -741,7 +748,6 @@ mod tests {
         UpdateProject,
     };
     use crate::util::config::{get_config_element, Postgres};
-    use crate::util::user_input::UserInput;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
     use bb8_postgres::bb8::ManageConnection;
@@ -978,15 +984,11 @@ mod tests {
             .unwrap());
 
         let user2 = app_ctx
-            .register_user(
-                UserRegistration {
-                    email: "user2@example.com".into(),
-                    password: "12345678".into(),
-                    real_name: "User2".into(),
-                }
-                .validated()
-                .unwrap(),
-            )
+            .register_user(UserRegistration {
+                email: "user2@example.com".into(),
+                password: "12345678".into(),
+                real_name: "User2".into(),
+            })
             .await
             .unwrap();
 
@@ -1079,9 +1081,7 @@ mod tests {
             bounds: None,
             time_step: None,
         };
-        db.update_project(update.validated().unwrap())
-            .await
-            .unwrap();
+        db.update_project(update).await.unwrap();
 
         let versions = db.list_project_versions(project_id).await.unwrap();
         assert_eq!(versions.len(), 2);
@@ -1110,9 +1110,7 @@ mod tests {
             bounds: None,
             time_step: None,
         };
-        db.update_project(update.validated().unwrap())
-            .await
-            .unwrap();
+        db.update_project(update).await.unwrap();
 
         let versions = db.list_project_versions(project_id).await.unwrap();
         assert_eq!(versions.len(), 3);
@@ -1127,9 +1125,7 @@ mod tests {
             bounds: None,
             time_step: None,
         };
-        db.update_project(update.validated().unwrap())
-            .await
-            .unwrap();
+        db.update_project(update).await.unwrap();
 
         let versions = db.list_project_versions(project_id).await.unwrap();
         assert_eq!(versions.len(), 4);
@@ -1144,9 +1140,7 @@ mod tests {
             order: OrderBy::NameDesc,
             offset: 0,
             limit: 2,
-        }
-        .validated()
-        .unwrap();
+        };
 
         let db = app_ctx.session_context(session.clone()).db();
 
@@ -1176,9 +1170,7 @@ mod tests {
                 )
                 .unwrap(),
                 time_step: None,
-            }
-            .validated()
-            .unwrap();
+            };
             db.create_project(create).await.unwrap();
         }
     }
@@ -1188,9 +1180,7 @@ mod tests {
             email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
-        }
-        .validated()
-        .unwrap();
+        };
 
         let user_id = app_ctx.register_user(user_registration).await.unwrap();
 
@@ -1396,25 +1386,19 @@ let ctx = app_ctx.session_context(session);
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
-                }
-                .validated()
-                .unwrap(),
+                },
                 wrap,
             )
             .await
             .unwrap();
 
             let datasets = db
-                .list_datasets(
-                    DatasetListOptions {
-                        filter: None,
-                        order: crate::datasets::listing::OrderBy::NameAsc,
-                        offset: 0,
-                        limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+                .list_datasets(DatasetListOptions {
+                    filter: None,
+                    order: crate::datasets::listing::OrderBy::NameAsc,
+                    offset: 0,
+                    limit: 10,
+                })
                 .await
                 .unwrap();
 
@@ -1593,14 +1577,10 @@ let ctx = app_ctx.session_context(session);
             db.add_layer_provider(Box::new(provider)).await.unwrap();
 
             let providers = db
-                .list_layer_providers(
-                    LayerProviderListingOptions {
-                        offset: 0,
-                        limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+                .list_layer_providers(LayerProviderListingOptions {
+                    offset: 0,
+                    limit: 10,
+                })
                 .await
                 .unwrap();
 
@@ -1623,9 +1603,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -1681,38 +1659,27 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let _id = db1
-                .add_dataset(ds.validated().unwrap(), meta)
-                .await
-                .unwrap();
+            let _id = db1.add_dataset(ds, meta).await.unwrap();
 
             let list1 = db1
-                .list_datasets(
-                    DatasetListOptions {
-                        filter: None,
-                        order: crate::datasets::listing::OrderBy::NameAsc,
-                        offset: 0,
-                        limit: 1,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+                .list_datasets(DatasetListOptions {
+                    filter: None,
+                    order: crate::datasets::listing::OrderBy::NameAsc,
+                    offset: 0,
+                    limit: 1,
+                })
                 .await
                 .unwrap();
 
             assert_eq!(list1.len(), 1);
 
             let list2 = db2
-                .list_datasets(
-                    DatasetListOptions {
-                        filter: None,
-                        order: crate::datasets::listing::OrderBy::NameAsc,
-                        offset: 0,
-                        limit: 1,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+                .list_datasets(DatasetListOptions {
+                    filter: None,
+                    order: crate::datasets::listing::OrderBy::NameAsc,
+                    offset: 0,
+                    limit: 1,
+                })
                 .await
                 .unwrap();
 
@@ -1767,10 +1734,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1
-                .add_dataset(ds.validated().unwrap(), meta)
-                .await
-                .unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap();
 
             assert!(db1.load_provenance(&id).await.is_ok());
 
@@ -1825,10 +1789,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1
-                .add_dataset(ds.validated().unwrap(), meta)
-                .await
-                .unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap();
 
             assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1889,10 +1850,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1
-                .add_dataset(ds.validated().unwrap(), meta)
-                .await
-                .unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap();
 
             assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1953,10 +1911,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1
-                .add_dataset(ds.validated().unwrap(), meta)
-                .await
-                .unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap();
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -2042,9 +1997,7 @@ let ctx = app_ctx.session_context(session);
                         workflow: workflow.clone(),
                         metadata: [("meta".to_string(), "datum".to_string())].into(),
                         properties: vec![("proper".to_string(), "tee".to_string()).into()],
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &root_collection_id,
                 )
                 .await
@@ -2072,9 +2025,7 @@ let ctx = app_ctx.session_context(session);
                         name: "Collection1".to_string(),
                         description: "Collection 1".to_string(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &root_collection_id,
                 )
                 .await
@@ -2089,9 +2040,7 @@ let ctx = app_ctx.session_context(session);
                         workflow: workflow.clone(),
                         metadata: Default::default(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &collection1_id,
                 )
                 .await
@@ -2103,9 +2052,7 @@ let ctx = app_ctx.session_context(session);
                         name: "Collection2".to_string(),
                         description: "Collection 2".to_string(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &collection1_id,
                 )
                 .await
@@ -2122,9 +2069,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -2180,9 +2125,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -2228,15 +2171,11 @@ let ctx = app_ctx.session_context(session);
     async fn it_tracks_used_quota_in_postgres() {
         with_temp_context(|app_ctx, _| async move {
             let _user = app_ctx
-                .register_user(
-                    UserRegistration {
-                        email: "foo@example.com".to_string(),
-                        password: "secret1234".to_string(),
-                        real_name: "Foo Bar".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
                 .await
                 .unwrap();
 
@@ -2280,15 +2219,11 @@ let ctx = app_ctx.session_context(session);
     async fn it_tracks_available_quota() {
         with_temp_context(|app_ctx, _| async move {
             let user = app_ctx
-                .register_user(
-                    UserRegistration {
-                        email: "foo@example.com".to_string(),
-                        password: "secret1234".to_string(),
-                        real_name: "Foo Bar".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
                 .await
                 .unwrap();
 
@@ -2339,15 +2274,11 @@ let ctx = app_ctx.session_context(session);
     async fn it_updates_quota_in_postgres() {
         with_temp_context(|app_ctx, _| async move {
             let user = app_ctx
-                .register_user(
-                    UserRegistration {
-                        email: "foo@example.com".to_string(),
-                        password: "secret1234".to_string(),
-                        real_name: "Foo Bar".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
                 .await
                 .unwrap();
 
@@ -2412,9 +2343,7 @@ let ctx = app_ctx.session_context(session);
                 symbology: None,
                 metadata: Default::default(),
                 properties: Default::default(),
-            }
-            .validated()
-            .unwrap();
+            };
 
             let root_collection = &layer_db.get_root_layer_collection_id().await.unwrap();
 
@@ -2422,9 +2351,7 @@ let ctx = app_ctx.session_context(session);
                 name: "top collection".to_string(),
                 description: "description".to_string(),
                 properties: Default::default(),
-            }
-            .validated()
-            .unwrap();
+            };
 
             let top_c_id = layer_db
                 .add_layer_collection(collection, root_collection)
@@ -2437,9 +2364,7 @@ let ctx = app_ctx.session_context(session);
                 name: "empty collection".to_string(),
                 description: "description".to_string(),
                 properties: Default::default(),
-            }
-            .validated()
-            .unwrap();
+            };
 
             let empty_c_id = layer_db
                 .add_layer_collection(collection, &top_c_id)
@@ -2452,9 +2377,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -2502,9 +2425,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -2541,9 +2462,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap_err();
@@ -2562,9 +2481,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -2588,9 +2505,7 @@ let ctx = app_ctx.session_context(session);
                         name: "mid collection".to_string(),
                         description: "description".to_string(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     root_collection_id,
                 )
                 .await
@@ -2602,9 +2517,7 @@ let ctx = app_ctx.session_context(session);
                         name: "bottom collection".to_string(),
                         description: "description".to_string(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &mid_collection_id,
                 )
                 .await
@@ -2628,9 +2541,7 @@ let ctx = app_ctx.session_context(session);
                         symbology: None,
                         metadata: Default::default(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &mid_collection_id,
                 )
                 .await
@@ -2642,31 +2553,22 @@ let ctx = app_ctx.session_context(session);
                 .unwrap();
 
             // …should remove itself
-            db.load_layer_collection(
-                &mid_collection_id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
-            .await
-            .unwrap_err();
+            db.load_layer_collection(&mid_collection_id, LayerCollectionListOptions::default())
+                .await
+                .unwrap_err();
 
             // …should remove the bottom collection
-            db.load_layer_collection(
-                &bottom_collection_id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
-            .await
-            .unwrap_err();
+            db.load_layer_collection(&bottom_collection_id, LayerCollectionListOptions::default())
+                .await
+                .unwrap_err();
 
             // … and should remove the layer of the bottom collection
             db.load_layer(&layer_id).await.unwrap_err();
 
             // the root collection is still there
-            db.load_layer_collection(
-                root_collection_id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
-            .await
-            .unwrap();
+            db.load_layer_collection(root_collection_id, LayerCollectionListOptions::default())
+                .await
+                .unwrap();
         })
         .await;
     }
@@ -2687,9 +2589,7 @@ let ctx = app_ctx.session_context(session);
                         name: "top collection".to_string(),
                         description: "description".to_string(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     root_collection,
                 )
                 .await
@@ -2713,9 +2613,7 @@ let ctx = app_ctx.session_context(session);
                         symbology: None,
                         metadata: Default::default(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &another_collection,
                 )
                 .await
@@ -2739,9 +2637,7 @@ let ctx = app_ctx.session_context(session);
                         symbology: None,
                         metadata: Default::default(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &another_collection,
                 )
                 .await
@@ -2763,9 +2659,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap()
@@ -2790,9 +2684,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap()
@@ -2884,9 +2776,7 @@ let ctx = app_ctx.session_context(session);
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
-                }
-                .validated()
-                .unwrap(),
+                },
                 wrap,
             )
             .await
@@ -2977,9 +2867,7 @@ let ctx = app_ctx.session_context(session);
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
-                }
-                .validated()
-                .unwrap(),
+                },
                 wrap,
             )
             .await
@@ -3008,9 +2896,7 @@ let ctx = app_ctx.session_context(session);
                         name: "top collection".to_string(),
                         description: "description".to_string(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     root_collection_id,
                 )
                 .await
@@ -3029,9 +2915,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -3075,9 +2959,7 @@ let ctx = app_ctx.session_context(session);
                         name: "admin collection".to_string(),
                         description: String::new(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &root,
                 )
                 .await
@@ -3090,9 +2972,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -3118,9 +2998,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -3137,9 +3015,7 @@ let ctx = app_ctx.session_context(session);
                         name: "user layer".to_string(),
                         description: String::new(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &new_collection_id,
                 )
                 .await;
@@ -3162,9 +3038,7 @@ let ctx = app_ctx.session_context(session);
                     name: "user layer".to_string(),
                     description: String::new(),
                     properties: Default::default(),
-                }
-                .validated()
-                .unwrap(),
+                },
                 &new_collection_id,
             )
             .await
@@ -3195,9 +3069,7 @@ let ctx = app_ctx.session_context(session);
                         name: "user layer".to_string(),
                         description: String::new(),
                         properties: Default::default(),
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                     &root,
                 )
                 .await;
@@ -3210,9 +3082,7 @@ let ctx = app_ctx.session_context(session);
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -3230,15 +3100,11 @@ let ctx = app_ctx.session_context(session);
         with_temp_context(|app_ctx, _| async move {
             let admin_session = admin_login(&app_ctx).await;
             let user_id = app_ctx
-                .register_user(
-                    UserRegistration {
-                        email: "foo@example.com".to_string(),
-                        password: "secret123".to_string(),
-                        real_name: "Foo Bar".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
                 .await
                 .unwrap();
 
@@ -3343,10 +3209,7 @@ let ctx = app_ctx.session_context(session);
             }))
             .unwrap();
 
-            let project_id = db
-                .create_project(create_project.validated().unwrap())
-                .await
-                .unwrap();
+            let project_id = db.create_project(create_project).await.unwrap();
 
             let update: UpdateProject = serde_json::from_value(json!({
                 "id": project_id.to_string(),
@@ -3378,9 +3241,7 @@ let ctx = app_ctx.session_context(session);
             }))
             .unwrap();
 
-            db.update_project(update.validated().unwrap())
-                .await
-                .unwrap();
+            db.update_project(update).await.unwrap();
 
             let update: UpdateProject = serde_json::from_value(json!({
                 "id": project_id.to_string(),
@@ -3454,9 +3315,7 @@ let ctx = app_ctx.session_context(session);
             }))
             .unwrap();
 
-            db.update_project(update.validated().unwrap())
-                .await
-                .unwrap();
+            db.update_project(update).await.unwrap();
 
             let update: UpdateProject = serde_json::from_value(json!({
                 "id": project_id.to_string(),
@@ -3530,9 +3389,7 @@ let ctx = app_ctx.session_context(session);
             }))
             .unwrap();
 
-            db.update_project(update.validated().unwrap())
-                .await
-                .unwrap();
+            db.update_project(update).await.unwrap();
 
             let update: UpdateProject = serde_json::from_value(json!({
                 "id": project_id.to_string(),
@@ -3606,7 +3463,7 @@ let ctx = app_ctx.session_context(session);
             }))
             .unwrap();
 
-            let update = update.validated().unwrap();
+            let update = update;
 
             // run two updates concurrently
             let (r0, r1) = join!(db.update_project(update.clone()), db.update_project(update));
