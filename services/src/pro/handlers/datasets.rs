@@ -4,6 +4,7 @@ use snafu::ResultExt;
 use crate::{
     api::model::{
         datatypes::DatasetId,
+        responses::datasets::errors::*,
         services::{CreateDataset, DataPath, DatasetDefinition},
     },
     contexts::{ApplicationContext, SessionContext},
@@ -13,9 +14,9 @@ use crate::{
     },
     error::Result,
     handlers::datasets::{
-        self, adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
+        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
         delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
-        suggest_meta_data_handler, CreateDatasetError,
+        suggest_meta_data_handler,
     },
     pro::{
         contexts::{ProApplicationContext, ProGeoEngineDb},
@@ -95,7 +96,7 @@ where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let volumes = get_config_element::<Data>()
-        .context(datasets::CannotAccessConfig)?
+        .context(CannotAccessConfig)?
         .volumes;
     let volume_path = volumes
         .get(&volume_name)
@@ -106,7 +107,7 @@ where
     };
 
     adjust_meta_data_path(&mut definition.meta_data, &volume)
-        .context(datasets::CannotResolveUploadFilePath)?;
+        .context(CannotResolveUploadFilePath)?;
 
     let db = app_ctx.session_context(session).db();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
@@ -116,11 +117,11 @@ where
             definition
                 .properties
                 .validated()
-                .context(datasets::JsonValidationFailed)?,
+                .context(JsonValidationFailed)?,
             meta_data,
         )
         .await
-        .context(datasets::DatabaseAccess)?;
+        .context(DatabaseAccess)?;
 
     db.add_permission(
         Role::registered_user_role_id(),
@@ -128,11 +129,11 @@ where
         Permission::Read,
     )
     .await
-    .context(datasets::DatabaseAccess)?;
+    .context(DatabaseAccess)?;
 
     db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
         .await
-        .context(datasets::DatabaseAccess)?;
+        .context(DatabaseAccess)?;
 
     Ok(web::Json(IdResponse::from(dataset_id)))
 }

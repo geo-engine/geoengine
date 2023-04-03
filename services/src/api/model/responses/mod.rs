@@ -1,3 +1,5 @@
+pub mod datasets;
+
 use crate::handlers::ErrorResponse;
 use utoipa::ToResponse;
 

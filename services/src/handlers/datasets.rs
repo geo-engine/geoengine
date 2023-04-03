@@ -5,10 +5,10 @@ use std::{
 };
 
 use crate::error::{self, Result};
-use crate::handlers::ErrorResponse;
 use crate::util::user_input::UserInput;
 use crate::{
     api::model::datatypes::DatasetId,
+    api::model::responses::datasets::errors::*,
     api::model::services::{
         AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
         MetaDataSuggestion,
@@ -23,8 +23,9 @@ use crate::{
         IdResponse,
     },
 };
-use crate::{contexts::SessionContext, contexts::ApplicationContext, datasets::storage::AutoCreateDataset};
-use actix_web::http::StatusCode;
+use crate::{
+    contexts::ApplicationContext, contexts::SessionContext, datasets::storage::AutoCreateDataset,
+};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use gdal::{
     vector::{Layer, LayerAccess, OGRFieldType},
@@ -43,8 +44,7 @@ use geoengine_operators::{
     },
     util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
-use snafu::prelude::*;
-use strum::IntoStaticStr;
+use snafu::ResultExt;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -145,21 +145,6 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     Ok(web::Json(list))
 }
 
-#[derive(Debug, Snafu, IntoStaticStr)]
-pub enum GetDatasetError {
-    CannotLoadDataset { source: error::Error },
-}
-
-impl actix_web::error::ResponseError for GetDatasetError {
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
-    }
-
-    fn status_code(&self) -> StatusCode {
-        StatusCode::BAD_REQUEST
-    }
-}
-
 /// Retrieves details about a dataset using the internal id.
 #[utoipa::path(
     tag = "Datasets",
@@ -208,37 +193,8 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
         .db()
         .load_dataset(&dataset.into_inner())
         .await
-        .context(CannotLoadDatasetSnafu)?;
+        .context(CannotLoadDataset)?;
     Ok(web::Json(dataset))
-}
-
-#[derive(Debug, Snafu, IntoStaticStr)]
-#[snafu(visibility(pub(crate)))]
-#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
-pub enum CreateDatasetError {
-    UploadNotFound { source: error::Error },
-    OnlyAdminsCanCreateDatasetFromVolume,
-    AdminsCannotCreateDatasetFromUpload,
-    CannotResolveUploadFilePath { source: error::Error },
-    JsonValidationFailed { source: error::Error },
-    DatabaseAccessError { source: error::Error },
-    CannotAccessConfig { source: error::Error },
-    UnknownVolume,
-}
-
-impl actix_web::error::ResponseError for CreateDatasetError {
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
-    }
-
-    fn status_code(&self) -> StatusCode {
-        match self {
-            Self::DatabaseAccessError { .. } | Self::CannotAccessConfig { .. } => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
-            _ => StatusCode::BAD_REQUEST,
-        }
-    }
 }
 
 /// Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.
