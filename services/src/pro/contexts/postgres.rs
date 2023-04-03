@@ -29,7 +29,7 @@ use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
-use log::{debug, warn};
+use log::{debug, info};
 use postgres_protocol::escape::escape_literal;
 use pwhash::bcrypt;
 use rayon::ThreadPool;
@@ -109,7 +109,9 @@ where
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
-        Self::update_schema(pool.get().await?).await?;
+        let conn = pool.get().await?;
+        let uninitialized = Self::schema_version(&conn).await? == 0;
+        Self::update_schema(conn).await?;
 
         let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
@@ -125,19 +127,23 @@ where
             volumes: Default::default(),
         };
 
-        let mut db = app_ctx.session_context(UserSession::admin_session()).db();
+        if uninitialized {
+            info!("Populating database with initial data...");
 
-        add_layers_from_directory(&mut db, layer_defs_path).await;
-        add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
+            let mut db = app_ctx.session_context(UserSession::admin_session()).db();
 
-        add_datasets_from_directory(&mut db, dataset_defs_path).await;
+            add_layers_from_directory(&mut db, layer_defs_path).await;
+            add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
 
-        add_providers_from_directory(
-            &mut db,
-            provider_defs_path.clone(),
-            &[provider_defs_path.join("pro")],
-        )
-        .await;
+            add_datasets_from_directory(&mut db, dataset_defs_path).await;
+
+            add_providers_from_directory(
+                &mut db,
+                provider_defs_path.clone(),
+                &[provider_defs_path.join("pro")],
+            )
+            .await;
+        }
 
         Ok(app_ctx)
     }
@@ -150,7 +156,7 @@ where
             Err(e) => {
                 if let Some(code) = e.code() {
                     if *code == SqlState::UNDEFINED_TABLE {
-                        warn!("UserDB: Uninitialized schema");
+                        info!("Version table not found. Initializing schema.");
                         return Ok(0);
                     }
                 }
@@ -164,9 +170,10 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
+    /// Updates the schema, returns the new schema version
     async fn update_schema(
         conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<()> {
+    ) -> Result<i32> {
         let mut version = Self::schema_version(&conn).await?;
 
         loop {
@@ -547,7 +554,7 @@ where
                 // .await?;
                 // eprintln!("Updated user database to schema version {}", version + 1);
                 // }
-                _ => return Ok(()),
+                _ => return Ok(version),
             }
             version += 1;
         }

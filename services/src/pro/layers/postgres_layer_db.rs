@@ -200,13 +200,15 @@ where
 
         let symbology = serde_json::to_value(&layer.symbology).context(crate::error::SerdeJson)?;
 
+        let metadata = serde_json::to_value(&layer.metadata).context(crate::error::SerdeJson)?;
+
         let trans = conn.build_transaction().start().await?;
 
         let stmt = trans
             .prepare(
                 "
-            INSERT INTO layers (id, name, description, workflow, symbology)
-            VALUES ($1, $2, $3, $4, $5);",
+            INSERT INTO layers (id, name, description, workflow, symbology, properties, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7);",
             )
             .await?;
 
@@ -219,6 +221,8 @@ where
                     &layer.description,
                     &serde_json::to_value(&layer.workflow).context(crate::error::SerdeJson)?,
                     &symbology,
+                    &layer.properties,
+                    &metadata,
                 ],
             )
             .await?;
@@ -400,15 +404,20 @@ where
         let stmt = trans
             .prepare(
                 "
-            INSERT INTO layer_collections (id, name, description)
-            VALUES ($1, $2, $3);",
+            INSERT INTO layer_collections (id, name, description, properties)
+            VALUES ($1, $2, $3, $4);",
             )
             .await?;
 
         trans
             .execute(
                 &stmt,
-                &[&collection_id, &collection.name, &collection.description],
+                &[
+                    &collection_id,
+                    &collection.name,
+                    &collection.description,
+                    &collection.properties,
+                ],
             )
             .await?;
 
