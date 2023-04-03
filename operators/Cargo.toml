@@ -66,13 +66,24 @@ name = "expression"
 harness = false
 
 [[bench]]
-name = "workflows"
-harness = false
-
-[[bench]]
 name = "thread_pool"
 harness = false
 
 [[bench]]
 name = "pip"
 harness = false
+
+[[bench]]
+name = "workflow_gdal_source"
+harness = false
+path="benches/workflows/workflow_gdal_source.rs"
+
+[[bench]]
+name = "workflow_mock_source"
+harness = false
+path="benches/workflows/workflow_mock_source.rs"
+
+[[bench]]
+name = "workflow_gdal_source_expression"
+harness = false
+path="benches/workflows/workflow_gdal_source_expression.rs"

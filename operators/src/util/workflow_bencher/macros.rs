@@ -35,12 +35,12 @@
 ///
 #[macro_export]
 macro_rules! workflow_bencher_main {
-    ($( $target:path ),+ $(,)*) => {
+    ( $( $target:path ),+ $(,)* ) => {
         fn main() {
-            let mut bench_collector = $crate::WorkflowBenchmarkCollector::default();
+            let mut bench_collector = $crate::util::workflow_bencher::WorkflowBenchmarkCollector::default();
             $(
                 $target(&mut bench_collector);
             )+
         }
-    };
+    }
 }

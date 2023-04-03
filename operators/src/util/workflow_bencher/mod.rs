@@ -17,6 +17,8 @@ use geoengine_datatypes::{
 
 use serde::{Serialize, Serializer};
 
+mod macros;
+
 pub struct WorkflowBenchmarkCollector {
     pub writer: csv::Writer<std::io::Stdout>,
 }
