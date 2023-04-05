@@ -4,58 +4,66 @@ use actix_web::dev::ServiceResponse;
 use actix_web::http::{header, Method};
 use actix_web::test::TestRequest;
 use actix_web_httpauth::headers::authorization::Bearer;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::future::Future;
 use utoipa::openapi::path::{Parameter, ParameterIn};
 use utoipa::openapi::schema::AdditionalProperties;
 use utoipa::openapi::{
-    KnownFormat, OpenApi, PathItemType, Ref, RefOr, Schema, SchemaFormat, SchemaType,
+    Components, KnownFormat, OpenApi, PathItemType, Ref, RefOr, Schema, SchemaFormat, SchemaType,
 };
 use uuid::Uuid;
 
 pub mod model;
 
-fn get_schema_name_from_ref(reference: &Ref) -> &str {
-    const SCHEMA_REF_PREFIX_LEN: usize = "#/components/schemas/".len();
-    &reference.ref_location[SCHEMA_REF_PREFIX_LEN..]
-}
+fn throw_if_invalid_ref(reference: &Ref, components: &Components) {
+    const SCHEMA_REF_PREFIX: &str = "#/components/schemas/";
+    const RESPONSE_REF_PREFIX: &str = "#/components/responses/";
 
-fn throw_if_invalid_ref(reference: &Ref, schemas: &BTreeMap<String, RefOr<Schema>>) {
-    let schema_name = get_schema_name_from_ref(reference);
-    assert!(
-        schemas.contains_key(schema_name),
-        "Referenced the unknown schema `{schema_name}`"
-    );
+    if reference.ref_location.starts_with(SCHEMA_REF_PREFIX) {
+        let schema_name = &reference.ref_location[SCHEMA_REF_PREFIX.len()..];
+        assert!(
+            components.schemas.contains_key(schema_name),
+            "Referenced the unknown schema `{schema_name}`"
+        );
+    } else if reference.ref_location.starts_with(RESPONSE_REF_PREFIX) {
+        let response_name = &reference.ref_location[RESPONSE_REF_PREFIX.len()..];
+        assert!(
+            components.responses.contains_key(response_name),
+            "Referenced the unknown response `{response_name}`"
+        );
+    } else {
+        panic!("Invalid reference type");
+    }
 }
 
 /// Recursively checks that schemas referenced in the given schema object exist in the provided map.
-fn can_resolve_schema(schema: RefOr<Schema>, schemas: &BTreeMap<String, RefOr<Schema>>) {
+fn can_resolve_schema(schema: RefOr<Schema>, components: &Components) {
     match schema {
         RefOr::Ref(reference) => {
-            throw_if_invalid_ref(&reference, schemas);
+            throw_if_invalid_ref(&reference, components);
         }
         RefOr::T(concrete) => match concrete {
             Schema::Array(arr) => {
-                can_resolve_schema(*arr.items, schemas);
+                can_resolve_schema(*arr.items, components);
             }
             Schema::Object(obj) => {
                 for property in obj.properties.into_values() {
-                    can_resolve_schema(property, schemas);
+                    can_resolve_schema(property, components);
                 }
                 if let Some(additional_properties) = obj.additional_properties {
                     if let AdditionalProperties::RefOr(properties_schema) = *additional_properties {
-                        can_resolve_schema(properties_schema, schemas);
+                        can_resolve_schema(properties_schema, components);
                     }
                 }
             }
             Schema::OneOf(oo) => {
                 for item in oo.items {
-                    can_resolve_schema(item, schemas);
+                    can_resolve_schema(item, components);
                 }
             }
             Schema::AllOf(ao) => {
                 for item in ao.items {
-                    can_resolve_schema(item, schemas);
+                    can_resolve_schema(item, components);
                 }
             }
             _ => panic!("Unknown schema type"),
@@ -66,23 +74,20 @@ fn can_resolve_schema(schema: RefOr<Schema>, schemas: &BTreeMap<String, RefOr<Sc
 /// Loops through all registered HTTP handlers and ensures that the referenced schemas
 /// (inside of request bodies, parameters or responses) exist and can be resolved.
 pub fn can_resolve_api(api: OpenApi) {
-    let schemas = api
-        .components
-        .expect("api has at least one component")
-        .schemas;
+    let components = api.components.expect("api has at least one component");
 
     for path_item in api.paths.paths.into_values() {
         for operation in path_item.operations.into_values() {
             if let Some(request_body) = operation.request_body {
                 for content in request_body.content.into_values() {
-                    can_resolve_schema(content.schema, &schemas);
+                    can_resolve_schema(content.schema, &components);
                 }
             }
 
             if let Some(parameters) = operation.parameters {
                 for parameter in parameters {
                     if let Some(schema) = parameter.schema {
-                        can_resolve_schema(schema, &schemas);
+                        can_resolve_schema(schema, &components);
                     }
                 }
             }
@@ -90,11 +95,11 @@ pub fn can_resolve_api(api: OpenApi) {
             for response in operation.responses.responses.into_values() {
                 match response {
                     RefOr::Ref(reference) => {
-                        throw_if_invalid_ref(&reference, &schemas);
+                        throw_if_invalid_ref(&reference, &components);
                     }
                     RefOr::T(concrete) => {
                         for content in concrete.content.into_values() {
-                            can_resolve_schema(content.schema, &schemas);
+                            can_resolve_schema(content.schema, &components);
                         }
                     }
                 }
@@ -108,7 +113,7 @@ where
     F: Fn(TestRequest, C) -> Fut,
     Fut: Future<Output = ServiceResponse>,
 {
-    schemas: &'a BTreeMap<String, RefOr<Schema>>,
+    components: &'a Components,
     http_method: &'a PathItemType,
     uri: &'a str,
     parameters: &'a Option<Vec<Parameter>>,
@@ -161,9 +166,15 @@ where
     fn resolve_schema(&'a self, ref_or: &'a RefOr<Schema>) -> &Schema {
         match ref_or {
             RefOr::Ref(reference) => {
-                throw_if_invalid_ref(reference, self.schemas);
-                let schema_name = get_schema_name_from_ref(reference);
-                self.resolve_schema(self.schemas.get(schema_name).expect("checked before"))
+                throw_if_invalid_ref(reference, self.components);
+                const SCHEMA_REF_PREFIX_LEN: usize = "#/components/schemas/".len();
+                let schema_name = &reference.ref_location[SCHEMA_REF_PREFIX_LEN..];
+                self.resolve_schema(
+                    self.components
+                        .schemas
+                        .get(schema_name)
+                        .expect("checked before"),
+                )
             }
             RefOr::T(concrete) => concrete,
         }
@@ -288,10 +299,7 @@ pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
     F2: Fn(TestRequest, C) -> Fut2,
     Fut2: Future<Output = ServiceResponse>,
 {
-    let schemas = api
-        .components
-        .expect("api has at least one component")
-        .schemas;
+    let components = api.components.expect("api has at least one component");
 
     for (uri, path_item) in api.paths.paths {
         for (http_method, operation) in path_item.operations {
@@ -302,7 +310,7 @@ pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
                     if let Some(example) = content.example {
                         let (ctx, session_id) = ctx_creator().await;
                         RunnableExample {
-                            schemas: &schemas,
+                            components: &components,
                             http_method: &http_method,
                             uri: uri.as_str(),
                             parameters: &operation.parameters,
@@ -326,7 +334,7 @@ pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
                                     if let Some(body) = concrete.value {
                                         let (ctx, session_id) = ctx_creator().await;
                                         RunnableExample {
-                                            schemas: &schemas,
+                                            components: &components,
                                             http_method: &http_method,
                                             uri: uri.as_str(),
                                             parameters: &operation.parameters,
@@ -372,14 +380,16 @@ mod tests {
     #[test]
     #[should_panic(expected = "MissingSchema")]
     fn throws_because_of_invalid_ref() {
-        throw_if_invalid_ref(&Ref::from_schema_name("MissingSchema"), &BTreeMap::new());
+        throw_if_invalid_ref(&Ref::from_schema_name("MissingSchema"), &Components::new());
     }
 
     #[test]
     fn finds_ref() {
         throw_if_invalid_ref(
             &Ref::from_schema_name("ExistingSchema"),
-            &BTreeMap::from([("ExistingSchema".to_string(), RefOr::T(Schema::default()))]),
+            &ComponentsBuilder::new()
+                .schema("ExistingSchema", RefOr::T(Schema::default()))
+                .into(),
         );
     }
 
@@ -392,7 +402,7 @@ mod tests {
                     .items(Ref::from_schema_name("MissingSchema"))
                     .into(),
             ),
-            &BTreeMap::new(),
+            &Components::new(),
         );
     }
 
@@ -405,7 +415,7 @@ mod tests {
                     .property("Prop", Ref::from_schema_name("MissingSchema"))
                     .into(),
             ),
-            &BTreeMap::new(),
+            &Components::new(),
         );
     }
 
@@ -418,7 +428,7 @@ mod tests {
                     .item(Ref::from_schema_name("MissingSchema"))
                     .into(),
             ),
-            &BTreeMap::new(),
+            &Components::new(),
         );
     }
 
@@ -431,7 +441,7 @@ mod tests {
                     .item(Ref::from_schema_name("MissingSchema"))
                     .into(),
             ),
-            &BTreeMap::new(),
+            &Components::new(),
         );
     }
 
