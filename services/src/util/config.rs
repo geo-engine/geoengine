@@ -120,6 +120,8 @@ pub struct Web {
     pub bind_address: SocketAddr,
     #[serde(deserialize_with = "deserialize_base_url_option", default)]
     pub external_address: Option<url::Url>,
+    /// The api prefix is appended to the external address if set, or the bind address otherwise.
+    /// During parsing it is ensured that a slash is at the start and no slash is at the end.
     #[serde(deserialize_with = "deserialize_api_prefix")]
     pub api_prefix: String,
     pub backend: Backend,
@@ -127,11 +129,14 @@ pub struct Web {
 }
 
 impl Web {
-    pub fn external_address(&self) -> Result<Url> {
-        Ok(self.external_address.clone().unwrap_or(Url::parse(&format!(
-            "http://{}{}/",
-            self.bind_address, self.api_prefix
-        ))?))
+    /// The (public) base address of the API of the server ending in a slash.
+    /// Use this e.g. for generating links to API handlers by joining it with a relative path.
+    pub fn api_url(&self) -> Result<Url> {
+        match &self.external_address {
+            Some(external_address) => external_address.join(&format!("{}/", self.api_prefix)),
+            None => Url::parse(&format!("http://{}{}/", self.bind_address, self.api_prefix)),
+        }
+        .context(error::Url)
     }
 }
 

@@ -1,8 +1,13 @@
 [web]
 bind_address = "127.0.0.1:3030"
+
 # set the public address of the server, if it is different from the bind address
 # external_address = "http://localhost:3030"
-api_prefix = "/api"
+
+# Specify the path under which the API is served relative to the servers address.
+# It is appended to the `external_address` if set, otherwise to the `bind_address`.
+api_prefix = "/api/"
+
 backend = "in_memory" # TODO: remove option
 version_api = true
 
@@ -143,7 +148,7 @@ user_registration = true
 quota_check = false
 # default_available_quota = 999999
 admin_email = "admin@localhost"
-admin_password = "admin" # Initial password for the user "admin", which is created on startup
+admin_password = "adminadmin" # Initial password for the user "admin", which is created on startup
 
 [odm]
 endpoint = "http://localhost:3000/"

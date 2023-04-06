@@ -218,7 +218,7 @@ where
 
 fn wms_url(workflow: WorkflowId) -> Result<Url> {
     let web_config = crate::util::config::get_config_element::<crate::util::config::Web>()?;
-    let base = web_config.external_address()?;
+    let base = web_config.api_url()?;
 
     ogc_endpoint_url(&base, OgcProtocol::Wms, workflow)
 }
