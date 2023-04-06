@@ -198,7 +198,6 @@ mod tests {
         assert_eq!(array.null_count(), 3);
         assert_eq!(*array.data_type(), arrow_data_type::<u8>());
         assert_eq!(*array.data_type(), arrow::datatypes::DataType::UInt8);
-
     }
 
     #[test]
@@ -228,7 +227,6 @@ mod tests {
         assert_eq!(array.null_count(), 3);
         assert_eq!(*array.data_type(), arrow_data_type::<u16>());
         assert_eq!(*array.data_type(), arrow::datatypes::DataType::UInt16);
-
     }
 
     #[test]
