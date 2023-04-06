@@ -1,11 +1,13 @@
 use super::listing::LayerCollectionId;
 use crate::api::model::datatypes::{DataProviderId, LayerId};
+use crate::util::config::{get_config_element, LayerService};
 use crate::{projects::Symbology, workflows::workflow::Workflow};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use utoipa::openapi::{ArrayBuilder, ObjectBuilder, SchemaType};
 use utoipa::{IntoParams, ToSchema};
-use validator::Validate;
+use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -259,8 +261,21 @@ pub struct LayerCollectionListOptions {
     #[param(example = 0)]
     pub offset: u32,
     #[param(example = 20)]
-    #[validate(range(max = 20))]
+    #[validate(custom = "validate_list_limit")]
     pub limit: u32,
+}
+
+fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
+    let limit = get_config_element::<LayerService>()
+        .expect("should exist because it is defined in the default config")
+        .list_limit;
+    if value <= limit {
+        return Ok(());
+    }
+
+    let mut err = ValidationError::new("limit (too large)");
+    err.add_param::<u32>(Cow::Borrowed("max limit"), &limit);
+    Err(err)
 }
 
 impl Default for LayerCollectionListOptions {
