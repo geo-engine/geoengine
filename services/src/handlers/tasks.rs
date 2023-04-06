@@ -480,14 +480,14 @@ mod tests {
 
         // 2. Abort task
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // 3. Wait for abortion to complete
 
@@ -537,14 +537,14 @@ mod tests {
 
         // 2. Abort task
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort?force=true"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}?force=true"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // 3. Wait for abortion to complete
 
@@ -591,21 +591,21 @@ mod tests {
 
         // 2. Abort task
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // do not call `_complete_tx`
 
         // 3. Abort again without force
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -625,14 +625,14 @@ mod tests {
 
         // 5. Abort again with force
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort?force=true"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}?force=true"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // 6. Check abortion status
 
