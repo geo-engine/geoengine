@@ -49,7 +49,7 @@ use crate::projects::{
     ProjectFilter, ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId,
     RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
-use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
+use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
 use crate::util::server::ServerInfo;
 use crate::util::{apidoc::OpenApiServerInfo, IdResponse};
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -198,6 +198,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             TaskFilter,
             TaskListOptions,
             TaskStatus,
+            TaskStatusWithId,
             TaskResponse,
 
             Layer,
