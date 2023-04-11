@@ -27,7 +27,7 @@ pub fn raster_tile_2d_to_arrow_ipc_file<P: Pixel>(
     let mut file_writer = FileWriter::try_new_with_options(
         Vec::new(),
         &record_batch.schema(),
-        IpcWriteOptions::default().try_with_compression(None)?, //Some(CompressionType::LZ4_FRAME))?, // TODO: enable compression when pyarrow >= 12. Also: make this configurable.
+        IpcWriteOptions::default(), //.try_with_compression(Some(CompressionType::LZ4_FRAME))?, // TODO: enable compression when pyarrow >= 12. Also: make this configurable.
     )?;
     file_writer.write(&record_batch)?;
     file_writer.finish()?;
