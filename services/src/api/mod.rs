@@ -166,8 +166,8 @@ where
     fn resolve_schema(&'a self, ref_or: &'a RefOr<Schema>) -> &Schema {
         match ref_or {
             RefOr::Ref(reference) => {
-                throw_if_invalid_ref(reference, self.components);
                 const SCHEMA_REF_PREFIX_LEN: usize = "#/components/schemas/".len();
+                throw_if_invalid_ref(reference, self.components);
                 let schema_name = &reference.ref_location[SCHEMA_REF_PREFIX_LEN..];
                 self.resolve_schema(
                     self.components
