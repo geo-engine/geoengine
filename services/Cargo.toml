@@ -79,7 +79,7 @@ time = "0.3"
 tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
 tokio-postgres = { version = "0.7" }
 tokio-util = { version = "0.7", features = ["codec"] }
-tonic = { version = "0.8.3", features = ["tls", "tls-roots"] } # must be compatible with `aruna-rust-api`
+tonic = { version = "0.9", features = ["tls", "tls-roots"] } # must be compatible with `aruna-rust-api`
 tracing = "0.1"
 tracing-actix-web = "0.7"
 tracing-opentelemetry = "0.18"
