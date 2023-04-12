@@ -1,12 +1,10 @@
 [web]
 bind_address = "127.0.0.1:3030"
-
-# set the public address of the server, if it is different from the bind address
-# external_address = "http://localhost:3030"
-
-# Specify the path under which the API is served relative to the servers address.
-# It is appended to the `external_address` if set, otherwise to the `bind_address`.
+# set the path under which the api is served relative to the bind address
 api_prefix = "/api"
+
+# set the public address (typically ending in "/api") of the server, if it is different from the bind address
+# external_address = "http://localhost:3030/api"
 
 backend = "in_memory" # TODO: remove option
 version_api = true
