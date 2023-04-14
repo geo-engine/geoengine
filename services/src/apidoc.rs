@@ -52,7 +52,7 @@ use crate::projects::{
     ProjectFilter, ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId,
     RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
-use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
+use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
 use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
@@ -183,6 +183,7 @@ use utoipa::{Modify, OpenApi};
             TaskFilter,
             TaskListOptions,
             TaskStatus,
+            TaskStatusWithId,
             TaskResponse,
 
             Layer,
