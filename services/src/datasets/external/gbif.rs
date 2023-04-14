@@ -5,6 +5,7 @@ use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
 use postgres_types::ToSql;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use tokio_postgres::NoTls;
 
 use geoengine_datatypes::collections::VectorDataType;
@@ -130,17 +131,27 @@ impl GbifDataProvider {
         let taxonrank = path
             .split_once('/')
             .map_or_else(String::new, |(taxonrank, _)| taxonrank.to_string());
+        ensure!(
+            ["family", "genus", "species"].contains(&taxonrank.as_str()),
+            crate::error::InvalidPath
+        );
         let path = path.split_once('/').map_or_else(|| "", |(_, path)| path);
         let filters = GbifDataProvider::get_filters(path);
         let conn = self.pool.get().await?;
         let query = &format!(
             r#"
-            SELECT DISTINCT canonicalname
-            FROM {schema}.species
-            WHERE taxonrank = $1{filter}
-            ORDER BY canonicalname
+            SELECT {taxonrank}, COUNT(*)
+            FROM {schema}.occurrences
+            WHERE {taxonrank} IN
+                (
+                    SELECT DISTINCT canonicalname
+                    FROM {schema}.species
+                    WHERE taxonrank = $1{filter}
+                )
+            GROUP BY {taxonrank}
+            ORDER BY {taxonrank} 
             LIMIT $2
-            OFFSET $3
+            OFFSET $3;
             "#,
             schema = self.db_config.schema,
             filter = filters
@@ -165,6 +176,7 @@ impl GbifDataProvider {
             .into_iter()
             .map(|row| {
                 let canonicalname = row.get::<usize, String>(0);
+                let num_points = row.get::<usize, i64>(1);
 
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
@@ -172,7 +184,7 @@ impl GbifDataProvider {
                         layer_id: LayerId(taxonrank.clone() + "/" + canonicalname.as_str()),
                     },
                     name: canonicalname.clone(),
-                    description: String::new(),
+                    description: format!("{num_points} occurrences"),
                     properties: vec![],
                 })
             })
@@ -1299,6 +1311,21 @@ mod tests {
             .await
             .unwrap();
 
+            let invalid_root_id = LayerCollectionId("datasets/families/".to_string());
+
+            let collection = provider
+                .load_layer_collection(
+                    &invalid_root_id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 10,
+                    },
+                )
+                .await;
+
+            assert!(collection.is_err());
+            matches!(collection, Err(Error::InvalidPath));
+
             let root_id = LayerCollectionId("datasets/family/".to_string());
 
             let collection = provider
@@ -1328,7 +1355,7 @@ mod tests {
                             layer_id: LayerId("family/Limoniidae".to_string()),
                         },
                         name: "Limoniidae".to_string(),
-                        description: String::new(),
+                        description: "3 occurrences".to_string(),
                         properties: vec![]
                     }),],
                     entry_label: None,

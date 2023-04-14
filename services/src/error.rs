@@ -427,6 +427,8 @@ pub enum Error {
     },
 
     ProviderDoesNotSupportBrowsing,
+
+    InvalidPath,
 }
 
 impl actix_web::error::ResponseError for Error {
