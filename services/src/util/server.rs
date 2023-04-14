@@ -273,7 +273,7 @@ pub fn serve_openapi_json<
 pub(crate) fn log_server_info() -> Result<()> {
     let web_config: crate::util::config::Web = get_config_element()?;
 
-    let external_address = web_config.external_address()?;
+    let external_address = web_config.api_url()?;
 
     info!("Starting server…");
 
