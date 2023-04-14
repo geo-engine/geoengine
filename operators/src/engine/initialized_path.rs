@@ -1,9 +1,12 @@
 use async_trait::async_trait;
 
-use crate::{util::{
-    input::{MultiRasterOrVectorOperator, RasterOrVectorOperator},
-    Result,
-}, error::Error};
+use crate::{
+    error::Error,
+    util::{
+        input::{MultiRasterOrVectorOperator, RasterOrVectorOperator},
+        Result,
+    },
+};
 
 use super::{
     ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
@@ -12,7 +15,7 @@ use super::{
     SingleVectorSource,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct WorkflowOperatorPath {
     id: Vec<u8>,
 }
@@ -26,6 +29,7 @@ impl WorkflowOperatorPath {
         self.id
     }
 
+    #[must_use]
     pub fn clone_and_extend(&self, suffix: &[u8]) -> Self {
         let mut id = self.id.clone();
         id.extend(suffix);
@@ -49,14 +53,8 @@ impl From<&[u8]> for WorkflowOperatorPath {
     }
 }
 
-impl Default for WorkflowOperatorPath {
-    fn default() -> Self {
-        Self { id: vec![] }
-    }
-}
-
 #[async_trait]
-pub trait InitializedSources<Initialized, E=Error> {
+pub trait InitializedSources<Initialized, E = Error> {
     /// Initialize the operator(s) with a prefix
     async fn initialize_sources(
         self,
@@ -94,12 +92,17 @@ pub struct InitializedSingleVectorMultipleRasterSources<
     pub rasters: Vec<R>,
 }
 
-pub enum InitializedSingleRasterOrVectorOperator<R: InitializedRasterOperator, V: InitializedVectorOperator> {
+pub enum InitializedSingleRasterOrVectorOperator<
+    R: InitializedRasterOperator,
+    V: InitializedVectorOperator,
+> {
     Raster(R),
     Vector(V),
 }
 
-impl <R: InitializedRasterOperator,V: InitializedVectorOperator> InitializedSingleRasterOrVectorOperator<R,V> {
+impl<R: InitializedRasterOperator, V: InitializedVectorOperator>
+    InitializedSingleRasterOrVectorOperator<R, V>
+{
     pub fn is_raster(&self) -> bool {
         match self {
             InitializedSingleRasterOrVectorOperator::Raster(_) => true,
@@ -131,7 +134,9 @@ pub enum InitializedMultiRasterOrVectorOperator<
     Vector(V),
 }
 
-impl <R: InitializedRasterOperator,V: InitializedVectorOperator> InitializedMultiRasterOrVectorOperator<R,V> {
+impl<R: InitializedRasterOperator, V: InitializedVectorOperator>
+    InitializedMultiRasterOrVectorOperator<R, V>
+{
     pub fn is_raster(&self) -> bool {
         match self {
             InitializedMultiRasterOrVectorOperator::Raster(_) => true,
@@ -154,8 +159,6 @@ pub struct InitializedMultiRasterOrVectorSource<
     pub path: WorkflowOperatorPath,
     pub source: InitializedMultiRasterOrVectorOperator<R, V>,
 }
-
-
 
 #[async_trait]
 impl InitializedSources<InitializedSingleRasterSource<Box<dyn InitializedRasterOperator>>>
@@ -197,7 +200,6 @@ impl InitializedSources<InitializedSingleVectorSource<Box<dyn InitializedVectorO
     }
 }
 
-
 #[async_trait]
 impl InitializedSources<InitializedMultipleRasterSources<Box<dyn InitializedRasterOperator>>>
     for MultipleRasterSources
@@ -207,16 +209,17 @@ impl InitializedSources<InitializedMultipleRasterSources<Box<dyn InitializedRast
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<InitializedMultipleRasterSources<Box<dyn InitializedRasterOperator>>> {
-
         let rasters = futures::future::try_join_all(
-            self.rasters.into_iter().enumerate().map(|(i, op)| op.initialize(path.clone_and_extend(&[i as u8]), context)),
-        ).await?;
+            self.rasters
+                .into_iter()
+                .enumerate()
+                .map(|(i, op)| op.initialize(path.clone_and_extend(&[i as u8]), context)),
+        )
+        .await?;
 
-        Ok(InitializedMultipleRasterSources { rasters, path })
+        Ok(InitializedMultipleRasterSources { path, rasters })
     }
 }
-
-
 
 #[async_trait]
 impl InitializedSources<InitializedMultipleVectorSources<Box<dyn InitializedVectorOperator>>>
@@ -227,16 +230,17 @@ impl InitializedSources<InitializedMultipleVectorSources<Box<dyn InitializedVect
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<InitializedMultipleVectorSources<Box<dyn InitializedVectorOperator>>> {
-
         let vectors = futures::future::try_join_all(
-            self.vectors.into_iter().enumerate().map(|(i, op)| op.initialize(path.clone_and_extend(&[i as u8]), context)),
-        ).await?;
+            self.vectors
+                .into_iter()
+                .enumerate()
+                .map(|(i, op)| op.initialize(path.clone_and_extend(&[i as u8]), context)),
+        )
+        .await?;
 
-        Ok(InitializedMultipleVectorSources { vectors, path })
+        Ok(InitializedMultipleVectorSources { path, vectors })
     }
 }
-
-
 
 #[async_trait]
 impl
@@ -262,13 +266,17 @@ impl
         let vector = self.vector.initialize(op_path, context).await?;
 
         let rasters = futures::future::try_join_all(
-            self.rasters.into_iter().enumerate().map(|(i, op)| op.initialize(path.clone_and_extend(&[i as u8 + 1]), context)),
-        ).await?;
-        
+            self.rasters
+                .into_iter()
+                .enumerate()
+                .map(|(i, op)| op.initialize(path.clone_and_extend(&[i as u8 + 1]), context)),
+        )
+        .await?;
+
         Ok(InitializedSingleVectorMultipleRasterSources {
+            path,
             vector,
             rasters,
-            path,
         })
     }
 }
@@ -305,10 +313,9 @@ impl
             }
         };
 
-        Ok(InitializedSingleRasterOrVectorSource { source, path })
+        Ok(InitializedSingleRasterOrVectorSource { path, source })
     }
 }
-
 
 #[async_trait]
 impl
@@ -331,9 +338,11 @@ impl
     > {
         let source = match self.source {
             MultiRasterOrVectorOperator::Raster(r) => {
-                let rasters = futures::future::try_join_all(
-                    r.into_iter().enumerate().map(|(i, op)| op.initialize(path.clone_and_extend(&[i as u8 + 1]), context)),
-                ).await?;
+                let rasters =
+                    futures::future::try_join_all(r.into_iter().enumerate().map(|(i, op)| {
+                        op.initialize(path.clone_and_extend(&[i as u8 + 1]), context)
+                    }))
+                    .await?;
 
                 InitializedMultiRasterOrVectorOperator::Raster(rasters)
             }
@@ -345,6 +354,6 @@ impl
             }
         };
 
-        Ok(InitializedMultiRasterOrVectorSource { source, path })
+        Ok(InitializedMultiRasterOrVectorSource { path, source })
     }
 }

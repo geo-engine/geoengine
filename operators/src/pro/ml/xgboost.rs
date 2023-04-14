@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures::{future, StreamExt};
+use futures::StreamExt;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle, SpatialPartition2D,
     SpatialResolution,
@@ -20,9 +20,9 @@ use snafu::{ensure, OptionExt, ResultExt};
 use xgboost_rs::{Booster, DMatrix, XGBError};
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, MultipleRasterSources, Operator, OperatorName,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    TypedRasterQueryProcessor, WorkflowOperatorPath, InitializedSources
+    ExecutionContext, InitializedRasterOperator, InitializedSources, MultipleRasterSources,
+    Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::stream_zip::StreamVectorZip;
 use crate::util::Result;
@@ -110,6 +110,8 @@ impl RasterOperator for XgboostOperator {
         let model = context.read_ml_model(self.params.model_sub_path).await?;
 
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
+
+        let init_rasters = initialized_sources.rasters;
 
         let input = init_rasters.get(0).context(self::error::NoInputData)?;
 
@@ -566,7 +568,7 @@ mod tests {
             .expect("The model file should be available.");
 
         let op = RasterOperator::boxed(xg)
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap();
 
@@ -876,7 +878,7 @@ mod tests {
             .expect("The model file should be available.");
 
         let op = RasterOperator::boxed(xg)
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap();
 

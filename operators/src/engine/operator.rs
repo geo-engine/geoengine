@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 use crate::error;
 use crate::util::Result;
@@ -46,7 +47,9 @@ pub trait RasterOperator:
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let span = self.span();
+        debug!("Initialize {:?}, path: {:?}", self.typetag_name(), &path);
         let op = self._initialize(path, context).await?;
+
         Ok(context.wrap_initialized_raster_operator(op, span))
     }
 
@@ -79,6 +82,7 @@ pub trait VectorOperator:
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let span = self.span();
+        debug!("Initialize {:?}, path: {:?}", self.typetag_name(), &path);
         let op = self._initialize(path, context).await?;
         Ok(context.wrap_initialized_vector_operator(op, span))
     }
@@ -112,6 +116,7 @@ pub trait PlotOperator:
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let span = self.span();
+        debug!("Initialize {:?}, path: {:?}", self.typetag_name(), &path);
         let op = self._initialize(path, context).await?;
         Ok(context.wrap_initialized_plot_operator(op, span))
     }

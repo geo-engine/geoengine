@@ -440,7 +440,7 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src.initialize(Default::default(), &context).await.unwrap();
         let proc = initialized_op.query_processor().unwrap();
 
         let TypedVectorQueryProcessor::Data(proc) = proc else {
@@ -495,7 +495,7 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src.initialize(Default::default(), &context).await.unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
 
@@ -562,7 +562,7 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src.initialize(Default::default(), &context).await.unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
 
@@ -625,7 +625,7 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src.initialize(Default::default(), &context).await.unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
         let TypedVectorQueryProcessor::MultiPoint(proc) = proc else {

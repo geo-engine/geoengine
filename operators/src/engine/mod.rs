@@ -30,9 +30,10 @@ pub use result_descriptor::{
 use tracing::Span;
 
 pub use initialized_path::{
-    InitializedSources, WorkflowOperatorPath, InitializedSingleRasterSource, InitializedSingleVectorSource,
-    InitializedSingleRasterOrVectorSource, InitializedMultiRasterOrVectorSource,
-    InitializedSingleRasterOrVectorOperator, InitializedMultiRasterOrVectorOperator
+    InitializedMultiRasterOrVectorOperator, InitializedMultiRasterOrVectorSource,
+    InitializedSingleRasterOrVectorOperator, InitializedSingleRasterOrVectorSource,
+    InitializedSingleRasterSource, InitializedSingleVectorSource, InitializedSources,
+    WorkflowOperatorPath,
 };
 
 mod clonable_operator;

@@ -577,7 +577,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = ctx.execution_context().unwrap();
-        let initialized = op.initialize(&exe_ctx).await.unwrap();
+        let initialized = op.initialize(Default::default(), &exe_ctx).await.unwrap();
 
         let processor = initialized.query_processor().unwrap().get_u8().unwrap();
 

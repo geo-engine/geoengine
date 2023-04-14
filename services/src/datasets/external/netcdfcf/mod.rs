@@ -2279,7 +2279,10 @@ mod tests {
         // let execution_context = MockExecutionContext::test_default();
         let execution_context = ctx.execution_context().unwrap();
 
-        let initialized_operator = operator.initialize(&execution_context).await.unwrap();
+        let initialized_operator = operator
+            .initialize(Default::default(), &execution_context)
+            .await
+            .unwrap();
 
         let TypedPlotQueryProcessor::JsonVega(processor) = initialized_operator.query_processor().unwrap() else {
             panic!("wrong plot type");

@@ -51,7 +51,7 @@ impl OperatorData for VectorJoinSources {
 pub struct InitializedVectorJoinSources {
     left: Box<dyn InitializedVectorOperator>,
     right: Box<dyn InitializedVectorOperator>,
-    path: WorkflowOperatorPath,
+    // path: WorkflowOperatorPath,
 }
 
 #[async_trait]
@@ -65,7 +65,7 @@ impl InitializedSources<InitializedVectorJoinSources> for VectorJoinSources {
         Ok(InitializedVectorJoinSources {
             left: self.left.initialize(path.clone_and_extend(&[0]), context).await?,
             right: self.right.initialize(path.clone_and_extend(&[1]), context).await?,
-            path,
+            // path,
         })
     }
 }
