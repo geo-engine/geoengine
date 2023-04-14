@@ -226,7 +226,8 @@ mod tests {
 
             let bytes = websocket_context.next().await.unwrap().unwrap();
 
-            let bytes = &bytes[4..]; // the first four bytes are WS op bytes
+            let pos = bytes.windows(6).position(|w| w == b"ARROW1").unwrap();
+            let bytes = &bytes[pos..]; // the first "pos" bytes are WS op bytes
 
             let record_batches = arrow_ipc_file_to_record_batches(bytes).unwrap();
             assert_eq!(record_batches.len(), 1);
