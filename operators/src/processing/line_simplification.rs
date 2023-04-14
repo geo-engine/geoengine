@@ -2,7 +2,7 @@ use crate::{
     engine::{
         ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
         QueryProcessor, SingleVectorSource, TypedVectorQueryProcessor, VectorOperator,
-        VectorQueryProcessor, VectorResultDescriptor,
+        VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath, InitializedSources,
     },
     util::Result,
 };
@@ -39,6 +39,7 @@ impl OperatorName for LineSimplification {
 impl VectorOperator for LineSimplification {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         if self
@@ -49,7 +50,8 @@ impl VectorOperator for LineSimplification {
             return Err(LineSimplificationError::InvalidEpsilon.into());
         }
 
-        let source = self.sources.vector.initialize(context).await?;
+        let sources = self.sources.initialize_sources(path, context).await?;
+        let source = sources.vector;
 
         if source.result_descriptor().data_type != VectorDataType::MultiLineString
             && source.result_descriptor().data_type != VectorDataType::MultiPolygon
@@ -386,7 +388,7 @@ mod tests {
             .into(),
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(Default::default(), &MockExecutionContext::test_default())
         .await
         .is_err());
 
@@ -403,7 +405,7 @@ mod tests {
             .into(),
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(Default::default(), &MockExecutionContext::test_default())
         .await
         .is_err());
 
@@ -420,7 +422,7 @@ mod tests {
             .into(),
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(Default::default(), &MockExecutionContext::test_default())
         .await
         .is_err());
     }
@@ -459,7 +461,7 @@ mod tests {
         .boxed();
 
         let initialized = simplification
-            .initialize(&MockExecutionContext::test_default())
+            .initialize(Default::default(), &MockExecutionContext::test_default())
             .await
             .unwrap();
 
@@ -563,7 +565,7 @@ mod tests {
             .into(),
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await
         .unwrap();
 

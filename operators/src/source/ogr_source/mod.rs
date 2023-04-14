@@ -36,7 +36,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::{OperatorData, OperatorName, QueryProcessor};
+use crate::engine::{OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath};
 use crate::error::Error;
 use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
@@ -350,9 +350,12 @@ pub struct InitializedOgrSource {
 impl VectorOperator for OgrSource {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn crate::engine::InitializedVectorOperator>> {
         // TODO: check rename of fields are valid
+
+        debug!("Initializing OgrSource with prefix: {:?}", path);
 
         let info: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -1837,7 +1840,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -1933,7 +1936,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -2032,7 +2035,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -2182,7 +2185,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -2353,7 +2356,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -3758,7 +3761,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -4006,7 +4009,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4093,7 +4096,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4210,7 +4213,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4333,7 +4336,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4454,7 +4457,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4575,7 +4578,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4692,7 +4695,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4822,7 +4825,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4938,7 +4941,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await
         .unwrap();
 

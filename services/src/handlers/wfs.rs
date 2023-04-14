@@ -30,7 +30,7 @@ use geoengine_datatypes::{
     primitives::{FeatureData, Geometry, MultiPoint},
     spatial_reference::SpatialReference,
 };
-use geoengine_operators::engine::QueryProcessor;
+use geoengine_operators::engine::{QueryProcessor, WorkflowOperatorPath};
 use geoengine_operators::engine::{
     QueryContext, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
@@ -183,11 +183,13 @@ where
     let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context()?;
+    let workflow_operator_path_root = WorkflowOperatorPath::default();
+
     let operator = workflow
         .operator
         .get_vector()
         .context(error::Operator)?
-        .initialize(&exe_ctx)
+        .initialize(workflow_operator_path_root, &exe_ctx)
         .await
         .context(error::Operator)?;
 
@@ -459,9 +461,11 @@ async fn wfs_feature_handler<C: ApplicationContext>(
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
     let execution_context = ctx.execution_context()?;
+    let workflow_operator_path_root = WorkflowOperatorPath::default();
+
     let initialized = operator
         .clone()
-        .initialize(&execution_context)
+        .initialize(workflow_operator_path_root, &execution_context)
         .await
         .context(error::Operator)?;
 

@@ -716,7 +716,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let qp1 = mrs1
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -725,7 +725,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -927,7 +927,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let qp1 = mrs1
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -936,7 +936,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1120,7 +1120,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let qp1 = mrs1
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1129,7 +1129,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1297,7 +1297,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let qp1 = mrs1
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1306,7 +1306,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1452,7 +1452,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let qp1 = mrs1
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1461,7 +1461,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1606,7 +1606,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let qp1 = mrs1
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1615,7 +1615,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1769,7 +1769,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let qp1 = mrs1
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1778,7 +1778,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1942,7 +1942,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let qp1 = mrs1
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1951,7 +1951,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -2095,7 +2095,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let query_processor_a = raster_source_a
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -2104,7 +2104,7 @@ mod tests {
             .unwrap();
 
         let query_processor_b = raster_source_b
-            .initialize(&exe_ctx)
+            .initialize(Default::default(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()

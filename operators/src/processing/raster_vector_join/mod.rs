@@ -6,7 +6,7 @@ mod util;
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
     SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath, InitializedSources,
 };
 use crate::error::{self, Error};
 use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
@@ -14,7 +14,6 @@ use crate::util::Result;
 
 use crate::processing::raster_vector_join::aggregated::RasterVectorAggregateJoinProcessor;
 use async_trait::async_trait;
-use futures::future::join_all;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::raster::{Pixel, RasterDataType};
@@ -77,6 +76,7 @@ pub enum TemporalAggregationMethod {
 impl VectorOperator for RasterVectorJoin {
     async fn _initialize(
         mut self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(
@@ -93,7 +93,10 @@ impl VectorOperator for RasterVectorJoin {
             }
         );
 
-        let vector_source = self.sources.vector.initialize(context).await?;
+        // TODO: how to check the vector source? bevor init of the other sources?
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+
+        let vector_source = initialized_sources.vector;
         let vector_rd = vector_source.result_descriptor();
 
         ensure!(
@@ -109,15 +112,7 @@ impl VectorOperator for RasterVectorJoin {
             },
         );
 
-        let raster_sources = join_all(
-            self.sources
-                .rasters
-                .into_iter()
-                .map(|s| s.initialize(context)),
-        )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>>>()?;
+        let raster_sources = initialized_sources.rasters;
 
         let spatial_reference = vector_rd.spatial_reference;
 
@@ -378,7 +373,7 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
+        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
@@ -447,7 +442,7 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
+        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
@@ -519,7 +514,7 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
+        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
@@ -582,7 +577,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctc)
+        .initialize(Default::default(), &exe_ctc)
         .await;
 
         assert!(matches!(

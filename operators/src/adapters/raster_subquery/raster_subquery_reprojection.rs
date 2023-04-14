@@ -435,7 +435,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
         let tiling_strat = exe_ctx.tiling_specification;
 
-        let op = mrs1.initialize(&exe_ctx).await.unwrap();
+        let op = mrs1.initialize(Default::default(), &exe_ctx).await.unwrap();
 
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 

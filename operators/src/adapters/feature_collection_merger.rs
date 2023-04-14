@@ -160,7 +160,7 @@ mod tests {
 
         let source = source
             .boxed()
-            .initialize(&MockExecutionContext::test_default())
+            .initialize(Default::default(), &MockExecutionContext::test_default())
             .await
             .unwrap();
 
@@ -227,7 +227,7 @@ mod tests {
     async fn empty() {
         let source = MockFeatureCollectionSource::single(DataCollection::empty())
             .boxed()
-            .initialize(&MockExecutionContext::test_default())
+            .initialize(Default::default(), &MockExecutionContext::test_default())
             .await
             .unwrap();
 

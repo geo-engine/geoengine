@@ -58,7 +58,7 @@ async fn main() {
     let expression = expression_on_sources(ndvi_source.clone(), ndvi_source);
 
     let expression_processor = expression
-        .initialize(&execution_context)
+        .initialize(Default::default(), &execution_context)
         .await
         .unwrap()
         .query_processor()

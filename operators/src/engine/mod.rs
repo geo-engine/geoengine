@@ -29,11 +29,19 @@ pub use result_descriptor::{
 };
 use tracing::Span;
 
+pub use initialized_path::{
+    InitializedSources, WorkflowOperatorPath, InitializedSingleRasterSource, InitializedSingleVectorSource,
+    InitializedSingleRasterOrVectorSource, InitializedMultiRasterOrVectorSource,
+    InitializedSingleRasterOrVectorOperator, InitializedMultiRasterOrVectorOperator
+};
+
 mod clonable_operator;
 mod execution_context;
+mod initialized_path;
 mod operator;
 mod operator_impl;
 mod query;
+
 #[macro_use]
 mod query_processor;
 mod result_descriptor;

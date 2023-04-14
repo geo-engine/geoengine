@@ -879,7 +879,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe)
+        .initialize(Default::default(), &exe)
         .await
         .unwrap();
 
@@ -1243,7 +1243,7 @@ mod tests {
             params: GdalSourceParameters { data: id },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(Default::default(), &execution_context)
         .await
         .unwrap()
         .query_processor()

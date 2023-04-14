@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
     QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor,
+    SingleRasterSource, TypedRasterQueryProcessor, InitializedSources, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -63,9 +63,11 @@ pub struct InitializedReflectance {
 impl RasterOperator for Reflectance {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let input = self.sources.raster.initialize(context).await?;
+        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let input = initialized_source.raster;
 
         let in_desc = input.result_descriptor();
 

@@ -1,7 +1,7 @@
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
     QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    VectorResultDescriptor, WorkflowOperatorPath, InitializedSources,
 };
 use crate::error;
 use crate::util::input::StringOrNumberRange;
@@ -40,13 +40,14 @@ impl OperatorName for ColumnRangeFilter {
 impl VectorOperator for ColumnRangeFilter {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        let vector_source = self.sources.vector.initialize(context).await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
 
         let initialized_operator = InitializedColumnRangeFilter {
-            result_descriptor: vector_source.result_descriptor().clone(),
-            vector_source,
+            result_descriptor: initialized_sources.vector.result_descriptor().clone(),
+            vector_source: initialized_sources.vector,
             state: self.params,
         };
 
@@ -251,7 +252,7 @@ mod tests {
         .boxed();
 
         let initialized = filter
-            .initialize(&MockExecutionContext::test_default())
+            .initialize(Default::default(), &MockExecutionContext::test_default())
             .await
             .unwrap();
 

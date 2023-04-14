@@ -7,7 +7,7 @@ use crate::adapters::{
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
     QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor,
+    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath, InitializedSources,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -67,9 +67,11 @@ impl OperatorName for Interpolation {
 impl RasterOperator for Interpolation {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let raster_source = self.sources.raster.initialize(context).await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let raster_source = initialized_sources.raster;
         let in_descriptor = raster_source.result_descriptor();
 
         ensure!(
@@ -456,7 +458,7 @@ mod tests {
             sources: SingleRasterSource { raster },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(Default::default(), &exe_ctx)
         .await?;
 
         let processor = operator.query_processor()?.get_i8().unwrap();

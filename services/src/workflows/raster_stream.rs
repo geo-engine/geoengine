@@ -10,7 +10,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
-    engine::{QueryAbortTrigger, QueryContext, QueryProcessorExt, RasterOperator},
+    engine::{QueryAbortTrigger, QueryContext, QueryProcessorExt, RasterOperator, WorkflowOperatorPath},
 };
 
 pub struct RasterWebsocketStreamHandler {
@@ -68,7 +68,9 @@ impl RasterWebsocketStreamHandler {
         execution_ctx: C::ExecutionContext,
         mut query_ctx: C::QueryContext,
     ) -> Result<Self> {
-        let initialized_operator = raster_operator.initialize(&execution_ctx).await?;
+        let workflow_operator_path_root = WorkflowOperatorPath::default();
+
+        let initialized_operator = raster_operator.initialize(workflow_operator_path_root, &execution_ctx).await?;
 
         let spatial_reference = initialized_operator.result_descriptor().spatial_reference;
 

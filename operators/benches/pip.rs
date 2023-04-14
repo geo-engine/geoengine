@@ -30,7 +30,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
         },
     }
     .boxed()
-    .initialize(&MockExecutionContext::test_default())
+    .initialize(Default::default(), &MockExecutionContext::test_default())
     .await
     .unwrap();
 

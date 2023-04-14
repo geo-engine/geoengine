@@ -81,7 +81,7 @@ mod test_util {
     {
         // let input = make_raster(props, custom_data, measurement);
 
-        let op = make_op().initialize(ctx).await?;
+        let op = make_op().initialize(Default::default(), ctx).await?;
 
         let processor = op.query_processor().unwrap().get_f32().unwrap();
 

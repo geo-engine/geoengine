@@ -31,7 +31,7 @@ use crate::util::server::{connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
-use geoengine_operators::engine::ExecutionContext;
+use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
 use geoengine_operators::engine::ResultDescriptor;
 use geoengine_operators::processing::{InitializedRasterReprojection, ReprojectionParams};
 
@@ -207,11 +207,14 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     let workflow = ctx.db().load_workflow(&identifiers).await?;
 
     let exe_ctx = ctx.execution_context()?;
+
+    let workflow_operator_path_root = WorkflowOperatorPath::default();
+
     let operator = workflow
         .operator
         .get_raster()
         .context(error::Operator)?
-        .initialize(&exe_ctx)
+        .initialize(workflow_operator_path_root, &exe_ctx)
         .await
         .context(error::Operator)?;
 
@@ -364,9 +367,11 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
 
     let execution_context = ctx.execution_context()?;
 
+    let workflow_operator_path_root = WorkflowOperatorPath::default();
+
     let initialized = operator
         .clone()
-        .initialize(&execution_context)
+        .initialize(workflow_operator_path_root, &execution_context)
         .await
         .context(error::Operator)?;
 

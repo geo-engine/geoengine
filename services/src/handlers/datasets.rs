@@ -1249,7 +1249,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(exe_ctx)
+        .initialize(Default::default(), exe_ctx)
         .await
         .map_err(Into::into)
     }

@@ -22,7 +22,7 @@ use xgboost_rs::{Booster, DMatrix, XGBError};
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, MultipleRasterSources, Operator, OperatorName,
     QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    TypedRasterQueryProcessor,
+    TypedRasterQueryProcessor, WorkflowOperatorPath, InitializedSources
 };
 use crate::util::stream_zip::StreamVectorZip;
 use crate::util::Result;
@@ -104,17 +104,12 @@ type PixelOut = f32;
 impl RasterOperator for XgboostOperator {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let model = context.read_ml_model(self.params.model_sub_path).await?;
 
-        let init_rasters = future::try_join_all(
-            self.sources
-                .rasters
-                .iter()
-                .map(|raster| raster.clone().initialize(context)),
-        )
-        .await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
 
         let input = init_rasters.get(0).context(self::error::NoInputData)?;
 

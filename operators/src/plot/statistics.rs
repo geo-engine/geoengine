@@ -2,15 +2,14 @@ use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
     PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath, InitializedSources,
+    InitializedMultiRasterOrVectorOperator,
 };
 use crate::error;
 use crate::error::Error;
-use crate::util::input::MultiRasterOrVectorOperator::{Raster, Vector};
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::future::join_all;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::collections::FeatureCollectionInfos;
@@ -51,10 +50,13 @@ pub struct StatisticsParams {
 impl PlotOperator for Statistics {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
-        match self.sources.source {
-            Raster(rasters) => {
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+
+        match initialized_sources.source {
+            InitializedMultiRasterOrVectorOperator::Raster(rasters) => {
                 ensure!( self.params.column_names.is_empty() || self.params.column_names.len() == rasters.len(),
                     error::InvalidOperatorSpec {
                         reason: "Statistics on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all."
@@ -68,10 +70,7 @@ impl PlotOperator for Statistics {
                 } else {
                     self.params.column_names.clone()
                 };
-
-                let rasters = join_all(rasters.into_iter().map(|s| s.initialize(context))).await;
-                let rasters = rasters.into_iter().collect::<Result<Vec<_>>>()?;
-
+                
                 let in_descriptors = rasters
                     .iter()
                     .map(InitializedRasterOperator::result_descriptor)
@@ -104,8 +103,7 @@ impl PlotOperator for Statistics {
 
                 Ok(initialized_operator.boxed())
             }
-            Vector(vector) => {
-                let initialized_vector = vector.initialize(context).await?;
+            InitializedMultiRasterOrVectorOperator::Vector(initialized_vector) => {
                 let in_descriptor = initialized_vector.result_descriptor();
 
                 let column_names = if self.params.column_names.is_empty() {
@@ -428,7 +426,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap();
 
@@ -494,7 +492,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap();
 
@@ -600,7 +598,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap();
 
@@ -714,7 +712,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap();
 
@@ -825,7 +823,7 @@ mod tests {
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
-        let statistics = statistics.boxed().initialize(&execution_context).await;
+        let statistics = statistics.boxed().initialize(Default::default(), &execution_context).await;
 
         assert!(
             matches!(statistics, Err(error::Error::InvalidOperatorSpec{reason}) if reason == *"Statistics on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all.")
@@ -885,7 +883,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap();
 
@@ -981,7 +979,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap();
 
@@ -1069,7 +1067,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap();
 

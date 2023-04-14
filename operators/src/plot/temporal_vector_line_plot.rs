@@ -1,7 +1,7 @@
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, OperatorName,
     PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, SingleVectorSource,
-    TypedPlotQueryProcessor, VectorQueryProcessor,
+    TypedPlotQueryProcessor, VectorQueryProcessor, InitializedSources, WorkflowOperatorPath,
 };
 use crate::engine::{QueryProcessor, VectorColumnInfo};
 use crate::error;
@@ -53,9 +53,11 @@ pub struct FeatureAttributeValuesOverTimeParams {
 impl PlotOperator for FeatureAttributeValuesOverTime {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
-        let source = self.sources.vector.initialize(context).await?;
+        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let source = initialized_source.vector;
         let result_descriptor = source.result_descriptor();
         let columns: &HashMap<String, VectorColumnInfo> = &result_descriptor.columns;
 
@@ -331,7 +333,7 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
+        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 
@@ -474,7 +476,7 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
+        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 
@@ -605,7 +607,7 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
+        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 

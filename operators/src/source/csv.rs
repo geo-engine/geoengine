@@ -20,7 +20,7 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 
-use crate::engine::QueryProcessor;
+use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::engine::{
     InitializedVectorOperator, OperatorData, OperatorName, QueryContext, SourceOperator,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
@@ -158,6 +158,7 @@ impl OperatorData for CsvSourceParameters {
 impl VectorOperator for CsvSource {
     async fn _initialize(
         self: Box<Self>,
+        _path: WorkflowOperatorPath,
         _context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let initialized_source = InitializedCsvSource {

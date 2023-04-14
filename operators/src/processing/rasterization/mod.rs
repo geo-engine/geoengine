@@ -2,7 +2,7 @@ use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
     QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath, InitializedSources,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
 
@@ -86,9 +86,11 @@ pub struct GridParams {
 impl RasterOperator for Rasterization {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> util::Result<Box<dyn InitializedRasterOperator>> {
-        let vector_source = self.sources.vector.initialize(context).await?;
+        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let vector_source = initialized_source.vector;
         let in_desc = vector_source.result_descriptor();
 
         let tiling_specification = context.tiling_specification();
@@ -590,7 +592,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(Default::default(), &execution_context)
         .await
         .unwrap();
 
@@ -639,7 +641,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(Default::default(), &execution_context)
         .await
         .unwrap();
 
@@ -688,7 +690,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(Default::default(), &execution_context)
         .await
         .unwrap();
 
@@ -737,7 +739,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(Default::default(), &execution_context)
         .await
         .unwrap();
 
@@ -787,7 +789,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(Default::default(), &execution_context)
         .await
         .unwrap();
 
@@ -837,7 +839,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(Default::default(), &execution_context)
         .await
         .unwrap();
 
@@ -880,7 +882,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(Default::default(), &execution_context)
         .await
         .unwrap();
 
@@ -959,7 +961,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(Default::default(), &execution_context)
         .await
         .unwrap();
 

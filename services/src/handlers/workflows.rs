@@ -22,7 +22,7 @@ use geoengine_datatypes::primitives::{
     VectorQueryRectangle,
 };
 use geoengine_operators::call_on_typed_operator;
-use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor};
+use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -131,19 +131,21 @@ async fn register_workflow_handler<C: ApplicationContext>(
 
     // ensure the workflow is valid by initializing it
     let execution_context = ctx.execution_context()?;
+    let workflow_operator_path_root = WorkflowOperatorPath::default();
+
     match workflow.clone().operator {
         TypedOperator::Vector(o) => {
-            o.initialize(&execution_context)
+            o.initialize(workflow_operator_path_root, &execution_context)
                 .await
                 .context(crate::error::Operator)?;
         }
         TypedOperator::Raster(o) => {
-            o.initialize(&execution_context)
+            o.initialize(workflow_operator_path_root, &execution_context)
                 .await
                 .context(crate::error::Operator)?;
         }
         TypedOperator::Plot(o) => {
-            o.initialize(&execution_context)
+            o.initialize(workflow_operator_path_root, &execution_context)
                 .await
                 .context(crate::error::Operator)?;
         }
@@ -222,11 +224,13 @@ async fn workflow_metadata<C: SessionContext>(
     execution_context: C::ExecutionContext,
 ) -> Result<TypedResultDescriptor> {
     // TODO: use cache here
+    let workflow_operator_path_root = WorkflowOperatorPath::default();
+
     let result_descriptor: TypedResultDescriptor = call_on_typed_operator!(
         workflow.operator,
         operator => {
             let operator = operator
-                .initialize(&execution_context).await
+                .initialize(workflow_operator_path_root, &execution_context).await
                 .context(crate::error::Operator)?;
 
             #[allow(clippy::clone_on_copy)]
@@ -1434,7 +1438,7 @@ mod tests {
 
         let exe_ctx = ctx.execution_context().unwrap();
 
-        let o = op.initialize(&exe_ctx).await.unwrap();
+        let o = op.initialize(Default::default(), &exe_ctx).await.unwrap();
 
         let query_ctx = ctx.query_context().unwrap();
         let query_rect = RasterQueryRectangle {

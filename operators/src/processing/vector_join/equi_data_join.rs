@@ -419,12 +419,12 @@ mod tests {
 
         let left = MockFeatureCollectionSource::single(left)
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap();
         let right = MockFeatureCollectionSource::single(right)
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap();
 

@@ -263,7 +263,7 @@ mod tests {
             TilingSpecification::new((0., 0.).into(), [3, 2].into()),
         );
 
-        let raster_source = raster_source.initialize(&execution_context).await.unwrap();
+        let raster_source = raster_source.initialize(Default::default(), &execution_context).await.unwrap();
 
         let points = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -348,7 +348,7 @@ mod tests {
             TilingSpecification::new((0., 0.).into(), [3, 2].into()),
         );
 
-        let raster_source = raster_source.initialize(&execution_context).await.unwrap();
+        let raster_source = raster_source.initialize(Default::default(), &execution_context).await.unwrap();
 
         let points = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -460,7 +460,7 @@ mod tests {
             TilingSpecification::new((0., 0.).into(), [3, 2].into()),
         );
 
-        let raster_source = raster_source.initialize(&execution_context).await.unwrap();
+        let raster_source = raster_source.initialize(Default::default(), &execution_context).await.unwrap();
 
         let points = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -596,7 +596,7 @@ mod tests {
             TilingSpecification::new((0., 0.).into(), [3, 2].into()),
         );
 
-        let raster_source = raster_source.initialize(&execution_context).await.unwrap();
+        let raster_source = raster_source.initialize(Default::default(), &execution_context).await.unwrap();
 
         let polygons = MultiPolygonCollection::from_data(
             vec![MultiPolygon::new(vec![vec![vec![

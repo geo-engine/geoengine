@@ -76,7 +76,7 @@ where
 
         let operator = (self.operator_builder)(self.tiling_spec, self.query_rect);
         let init_start = Instant::now();
-        let initialized_operator = run_time.block_on(async { operator.initialize(&exe_ctx).await });
+        let initialized_operator = run_time.block_on(async { operator.initialize(Default::default(), &exe_ctx).await });
         let init_elapsed = init_start.elapsed();
 
         let initialized_queryprocessor = initialized_operator.unwrap().query_processor().unwrap();

@@ -8,7 +8,7 @@ use geoengine_datatypes::plots::{Histogram2D, HistogramDimension, Plot, PlotData
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, OperatorName,
     PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    SingleVectorSource, TypedPlotQueryProcessor, TypedVectorQueryProcessor,
+    SingleVectorSource, TypedPlotQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath, InitializedSources,
 };
 use crate::error::Error;
 use crate::util::Result;
@@ -51,9 +51,11 @@ pub struct ScatterPlotParams {
 impl PlotOperator for ScatterPlot {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
-        let source = self.sources.vector.initialize(context).await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let source = initialized_sources.vector;
         for cn in [&self.params.column_x, &self.params.column_y] {
             match source.result_descriptor().column_data_type(cn.as_str()) {
                 Some(column) if !column.is_numeric() => {
@@ -353,7 +355,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -430,7 +432,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -482,7 +484,7 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(&execution_context).await;
+        let init = box_plot.boxed().initialize(Default::default(), &execution_context).await;
 
         assert!(init.is_err());
     }
@@ -512,7 +514,7 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(&execution_context).await;
+        let init = box_plot.boxed().initialize(Default::default(), &execution_context).await;
 
         assert!(init.is_err());
     }
@@ -542,7 +544,7 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(&execution_context).await;
+        let init = box_plot.boxed().initialize(Default::default(), &execution_context).await;
 
         assert!(init.is_err());
     }
@@ -572,7 +574,7 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(&execution_context).await;
+        let init = box_plot.boxed().initialize(Default::default(), &execution_context).await;
 
         assert!(init.is_err());
     }
@@ -603,7 +605,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -656,7 +658,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -711,7 +713,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -792,7 +794,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(Default::default(), &execution_context)
             .await
             .unwrap()
             .query_processor()
