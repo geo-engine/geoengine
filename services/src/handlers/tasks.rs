@@ -1,6 +1,6 @@
 use crate::contexts::ApplicationContext;
 use crate::error::Result;
-use crate::tasks::{TaskListOptions, TaskManager};
+use crate::tasks::{TaskListOptions, TaskManager, TaskStatusWithId};
 use crate::util::extractors::ValidatedQuery;
 use crate::{contexts::SessionContext, tasks::TaskId};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
@@ -18,7 +18,7 @@ where
             .service(
                 web::scope("/{task_id}")
                     .service(web::resource("/status").route(web::get().to(status_handler::<C>)))
-                    .service(web::resource("/abort").route(web::get().to(abort_handler::<C>))),
+                    .service(web::resource("").route(web::delete().to(abort_handler::<C>))),
             ),
     );
 }
@@ -80,7 +80,7 @@ async fn status_handler<C: ApplicationContext>(
     get,
     path = "/tasks/list",
     responses(
-        (status = 200, description = "Status of all tasks", body = TaskStatus,
+        (status = 200, description = "Status of all tasks", body = Vec<TaskStatusWithId>,
             example = json!([
                 {
                     "taskId": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
@@ -103,7 +103,7 @@ async fn list_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     task_list_options: ValidatedQuery<TaskListOptions>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<Vec<TaskStatusWithId>>> {
     let task_list_options = task_list_options.into_inner();
 
     let task = app_ctx
@@ -129,10 +129,10 @@ pub struct TaskAbortOptions {
 ///             You can abort a task that is already in the process of aborting.
 #[utoipa::path(
     tag = "Tasks",
-    get,
-    path = "/tasks/{id}/abort",
+    delete,
+    path = "/tasks/{id}",
     responses(
-        (status = 200, description = "Task successfully aborted.")
+        (status = 202, description = "Task will be aborted.")
     ),
     params(
         TaskAbortOptions,
@@ -147,7 +147,7 @@ async fn abort_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     task_id: web::Path<TaskId>,
     options: web::Query<TaskAbortOptions>,
-) -> Result<impl Responder> {
+) -> Result<HttpResponse> {
     let task_id = task_id.into_inner();
 
     app_ctx
@@ -156,7 +156,7 @@ async fn abort_handler<C: ApplicationContext>(
         .abort_tasks(task_id, options.force)
         .await?;
 
-    Ok(HttpResponse::Ok())
+    Ok(HttpResponse::Accepted().finish())
 }
 
 #[cfg(test)]
@@ -480,14 +480,14 @@ mod tests {
 
         // 2. Abort task
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // 3. Wait for abortion to complete
 
@@ -537,14 +537,14 @@ mod tests {
 
         // 2. Abort task
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort?force=true"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}?force=true"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // 3. Wait for abortion to complete
 
@@ -591,21 +591,21 @@ mod tests {
 
         // 2. Abort task
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // do not call `_complete_tx`
 
         // 3. Abort again without force
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -625,14 +625,14 @@ mod tests {
 
         // 5. Abort again with force
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort?force=true"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}?force=true"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // 6. Check abortion status
 

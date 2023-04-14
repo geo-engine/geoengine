@@ -193,7 +193,7 @@ pub enum TaskCleanUpStatus {
     },
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskStatusWithId {
     pub task_id: TaskId,

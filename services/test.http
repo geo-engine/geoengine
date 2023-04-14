@@ -233,22 +233,38 @@ POST http://localhost:3000/task/new/upload/530a6809-34c0-457f-8cb9-52c7b89f1ad6
 ###
 
 # @name lastTask
-PUT http://localhost:3030/ebv/overviews/all
-Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+PUT http://localhost:3030/api/ebv/overviews/all
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Accept: application/json
 
 ###
 
 # @name lastTask
-PUT http://localhost:3030/ebv/overviews/dataset_sm.nc
-Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+PUT http://localhost:3030/api/ebv/overviews/dataset_sm.nc
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Content-Type: application/json
 Accept: application/json
 
 ###
 
-GET http://localhost:3030/tasks/{{lastTask.response.body.$.task_id}}/status
-Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+GET http://localhost:3030/api/tasks/{{lastTask.response.body.$.task_id}}/status
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+
+###
+
+PUT http://localhost:3030/api/ebv/overviews/fernandez_ecostr_id22_20220303_v1.nc
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+Accept: application/json
+
+###
+
+# @name lastTask
+DELETE http://localhost:3030/api/ebv/overviews/fernandez_ecostr_id22_20220303_v1.nc
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+Accept: application/json
+
 
 ###
 
@@ -264,7 +280,7 @@ Accept: application/json
 
 
 # @name anonymousSession
-POST http://localhost:3030/anonymous
+POST http://localhost:3030/api/anonymous
 Content-Type: application/json
 
 
