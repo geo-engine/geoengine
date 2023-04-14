@@ -73,3 +73,19 @@ jobs:
       - name: Push nightly with date
         if: env.TAG_NAME == 'nightly'
         run: podman push geoengine:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine:${{env.FULL_TAG_NAME}}-$(date +'%Y-%m-%d')
+
+  notify-slack-on-failure:
+    name: Post to a Slack channel in case of failure
+    needs: create-container
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Post to a Slack channel
+        if: ${{ needs.create-container.result == 'failure' }}
+        id: slack
+        uses: slackapi/slack-github-action@v1.23.0
+        with:
+          channel-id: "geoengine-dev-core"
+          slack-message: "⚠️ The workflow ${{ github.workflow }} in the repository ${{ github.event.repository.name }} FAILED!"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
