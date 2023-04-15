@@ -6,7 +6,7 @@ use std::{
 };
 use tracing::Span;
 
-use crate::pro::meta::quota::QuotaTracking;
+use crate::{engine::WorkflowOperatorPath, pro::meta::quota::QuotaTracking};
 
 #[pin_project(project = StreamStatisticsAdapterProjection)]
 pub struct StreamStatisticsAdapter<S> {
@@ -16,16 +16,23 @@ pub struct StreamStatisticsAdapter<S> {
     element_count: u64,
     span: Span,
     quota: QuotaTracking,
+    path: WorkflowOperatorPath,
 }
 
 impl<S> StreamStatisticsAdapter<S> {
-    pub fn new(stream: S, span: Span, quota: QuotaTracking) -> StreamStatisticsAdapter<S> {
+    pub fn new(
+        stream: S,
+        span: Span,
+        quota: QuotaTracking,
+        path: WorkflowOperatorPath,
+    ) -> StreamStatisticsAdapter<S> {
         StreamStatisticsAdapter {
             stream,
             poll_next_count: 0,
             element_count: 0,
             span,
             quota,
+            path,
         }
     }
 
@@ -54,7 +61,7 @@ where
 
         let _enter = this.span.enter();
 
-        tracing::trace!(event = "poll_next", poll_next_count = *this.poll_next_count);
+        tracing::trace!(event = "poll_next", poll_next_count = *this.poll_next_count, path=?this.path);
 
         let v = ready!(this.stream.as_mut().poll_next(cx));
         match v {
@@ -64,7 +71,8 @@ where
                     event = "poll_next",
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,
-                    empty = false
+                    empty = false,
+                    path = ?this.path
                 );
 
                 (*this.quota).work_unit_done();
@@ -74,7 +82,8 @@ where
                     event = "poll_next",
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,
-                    empty = true
+                    empty = true,
+                    path = ?this.path
                 );
             }
         }
@@ -107,8 +116,12 @@ mod tests {
         let issuer = Uuid::new_v4();
         let context = ComputationContext::new();
         let quota = QuotaTracking::new(tx, ComputationUnit { issuer, context });
-        let mut v_stat_stream =
-            StreamStatisticsAdapter::new(v_stream, span!(Level::TRACE, "test"), quota);
+        let mut v_stat_stream = StreamStatisticsAdapter::new(
+            v_stream,
+            span!(Level::TRACE, "test"),
+            quota,
+            WorkflowOperatorPath::default(),
+        );
 
         let one = v_stat_stream.next().await;
         assert_eq!(one, Some(1));

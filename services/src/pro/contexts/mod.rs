@@ -11,7 +11,7 @@ use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_operators::engine::{
     CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, MetaData,
-    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
+    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::pro::meta::quota::QuotaCheck;
@@ -98,22 +98,25 @@ where
         &self,
         op: Box<dyn geoengine_operators::engine::InitializedRasterOperator>,
         span: CreateSpan,
+        path: WorkflowOperatorPath,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
-        Box::new(InitializedOperatorWrapper::new(op, span))
+        Box::new(InitializedOperatorWrapper::new(op, span, path))
     }
 
     fn wrap_initialized_vector_operator(
         &self,
         op: Box<dyn InitializedVectorOperator>,
         span: CreateSpan,
+        path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedVectorOperator> {
-        Box::new(InitializedOperatorWrapper::new(op, span))
+        Box::new(InitializedOperatorWrapper::new(op, span, path))
     }
 
     fn wrap_initialized_plot_operator(
         &self,
         op: Box<dyn InitializedPlotOperator>,
         _span: CreateSpan,
+        _path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedPlotOperator> {
         // as plots do not produce a stream of results, we have nothing to count for now
         op

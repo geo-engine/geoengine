@@ -48,9 +48,9 @@ pub trait RasterOperator:
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let span = self.span();
         debug!("Initialize {:?}, path: {:?}", self.typetag_name(), &path);
-        let op = self._initialize(path, context).await?;
+        let op = self._initialize(path.clone(), context).await?;
 
-        Ok(context.wrap_initialized_raster_operator(op, span))
+        Ok(context.wrap_initialized_raster_operator(op, span, path))
     }
 
     /// Wrap a box around a `RasterOperator`
@@ -83,8 +83,8 @@ pub trait VectorOperator:
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let span = self.span();
         debug!("Initialize {:?}, path: {:?}", self.typetag_name(), &path);
-        let op = self._initialize(path, context).await?;
-        Ok(context.wrap_initialized_vector_operator(op, span))
+        let op = self._initialize(path.clone(), context).await?;
+        Ok(context.wrap_initialized_vector_operator(op, span, path))
     }
 
     /// Wrap a box around a `VectorOperator`
@@ -117,8 +117,8 @@ pub trait PlotOperator:
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let span = self.span();
         debug!("Initialize {:?}, path: {:?}", self.typetag_name(), &path);
-        let op = self._initialize(path, context).await?;
-        Ok(context.wrap_initialized_plot_operator(op, span))
+        let op = self._initialize(path.clone(), context).await?;
+        Ok(context.wrap_initialized_plot_operator(op, span, path))
     }
 
     /// Wrap a box around a `PlotOperator`
