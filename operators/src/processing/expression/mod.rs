@@ -1,8 +1,9 @@
 use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser};
 use crate::{
     engine::{
-        ExecutionContext, InitializedRasterOperator, Operator, OperatorData, OperatorName,
-        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor, InitializedSources, WorkflowOperatorPath,
+        ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorData,
+        OperatorName, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        TypedRasterQueryProcessor, WorkflowOperatorPath,
     },
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::Result,
@@ -131,12 +132,12 @@ impl ExpressionSources {
         let (a, b, c, d, e, f, g, h) = try_join!(
             self.a.initialize(path.clone_and_extend(&[0]), context),
             Self::initialize_source(self.b, path.clone_and_extend(&[1]), context),
-            Self::initialize_source(self.c, path.clone_and_extend(&[2]),context),
-            Self::initialize_source(self.d, path.clone_and_extend(&[3]),context),
-            Self::initialize_source(self.e, path.clone_and_extend(&[4]),context),
-            Self::initialize_source(self.f, path.clone_and_extend(&[5]),context),
-            Self::initialize_source(self.g, path.clone_and_extend(&[6]),context),
-            Self::initialize_source(self.h, path.clone_and_extend(&[7]),context),
+            Self::initialize_source(self.c, path.clone_and_extend(&[2]), context),
+            Self::initialize_source(self.d, path.clone_and_extend(&[3]), context),
+            Self::initialize_source(self.e, path.clone_and_extend(&[4]), context),
+            Self::initialize_source(self.f, path.clone_and_extend(&[5]), context),
+            Self::initialize_source(self.g, path.clone_and_extend(&[6]), context),
+            Self::initialize_source(self.h, path.clone_and_extend(&[7]), context),
         )?;
 
         Ok(ExpressionInitializedSources {
@@ -346,7 +347,11 @@ impl ExpressionInitializedSources {
 
 #[async_trait]
 impl InitializedSources<ExpressionInitializedSources> for ExpressionSources {
-    async fn initialize_sources(self, path: WorkflowOperatorPath, context: &dyn ExecutionContext) -> Result<ExpressionInitializedSources> {
+    async fn initialize_sources(
+        self,
+        path: WorkflowOperatorPath,
+        context: &dyn ExecutionContext,
+    ) -> Result<ExpressionInitializedSources> {
         self.initialize(path, context).await
     }
 }

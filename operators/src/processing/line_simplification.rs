@@ -1,8 +1,8 @@
 use crate::{
     engine::{
-        ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
-        QueryProcessor, SingleVectorSource, TypedVectorQueryProcessor, VectorOperator,
-        VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath, InitializedSources,
+        ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorName,
+        QueryContext, QueryProcessor, SingleVectorSource, TypedVectorQueryProcessor,
+        VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
     },
     util::Result,
 };

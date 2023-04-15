@@ -1,16 +1,17 @@
-use crate::engine::{QueryProcessor, WorkflowOperatorPath, InitializedSources, InitializedSingleRasterOrVectorOperator};
+use crate::engine::{
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+};
+use crate::engine::{
+    InitializedSingleRasterOrVectorOperator, InitializedSources, QueryProcessor,
+    WorkflowOperatorPath,
+};
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
 use crate::util::Result;
-use crate::{
-    engine::{
-        ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-        InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-        PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
-        TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    },
-};
 use async_trait::async_trait;
 use float_cmp::approx_eq;
 use futures::stream::BoxStream;
@@ -92,7 +93,6 @@ impl PlotOperator for Histogram {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
-
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
 
         Ok(match initialized_sources.source {
@@ -1148,8 +1148,10 @@ mod tests {
             }),
         );
 
-        if let Err(Error::InvalidOperatorSpec { reason }) =
-            histogram.boxed().initialize(Default::default(), &execution_context).await
+        if let Err(Error::InvalidOperatorSpec { reason }) = histogram
+            .boxed()
+            .initialize(Default::default(), &execution_context)
+            .await
         {
             assert_eq!(reason, "column `featurecla` must be numerical");
         } else {

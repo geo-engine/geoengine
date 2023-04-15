@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
-    QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath, InitializedSources,
+    ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorName,
+    QueryContext, QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::util::input::StringOrNumberRange;

@@ -3,7 +3,7 @@ use crate::{
     engine::{
         ExecutionContext, InitializedVectorOperator, OperatorName, SourceOperator,
         TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-        WorkflowOperatorPath
+        WorkflowOperatorPath,
     },
     util::Result,
 };
@@ -142,7 +142,10 @@ mod tests {
             params: MockPointSourceParams { points },
         }
         .boxed();
-        let initialized = mps.initialize(Default::default(), &execution_context).await.unwrap();
+        let initialized = mps
+            .initialize(Default::default(), &execution_context)
+            .await
+            .unwrap();
 
         let typed_processor = initialized.query_processor();
         let Ok(TypedVectorQueryProcessor::MultiPoint(point_processor)) = typed_processor else { panic!() };

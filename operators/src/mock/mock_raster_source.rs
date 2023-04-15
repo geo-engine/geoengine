@@ -1,7 +1,7 @@
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{
     InitializedRasterOperator, OperatorData, OperatorName, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor, WorkflowOperatorPath
+    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -376,7 +376,10 @@ mod tests {
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
-        let initialized = deserialized.initialize(Default::default(), &execution_context).await.unwrap();
+        let initialized = deserialized
+            .initialize(Default::default(), &execution_context)
+            .await
+            .unwrap();
 
         match initialized.query_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}

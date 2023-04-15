@@ -1,9 +1,9 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
-    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath, InitializedSources,
-    InitializedMultiRasterOrVectorOperator,
+    ExecutionContext, InitializedMultiRasterOrVectorOperator, InitializedPlotOperator,
+    InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
+    MultipleRasterOrSingleVectorSource, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    PlotResultDescriptor, QueryContext, QueryProcessor, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::error::Error;
@@ -70,7 +70,7 @@ impl PlotOperator for Statistics {
                 } else {
                     self.params.column_names.clone()
                 };
-                
+
                 let in_descriptors = rasters
                     .iter()
                     .map(InitializedRasterOperator::result_descriptor)
@@ -823,7 +823,10 @@ mod tests {
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
-        let statistics = statistics.boxed().initialize(Default::default(), &execution_context).await;
+        let statistics = statistics
+            .boxed()
+            .initialize(Default::default(), &execution_context)
+            .await;
 
         assert!(
             matches!(statistics, Err(error::Error::InvalidOperatorSpec{reason}) if reason == *"Statistics on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all.")

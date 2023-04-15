@@ -9,7 +9,8 @@ use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
 use crate::engine::{
-    ExecutionContext, Operator, QueryProcessor, RasterOperator, SingleRasterSource, WorkflowOperatorPath, InitializedSources,
+    ExecutionContext, InitializedSources, Operator, QueryProcessor, RasterOperator,
+    SingleRasterSource, WorkflowOperatorPath,
 };
 use crate::{
     adapters::SubQueryTileAggregator,

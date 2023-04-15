@@ -14,12 +14,12 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::adapters::FeatureCollectionStreamExt;
-use crate::engine::{OperatorName, InitializedSources, WorkflowOperatorPath};
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
     SingleVectorSource, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
+use crate::engine::{InitializedSources, OperatorName, WorkflowOperatorPath};
 use crate::error::{self, Error};
 use crate::processing::circle_merging_quadtree::aggregates::MeanAggregator;
 use crate::processing::circle_merging_quadtree::circle_of_points::CircleOfPoints;

@@ -5,9 +5,9 @@ use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
 use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
 use crate::adapters::RasterSubQueryAdapter;
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
-    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath, InitializedSources,
+    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
+    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -475,7 +475,10 @@ mod tests {
 
         let raster = make_raster();
 
-        let operator = raster.initialize(Default::default(), &exe_ctx).await.unwrap();
+        let operator = raster
+            .initialize(Default::default(), &exe_ctx)
+            .await
+            .unwrap();
 
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 

@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, OperatorName,
-    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, TypedPlotQueryProcessor,
-    TypedVectorQueryProcessor, WorkflowOperatorPath, InitializedSources,
+    ExecutionContext, InitializedPlotOperator, InitializedSources, InitializedVectorOperator,
+    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
+    TypedPlotQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::engine::{QueryProcessor, SingleVectorSource};
 use crate::error::Error;

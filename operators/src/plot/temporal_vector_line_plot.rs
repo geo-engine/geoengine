@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, OperatorName,
-    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, SingleVectorSource,
-    TypedPlotQueryProcessor, VectorQueryProcessor, InitializedSources, WorkflowOperatorPath,
+    ExecutionContext, InitializedPlotOperator, InitializedSources, InitializedVectorOperator,
+    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
+    SingleVectorSource, TypedPlotQueryProcessor, VectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::engine::{QueryProcessor, VectorColumnInfo};
 use crate::error;
@@ -333,7 +333,11 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
+        let operator = operator
+            .boxed()
+            .initialize(Default::default(), &exe_ctc)
+            .await
+            .unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 
@@ -476,7 +480,11 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
+        let operator = operator
+            .boxed()
+            .initialize(Default::default(), &exe_ctc)
+            .await
+            .unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 
@@ -607,7 +615,11 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
+        let operator = operator
+            .boxed()
+            .initialize(Default::default(), &exe_ctc)
+            .await
+            .unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 

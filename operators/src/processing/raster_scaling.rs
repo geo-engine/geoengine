@@ -1,6 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, Operator, OperatorName, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath, InitializedSources,
+    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;

@@ -20,11 +20,11 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 
-use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::engine::{
     InitializedVectorOperator, OperatorData, OperatorName, QueryContext, SourceOperator,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
+use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;

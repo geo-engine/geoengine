@@ -1,7 +1,8 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, Operator, OperatorName,
-    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    RasterQueryProcessor, SingleRasterSource, TypedPlotQueryProcessor, InitializedSources, WorkflowOperatorPath,
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, InitializedSources,
+    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
+    QueryProcessor, RasterQueryProcessor, SingleRasterSource, TypedPlotQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::util::math::average_floor;
 use crate::util::Result;

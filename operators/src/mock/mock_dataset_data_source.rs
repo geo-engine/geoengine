@@ -191,7 +191,10 @@ mod tests {
             params: MockDatasetDataSourceParams { data: id },
         }
         .boxed();
-        let initialized = mps.initialize(Default::default(), &execution_context).await.unwrap();
+        let initialized = mps
+            .initialize(Default::default(), &execution_context)
+            .await
+            .unwrap();
 
         let typed_processor = initialized.query_processor();
         let Ok(TypedVectorQueryProcessor::MultiPoint(point_processor)) = typed_processor else { panic!() };

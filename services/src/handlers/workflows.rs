@@ -22,7 +22,9 @@ use geoengine_datatypes::primitives::{
     VectorQueryRectangle,
 };
 use geoengine_operators::call_on_typed_operator;
-use geoengine_operators::engine::{OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath};
+use geoengine_operators::engine::{
+    OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
+};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 

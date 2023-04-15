@@ -1,8 +1,9 @@
 use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath, InitializedSources,
+    ExecutionContext, InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
+    Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleVectorSource, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
 

@@ -1508,7 +1508,10 @@ mod tests {
         let exe_ctx = ctx.execution_context().unwrap();
         let query_ctx = ctx.query_context().unwrap();
 
-        let initialized_operator = operator.initialize(Default::default(), &exe_ctx).await.unwrap();
+        let initialized_operator = operator
+            .initialize(Default::default(), &exe_ctx)
+            .await
+            .unwrap();
         let query_processor = initialized_operator
             .query_processor()
             .unwrap()

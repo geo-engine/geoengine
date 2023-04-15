@@ -4,9 +4,10 @@ mod non_aggregated;
 mod util;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
-    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath, InitializedSources,
+    ExecutionContext, InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
+    Operator, OperatorName, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor,
+    VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
 use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
@@ -373,7 +374,11 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
+        let operator = operator
+            .boxed()
+            .initialize(Default::default(), &exe_ctc)
+            .await
+            .unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
@@ -442,7 +447,11 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
+        let operator = operator
+            .boxed()
+            .initialize(Default::default(), &exe_ctc)
+            .await
+            .unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
@@ -514,7 +523,11 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(Default::default(), &exe_ctc).await.unwrap();
+        let operator = operator
+            .boxed()
+            .initialize(Default::default(), &exe_ctc)
+            .await
+            .unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 

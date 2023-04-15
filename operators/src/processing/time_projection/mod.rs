@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
-    SingleVectorSource, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath, InitializedSources,
+    ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorName,
+    QueryContext, SingleVectorSource, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;

@@ -1,8 +1,9 @@
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
-    QueryContext, RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    ExecutionContext, InitializedRasterOperator, InitializedSingleRasterOrVectorOperator,
+    InitializedSources, InitializedVectorOperator, Operator, OperatorName, QueryContext,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
     SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath, InitializedSources, InitializedSingleRasterOrVectorOperator,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -168,7 +169,6 @@ impl VectorOperator for TimeShift {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-
         let init_sources = self.sources.initialize_sources(path, context).await?;
 
         match (init_sources.source, self.params) {
@@ -176,7 +176,6 @@ impl VectorOperator for TimeShift {
                 InitializedSingleRasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Relative { granularity, value },
             ) if value.is_positive() => {
-
                 let shift = RelativeForwardShift {
                     step: TimeStep {
                         granularity,
@@ -196,7 +195,6 @@ impl VectorOperator for TimeShift {
                 InitializedSingleRasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Relative { granularity, value },
             ) => {
-
                 let shift = RelativeBackwardShift {
                     step: TimeStep {
                         granularity,
@@ -216,7 +214,6 @@ impl VectorOperator for TimeShift {
                 InitializedSingleRasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Absolute { time_interval },
             ) => {
-
                 let shift = AbsoluteShift { time_interval };
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
@@ -227,7 +224,9 @@ impl VectorOperator for TimeShift {
                     shift,
                 }))
             }
-            (InitializedSingleRasterOrVectorOperator::Raster(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
+            (InitializedSingleRasterOrVectorOperator::Raster(_), _) => {
+                Err(TimeShiftError::UnmatchedOutput.into())
+            }
         }
     }
 
@@ -249,7 +248,6 @@ impl RasterOperator for TimeShift {
                 InitializedSingleRasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Relative { granularity, value },
             ) if value.is_positive() => {
-                
                 let shift = RelativeForwardShift {
                     step: TimeStep {
                         granularity,
@@ -269,7 +267,6 @@ impl RasterOperator for TimeShift {
                 InitializedSingleRasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Relative { granularity, value },
             ) => {
-                
                 let shift = RelativeBackwardShift {
                     step: TimeStep {
                         granularity,
@@ -289,7 +286,6 @@ impl RasterOperator for TimeShift {
                 InitializedSingleRasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Absolute { time_interval },
             ) => {
-
                 let shift = AbsoluteShift { time_interval };
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
@@ -300,7 +296,9 @@ impl RasterOperator for TimeShift {
                     shift,
                 }))
             }
-            (InitializedSingleRasterOrVectorOperator::Vector(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
+            (InitializedSingleRasterOrVectorOperator::Vector(_), _) => {
+                Err(TimeShiftError::UnmatchedOutput.into())
+            }
         }
     }
 

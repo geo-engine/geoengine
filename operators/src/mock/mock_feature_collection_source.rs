@@ -4,7 +4,7 @@ use crate::engine::QueryContext;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName, ResultDescriptor,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;

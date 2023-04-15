@@ -12,10 +12,11 @@ use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
 use geoengine_datatypes::raster::GridOrEmpty;
 
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
-    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath, InitializedSources, InitializedMultiRasterOrVectorOperator,
+    ExecutionContext, InitializedMultiRasterOrVectorOperator, InitializedPlotOperator,
+    InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
+    MultipleRasterOrSingleVectorSource, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    PlotResultDescriptor, QueryContext, QueryProcessor, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
 use crate::util::statistics::PSquareQuantileEstimator;
@@ -76,8 +77,6 @@ impl PlotOperator for BoxPlot {
                     self.params.column_names.clone()
                 };
 
-                
-
                 if raster_sources.len() > 1 {
                     let srs = raster_sources[0].result_descriptor().spatial_reference;
                     ensure!(
@@ -118,7 +117,10 @@ impl PlotOperator for BoxPlot {
                 );
 
                 for cn in &self.params.column_names {
-                    match vector_source.result_descriptor().column_data_type(cn.as_str()) {
+                    match vector_source
+                        .result_descriptor()
+                        .column_data_type(cn.as_str())
+                    {
                         Some(column) if !column.is_numeric() => {
                             return Err(Error::InvalidOperatorSpec {
                                 reason: format!("Column '{cn}' is not numeric."),
@@ -686,7 +688,10 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(Default::default(), &execution_context).await;
+        let init = box_plot
+            .boxed()
+            .initialize(Default::default(), &execution_context)
+            .await;
 
         assert!(init.is_err());
     }
@@ -712,7 +717,10 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(Default::default(), &execution_context).await;
+        let init = box_plot
+            .boxed()
+            .initialize(Default::default(), &execution_context)
+            .await;
 
         assert!(init.is_err());
     }

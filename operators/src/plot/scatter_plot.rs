@@ -6,9 +6,10 @@ use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{Histogram2D, HistogramDimension, Plot, PlotData};
 
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, OperatorName,
-    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    SingleVectorSource, TypedPlotQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath, InitializedSources,
+    ExecutionContext, InitializedPlotOperator, InitializedSources, InitializedVectorOperator,
+    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
+    QueryProcessor, SingleVectorSource, TypedPlotQueryProcessor, TypedVectorQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::error::Error;
 use crate::util::Result;
@@ -484,7 +485,10 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(Default::default(), &execution_context).await;
+        let init = box_plot
+            .boxed()
+            .initialize(Default::default(), &execution_context)
+            .await;
 
         assert!(init.is_err());
     }
@@ -514,7 +518,10 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(Default::default(), &execution_context).await;
+        let init = box_plot
+            .boxed()
+            .initialize(Default::default(), &execution_context)
+            .await;
 
         assert!(init.is_err());
     }
@@ -544,7 +551,10 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(Default::default(), &execution_context).await;
+        let init = box_plot
+            .boxed()
+            .initialize(Default::default(), &execution_context)
+            .await;
 
         assert!(init.is_err());
     }
@@ -574,7 +584,10 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(Default::default(), &execution_context).await;
+        let init = box_plot
+            .boxed()
+            .initialize(Default::default(), &execution_context)
+            .await;
 
         assert!(init.is_err());
     }

@@ -7,10 +7,11 @@ use crate::{
         TileReprojectionSubQuery,
     },
     engine::{
-        ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-        OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+        ExecutionContext, InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
+        Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
         RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath, InitializedSources,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        WorkflowOperatorPath,
     },
     error::{self, Error},
     util::Result,
@@ -197,13 +198,13 @@ impl VectorOperator for Reprojection {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-
-        let vector_source = self.sources.vector().ok_or_else(|| {
-            error::Error::InvalidOperatorType {
-                expected: "Vector".to_owned(),
-                found: "Raster".to_owned(),
-            }
-        })?;
+        let vector_source =
+            self.sources
+                .vector()
+                .ok_or_else(|| error::Error::InvalidOperatorType {
+                    expected: "Vector".to_owned(),
+                    found: "Raster".to_owned(),
+                })?;
 
         let initilaized_source = vector_source.initialize_sources(path, context).await?;
 
@@ -317,12 +318,13 @@ impl RasterOperator for Reprojection {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let raster_source = self.sources.raster().ok_or_else(|| {
-            error::Error::InvalidOperatorType {
-                expected: "Raster".to_owned(),
-                found: "Vector".to_owned(),
-            }
-        })?;
+        let raster_source =
+            self.sources
+                .raster()
+                .ok_or_else(|| error::Error::InvalidOperatorType {
+                    expected: "Raster".to_owned(),
+                    found: "Vector".to_owned(),
+                })?;
 
         let initialized_source = raster_source.initialize_sources(path, context).await?;
 
