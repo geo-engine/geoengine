@@ -12,46 +12,8 @@ use super::{
     ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
     MultipleRasterOrSingleVectorSource, MultipleRasterSources, MultipleVectorSources,
     SingleRasterOrVectorSource, SingleRasterSource, SingleVectorMultipleRasterSources,
-    SingleVectorSource,
+    SingleVectorSource, WorkflowOperatorPath,
 };
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct WorkflowOperatorPath {
-    id: Vec<u8>,
-}
-
-impl WorkflowOperatorPath {
-    pub fn new(id: Vec<u8>) -> Self {
-        Self { id }
-    }
-
-    pub fn inner(self) -> Vec<u8> {
-        self.id
-    }
-
-    #[must_use]
-    pub fn clone_and_extend(&self, suffix: &[u8]) -> Self {
-        let mut id = self.id.clone();
-        id.extend(suffix);
-        Self { id }
-    }
-
-    pub fn starts_with(&self, prefix: &[u8]) -> bool {
-        self.id.starts_with(prefix)
-    }
-}
-
-impl AsRef<[u8]> for WorkflowOperatorPath {
-    fn as_ref(&self) -> &[u8] {
-        &self.id
-    }
-}
-
-impl From<&[u8]> for WorkflowOperatorPath {
-    fn from(id: &[u8]) -> Self {
-        Self { id: id.to_vec() }
-    }
-}
 
 #[async_trait]
 pub trait InitializedSources<Initialized, E = Error> {
@@ -169,10 +131,9 @@ impl InitializedSources<InitializedSingleRasterSource<Box<dyn InitializedRasterO
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<InitializedSingleRasterSource<Box<dyn InitializedRasterOperator>>> {
-        // this is the prefix for the operator
-        let op_prefix = path.clone_and_extend(&[0]);
+        let op_path = path.clone_and_extend(&[0]);
 
-        let op_initialized = self.raster.initialize(op_prefix, context).await?;
+        let op_initialized = self.raster.initialize(op_path, context).await?;
         Ok(InitializedSingleRasterSource {
             raster: op_initialized,
             path,
@@ -189,10 +150,9 @@ impl InitializedSources<InitializedSingleVectorSource<Box<dyn InitializedVectorO
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<InitializedSingleVectorSource<Box<dyn InitializedVectorOperator>>> {
-        // this is the prefix for the operator
-        let op_prefix = path.clone_and_extend(&[0]);
+        let op_path = path.clone_and_extend(&[0]);
 
-        let op_initialized = self.vector.initialize(op_prefix, context).await?;
+        let op_initialized = self.vector.initialize(op_path, context).await?;
         Ok(InitializedSingleVectorSource {
             vector: op_initialized,
             path,
@@ -261,7 +221,6 @@ impl
             Box<dyn InitializedRasterOperator>,
         >,
     > {
-        // this is the prefix for the vector
         let op_path = path.clone_and_extend(&[0]);
         let vector = self.vector.initialize(op_path, context).await?;
 
@@ -300,15 +259,15 @@ impl
             Box<dyn InitializedVectorOperator>,
         >,
     > {
-        let op_prefix = path.clone_and_extend(&[0]);
+        let op_path = path.clone_and_extend(&[0]);
 
         let source = match self.source {
             RasterOrVectorOperator::Raster(raster) => {
-                let raster = raster.initialize(op_prefix, context).await?;
+                let raster = raster.initialize(op_path, context).await?;
                 InitializedSingleRasterOrVectorOperator::Raster(raster)
             }
             RasterOrVectorOperator::Vector(vector) => {
-                let vector = vector.initialize(op_prefix, context).await?;
+                let vector = vector.initialize(op_path, context).await?;
                 InitializedSingleRasterOrVectorOperator::Vector(vector)
             }
         };
@@ -347,9 +306,9 @@ impl
                 InitializedMultiRasterOrVectorOperator::Raster(rasters)
             }
             MultiRasterOrVectorOperator::Vector(vector) => {
-                let op_prefix = path.clone_and_extend(&[0]);
+                let op_path = path.clone_and_extend(&[0]);
 
-                let op_initialized = vector.initialize(op_prefix, context).await?;
+                let op_initialized = vector.initialize(op_path, context).await?;
                 InitializedMultiRasterOrVectorOperator::Vector(op_initialized)
             }
         };
