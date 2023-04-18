@@ -17,7 +17,7 @@ use super::{
 
 #[async_trait]
 pub trait InitializedSources<Initialized, E = Error> {
-    /// Initialize the operator(s) with a prefix
+    /// Initialize the source operator(s) with a path
     async fn initialize_sources(
         self,
         path: WorkflowOperatorPath,
