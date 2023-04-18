@@ -59,7 +59,6 @@ impl OperatorData for PointInPolygonFilterSource {
 struct InitializedPointInPolygonFilterSource {
     points: Box<dyn InitializedVectorOperator>,
     polygons: Box<dyn InitializedVectorOperator>,
-    // path: WorkflowOperatorPath,
 }
 
 #[async_trait]
@@ -75,7 +74,6 @@ impl InitializedSources<InitializedPointInPolygonFilterSource> for PointInPolygo
         Ok(InitializedPointInPolygonFilterSource {
             points: self.points.initialize(points_path, context).await?,
             polygons: self.polygons.initialize(polygons_path, context).await?,
-            // path,
         })
     }
 }
