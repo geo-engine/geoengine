@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 /// A path to an operator within an operator graph (workflow).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WorkflowOperatorPath {
@@ -46,5 +48,35 @@ impl AsRef<[u8]> for WorkflowOperatorPath {
 impl From<&[u8]> for WorkflowOperatorPath {
     fn from(id: &[u8]) -> Self {
         Self { id: id.to_vec() }
+    }
+}
+
+impl Display for WorkflowOperatorPath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let joined_array = self
+            .id
+            .iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        write!(f, "OperatorWorkflowPath: [{}]", joined_array)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display() {
+        let path = WorkflowOperatorPath::initialize_root();
+        assert_eq!(path.to_string(), "OperatorWorkflowPath: []");
+
+        let path = path.clone_and_append(1);
+        assert_eq!(path.to_string(), "OperatorWorkflowPath: [1]");
+
+        let path = path.clone_and_extend(&[2, 3]);
+        assert_eq!(path.to_string(), "OperatorWorkflowPath: [1, 2, 3]");
     }
 }

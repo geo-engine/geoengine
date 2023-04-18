@@ -47,7 +47,7 @@ pub trait RasterOperator:
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let span = self.span();
-        debug!("Initialize {:?}, path: {:?}", self.typetag_name(), &path);
+        debug!("Initialize {}, path: {}", self.typetag_name(), &path);
         let op = self._initialize(path.clone(), context).await?;
 
         Ok(context.wrap_initialized_raster_operator(op, span, path))
