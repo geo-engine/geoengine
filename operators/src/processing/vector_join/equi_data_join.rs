@@ -402,7 +402,9 @@ mod tests {
     };
     use geoengine_datatypes::util::test::TestDefault;
 
-    use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator};
+    use crate::engine::{
+        ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator, WorkflowOperatorPath,
+    };
     use crate::mock::MockFeatureCollectionSource;
 
     use super::*;
@@ -419,12 +421,12 @@ mod tests {
 
         let left = MockFeatureCollectionSource::single(left)
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
         let right = MockFeatureCollectionSource::single(right)
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 

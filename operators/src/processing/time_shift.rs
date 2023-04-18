@@ -634,7 +634,7 @@ mod tests {
         };
 
         let query_processor = VectorOperator::boxed(time_shift)
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -720,7 +720,7 @@ mod tests {
         };
 
         let query_processor = VectorOperator::boxed(time_shift)
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -884,7 +884,7 @@ mod tests {
         let query_context = MockQueryContext::test_default();
 
         let query_processor = RasterOperator::boxed(time_shift)
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1044,7 +1044,7 @@ mod tests {
         let query_context = MockQueryContext::test_default();
 
         let query_processor = RasterOperator::boxed(time_shift)
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1127,7 +1127,7 @@ mod tests {
         .boxed();
 
         let query_processor = expression
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1193,7 +1193,7 @@ mod tests {
         });
 
         let query_processor = shifted_ndvi_source
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()

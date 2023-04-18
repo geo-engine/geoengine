@@ -458,7 +458,7 @@ mod tests {
             sources: SingleRasterSource { raster },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let processor = operator.query_processor()?.get_i8().unwrap();

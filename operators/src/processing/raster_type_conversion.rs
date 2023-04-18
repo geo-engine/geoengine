@@ -202,7 +202,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = op.initialize(Default::default(), &ctx).await.unwrap();
+        let initialized_op = op
+            .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+            .await
+            .unwrap();
 
         let result_descriptor = initialized_op.result_descriptor();
 

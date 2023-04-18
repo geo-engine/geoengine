@@ -6,8 +6,10 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{collections::MultiPointCollection, primitives::TimeInterval};
-use geoengine_operators::engine::{ChunkByteSize, QueryProcessor};
-use geoengine_operators::engine::{MockExecutionContext, MockQueryContext, VectorOperator};
+use geoengine_operators::engine::{
+    ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, VectorOperator,
+    WorkflowOperatorPath,
+};
 use geoengine_operators::mock::MockFeatureCollectionSource;
 use geoengine_operators::processing::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
@@ -30,7 +32,10 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
         },
     }
     .boxed()
-    .initialize(Default::default(), &MockExecutionContext::test_default())
+    .initialize(
+        WorkflowOperatorPath::initialize_root(),
+        &MockExecutionContext::test_default(),
+    )
     .await
     .unwrap();
 

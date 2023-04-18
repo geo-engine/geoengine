@@ -414,7 +414,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -463,7 +466,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -525,7 +531,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -605,7 +614,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -681,7 +693,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await
         .unwrap();
 
@@ -743,7 +758,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await;
 
         assert!(matches!(

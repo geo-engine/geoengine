@@ -140,7 +140,10 @@ mod tests {
         util::test::TestDefault,
     };
     use geoengine_operators::{
-        engine::{ExecutionContext, InitializedVectorOperator, QueryProcessor, VectorOperator},
+        engine::{
+            ExecutionContext, InitializedVectorOperator, QueryProcessor, VectorOperator,
+            WorkflowOperatorPath,
+        },
         source::{OgrSource, OgrSourceParameters},
         util::gdal::create_ndvi_meta_data,
     };
@@ -301,7 +304,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
         .await
         .map_err(Into::into)
     }

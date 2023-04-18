@@ -1840,7 +1840,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -1936,7 +1936,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -2035,7 +2035,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -2185,7 +2185,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -2356,7 +2356,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -3761,7 +3761,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -4009,7 +4009,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4096,7 +4096,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4213,7 +4213,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4336,7 +4336,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4457,7 +4457,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4578,7 +4578,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4695,7 +4695,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4825,7 +4825,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4941,7 +4941,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 

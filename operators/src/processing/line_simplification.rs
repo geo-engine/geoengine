@@ -388,7 +388,10 @@ mod tests {
             .into(),
         }
         .boxed()
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default()
+        )
         .await
         .is_err());
 
@@ -405,7 +408,10 @@ mod tests {
             .into(),
         }
         .boxed()
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default()
+        )
         .await
         .is_err());
 
@@ -422,7 +428,10 @@ mod tests {
             .into(),
         }
         .boxed()
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default()
+        )
         .await
         .is_err());
     }
@@ -461,7 +470,10 @@ mod tests {
         .boxed();
 
         let initialized = simplification
-            .initialize(Default::default(), &MockExecutionContext::test_default())
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default(),
+            )
             .await
             .unwrap();
 
@@ -565,7 +577,7 @@ mod tests {
             .into(),
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 

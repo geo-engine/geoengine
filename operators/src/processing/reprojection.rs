@@ -635,7 +635,10 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -706,7 +709,10 @@ mod tests {
                 source: lines_source.into(),
             },
         })
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -784,7 +790,10 @@ mod tests {
                 source: polygon_source.into(),
             },
         })
-        .initialize(Default::default(), &MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -895,7 +904,7 @@ mod tests {
                 source: mrs1.into(),
             },
         })
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let qp = initialized_operator
@@ -953,7 +962,7 @@ mod tests {
                 source: gdal_op.into(),
             },
         })
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
@@ -1106,7 +1115,7 @@ mod tests {
                 source: gdal_op.into(),
             },
         })
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let x_query_resolution = output_bounds.size_x() / 480.; // since we request x -180 to 180 and y -90 to 90 with 60x60 tiles this will result in 8 x 4 tiles
@@ -1238,7 +1247,7 @@ mod tests {
                 source: gdal_op.into(),
             },
         })
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1306,7 +1315,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1382,7 +1391,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1459,7 +1468,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 

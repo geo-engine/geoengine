@@ -530,7 +530,7 @@ fn gaussian_inverse(x: f64, stddev: f64) -> f64 {
 mod tests {
     use crate::engine::{
         InitializedRasterOperator, MockExecutionContext, MockQueryContext, QueryProcessor,
-        RasterOperator, SingleVectorSource, VectorOperator,
+        RasterOperator, SingleVectorSource, VectorOperator, WorkflowOperatorPath,
     };
     use crate::mock::{MockPointSource, MockPointSourceParams};
     use crate::processing::rasterization::GridSizeMode::{Fixed, Relative};
@@ -593,7 +593,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -642,7 +642,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -691,7 +691,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -740,7 +740,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -790,7 +790,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -840,7 +840,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -883,7 +883,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -962,7 +962,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 

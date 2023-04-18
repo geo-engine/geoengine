@@ -1440,7 +1440,10 @@ mod tests {
 
         let exe_ctx = ctx.execution_context().unwrap();
 
-        let o = op.initialize(Default::default(), &exe_ctx).await.unwrap();
+        let o = op
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
 
         let query_ctx = ctx.query_context().unwrap();
         let query_rect = RasterQueryRectangle {

@@ -445,7 +445,7 @@ mod tests {
 
         assert!(histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .is_err());
     }
@@ -505,7 +505,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -589,7 +589,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -673,7 +673,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -820,7 +820,7 @@ mod tests {
 
         if let Err(Error::InvalidOperatorSpec { reason }) = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
         {
             assert_eq!(reason, "column `featurecla` must be numerical");
@@ -874,7 +874,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -935,7 +935,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -997,7 +997,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1073,7 +1073,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()

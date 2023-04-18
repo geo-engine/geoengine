@@ -1509,7 +1509,7 @@ mod tests {
         let query_ctx = ctx.query_context().unwrap();
 
         let initialized_operator = operator
-            .initialize(Default::default(), &exe_ctx)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
         let query_processor = initialized_operator

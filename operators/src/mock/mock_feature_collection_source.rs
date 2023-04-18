@@ -355,7 +355,10 @@ mod tests {
         let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
         let source = source
-            .initialize(Default::default(), &MockExecutionContext::test_default())
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default(),
+            )
             .await
             .unwrap();
 

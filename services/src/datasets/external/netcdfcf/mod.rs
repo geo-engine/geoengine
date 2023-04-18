@@ -2280,7 +2280,7 @@ mod tests {
         let execution_context = ctx.execution_context().unwrap();
 
         let initialized_operator = operator
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 

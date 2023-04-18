@@ -572,7 +572,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -638,7 +638,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -690,7 +690,7 @@ mod tests {
 
         let init = box_plot
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await;
 
         assert!(init.is_err());
@@ -719,7 +719,7 @@ mod tests {
 
         let init = box_plot
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await;
 
         assert!(init.is_err());
@@ -747,7 +747,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -798,7 +798,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -851,7 +851,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -929,7 +929,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -997,7 +997,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1065,7 +1065,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1130,7 +1130,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1211,7 +1211,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1284,7 +1284,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1369,7 +1369,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()

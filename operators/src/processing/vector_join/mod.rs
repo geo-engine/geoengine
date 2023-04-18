@@ -341,7 +341,10 @@ mod tests {
 
         operator
             .boxed()
-            .initialize(Default::default(), &MockExecutionContext::test_default())
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default(),
+            )
             .await
             .unwrap();
     }
@@ -381,7 +384,7 @@ mod tests {
         assert!(matches!(
             operator
                 .boxed()
-                .initialize(Default::default(), &MockExecutionContext::test_default())
+                .initialize(WorkflowOperatorPath::initialize_root(), &MockExecutionContext::test_default())
                 .await,
             Err(error::Error::ColumnDoesNotExist { column }) if column == "foo"
         ));

@@ -296,6 +296,12 @@ impl
         >,
     > {
         let source = match self.source {
+            MultiRasterOrVectorOperator::Vector(vector) => {
+                let op_path = path.clone_and_extend(&[0]);
+
+                let op_initialized = vector.initialize(op_path, context).await?;
+                InitializedMultiRasterOrVectorOperator::Vector(op_initialized)
+            }
             MultiRasterOrVectorOperator::Raster(r) => {
                 let rasters =
                     futures::future::try_join_all(r.into_iter().enumerate().map(|(i, op)| {
@@ -304,12 +310,6 @@ impl
                     .await?;
 
                 InitializedMultiRasterOrVectorOperator::Raster(rasters)
-            }
-            MultiRasterOrVectorOperator::Vector(vector) => {
-                let op_path = path.clone_and_extend(&[0]);
-
-                let op_initialized = vector.initialize(op_path, context).await?;
-                InitializedMultiRasterOrVectorOperator::Vector(op_initialized)
             }
         };
 

@@ -1176,7 +1176,10 @@ mod tests {
         let spatial_resolution =
             SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
 
-        let o = op.initialize(Default::default(), exe_ctx).await.unwrap();
+        let o = op
+            .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+            .await
+            .unwrap();
 
         o.query_processor()
             .unwrap()

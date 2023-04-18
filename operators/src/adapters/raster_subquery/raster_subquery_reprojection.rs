@@ -361,7 +361,10 @@ mod tests {
 
     use crate::{
         adapters::RasterSubQueryAdapter,
-        engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor},
+        engine::{
+            MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
+            WorkflowOperatorPath,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -435,7 +438,10 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
         let tiling_strat = exe_ctx.tiling_specification;
 
-        let op = mrs1.initialize(Default::default(), &exe_ctx).await.unwrap();
+        let op = mrs1
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
 
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 

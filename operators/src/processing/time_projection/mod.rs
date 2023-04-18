@@ -438,7 +438,7 @@ mod tests {
 
         let query_processor = time_projection
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -540,7 +540,7 @@ mod tests {
 
         let query_processor = time_projection
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()

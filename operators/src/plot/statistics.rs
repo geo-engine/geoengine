@@ -426,7 +426,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -492,7 +492,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -598,7 +598,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -712,7 +712,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -825,7 +825,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await;
 
         assert!(
@@ -886,7 +886,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -982,7 +982,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -1070,7 +1070,7 @@ mod tests {
 
         let statistics = statistics
             .boxed()
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 

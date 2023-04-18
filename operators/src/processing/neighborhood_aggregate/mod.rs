@@ -423,7 +423,7 @@ mod tests {
             sources: SingleRasterSource { raster },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -476,7 +476,7 @@ mod tests {
         let raster = make_raster();
 
         let operator = raster
-            .initialize(Default::default(), &exe_ctx)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -645,7 +645,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -714,7 +714,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(Default::default(), &exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 

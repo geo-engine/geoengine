@@ -131,7 +131,7 @@ mod tests {
 
     use crate::engine::{
         MockExecutionContext, MockQueryContext, QueryProcessor, TypedVectorQueryProcessor,
-        VectorOperator,
+        VectorOperator, WorkflowOperatorPath,
     };
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
@@ -160,7 +160,10 @@ mod tests {
 
         let source = source
             .boxed()
-            .initialize(Default::default(), &MockExecutionContext::test_default())
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default(),
+            )
             .await
             .unwrap();
 
@@ -227,7 +230,10 @@ mod tests {
     async fn empty() {
         let source = MockFeatureCollectionSource::single(DataCollection::empty())
             .boxed()
-            .initialize(Default::default(), &MockExecutionContext::test_default())
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default(),
+            )
             .await
             .unwrap();
 

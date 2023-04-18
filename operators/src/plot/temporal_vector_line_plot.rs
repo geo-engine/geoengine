@@ -335,7 +335,7 @@ mod tests {
 
         let operator = operator
             .boxed()
-            .initialize(Default::default(), &exe_ctc)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
 
@@ -482,7 +482,7 @@ mod tests {
 
         let operator = operator
             .boxed()
-            .initialize(Default::default(), &exe_ctc)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
 
@@ -617,7 +617,7 @@ mod tests {
 
         let operator = operator
             .boxed()
-            .initialize(Default::default(), &exe_ctc)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
 

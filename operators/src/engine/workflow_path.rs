@@ -4,8 +4,8 @@ pub struct WorkflowOperatorPath {
 }
 
 impl WorkflowOperatorPath {
-    pub fn new(id: Vec<u8>) -> Self {
-        Self { id }
+    pub fn initialize_root() -> Self {
+        Self { id: Vec::new() }
     }
 
     pub fn inner(self) -> Vec<u8> {

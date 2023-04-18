@@ -377,7 +377,7 @@ mod tests {
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let initialized = deserialized
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -446,7 +446,7 @@ mod tests {
         );
 
         let query_processor = raster_source
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()

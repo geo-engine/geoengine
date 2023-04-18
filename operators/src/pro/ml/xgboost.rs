@@ -568,7 +568,7 @@ mod tests {
             .expect("The model file should be available.");
 
         let op = RasterOperator::boxed(xg)
-            .initialize(Default::default(), &exe_ctx)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -878,7 +878,7 @@ mod tests {
             .expect("The model file should be available.");
 
         let op = RasterOperator::boxed(xg)
-            .initialize(Default::default(), &exe_ctx)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 

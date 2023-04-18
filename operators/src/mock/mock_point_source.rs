@@ -143,7 +143,7 @@ mod tests {
         }
         .boxed();
         let initialized = mps
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 

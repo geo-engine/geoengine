@@ -215,7 +215,9 @@ where
 mod tests {
     use super::*;
 
-    use crate::engine::{ChunkByteSize, MockExecutionContext, RasterResultDescriptor};
+    use crate::engine::{
+        ChunkByteSize, MockExecutionContext, RasterResultDescriptor, WorkflowOperatorPath,
+    };
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::collections::{MultiPointCollection, MultiPolygonCollection};
@@ -264,7 +266,7 @@ mod tests {
         );
 
         let raster_source = raster_source
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -352,7 +354,7 @@ mod tests {
         );
 
         let raster_source = raster_source
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -467,7 +469,7 @@ mod tests {
         );
 
         let raster_source = raster_source
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -606,7 +608,7 @@ mod tests {
         );
 
         let raster_source = raster_source
-            .initialize(Default::default(), &execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
