@@ -384,7 +384,9 @@ mod tests {
     };
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_operators::engine::{MetaData, MetaDataProvider, RasterOperator};
+    use geoengine_operators::engine::{
+        MetaData, MetaDataProvider, RasterOperator, WorkflowOperatorPath,
+    };
     use serial_test::serial;
     use std::io::Write;
     use std::io::{Cursor, Read};

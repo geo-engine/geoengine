@@ -368,7 +368,7 @@ where
 mod tests {
     use crate::engine::{
         MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
-        RasterOperator, RasterResultDescriptor,
+        RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
 

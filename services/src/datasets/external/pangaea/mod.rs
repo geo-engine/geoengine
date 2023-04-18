@@ -227,6 +227,7 @@ mod tests {
     use geoengine_operators::engine::{
         InitializedVectorOperator, MetaData, MockExecutionContext, MockQueryContext,
         QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
+        WorkflowOperatorPath,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
     use httptest::{

@@ -925,10 +925,9 @@ mod tests {
         BoundingBox2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_operators::engine::VectorOperator;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MockExecutionContext, MockQueryContext, QueryProcessor,
-        TypedVectorQueryProcessor, VectorResultDescriptor,
+        TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
     use httptest::responders::status_code;
