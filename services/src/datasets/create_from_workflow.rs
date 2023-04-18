@@ -72,7 +72,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
 
         let execution_context = self.ctx.execution_context()?;
 
-        let workflow_operator_path_root = WorkflowOperatorPath::default();
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
         let initialized = operator
             .initialize(workflow_operator_path_root, &execution_context)

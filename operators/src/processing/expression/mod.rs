@@ -130,14 +130,14 @@ impl ExpressionSources {
         }
 
         let (a, b, c, d, e, f, g, h) = try_join!(
-            self.a.initialize(path.clone_and_extend(&[0]), context),
-            Self::initialize_source(self.b, path.clone_and_extend(&[1]), context),
-            Self::initialize_source(self.c, path.clone_and_extend(&[2]), context),
-            Self::initialize_source(self.d, path.clone_and_extend(&[3]), context),
-            Self::initialize_source(self.e, path.clone_and_extend(&[4]), context),
-            Self::initialize_source(self.f, path.clone_and_extend(&[5]), context),
-            Self::initialize_source(self.g, path.clone_and_extend(&[6]), context),
-            Self::initialize_source(self.h, path.clone_and_extend(&[7]), context),
+            self.a.initialize(path.clone_and_append(0), context),
+            Self::initialize_source(self.b, path.clone_and_append(1), context),
+            Self::initialize_source(self.c, path.clone_and_append(2), context),
+            Self::initialize_source(self.d, path.clone_and_append(3), context),
+            Self::initialize_source(self.e, path.clone_and_append(4), context),
+            Self::initialize_source(self.f, path.clone_and_append(5), context),
+            Self::initialize_source(self.g, path.clone_and_append(6), context),
+            Self::initialize_source(self.h, path.clone_and_append(7), context),
         )?;
 
         Ok(ExpressionInitializedSources {

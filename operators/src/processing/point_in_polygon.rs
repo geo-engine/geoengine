@@ -69,8 +69,8 @@ impl InitializedSources<InitializedPointInPolygonFilterSource> for PointInPolygo
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<InitializedPointInPolygonFilterSource> {
-        let points_path = path.clone_and_extend(&[0]);
-        let polygons_path = path.clone_and_extend(&[1]);
+        let points_path = path.clone_and_append(0);
+        let polygons_path = path.clone_and_append(1);
 
         Ok(InitializedPointInPolygonFilterSource {
             points: self.points.initialize(points_path, context).await?,

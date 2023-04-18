@@ -65,11 +65,11 @@ impl InitializedSources<InitializedVectorJoinSources> for VectorJoinSources {
         Ok(InitializedVectorJoinSources {
             left: self
                 .left
-                .initialize(path.clone_and_extend(&[0]), context)
+                .initialize(path.clone_and_append(0), context)
                 .await?,
             right: self
                 .right
-                .initialize(path.clone_and_extend(&[1]), context)
+                .initialize(path.clone_and_append(1), context)
                 .await?,
             // path,
         })

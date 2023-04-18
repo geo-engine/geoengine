@@ -120,7 +120,7 @@ mod tests {
             v_stream,
             span!(Level::TRACE, "test"),
             quota,
-            WorkflowOperatorPath::default(),
+            WorkflowOperatorPath::initialize_root(),
         );
 
         let one = v_stat_stream.next().await;

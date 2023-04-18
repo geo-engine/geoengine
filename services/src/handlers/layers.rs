@@ -598,7 +598,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let execution_context = ctx.execution_context()?;
 
-    let workflow_operator_path_root = WorkflowOperatorPath::default();
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let raster_operator = layer
         .workflow
