@@ -154,7 +154,11 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let qc = self.inc_query_count() + 1;
 
-        tracing::debug!(event = "query", query_count = qc, path = ?self.path);
+        tracing::trace!(
+            event = "query",
+            query_count = qc,
+            path = self.path.to_string()
+        );
 
         let quota_checker = ctx
             .extensions()
@@ -173,7 +177,6 @@ where
         let span = (self.span)();
         let _enter = span.enter();
 
-        tracing::trace!(event = "query", path = ?self.path);
         let stream_result = self.processor.query(query, ctx).await;
         tracing::debug!(event = "query ready");
 
