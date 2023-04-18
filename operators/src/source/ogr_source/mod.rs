@@ -355,7 +355,7 @@ impl VectorOperator for OgrSource {
     ) -> Result<Box<dyn crate::engine::InitializedVectorOperator>> {
         // TODO: check rename of fields are valid
 
-        debug!("Initializing OgrSource with prefix: {:?}", path);
+        debug!("Initializing OgrSource with path: {:?}", path);
 
         let info: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,

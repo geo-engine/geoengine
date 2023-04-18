@@ -745,7 +745,7 @@ impl RasterOperator for GdalSource {
         let meta_data: GdalMetaData = context.meta_data(&self.params.data).await?;
 
         debug!("Initializing GdalSource for {:?}.", &self.params.data);
-        debug!("GdalSource prefix: {:?}", path);
+        debug!("GdalSource path: {:?}", path);
 
         let op = InitializedGdalSourceOperator {
             result_descriptor: meta_data.result_descriptor().await?,
