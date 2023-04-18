@@ -53,14 +53,18 @@ impl From<&[u8]> for WorkflowOperatorPath {
 
 impl Display for WorkflowOperatorPath {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let joined_array = self
-            .id
-            .iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>()
-            .join(", ");
+        let sep = ", ";
 
-        write!(f, "OperatorWorkflowPath: [{}]", joined_array)
+        write!(f, "OperatorWorkflowPath: [")?;
+
+        for (i, id) in self.id.iter().enumerate() {
+            if i > 0 {
+                write!(f, "{sep}")?;
+            }
+            write!(f, "{id}")?;
+        }
+
+        write!(f, "]")
     }
 }
 
@@ -69,7 +73,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_display() {
+    fn test() {
         let path = WorkflowOperatorPath::initialize_root();
         assert_eq!(path.to_string(), "OperatorWorkflowPath: []");
 
