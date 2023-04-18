@@ -114,7 +114,7 @@ async fn get_plot_handler<C: ApplicationContext>(
 
     let execution_context = ctx.execution_context()?;
 
-    let workflow_operator_path_root = WorkflowOperatorPath::default();
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let initialized = operator
         .initialize(workflow_operator_path_root, &execution_context)

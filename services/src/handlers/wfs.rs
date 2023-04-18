@@ -183,7 +183,7 @@ where
     let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context()?;
-    let workflow_operator_path_root = WorkflowOperatorPath::default();
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let operator = workflow
         .operator
@@ -461,7 +461,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
     let execution_context = ctx.execution_context()?;
-    let workflow_operator_path_root = WorkflowOperatorPath::default();
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let initialized = operator
         .clone()

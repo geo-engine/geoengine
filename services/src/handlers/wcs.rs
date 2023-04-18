@@ -208,7 +208,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
 
     let exe_ctx = ctx.execution_context()?;
 
-    let workflow_operator_path_root = WorkflowOperatorPath::default();
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let operator = workflow
         .operator
@@ -367,7 +367,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
 
     let execution_context = ctx.execution_context()?;
 
-    let workflow_operator_path_root = WorkflowOperatorPath::default();
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let initialized = operator
         .clone()

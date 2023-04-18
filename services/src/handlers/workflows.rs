@@ -133,7 +133,7 @@ async fn register_workflow_handler<C: ApplicationContext>(
 
     // ensure the workflow is valid by initializing it
     let execution_context = ctx.execution_context()?;
-    let workflow_operator_path_root = WorkflowOperatorPath::default();
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     match workflow.clone().operator {
         TypedOperator::Vector(o) => {
@@ -226,7 +226,7 @@ async fn workflow_metadata<C: SessionContext>(
     execution_context: C::ExecutionContext,
 ) -> Result<TypedResultDescriptor> {
     // TODO: use cache here
-    let workflow_operator_path_root = WorkflowOperatorPath::default();
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let result_descriptor: TypedResultDescriptor = call_on_typed_operator!(
         workflow.operator,

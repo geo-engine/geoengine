@@ -68,7 +68,7 @@ impl VectorWebsocketStreamHandler {
         execution_ctx: C::ExecutionContext,
         mut query_ctx: C::QueryContext,
     ) -> Result<Self> {
-        let workflow_operator_path_root = WorkflowOperatorPath::default();
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
         let initialized_operator = vector_operator
             .initialize(workflow_operator_path_root, &execution_ctx)
