@@ -756,20 +756,24 @@ mod tests {
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
-        SpatialResolution, TimeInterval, VectorQueryRectangle,
+        RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
+        TimeStep, VectorQueryRectangle,
     };
+    use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
-        StaticMetaData, TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
-        VectorResultDescriptor,
+        RasterResultDescriptor, StaticMetaData, TypedOperator, TypedResultDescriptor,
+        VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{
-        CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset,
+        CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
+        GdalDatasetParameters, GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular,
+        GdalMetaDataStatic, GdalMetadataNetCdfCf, OgrSourceColumnSpec, OgrSourceDataset,
         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
     };
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
@@ -1932,6 +1936,173 @@ let ctx = app_ctx.session_context(session);
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
             > = db2.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_loads_all_meta_data_types() {
+        with_temp_context(|app_ctx, _| async move {
+            let session = app_ctx.create_anonymous_session().await.unwrap();
+
+            let db = app_ctx.session_context(session.clone()).db();
+
+            let vector_descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+                time: None,
+                bbox: None,
+            };
+
+            let raster_descriptor = RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                measurement: Default::default(),
+                time: None,
+                bbox: None,
+                resolution: None,
+            };
+
+            let vector_ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let raster_ds = AddDataset {
+                id: None,
+                name: "GdalDataset".to_string(),
+                description: "My Gdal dataset".to_string(),
+                source_operator: "GdalSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let gdal_params = GdalDatasetParameters {
+                file_path: Default::default(),
+                rasterband_channel: 0,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: Default::default(),
+                    x_pixel_size: 0.0,
+                    y_pixel_size: 0.0,
+                },
+                width: 0,
+                height: 0,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+                allow_alphaband_as_mask: false,
+                retry: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: String::new(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: vector_descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = db.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let id = db.add_dataset(vector_ds, meta).await.unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+            > = db.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+
+            let meta = GdalMetaDataRegular {
+                result_descriptor: raster_descriptor.clone(),
+                params: gdal_params.clone(),
+                time_placeholders: Default::default(),
+                data_time: Default::default(),
+                step: TimeStep {
+                    granularity: TimeGranularity::Millis,
+                    step: 0,
+                },
+            };
+
+            let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataRegular(meta));
+
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+            > = db.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+
+            let meta = GdalMetaDataStatic {
+                time: None,
+                params: gdal_params.clone(),
+                result_descriptor: raster_descriptor.clone(),
+            };
+
+            let meta = db.wrap_meta_data(MetaDataDefinition::GdalStatic(meta));
+
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+            > = db.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+
+            let meta = GdalMetaDataList {
+                result_descriptor: raster_descriptor.clone(),
+                params: vec![],
+            };
+
+            let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataList(meta));
+
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+            > = db.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+
+            let meta = GdalMetadataNetCdfCf {
+                result_descriptor: raster_descriptor.clone(),
+                params: gdal_params.clone(),
+                start: TimeInstance::MIN,
+                end: TimeInstance::MAX,
+                step: TimeStep {
+                    granularity: TimeGranularity::Millis,
+                    step: 0,
+                },
+                band_offset: 0,
+            };
+
+            let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetadataNetCdfCf(meta));
+
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+            > = db.meta_data(&id.into()).await;
 
             assert!(meta.is_ok());
         })
