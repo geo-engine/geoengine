@@ -4,10 +4,9 @@ mod non_aggregated;
 mod util;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
-    Operator, OperatorName, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor,
-    VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-    WorkflowOperatorPath,
+    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
+    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
 use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
@@ -94,10 +93,12 @@ impl VectorOperator for RasterVectorJoin {
             }
         );
 
-        // TODO: how to check the vector source? bevor init of the other sources?
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let vector_source = self
+            .sources
+            .vector
+            .initialize(path.clone_and_append(0), context)
+            .await?;
 
-        let vector_source = initialized_sources.vector;
         let vector_rd = vector_source.result_descriptor();
 
         ensure!(
@@ -113,7 +114,14 @@ impl VectorOperator for RasterVectorJoin {
             },
         );
 
-        let raster_sources = initialized_sources.rasters;
+        let raster_sources = futures::future::try_join_all(
+            self.sources
+                .rasters
+                .into_iter()
+                .enumerate()
+                .map(|(i, op)| op.initialize(path.clone_and_append(i as u8 + 1), context)),
+        )
+        .await?;
 
         let spatial_reference = vector_rd.spatial_reference;
 

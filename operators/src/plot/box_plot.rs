@@ -12,13 +12,14 @@ use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
 use geoengine_datatypes::raster::GridOrEmpty;
 
 use crate::engine::{
-    ExecutionContext, InitializedMultiRasterOrVectorOperator, InitializedPlotOperator,
-    InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
-    MultipleRasterOrSingleVectorSource, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, QueryProcessor, TypedPlotQueryProcessor,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
+    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
+use crate::util::input::MultiRasterOrVectorOperator;
 use crate::util::statistics::PSquareQuantileEstimator;
 use crate::util::Result;
 use snafu::ensure;
@@ -52,10 +53,8 @@ impl PlotOperator for BoxPlot {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
-
-        match initialized_sources.source {
-            InitializedMultiRasterOrVectorOperator::Raster(raster_sources) => {
+        match self.sources.source {
+            MultiRasterOrVectorOperator::Raster(raster_sources) => {
                 ensure!(
                     (1..=MAX_NUMBER_OF_RASTER_INPUTS).contains(&raster_sources.len()),
                     error::InvalidNumberOfRasterInputs {
@@ -68,6 +67,14 @@ impl PlotOperator for BoxPlot {
                         reason: "BoxPlot on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all."
                             .to_string(),
                 });
+
+                let raster_sources = futures::future::try_join_all(
+                    raster_sources
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, op)| op.initialize(path.clone_and_append(i as u8), context)),
+                )
+                .await?;
 
                 let output_names = if self.params.column_names.is_empty() {
                     (1..=raster_sources.len())
@@ -108,13 +115,17 @@ impl PlotOperator for BoxPlot {
                 )
                 .boxed())
             }
-            InitializedMultiRasterOrVectorOperator::Vector(vector_source) => {
+            MultiRasterOrVectorOperator::Vector(vector_source) => {
                 ensure!( !self.params.column_names.is_empty(),
                     error::InvalidOperatorSpec {
                         reason: "BoxPlot on vector data requires the selection of at least one numeric column ('column_names' parameter)."
                             .to_string(),
                     }
                 );
+
+                let vector_source = vector_source
+                    .initialize(path.clone_and_append(0), context)
+                    .await?;
 
                 for cn in &self.params.column_names {
                     match vector_source

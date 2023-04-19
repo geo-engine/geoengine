@@ -4,13 +4,11 @@ use crate::engine::{
     PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
-use crate::engine::{
-    InitializedSingleRasterOrVectorOperator, InitializedSources, QueryProcessor,
-    WorkflowOperatorPath,
-};
+use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
+use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
 use async_trait::async_trait;
 use float_cmp::approx_eq;
@@ -93,10 +91,8 @@ impl PlotOperator for Histogram {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
-
-        Ok(match initialized_sources.source {
-            InitializedSingleRasterOrVectorOperator::Raster(raster_source) => {
+        Ok(match self.sources.source {
+            RasterOrVectorOperator::Raster(raster_source) => {
                 ensure!(
                     self.params.column_name.is_none(),
                     error::InvalidOperatorSpec {
@@ -104,6 +100,10 @@ impl PlotOperator for Histogram {
                             .to_string(),
                     }
                 );
+
+                let raster_source = raster_source
+                    .initialize(path.clone_and_append(0), context)
+                    .await?;
 
                 let in_desc = raster_source.result_descriptor();
                 InitializedHistogram::new(
@@ -120,7 +120,7 @@ impl PlotOperator for Histogram {
                 )
                 .boxed()
             }
-            InitializedSingleRasterOrVectorOperator::Vector(vector_source) => {
+            RasterOrVectorOperator::Vector(vector_source) => {
                 let column_name =
                     self.params
                         .column_name
@@ -129,6 +129,10 @@ impl PlotOperator for Histogram {
                             reason: "Histogram on vector input is missing `columnName` field"
                                 .to_string(),
                         })?;
+
+                let vector_source = vector_source
+                    .initialize(path.clone_and_append(0), context)
+                    .await?;
 
                 match vector_source
                     .result_descriptor()
