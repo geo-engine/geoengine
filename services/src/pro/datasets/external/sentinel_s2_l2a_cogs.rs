@@ -746,7 +746,10 @@ mod tests {
         util::{gdal::hide_gdal_errors, test::TestDefault, Identifier},
     };
     use geoengine_operators::{
-        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator},
+        engine::{
+            ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
+            WorkflowOperatorPath,
+        },
         source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     };
     use httptest::{
@@ -879,7 +882,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe)
         .await
         .unwrap();
 
@@ -1243,7 +1246,7 @@ mod tests {
             params: GdalSourceParameters { data: id },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap()
         .query_processor()

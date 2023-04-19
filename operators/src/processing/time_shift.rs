@@ -1,10 +1,10 @@
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
-    QueryContext, RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    ExecutionContext, InitializedRasterOperator, InitializedSingleRasterOrVectorOperator,
+    InitializedSources, InitializedVectorOperator, Operator, OperatorName, QueryContext,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
     SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
-use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -166,15 +166,16 @@ pub enum TimeShiftError {
 impl VectorOperator for TimeShift {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        match (self.sources.source, self.params) {
+        let init_sources = self.sources.initialize_sources(path, context).await?;
+
+        match (init_sources.source, self.params) {
             (
-                RasterOrVectorOperator::Vector(source),
+                InitializedSingleRasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Relative { granularity, value },
             ) if value.is_positive() => {
-                let source = source.initialize(context).await?;
-
                 let shift = RelativeForwardShift {
                     step: TimeStep {
                         granularity,
@@ -191,11 +192,9 @@ impl VectorOperator for TimeShift {
                 }))
             }
             (
-                RasterOrVectorOperator::Vector(source),
+                InitializedSingleRasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Relative { granularity, value },
             ) => {
-                let source = source.initialize(context).await?;
-
                 let shift = RelativeBackwardShift {
                     step: TimeStep {
                         granularity,
@@ -212,11 +211,9 @@ impl VectorOperator for TimeShift {
                 }))
             }
             (
-                RasterOrVectorOperator::Vector(source),
+                InitializedSingleRasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Absolute { time_interval },
             ) => {
-                let source = source.initialize(context).await?;
-
                 let shift = AbsoluteShift { time_interval };
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
@@ -227,7 +224,9 @@ impl VectorOperator for TimeShift {
                     shift,
                 }))
             }
-            (RasterOrVectorOperator::Raster(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
+            (InitializedSingleRasterOrVectorOperator::Raster(_), _) => {
+                Err(TimeShiftError::UnmatchedOutput.into())
+            }
         }
     }
 
@@ -239,15 +238,16 @@ impl VectorOperator for TimeShift {
 impl RasterOperator for TimeShift {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        match (self.sources.source, self.params) {
+        let init_sources = self.sources.initialize_sources(path, context).await?;
+
+        match (init_sources.source, self.params) {
             (
-                RasterOrVectorOperator::Raster(source),
+                InitializedSingleRasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Relative { granularity, value },
             ) if value.is_positive() => {
-                let source = source.initialize(context).await?;
-
                 let shift = RelativeForwardShift {
                     step: TimeStep {
                         granularity,
@@ -264,11 +264,9 @@ impl RasterOperator for TimeShift {
                 }))
             }
             (
-                RasterOrVectorOperator::Raster(source),
+                InitializedSingleRasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Relative { granularity, value },
             ) => {
-                let source = source.initialize(context).await?;
-
                 let shift = RelativeBackwardShift {
                     step: TimeStep {
                         granularity,
@@ -285,11 +283,9 @@ impl RasterOperator for TimeShift {
                 }))
             }
             (
-                RasterOrVectorOperator::Raster(source),
+                InitializedSingleRasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Absolute { time_interval },
             ) => {
-                let source = source.initialize(context).await?;
-
                 let shift = AbsoluteShift { time_interval };
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
@@ -300,7 +296,9 @@ impl RasterOperator for TimeShift {
                     shift,
                 }))
             }
-            (RasterOrVectorOperator::Vector(_), _) => Err(TimeShiftError::UnmatchedOutput.into()),
+            (InitializedSingleRasterOrVectorOperator::Vector(_), _) => {
+                Err(TimeShiftError::UnmatchedOutput.into())
+            }
         }
     }
 
@@ -477,7 +475,7 @@ mod tests {
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams, ExpressionSources},
         source::{GdalSource, GdalSourceParameters},
-        util::gdal::add_ndvi_dataset,
+        util::{gdal::add_ndvi_dataset, input::RasterOrVectorOperator},
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
@@ -636,7 +634,7 @@ mod tests {
         };
 
         let query_processor = VectorOperator::boxed(time_shift)
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -722,7 +720,7 @@ mod tests {
         };
 
         let query_processor = VectorOperator::boxed(time_shift)
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -886,7 +884,7 @@ mod tests {
         let query_context = MockQueryContext::test_default();
 
         let query_processor = RasterOperator::boxed(time_shift)
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1046,7 +1044,7 @@ mod tests {
         let query_context = MockQueryContext::test_default();
 
         let query_processor = RasterOperator::boxed(time_shift)
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1129,7 +1127,7 @@ mod tests {
         .boxed();
 
         let query_processor = expression
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1195,7 +1193,7 @@ mod tests {
         });
 
         let query_processor = shifted_ndvi_source
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()

@@ -21,6 +21,7 @@ use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use geoengine_datatypes::primitives::QueryRectangle;
+use geoengine_operators::engine::WorkflowOperatorPath;
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;
 
@@ -593,12 +594,14 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let execution_context = ctx.execution_context()?;
 
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
     let raster_operator = layer
         .workflow
         .operator
         .clone()
         .get_raster()?
-        .initialize(&execution_context)
+        .initialize(workflow_operator_path_root, &execution_context)
         .await?;
 
     let result_descriptor = raster_operator.result_descriptor();
@@ -1493,7 +1496,10 @@ mod tests {
         let exe_ctx = ctx.execution_context().unwrap();
         let query_ctx = ctx.query_context().unwrap();
 
-        let initialized_operator = operator.initialize(&exe_ctx).await.unwrap();
+        let initialized_operator = operator
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
         let query_processor = initialized_operator
             .query_processor()
             .unwrap()

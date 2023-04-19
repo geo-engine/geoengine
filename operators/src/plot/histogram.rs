@@ -1,17 +1,15 @@
-use crate::engine::QueryProcessor;
+use crate::engine::{
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+};
+use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
+use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
-use crate::{
-    engine::{
-        ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-        InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-        PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
-        TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    },
-    util::input::RasterOrVectorOperator,
-};
 use async_trait::async_trait;
 use float_cmp::approx_eq;
 use futures::stream::BoxStream;
@@ -90,6 +88,7 @@ pub enum HistogramBounds {
 impl PlotOperator for Histogram {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         Ok(match self.sources.source {
@@ -102,9 +101,11 @@ impl PlotOperator for Histogram {
                     }
                 );
 
-                let initialized = raster_source.initialize(context).await?;
+                let raster_source = raster_source
+                    .initialize(path.clone_and_append(0), context)
+                    .await?;
 
-                let in_desc = initialized.result_descriptor();
+                let in_desc = raster_source.result_descriptor();
                 InitializedHistogram::new(
                     PlotResultDescriptor {
                         spatial_reference: in_desc.spatial_reference,
@@ -115,7 +116,7 @@ impl PlotOperator for Histogram {
                             .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
                     },
                     self.params,
-                    initialized,
+                    raster_source,
                 )
                 .boxed()
             }
@@ -129,7 +130,9 @@ impl PlotOperator for Histogram {
                                 .to_string(),
                         })?;
 
-                let vector_source = vector_source.initialize(context).await?;
+                let vector_source = vector_source
+                    .initialize(path.clone_and_append(0), context)
+                    .await?;
 
                 match vector_source
                     .result_descriptor()
@@ -766,7 +769,7 @@ mod tests {
 
         assert!(histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .is_err());
     }
@@ -819,7 +822,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -873,7 +876,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -936,7 +939,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1006,7 +1009,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1149,8 +1152,10 @@ mod tests {
             }),
         );
 
-        if let Err(Error::InvalidOperatorSpec { reason }) =
-            histogram.boxed().initialize(&execution_context).await
+        if let Err(Error::InvalidOperatorSpec { reason }) = histogram
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
         {
             assert_eq!(reason, "column `featurecla` must be numerical");
         } else {
@@ -1202,7 +1207,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1260,7 +1265,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1325,7 +1330,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1406,7 +1411,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()

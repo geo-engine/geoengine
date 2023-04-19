@@ -600,8 +600,10 @@ mod tests {
     };
 
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext};
-    use crate::engine::{RasterOperator, RasterResultDescriptor};
+    use crate::engine::{
+        MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
+        WorkflowOperatorPath,
+    };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
 
@@ -671,7 +673,10 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
         let tiling_strat = exe_ctx.tiling_specification;
 
-        let op = mrs1.initialize(&exe_ctx).await.unwrap();
+        let op = mrs1
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
 
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 

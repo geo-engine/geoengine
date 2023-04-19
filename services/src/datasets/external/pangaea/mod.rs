@@ -227,6 +227,7 @@ mod tests {
     use geoengine_operators::engine::{
         InitializedVectorOperator, MetaData, MockExecutionContext, MockQueryContext,
         QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
+        WorkflowOperatorPath,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
     use httptest::{
@@ -440,7 +441,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src
+            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .await
+            .unwrap();
         let proc = initialized_op.query_processor().unwrap();
 
         let TypedVectorQueryProcessor::Data(proc) = proc else {
@@ -495,7 +499,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src
+            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .await
+            .unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
 
@@ -562,7 +569,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src
+            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .await
+            .unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
 
@@ -625,7 +635,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src
+            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .await
+            .unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
         let TypedVectorQueryProcessor::MultiPoint(proc) = proc else {

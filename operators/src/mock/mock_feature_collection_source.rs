@@ -4,7 +4,7 @@ use crate::engine::QueryContext;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName, ResultDescriptor,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -163,6 +163,7 @@ macro_rules! impl_mock_feature_collection_source {
         impl VectorOperator for $newtype {
             async fn _initialize(
                 self: Box<Self>,
+                _path: WorkflowOperatorPath,
                 _context: &dyn ExecutionContext,
             ) -> Result<Box<dyn InitializedVectorOperator>> {
                 let columns = self.params.collections[0]
@@ -354,7 +355,10 @@ mod tests {
         let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
         let source = source
-            .initialize(&MockExecutionContext::test_default())
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default(),
+            )
             .await
             .unwrap();
 

@@ -1540,7 +1540,7 @@ mod tests {
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
     use geoengine_operators::{
-        engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor},
+        engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
         plot::{
             MeanRasterPixelValuesOverTime, MeanRasterPixelValuesOverTimeParams,
             MeanRasterPixelValuesOverTimePosition,
@@ -2279,7 +2279,10 @@ mod tests {
         // let execution_context = MockExecutionContext::test_default();
         let execution_context = ctx.execution_context().unwrap();
 
-        let initialized_operator = operator.initialize(&execution_context).await.unwrap();
+        let initialized_operator = operator
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap();
 
         let TypedPlotQueryProcessor::JsonVega(processor) = initialized_operator.query_processor().unwrap() else {
             panic!("wrong plot type");

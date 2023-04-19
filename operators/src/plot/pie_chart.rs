@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, OperatorName,
-    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, TypedPlotQueryProcessor,
-    TypedVectorQueryProcessor,
+    ExecutionContext, InitializedPlotOperator, InitializedSources, InitializedVectorOperator,
+    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
+    TypedPlotQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::engine::{QueryProcessor, SingleVectorSource};
 use crate::error::Error;
@@ -49,9 +49,11 @@ pub enum PieChartParams {
 impl PlotOperator for PieChart {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
-        let vector_source = self.sources.vector.initialize(context).await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let vector_source = initialized_sources.vector;
 
         let in_desc = vector_source.result_descriptor().clone();
 
@@ -372,7 +374,7 @@ mod tests {
 
         let query_processor = pie_chart
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -448,7 +450,7 @@ mod tests {
 
         let query_processor = pie_chart
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -591,7 +593,7 @@ mod tests {
 
         let query_processor = pie_chart
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -639,7 +641,7 @@ mod tests {
 
         let query_processor = pie_chart
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -719,7 +721,7 @@ mod tests {
 
         let query_processor = pie_chart
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -783,7 +785,7 @@ mod tests {
 
         let query_processor = pie_chart
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()

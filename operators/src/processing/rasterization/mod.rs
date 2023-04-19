@@ -1,8 +1,9 @@
 use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    ExecutionContext, InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
+    Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleVectorSource, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
 
@@ -86,9 +87,11 @@ pub struct GridParams {
 impl RasterOperator for Rasterization {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> util::Result<Box<dyn InitializedRasterOperator>> {
-        let vector_source = self.sources.vector.initialize(context).await?;
+        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let vector_source = initialized_source.vector;
         let in_desc = vector_source.result_descriptor();
 
         let tiling_specification = context.tiling_specification();
@@ -527,7 +530,7 @@ fn gaussian_inverse(x: f64, stddev: f64) -> f64 {
 mod tests {
     use crate::engine::{
         InitializedRasterOperator, MockExecutionContext, MockQueryContext, QueryProcessor,
-        RasterOperator, SingleVectorSource, VectorOperator,
+        RasterOperator, SingleVectorSource, VectorOperator, WorkflowOperatorPath,
     };
     use crate::mock::{MockPointSource, MockPointSourceParams};
     use crate::processing::rasterization::GridSizeMode::{Fixed, Relative};
@@ -590,7 +593,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -639,7 +642,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -688,7 +691,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -737,7 +740,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -787,7 +790,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -837,7 +840,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -880,7 +883,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 
@@ -959,7 +962,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
 

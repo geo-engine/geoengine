@@ -5,8 +5,9 @@ use snafu::ensure;
 use geoengine_datatypes::collections::VectorDataType;
 
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, OperatorData, OperatorName,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorData,
+    OperatorName, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::util::Result;
@@ -48,6 +49,31 @@ impl OperatorData for VectorJoinSources {
     }
 }
 
+pub struct InitializedVectorJoinSources {
+    left: Box<dyn InitializedVectorOperator>,
+    right: Box<dyn InitializedVectorOperator>,
+}
+
+#[async_trait]
+impl InitializedSources<InitializedVectorJoinSources> for VectorJoinSources {
+    async fn initialize_sources(
+        self,
+        path: WorkflowOperatorPath,
+        context: &dyn ExecutionContext,
+    ) -> Result<InitializedVectorJoinSources> {
+        Ok(InitializedVectorJoinSources {
+            left: self
+                .left
+                .initialize(path.clone_and_append(0), context)
+                .await?,
+            right: self
+                .right
+                .initialize(path.clone_and_append(1), context)
+                .await?,
+        })
+    }
+}
+
 /// Define the type of join
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
@@ -67,10 +93,10 @@ pub enum VectorJoinType {
 impl VectorOperator for VectorJoin {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        let left = self.sources.left.initialize(context).await?;
-        let right = self.sources.right.initialize(context).await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
 
         match &self.params.join_type {
             VectorJoinType::EquiGeoToData {
@@ -78,8 +104,8 @@ impl VectorOperator for VectorJoin {
                 right_column,
                 right_column_suffix: _,
             } => {
-                let left_rd = left.result_descriptor();
-                let right_rd = right.result_descriptor();
+                let left_rd = initialized_sources.left.result_descriptor();
+                let right_rd = initialized_sources.right.result_descriptor();
 
                 ensure!(
                     left_rd.columns.contains_key(left_column),
@@ -98,14 +124,22 @@ impl VectorOperator for VectorJoin {
                     left_rd.data_type != VectorDataType::Data,
                     error::InvalidType {
                         expected: "a geo data collection".to_string(),
-                        found: left.result_descriptor().data_type.to_string(),
+                        found: initialized_sources
+                            .left
+                            .result_descriptor()
+                            .data_type
+                            .to_string(),
                     }
                 );
                 ensure!(
                     right_rd.data_type == VectorDataType::Data,
                     error::InvalidType {
                         expected: VectorDataType::Data.to_string(),
-                        found: right.result_descriptor().data_type.to_string(),
+                        found: initialized_sources
+                            .right
+                            .result_descriptor()
+                            .data_type
+                            .to_string(),
                     }
                 );
             }
@@ -120,28 +154,34 @@ impl VectorOperator for VectorJoin {
                 let right_column_suffix: &str =
                     right_column_suffix.as_ref().map_or("right", String::as_str);
                 translation_table(
-                    left.result_descriptor().columns.keys(),
-                    right.result_descriptor().columns.keys(),
+                    initialized_sources.left.result_descriptor().columns.keys(),
+                    initialized_sources.right.result_descriptor().columns.keys(),
                     right_column_suffix,
                 )
             }
         };
 
-        let result_descriptor = left.result_descriptor().map_columns(|left_columns| {
-            let mut columns = left_columns.clone();
-            for (right_column_name, right_column_type) in &right.result_descriptor().columns {
-                columns.insert(
-                    column_translation_table[right_column_name].clone(),
-                    right_column_type.clone(),
-                );
-            }
-            columns
-        });
+        let result_descriptor =
+            initialized_sources
+                .left
+                .result_descriptor()
+                .map_columns(|left_columns| {
+                    let mut columns = left_columns.clone();
+                    for (right_column_name, right_column_type) in
+                        &initialized_sources.right.result_descriptor().columns
+                    {
+                        columns.insert(
+                            column_translation_table[right_column_name].clone(),
+                            right_column_type.clone(),
+                        );
+                    }
+                    columns
+                });
 
         let initialized_operator = InitializedVectorJoin {
             result_descriptor,
-            left,
-            right,
+            left: initialized_sources.left,
+            right: initialized_sources.right,
             state: InitializedVectorJoinParams {
                 join_type: self.params.join_type.clone(),
                 column_translation_table,
@@ -299,7 +339,10 @@ mod tests {
 
         operator
             .boxed()
-            .initialize(&MockExecutionContext::test_default())
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default(),
+            )
             .await
             .unwrap();
     }
@@ -339,7 +382,7 @@ mod tests {
         assert!(matches!(
             operator
                 .boxed()
-                .initialize(&MockExecutionContext::test_default())
+                .initialize(WorkflowOperatorPath::initialize_root(), &MockExecutionContext::test_default())
                 .await,
             Err(error::Error::ColumnDoesNotExist { column }) if column == "foo"
         ));

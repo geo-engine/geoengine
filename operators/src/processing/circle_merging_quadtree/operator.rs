@@ -14,12 +14,12 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::adapters::FeatureCollectionStreamExt;
-use crate::engine::OperatorName;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
     SingleVectorSource, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
+use crate::engine::{InitializedSources, OperatorName, WorkflowOperatorPath};
 use crate::error::{self, Error};
 use crate::processing::circle_merging_quadtree::aggregates::MeanAggregator;
 use crate::processing::circle_merging_quadtree::circle_of_points::CircleOfPoints;
@@ -61,6 +61,7 @@ impl OperatorName for VisualPointClustering {
 impl VectorOperator for VisualPointClustering {
     async fn _initialize(
         mut self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(
@@ -85,7 +86,8 @@ impl VectorOperator for VisualPointClustering {
 
         let radius_model = LogScaledRadius::new(self.params.min_radius_px, self.params.delta_px)?;
 
-        let vector_source = self.sources.vector.initialize(context).await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let vector_source = initialized_sources.vector;
 
         ensure!(
             vector_source.result_descriptor().data_type == VectorDataType::MultiPoint,
@@ -496,7 +498,7 @@ mod tests {
 
         let initialized_operator = operator
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -578,7 +580,7 @@ mod tests {
 
         let initialized_operator = operator
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -661,7 +663,7 @@ mod tests {
 
         let initialized_operator = operator
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -752,7 +754,7 @@ mod tests {
 
         let initialized_operator = operator
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 

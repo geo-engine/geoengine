@@ -8,7 +8,9 @@ use futures::{stream::BoxStream, FutureExt, StreamExt, TryFutureExt, TryStreamEx
 use geoengine_datatypes::{collections::FeatureCollectionIpc, primitives::VectorQueryRectangle};
 use geoengine_operators::{
     call_on_generic_vector_processor,
-    engine::{QueryAbortTrigger, QueryContext, QueryProcessorExt, VectorOperator},
+    engine::{
+        QueryAbortTrigger, QueryContext, QueryProcessorExt, VectorOperator, WorkflowOperatorPath,
+    },
 };
 
 pub struct VectorWebsocketStreamHandler {
@@ -66,7 +68,11 @@ impl VectorWebsocketStreamHandler {
         execution_ctx: C::ExecutionContext,
         mut query_ctx: C::QueryContext,
     ) -> Result<Self> {
-        let initialized_operator = vector_operator.initialize(&execution_ctx).await?;
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized_operator = vector_operator
+            .initialize(workflow_operator_path_root, &execution_ctx)
+            .await?;
 
         let spatial_reference = initialized_operator.result_descriptor().spatial_reference;
 

@@ -925,10 +925,9 @@ mod tests {
         BoundingBox2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_operators::engine::VectorOperator;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MockExecutionContext, MockQueryContext, QueryProcessor,
-        TypedVectorQueryProcessor, VectorResultDescriptor,
+        TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
     use httptest::responders::status_code;
@@ -1794,7 +1793,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src
+            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .await
+            .unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
         let TypedVectorQueryProcessor::MultiPoint(proc) = proc else { panic!("Expected MultiPoint QueryProcessor"); };

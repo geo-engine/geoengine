@@ -15,7 +15,9 @@ use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::{QueryContext, ResultDescriptor, TypedPlotQueryProcessor};
+use geoengine_operators::engine::{
+    QueryContext, ResultDescriptor, TypedPlotQueryProcessor, WorkflowOperatorPath,
+};
 use geoengine_operators::util::abortable_query_execution;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -112,8 +114,10 @@ async fn get_plot_handler<C: ApplicationContext>(
 
     let execution_context = ctx.execution_context()?;
 
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
     let initialized = operator
-        .initialize(&execution_context)
+        .initialize(workflow_operator_path_root, &execution_context)
         .await
         .context(error::Operator)?;
 

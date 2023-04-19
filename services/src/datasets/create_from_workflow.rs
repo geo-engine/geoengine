@@ -12,7 +12,7 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::engine::{
-    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor,
+    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
 };
 use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
@@ -71,8 +71,11 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
         let operator = operator.get_raster().context(crate::error::Operator)?;
 
         let execution_context = self.ctx.execution_context()?;
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
         let initialized = operator
-            .initialize(&execution_context)
+            .initialize(workflow_operator_path_root, &execution_context)
             .await
             .context(crate::error::Operator)?;
 

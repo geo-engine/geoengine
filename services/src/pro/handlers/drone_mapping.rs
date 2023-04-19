@@ -384,7 +384,9 @@ mod tests {
     };
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_operators::engine::{MetaData, MetaDataProvider, RasterOperator};
+    use geoengine_operators::engine::{
+        MetaData, MetaDataProvider, RasterOperator, WorkflowOperatorPath,
+    };
     use serial_test::serial;
     use std::io::Write;
     use std::io::{Cursor, Read};
@@ -577,7 +579,10 @@ mod tests {
         .boxed();
 
         let exe_ctx = ctx.execution_context().unwrap();
-        let initialized = op.initialize(&exe_ctx).await.unwrap();
+        let initialized = op
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
 
         let processor = initialized.query_processor().unwrap().get_u8().unwrap();
 

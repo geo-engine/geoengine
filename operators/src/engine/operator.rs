@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 use crate::error;
 use crate::util::Result;
@@ -9,7 +10,7 @@ use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
     CloneablePlotOperator, CloneableRasterOperator, CloneableVectorOperator, CreateSpan,
     ExecutionContext, PlotResultDescriptor, RasterResultDescriptor, TypedPlotQueryProcessor,
-    VectorResultDescriptor,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 
 pub trait OperatorData {
@@ -32,6 +33,7 @@ pub trait RasterOperator:
     /// Internal initialization logic of the operator
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>>;
 
@@ -41,11 +43,14 @@ pub trait RasterOperator:
     /// execution context. Instead, `_initialize` should be implemented.
     async fn initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let span = self.span();
-        let op = self._initialize(context).await?;
-        Ok(context.wrap_initialized_raster_operator(op, span))
+        debug!("Initialize {}, path: {}", self.typetag_name(), &path);
+        let op = self._initialize(path.clone(), context).await?;
+
+        Ok(context.wrap_initialized_raster_operator(op, span, path))
     }
 
     /// Wrap a box around a `RasterOperator`
@@ -67,16 +72,19 @@ pub trait VectorOperator:
 {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>>;
 
     async fn initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let span = self.span();
-        let op = self._initialize(context).await?;
-        Ok(context.wrap_initialized_vector_operator(op, span))
+        debug!("Initialize {}, path: {}", self.typetag_name(), &path);
+        let op = self._initialize(path.clone(), context).await?;
+        Ok(context.wrap_initialized_vector_operator(op, span, path))
     }
 
     /// Wrap a box around a `VectorOperator`
@@ -98,16 +106,19 @@ pub trait PlotOperator:
 {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>>;
 
     async fn initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let span = self.span();
-        let op = self._initialize(context).await?;
-        Ok(context.wrap_initialized_plot_operator(op, span))
+        debug!("Initialize {}, path: {}", self.typetag_name(), &path);
+        let op = self._initialize(path.clone(), context).await?;
+        Ok(context.wrap_initialized_plot_operator(op, span, path))
     }
 
     /// Wrap a box around a `PlotOperator`

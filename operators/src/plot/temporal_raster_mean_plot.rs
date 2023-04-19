@@ -1,7 +1,8 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, Operator, OperatorName,
-    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    RasterQueryProcessor, SingleRasterSource, TypedPlotQueryProcessor,
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, InitializedSources,
+    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
+    QueryProcessor, RasterQueryProcessor, SingleRasterSource, TypedPlotQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::util::math::average_floor;
 use crate::util::Result;
@@ -56,9 +57,11 @@ pub enum MeanRasterPixelValuesOverTimePosition {
 impl PlotOperator for MeanRasterPixelValuesOverTime {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
-        let raster = self.sources.raster.initialize(context).await?;
+        let initalized_sources = self.sources.initialize_sources(path, context).await?;
+        let raster = initalized_sources.raster;
 
         let in_desc = raster.result_descriptor().clone();
 
@@ -328,7 +331,7 @@ mod tests {
 
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 
@@ -468,7 +471,7 @@ mod tests {
 
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
 

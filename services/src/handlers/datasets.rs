@@ -1069,7 +1069,7 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         ExecutionContext, InitializedVectorOperator, QueryProcessor, StaticMetaData,
-        VectorOperator, VectorResultDescriptor,
+        VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
     };
     use geoengine_operators::source::{
         OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
@@ -1365,7 +1365,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
         .await
         .map_err(Into::into)
     }

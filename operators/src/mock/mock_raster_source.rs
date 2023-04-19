@@ -1,7 +1,7 @@
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{
     InitializedRasterOperator, OperatorData, OperatorName, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -168,6 +168,7 @@ impl<T: Pixel> OperatorData for MockRasterSource<T> {
 /// impl<T: Pixel> RasterOperator for MockRasterSource<T> {
 ///     async fn initialize(
 ///         self: Box<Self>,
+///         _path: WorkflowOperatorPath,
 ///         _context: &dyn crate::engine::ExecutionContext,
 ///     ) -> Result<Box<dyn InitializedRasterOperator>> {
 ///         Ok(InitializedMockRasterSource {
@@ -197,6 +198,7 @@ macro_rules! impl_mock_raster_source {
         impl RasterOperator for $newtype {
             async fn _initialize(
                 self: Box<Self>,
+                _path: WorkflowOperatorPath,
                 context: &dyn crate::engine::ExecutionContext,
             ) -> Result<Box<dyn InitializedRasterOperator>> {
                 let data = self.params.data;
@@ -374,7 +376,10 @@ mod tests {
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
-        let initialized = deserialized.initialize(&execution_context).await.unwrap();
+        let initialized = deserialized
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap();
 
         match initialized.query_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}
@@ -441,7 +446,7 @@ mod tests {
         );
 
         let query_processor = raster_source
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
