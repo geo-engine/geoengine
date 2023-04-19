@@ -332,6 +332,8 @@ where
         Ok(match meta_data {
             MetaDataDefinition::GdalMetaDataRegular(m) => Box::new(m),
             MetaDataDefinition::GdalStatic(m) => Box::new(m),
+            MetaDataDefinition::GdalMetaDataList(m) => Box::new(m),
+            MetaDataDefinition::GdalMetadataNetCdfCf(m) => Box::new(m),
             _ => return Err(geoengine_operators::error::Error::DataIdTypeMissMatch),
         })
     }
