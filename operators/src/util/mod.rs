@@ -12,6 +12,7 @@ pub mod stream_zip;
 pub mod string_token;
 pub mod sunpos;
 mod temporary_gdal_thread_local_config_options;
+pub mod workflow_bencher;
 
 use crate::error::Error;
 use std::collections::HashSet;
