@@ -82,7 +82,7 @@ pub trait VectorOperator:
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let span = self.span();
-        debug!("Initialize {:?}, path: {:?}", self.typetag_name(), &path);
+        debug!("Initialize {}, path: {}", self.typetag_name(), &path);
         let op = self._initialize(path.clone(), context).await?;
         Ok(context.wrap_initialized_vector_operator(op, span, path))
     }
@@ -116,7 +116,7 @@ pub trait PlotOperator:
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let span = self.span();
-        debug!("Initialize {:?}, path: {:?}", self.typetag_name(), &path);
+        debug!("Initialize {}, path: {}", self.typetag_name(), &path);
         let op = self._initialize(path.clone(), context).await?;
         Ok(context.wrap_initialized_plot_operator(op, span, path))
     }
