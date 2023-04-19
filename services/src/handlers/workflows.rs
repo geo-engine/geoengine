@@ -112,9 +112,7 @@ where
         }))))
     ),
     responses(
-        (status = 200, description = "OK", body = IdResponse,
-            example = json!({"id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"})
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse)
     ),
     security(
         ("session_token" = [])
@@ -766,8 +764,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }
@@ -871,8 +869,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }
@@ -1060,8 +1058,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }

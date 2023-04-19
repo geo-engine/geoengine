@@ -2,7 +2,6 @@ use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use utoipa::ToSchema;
 
 pub use geoengine_datatypes::util::Identifier;
 pub use geoengine_operators::util::{spawn, spawn_blocking, spawn_blocking_with_thread_pool};
@@ -17,9 +16,8 @@ pub mod postgres;
 pub mod server;
 pub mod tests;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct IdResponse<T> {
-    #[schema(value_type = String)]
     pub id: T,
 }
 

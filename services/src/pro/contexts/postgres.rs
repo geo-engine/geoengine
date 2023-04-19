@@ -309,7 +309,7 @@ where
                             author_user_id UUID REFERENCES users(id) NOT NULL
                         );
 
-                        CREATE INDEX project_version_idx 
+                        CREATE INDEX project_version_idx
                         ON project_versions (project_id, changed DESC, author_user_id DESC);
 
                         CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
@@ -583,7 +583,7 @@ where
         self.user_session_by_id(session_id)
             .await
             .map_err(Box::new)
-            .context(error::Authorization)
+            .context(error::Unauthorized)
     }
 }
 

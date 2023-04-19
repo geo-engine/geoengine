@@ -5,36 +5,29 @@ use std::{
 };
 
 use crate::{
-    api::model::datatypes::DatasetId, contexts::ApplicationContext,
-    util::extractors::ValidatedQuery,
-};
-use crate::{
-    api::model::services::DataPath,
+    api::model::datatypes::DatasetId,
+    api::model::responses::datasets::errors::*,
+    api::model::services::{
+        AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
+        MetaDataSuggestion,
+    },
+    contexts::{ApplicationContext, SessionContext},
     datasets::{
-        listing::DatasetProvider,
-        storage::{DatasetStore, SuggestMetaData},
+        listing::{DatasetListOptions, DatasetProvider},
+        storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
+        upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName},
+    },
+    error::{self, Result},
+    util::{
+        config::{get_config_element, Data},
+        extractors::{ValidatedJson, ValidatedQuery},
+        IdResponse,
     },
 };
-use crate::{api::model::services::DatasetDefinition, datasets::upload::UploadId, error};
-use crate::{
-    api::model::services::{AddDataset, CreateDataset, MetaDataDefinition, MetaDataSuggestion},
-    util::config::{get_config_element, Data},
-};
-use crate::{contexts::SessionContext, datasets::storage::AutoCreateDataset};
-use crate::{datasets::upload::VolumeName, error::Result};
-use crate::{
-    datasets::upload::{AdjustFilePath, Upload, UploadRootPath, Volume},
-    util::extractors::ValidatedJson,
-};
-use crate::{
-    datasets::{listing::DatasetListOptions, upload::UploadDb},
-    util::IdResponse,
-};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
-use gdal::{vector::OGRFieldType, DatasetOptions};
 use gdal::{
-    vector::{Layer, LayerAccess},
-    Dataset,
+    vector::{Layer, LayerAccess, OGRFieldType},
+    Dataset, DatasetOptions,
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
@@ -84,7 +77,8 @@ where
                     "path": "./test_data/"
                 }
             ])
-        )
+        ),
+        (status = 401, response = crate::api::model::responses::UnauthorizedAdminResponse)
     ),
     security(
         ("session_token" = [])
@@ -124,7 +118,9 @@ pub async fn list_volumes_handler<C: ApplicationContext>(
                     }
                 }
             ])
-        )
+        ),
+        (status = 400, response = crate::api::model::responses::BadRequestQueryResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
         DatasetListOptions
@@ -169,7 +165,14 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
                 },
                 "sourceOperator": "OgrSource"
             })
-        )
+        ),
+        (status = 400, description = "Bad request", body = ErrorResponse, examples(
+            ("Referenced an unknown dataset" = (value = json!({
+                "error": "CannotLoadDataset",
+                "message": "CannotLoadDataset: UnknownDatasetId"
+            })))
+        )),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
         ("dataset" = DatasetId, description = "Dataset id")
@@ -182,12 +185,13 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
     dataset: web::Path<DatasetId>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, GetDatasetError> {
     let dataset = app_ctx
         .session_context(session)
         .db()
         .load_dataset(&dataset.into_inner())
-        .await?;
+        .await
+        .context(CannotLoadDataset)?;
     Ok(web::Json(dataset))
 }
 
@@ -282,13 +286,50 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
         }))))
     ),
     responses(
-        (status = 200, description = "OK", body = IdResponse,
-            example = json!({
-                "id": {
-                    "internal": "8d3471ab-fcf7-4c1b-bbc1-00477adf07c8"
-                }
-            })
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse, examples(
+            ("Body is invalid json" = (value = json!({
+                "error": "BodyDeserializeError",
+                "message": "expected `,` or `}` at line 13 column 7"
+            }))),
+            ("Failed to read body" = (value = json!({
+                "error": "Payload",
+                "message": "Error that occur during reading payload: Can not decode content-encoding."
+            }))),
+            ("Referenced an unknown upload" = (value = json!({
+                "error": "UploadNotFound",
+                "message": "UploadNotFound: UnknownUploadId"
+            }))),
+            ("Normal user tried to create dataset from a volume" = (value = json!({
+                "error": "OnlyAdminsCanCreateDatasetFromVolume",
+                "message": "OnlyAdminsCanCreateDatasetFromVolume"
+            }))),
+            ("Admin tried to create dataset from an upload" = (value = json!({
+                "error": "AdminsCannotCreateDatasetFromUpload",
+                "message": "AdminsCannotCreateDatasetFromUpload"
+            }))),
+            ("Filepath in metadata is invalid" = (value = json!({
+                "error": "CannotResolveUploadFilePath",
+                "message": "CannotResolveUploadFilePath: PathIsNotAFile"
+            }))),
+            ("Referenced an unknown volume" = (value = json!({
+                "error": "UnknownVolume",
+                "message": "UnknownVolume"
+            })))
+        )),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse),
+        (status = 413, response = crate::api::model::responses::PayloadTooLargeResponse),
+        (status = 415, response = crate::api::model::responses::UnsupportedMediaTypeForJsonResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse, examples(
+            ("Failed to access database" = (value = json!({
+                "error": "DatabaseAccessError",
+                "message": "DatabaseAccessError: connection closed"
+            }))),
+            ("Cannot access config" = (value = json!({
+                "error": "CannotAccessConfig",
+                "message": "CannotAccessConfig: ConfigLockFailed"
+            })))
+        ))
     ),
     security(
         ("session_token" = [])
@@ -298,7 +339,7 @@ pub async fn create_dataset_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<web::Json<IdResponse<DatasetId>>> {
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
     let create = create.into_inner();
     match create {
         CreateDataset {
@@ -317,14 +358,18 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     upload_id: UploadId,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>> {
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
     let db = app_ctx.session_context(session).db();
-    let upload = db.load_upload(upload_id).await?;
+    let upload = db.load_upload(upload_id).await.context(UploadNotFound)?;
 
-    adjust_meta_data_path(&mut definition.meta_data, &upload)?;
+    adjust_meta_data_path(&mut definition.meta_data, &upload)
+        .context(CannotResolveUploadFilePath)?;
 
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
-    let id = db.add_dataset(definition.properties, meta_data).await?;
+    let id = db
+        .add_dataset(definition.properties, meta_data)
+        .await
+        .context(DatabaseAccess)?;
 
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -334,22 +379,28 @@ async fn create_volume_dataset<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>> {
-    let volumes = get_config_element::<Data>()?.volumes;
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
+    let volumes = get_config_element::<Data>()
+        .context(CannotAccessConfig)?
+        .volumes;
     let volume_path = volumes
         .get(&volume_name)
-        .ok_or(error::Error::UnknownVolume)?;
+        .ok_or(CreateDatasetError::UnknownVolume)?;
     let volume = Volume {
         name: volume_name,
         path: volume_path.clone(),
     };
 
-    adjust_meta_data_path(&mut definition.meta_data, &volume)?;
+    adjust_meta_data_path(&mut definition.meta_data, &volume)
+        .context(CannotResolveUploadFilePath)?;
 
     let db = app_ctx.session_context(session).db();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
-    let id = db.add_dataset(definition.properties, meta_data).await?;
+    let id = db
+        .add_dataset(definition.properties, meta_data)
+        .await
+        .context(DatabaseAccess)?;
 
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -391,13 +442,40 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
     path = "/dataset/auto",
     request_body = AutoCreateDataset,
     responses(
-        (status = 200, description = "OK", body = IdResponse,
-            example = json!({
-                "id": {
-                    "internal": "664d4b3c-c9d7-4e57-b34d-8c709c1c26e8"
-                }
-            })
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse, examples(
+            ("Body is invalid json" = (value = json!({
+                "error": "BodyDeserializeError",
+                "message": "expected `,` or `}` at line 13 column 7"
+            }))),
+            ("Failed to read body" = (value = json!({
+                "error": "Payload",
+                "message": "Error that occur during reading payload: Can not decode content-encoding."
+            }))),
+            ("Referenced an unknown upload" = (value = json!({
+                "error": "UnknownUploadId",
+                "message": "UnknownUploadId"
+            }))),
+            ("Dataset name is empty" = (value = json!({
+                "error": "InvalidDatasetName",
+                "message": "InvalidDatasetName"
+            }))),
+            ("Upload filename is invalid" = (value = json!({
+                "error": "InvalidUploadFileName",
+                "message": "InvalidUploadFileName"
+            }))),
+            ("File does not exist" = (value = json!({
+                "error": "Operator",
+                "message": "Operator: GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
+            }))),
+            ("Dataset has no auto-importable layer" = (value = json!({
+                "error": "DatasetHasNoAutoImportableLayer",
+                "message": "DatasetHasNoAutoImportableLayer"
+            })))
+        )),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse),
+        (status = 413, response = crate::api::model::responses::PayloadTooLargeResponse),
+        (status = 415, response = crate::api::model::responses::UnsupportedMediaTypeForJsonResponse)
     ),
     security(
         ("session_token" = [])
@@ -476,7 +554,34 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
                     }
                 }
             })
-        )
+        ),
+        (status = 400, description = "Bad request", body = ErrorResponse, examples(
+            ("Missing field in query string" = (value = json!({
+                "error": "UnableToParseQueryString",
+                "message": "Unable to parse query string: missing field `offset`"
+            }))),
+            ("Number in query string contains letters" = (value = json!({
+                "error": "UnableToParseQueryString",
+                "message": "Unable to parse query string: invalid digit found in string"
+            }))),
+            ("Referenced an unknown upload" = (value = json!({
+                "error": "UnknownUploadId",
+                "message": "UnknownUploadId"
+            }))),
+            ("No suitable mainfile found" = (value = json!({
+                "error": "NoMainFileCandidateFound",
+                "message": "NoMainFileCandidateFound"
+            }))),
+            ("File does not exist" = (value = json!({
+                "error": "Operator",
+                "message": "Operator: GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
+            }))),
+            ("Dataset has no auto-importable layer" = (value = json!({
+                "error": "DatasetHasNoAutoImportableLayer",
+                "message": "DatasetHasNoAutoImportableLayer"
+            })))
+        )),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
         SuggestMetaData
@@ -902,6 +1007,17 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
     path = "/dataset/{dataset}",
     responses(
         (status = 200, description = "OK"),
+        (status = 400, description = "Bad request", body = ErrorResponse, examples(
+            ("Referenced an unknown dataset" = (value = json!({
+                "error": "UnknownDatasetId",
+                "message": "UnknownDatasetId"
+            }))),
+            ("Given dataset can only be deleted by owner" = (value = json!({
+                "error": "OperationRequiresOwnerPermission",
+                "message": "OperationRequiresOwnerPermission"
+            })))
+        )),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
         ("dataset" = DatasetId, description = "Dataset id")

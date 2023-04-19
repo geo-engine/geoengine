@@ -41,7 +41,7 @@ async fn anonymous_handler<C: SimpleApplicationContext>(
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
-        return Err(error::Error::Authorization {
+        return Err(error::Error::Unauthorized {
             source: Box::new(error::Error::AnonymousAccessDisabled),
         });
     }
@@ -246,8 +246,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "AnonymousAccessDisabled",
-            "Anonymous access is disabled, please log in",
+            "Unauthorized",
+            "Authorization error: Anonymous access is disabled, please log in",
         )
         .await;
     }

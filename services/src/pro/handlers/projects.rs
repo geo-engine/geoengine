@@ -356,8 +356,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }

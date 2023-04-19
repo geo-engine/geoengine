@@ -162,7 +162,7 @@ impl ApplicationContext for ProInMemoryContext {
         self.user_session_by_id(session_id)
             .await
             .map_err(Box::new)
-            .context(error::Authorization)
+            .context(error::Unauthorized)
     }
 }
 

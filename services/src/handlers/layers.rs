@@ -511,11 +511,7 @@ async fn layer_handler<C: ApplicationContext>(
     post,
     path = "/layers/{provider}/{layer}/workflowId",
     responses(
-        (status = 200, description = "OK", body = IdResponse<WorkflowId>,
-            example = json!({
-                "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
-            })
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse)
     ),
     params(
         ("provider" = DataProviderId, description = "Data provider id"),
@@ -659,11 +655,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
     ),
     request_body = AddLayer,
     responses(
-        (status = 200, description = "OK", body = IdResponse<LayerId>,
-            example = json!({
-                "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
-            })
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse)
     ),
     security(
         ("session_token" = [])
@@ -698,11 +690,7 @@ async fn add_layer<C: ApplicationContext>(
     ),
     request_body = AddLayerCollection,
     responses(
-        (status = 200, description = "OK", body = IdResponse<LayerCollectionId>,
-            example = json!({
-                "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
-            })
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse)
     ),
     security(
         ("session_token" = [])

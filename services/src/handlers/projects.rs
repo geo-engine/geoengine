@@ -28,9 +28,7 @@ where
     path = "/project",
     request_body = CreateProject,
     responses(
-        (status = 200, description = "OK", body = IdResponse,
-            example = json!({"id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"})
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse)
     ),
     security(
         ("session_token" = [])
@@ -344,8 +342,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }
@@ -425,8 +423,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }
@@ -479,8 +477,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }

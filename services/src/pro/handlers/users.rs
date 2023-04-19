@@ -127,7 +127,7 @@ where
         .login(user.into_inner())
         .await
         .map_err(Box::new)
-        .context(error::Authorization)?;
+        .context(error::Unauthorized)?;
     Ok(web::Json(session))
 }
 
@@ -224,7 +224,7 @@ where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
-        return Err(error::Error::Authorization {
+        return Err(error::Error::Unauthorized {
             source: Box::new(error::Error::AnonymousAccessDisabled),
         });
     }
@@ -363,7 +363,7 @@ where
     let user = user.into_inner();
 
     if session.user.id != user && !session.is_admin() {
-        return Err(error::Error::Authorization {
+        return Err(error::Error::Unauthorized {
             source: Box::new(error::Error::OperationRequiresAdminPrivilige),
         });
     }
@@ -869,8 +869,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "LoginFailed",
-            "User does not exist or password is wrong.",
+            "Unauthorized",
+            "Authorization error: User does not exist or password is wrong.",
         )
         .await;
     }
@@ -979,8 +979,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }
@@ -995,7 +995,13 @@ mod tests {
         ));
         let res = send_pro_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(res, 401, "InvalidSession", "The session id is invalid.").await;
+        ErrorResponse::assert(
+            res,
+            401,
+            "Unauthorized",
+            "Authorization error: The session id is invalid.",
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -1010,8 +1016,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "InvalidAuthorizationScheme",
-            "Authentication scheme must be Bearer.",
+            "Unauthorized",
+            "Authorization error: Authentication scheme must be Bearer.",
         )
         .await;
     }
@@ -1028,8 +1034,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "InvalidUuid",
-            "Identifier does not have the right format.",
+            "Unauthorized",
+            "Authorization error: Identifier does not have the right format.",
         )
         .await;
     }
@@ -1060,7 +1066,13 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_pro_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(res, 401, "InvalidSession", "The session id is invalid.").await;
+        ErrorResponse::assert(
+            res,
+            401,
+            "Unauthorized",
+            "Authorization error: The session id is invalid.",
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -1124,8 +1136,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             401,
-            "AnonymousAccessDisabled",
-            "Anonymous access is disabled, please log in",
+            "Unauthorized",
+            "Authorization error: Anonymous access is disabled, please log in",
         )
         .await;
     }

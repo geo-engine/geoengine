@@ -1,8 +1,10 @@
 use actix_web::{web, FromRequest};
+use snafu::ResultExt;
 
 use crate::{
     api::model::{
         datatypes::DatasetId,
+        responses::datasets::errors::*,
         services::{CreateDataset, DataPath, DatasetDefinition},
     },
     contexts::{ApplicationContext, SessionContext},
@@ -10,7 +12,7 @@ use crate::{
         storage::DatasetStore,
         upload::{Volume, VolumeName},
     },
-    error::{self, Result},
+    error::Result,
     handlers::datasets::{
         adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
         delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
@@ -56,13 +58,7 @@ where
     path = "/dataset/public", 
     request_body = CreateDataset,
     responses(
-        (status = 200, description = "OK", body = IdResponse,
-            example = json!({
-                "id": {
-                    "internal": "8d3471ab-fcf7-4c1b-bbc1-00477adf07c8"
-                }
-            })
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse),
     ),
     security(
         ("session_token" = [])
@@ -72,7 +68,7 @@ async fn create_dataset_handler<C: ProApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<web::Json<IdResponse<DatasetId>>>
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError>
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -94,35 +90,43 @@ async fn create_system_dataset<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>>
+) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError>
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    let volumes = get_config_element::<Data>()?.volumes;
+    let volumes = get_config_element::<Data>()
+        .context(CannotAccessConfig)?
+        .volumes;
     let volume_path = volumes
         .get(&volume_name)
-        .ok_or(error::Error::UnknownVolume)?;
+        .ok_or(CreateDatasetError::UnknownVolume)?;
     let volume = Volume {
         name: volume_name,
         path: volume_path.clone(),
     };
 
-    adjust_meta_data_path(&mut definition.meta_data, &volume)?;
+    adjust_meta_data_path(&mut definition.meta_data, &volume)
+        .context(CannotResolveUploadFilePath)?;
 
     let db = app_ctx.session_context(session).db();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
-    let dataset_id = db.add_dataset(definition.properties, meta_data).await?;
+    let dataset_id = db
+        .add_dataset(definition.properties, meta_data)
+        .await
+        .context(DatabaseAccess)?;
 
     db.add_permission(
         Role::registered_user_role_id(),
         dataset_id,
         Permission::Read,
     )
-    .await?;
+    .await
+    .context(DatabaseAccess)?;
 
     db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
-        .await?;
+        .await
+        .context(DatabaseAccess)?;
 
     Ok(web::Json(IdResponse::from(dataset_id)))
 }

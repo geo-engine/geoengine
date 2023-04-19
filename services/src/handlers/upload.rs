@@ -51,9 +51,7 @@ impl<'a> ToSchema<'a> for FileUploadRequest {
     path = "/upload",
     request_body(content = inline(FileUploadRequest), content_type = "multipart/form-data"),
     responses(
-        (status = 200, description = "File uploaded", body = IdResponse,
-            example = json!({"id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69"})
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse)
     ),
     security(
         ("session_token" = [])
