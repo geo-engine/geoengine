@@ -28,12 +28,15 @@ impl<S> InitializedOperatorWrapper<S> {
 
 impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn InitializedRasterOperator>> {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
-        tracing::debug!(event = "raster result descriptor", path = ?self.path);
+        tracing::debug!(
+            event = "raster result descriptor",
+            path = self.path.to_string()
+        );
         self.source.result_descriptor()
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        tracing::debug!(event = "query processor", path = ?self.path);
+        tracing::debug!(event = "query processor", path = self.path.to_string());
         let processor_result = self.source.query_processor();
         match processor_result {
             Ok(p) => {
@@ -182,7 +185,7 @@ where
 
         match stream_result {
             Ok(stream) => {
-                tracing::debug!(event = "query ok", path = ?self.path);
+                tracing::debug!(event = "query ok", path = self.path.to_string());
                 Ok(StreamStatisticsAdapter::new(
                     stream,
                     span.clone(),
@@ -192,7 +195,7 @@ where
                 .boxed())
             }
             Err(err) => {
-                tracing::debug!(event = "query error", path = ?self.path);
+                tracing::debug!(event = "query error", path = self.path.to_string());
                 Err(err)
             }
         }
