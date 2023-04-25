@@ -1073,7 +1073,9 @@ mod tests {
 
         let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
-            DataId::Internal { dataset_id },
+            DataId::Internal {
+                dataset: dataset_id.into(),
+            },
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),

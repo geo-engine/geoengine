@@ -1043,7 +1043,7 @@ pub async fn delete_dataset_handler<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::DatasetId;
+    use crate::api::model::datatypes::{DatasetId, DatasetName};
     use crate::api::model::services::DatasetDefinition;
     use crate::contexts::{
         ApplicationContext, InMemoryContext, Session, SessionId, SimpleApplicationContext,
@@ -1076,7 +1076,6 @@ mod tests {
     };
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use serde_json::{json, Value};
-    use std::str::FromStr;
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -1095,9 +1094,8 @@ mod tests {
             bbox: None,
         };
 
-        let id = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
         let ds = AddDataset {
-            id: Some(id),
+            id: Some(DatasetName::new("_", "My Dataset").unwrap()),
             name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
@@ -1126,10 +1124,8 @@ mod tests {
         let db = ctx.db();
         let _id = db.add_dataset(ds, Box::new(meta)).await?;
 
-        let id2 = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
-
         let ds = AddDataset {
-            id: Some(id2),
+            id: Some(DatasetName::new("_", "My_Dataset2").unwrap()),
             name: "OgrDataset2".to_string(),
             description: "My Ogr dataset2".to_string(),
             source_operator: "OgrSource".to_string(),
@@ -1176,7 +1172,7 @@ mod tests {
         assert_eq!(
             read_body_json(res).await,
             json!([{
-                "id": "370e99ec-9fd8-401d-828d-d67b431a8742",
+                "id": "_:My_Dataset2",
                 "name": "OgrDataset2",
                 "description": "My Ogr dataset2",
                 "tags": [],

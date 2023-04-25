@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::api::model::datatypes::{DatasetId, LayerId};
+use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId};
 use crate::api::model::services::AddDataset;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
@@ -84,7 +84,7 @@ where
                 d.symbology
             FROM 
                 user_permitted_datasets p JOIN datasets d 
-                    ON (p.dataset_id = d.id)
+                    ON (p.dataset_id = d.internal_id)
             WHERE 
                 p.user_id = $1",
             )
@@ -115,6 +115,7 @@ where
             .prepare(
                 "
             SELECT
+                d.internal_id,
                 d.id,
                 d.name,
                 d.description,
@@ -124,9 +125,9 @@ where
                 d.provenance
             FROM 
                 user_permitted_datasets p JOIN datasets d 
-                    ON (p.dataset_id = d.id)
+                    ON (p.dataset_id = d.internal_id)
             WHERE 
-                p.user_id = $1 AND d.id = $2
+                p.user_id = $1 AND d.internal_id = $2
             LIMIT 
                 1",
             )
@@ -138,13 +139,14 @@ where
             .await?;
 
         Ok(Dataset {
-            id: row.get(0),
-            name: row.get(1),
-            description: row.get(2),
-            result_descriptor: serde_json::from_value(row.get(3))?,
-            source_operator: row.get(4),
-            symbology: serde_json::from_value(row.get(5))?,
-            provenance: serde_json::from_value(row.get(6))?,
+            internal_id: row.get(0),
+            id: row.get(1),
+            name: row.get(2),
+            description: row.get(3),
+            result_descriptor: serde_json::from_value(row.get(4))?,
+            source_operator: row.get(5),
+            symbology: serde_json::from_value(row.get(6))?,
+            provenance: serde_json::from_value(row.get(7))?,
         })
     }
 
@@ -158,9 +160,9 @@ where
                 d.provenance 
             FROM 
                 user_permitted_datasets p JOIN datasets d
-                    ON(p.dataset_id = d.id)
+                    ON(p.dataset_id = d.internal_id)
             WHERE 
-                p.user_id = $1 AND d.id = $2",
+                p.user_id = $1 AND d.internal_id = $2",
             )
             .await?;
 
@@ -172,6 +174,35 @@ where
             data: (*dataset).into(),
             provenance: serde_json::from_value(row.get(0)).context(error::SerdeJson)?,
         })
+    }
+
+    async fn resolve_dataset(
+        &self,
+        dataset: &geoengine_datatypes::dataset::InternalDataset,
+    ) -> Result<geoengine_datatypes::dataset::DatasetId> {
+        let dataset_name = match dataset {
+            geoengine_datatypes::dataset::InternalDataset::DatasetId { dataset_id } => {
+                // early return if we already have an id
+                return Ok(*dataset_id);
+            }
+            geoengine_datatypes::dataset::InternalDataset::Name { name } => name,
+        };
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "SELECT internal_id
+                FROM datasets
+                WHERE id = $1",
+            )
+            .await?;
+
+        let row = conn
+            .query_one(&stmt, &[&DatasetName::from(dataset_name)])
+            .await?;
+
+        Ok(serde_json::from_value(row.get(0)).context(error::SerdeJson)?)
     }
 }
 
@@ -216,9 +247,13 @@ where
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
     > {
-        let id: DatasetId = id
+        let id = id
             .internal()
-            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?
+            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
+        let id: DatasetId = self
+            .resolve_dataset(&id)
+            .await
+            .map_err(|_| geoengine_operators::error::Error::UnknownDataId)?
             .into();
 
         if !self
@@ -243,9 +278,9 @@ where
             d.meta_data
         FROM
             user_permitted_datasets p JOIN datasets d
-                ON (p.dataset_id = d.id)
+                ON (p.dataset_id = d.internal_id)
         WHERE
-            d.id = $1 AND p.user_id = $2",
+            d.internal_id = $1 AND p.user_id = $2",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
@@ -284,9 +319,13 @@ where
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     > {
-        let id: DatasetId = id
+        let id = id
             .internal()
-            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?
+            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
+        let id: DatasetId = self
+            .resolve_dataset(&id)
+            .await
+            .map_err(|_| geoengine_operators::error::Error::UnknownDataId)?
             .into();
 
         if !self
@@ -311,9 +350,9 @@ where
             d.meta_data
         FROM
             user_permitted_datasets p JOIN datasets d
-                ON (p.dataset_id = d.id)
+                ON (p.dataset_id = d.internal_id)
         WHERE
-            d.id = $1 AND p.user_id = $2",
+            d.internal_id = $1 AND p.user_id = $2",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
@@ -427,7 +466,13 @@ where
         dataset: AddDataset,
         meta_data: Box<dyn PostgresStorable<Tls>>,
     ) -> Result<DatasetId> {
-        let id = dataset.id.unwrap_or_else(DatasetId::new);
+        let internal_id = DatasetId::new();
+        let id = dataset.id.unwrap_or_else(|| DatasetName {
+            namespace: self.session.user.id.to_string(),
+            name: internal_id.to_string(),
+        });
+
+        self.check_namespace(&id).await?;
 
         let meta_data_json = meta_data.to_json()?;
 
@@ -435,10 +480,13 @@ where
 
         let tx = conn.build_transaction().start().await?;
 
+        // unique constraint on `id` checks if dataset with same id exists
+
         let stmt = tx
             .prepare(
                 "
                 INSERT INTO datasets (
+                    internal_id,
                     id,
                     name,
                     description,
@@ -455,6 +503,7 @@ where
         tx.execute(
             &stmt,
             &[
+                &internal_id,
                 &id,
                 &dataset.name,
                 &dataset.description,
@@ -481,13 +530,17 @@ where
 
         tx.execute(
             &stmt,
-            &[&RoleId::from(self.session.user.id), &id, &Permission::Owner],
+            &[
+                &RoleId::from(self.session.user.id),
+                &internal_id,
+                &Permission::Owner,
+            ],
         )
         .await?;
 
         tx.commit().await?;
 
-        Ok(id)
+        Ok(internal_id)
     }
 
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {
@@ -507,9 +560,9 @@ where
             TRUE
         FROM 
             user_permitted_datasets p JOIN datasets d 
-                ON (p.dataset_id = d.id)
+                ON (p.dataset_id = d.internal_id)
         WHERE 
-            d.id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
+            d.internal_id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
             )
             .await?;
 
@@ -532,6 +585,17 @@ where
 
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
         Box::new(meta)
+    }
+
+    async fn check_namespace(&self, id: &DatasetName) -> Result<()> {
+        if (id.namespace == self.session.user.id.to_string())
+            || (self.session.is_admin()
+                && id.namespace == geoengine_datatypes::dataset::SYSTEM_NAMESPACE)
+        {
+            Ok(())
+        } else {
+            Err(Error::InvalidDatasetIdNamespace)
+        }
     }
 }
 
@@ -609,12 +673,12 @@ where
             .prepare(
                 "
                 SELECT 
-                    concat(d.id, ''), 
+                    concat(d.internal_id, ''), 
                     d.name, 
                     d.description
                 FROM 
                     user_permitted_datasets p JOIN datasets d 
-                        ON (p.dataset_id = d.id)
+                        ON (p.dataset_id = d.internal_id)
                 WHERE 
                     p.user_id = $1
                 ORDER BY d.name ASC

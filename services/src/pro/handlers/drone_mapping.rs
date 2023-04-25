@@ -293,7 +293,7 @@ async fn dataset_definition_from_geotiff(
 
         Ok(DatasetDefinition {
             properties: AddDataset {
-                id: Some(DatasetId::new()),
+                id: None,
                 name: "ODM Result".to_owned(), // TODO: more info
                 description: String::new(),    // TODO: more info
                 source_operator: "GdalSource".to_owned(),

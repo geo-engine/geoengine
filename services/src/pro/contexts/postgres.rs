@@ -344,8 +344,16 @@ where
                             workflow json NOT NULL
                         );
 
+                        -- TODO: add constraint not null
+                        -- TODO: add length constraints
+                        CREATE TYPE "DatasetName" AS (
+                            namepsace text,
+                            name text
+                        );
+
                         CREATE TABLE datasets (
-                            id UUID PRIMARY KEY,
+                            internal_id UUID PRIMARY KEY,
+                            id "DatasetName" UNIQUE NOT NULL,
                             name text NOT NULL,
                             description text NOT NULL, 
                             tags text[], 
@@ -469,7 +477,7 @@ where
                             -- resource_type "ResourceType" NOT NULL,
                             role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
                             permission "Permission" NOT NULL,
-                            dataset_id UUID REFERENCES datasets(id) ON DELETE CASCADE,
+                            dataset_id UUID REFERENCES datasets(internal_id) ON DELETE CASCADE,
                             layer_id UUID REFERENCES layers(id) ON DELETE CASCADE,
                             layer_collection_id UUID REFERENCES layer_collections(id) ON DELETE CASCADE,
                             project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
@@ -719,7 +727,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::api::model::datatypes::{DataProviderId, DatasetId, LayerId};
+    use crate::api::model::datatypes::{DataProviderId, DatasetName, LayerId};
     use crate::api::model::services::AddDataset;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -1318,7 +1326,7 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_datasets() {
         with_temp_context(|app_ctx, _| async move {
-            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
+            let dataset_id = DatasetName::new("_", "my_dataset").unwrap();
 
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
@@ -1378,23 +1386,24 @@ let ctx = app_ctx.session_context(session);
 
             let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
-            db.add_dataset(
-                AddDataset {
-                    id: Some(dataset_id),
-                    name: "Ogr Test".to_owned(),
-                    description: "desc".to_owned(),
-                    source_operator: "OgrSource".to_owned(),
-                    symbology: None,
-                    provenance: Some(vec![Provenance {
-                        citation: "citation".to_owned(),
-                        license: "license".to_owned(),
-                        uri: "uri".to_owned(),
-                    }]),
-                },
-                wrap,
-            )
-            .await
-            .unwrap();
+            let internal_dataset_id = db
+                .add_dataset(
+                    AddDataset {
+                        id: Some(dataset_id.clone()),
+                        name: "Ogr Test".to_owned(),
+                        description: "desc".to_owned(),
+                        source_operator: "OgrSource".to_owned(),
+                        symbology: None,
+                        provenance: Some(vec![Provenance {
+                            citation: "citation".to_owned(),
+                            license: "license".to_owned(),
+                            uri: "uri".to_owned(),
+                        }]),
+                    },
+                    wrap,
+                )
+                .await
+                .unwrap();
 
             let datasets = db
                 .list_datasets(DatasetListOptions {
@@ -1436,12 +1445,12 @@ let ctx = app_ctx.session_context(session);
                 },
             );
 
-            let provenance = db.load_provenance(&dataset_id).await.unwrap();
+            let provenance = db.load_provenance(&internal_dataset_id).await.unwrap();
 
             assert_eq!(
                 provenance,
                 ProvenanceOutput {
-                    data: dataset_id.into(),
+                    data: internal_dataset_id.into(),
                     provenance: Some(vec![Provenance {
                         citation: "citation".to_owned(),
                         license: "license".to_owned(),
@@ -1451,7 +1460,7 @@ let ctx = app_ctx.session_context(session);
             );
 
             let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> =
-                db.meta_data(&dataset_id.into()).await.unwrap();
+                db.meta_data(&internal_dataset_id.into()).await.unwrap();
 
             assert_eq!(
                 meta_data
@@ -2875,7 +2884,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     async fn it_deletes_dataset() {
         with_temp_context(|app_ctx, _| async move {
-            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
+            let dataset_id = DatasetName::new("_", "my_dataset").unwrap();
 
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
@@ -2935,29 +2944,30 @@ let ctx = app_ctx.session_context(session);
 
             let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
-            db.add_dataset(
-                AddDataset {
-                    id: Some(dataset_id),
-                    name: "Ogr Test".to_owned(),
-                    description: "desc".to_owned(),
-                    source_operator: "OgrSource".to_owned(),
-                    symbology: None,
-                    provenance: Some(vec![Provenance {
-                        citation: "citation".to_owned(),
-                        license: "license".to_owned(),
-                        uri: "uri".to_owned(),
-                    }]),
-                },
-                wrap,
-            )
-            .await
-            .unwrap();
+            let internal_dataset_id = db
+                .add_dataset(
+                    AddDataset {
+                        id: Some(dataset_id),
+                        name: "Ogr Test".to_owned(),
+                        description: "desc".to_owned(),
+                        source_operator: "OgrSource".to_owned(),
+                        symbology: None,
+                        provenance: Some(vec![Provenance {
+                            citation: "citation".to_owned(),
+                            license: "license".to_owned(),
+                            uri: "uri".to_owned(),
+                        }]),
+                    },
+                    wrap,
+                )
+                .await
+                .unwrap();
 
-            assert!(db.load_dataset(&dataset_id).await.is_ok());
+            assert!(db.load_dataset(&internal_dataset_id).await.is_ok());
 
-            db.delete_dataset(dataset_id).await.unwrap();
+            db.delete_dataset(internal_dataset_id).await.unwrap();
 
-            assert!(db.load_dataset(&dataset_id).await.is_err());
+            assert!(db.load_dataset(&internal_dataset_id).await.is_err());
         })
         .await;
     }
@@ -2966,7 +2976,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     async fn it_deletes_admin_dataset() {
         with_temp_context(|app_ctx, _| async move {
-            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
+            let dataset_id = DatasetName::new("_", "my_dataset").unwrap();
 
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
@@ -3026,29 +3036,30 @@ let ctx = app_ctx.session_context(session);
 
             let db = app_ctx.session_context(session).db();
             let wrap = db.wrap_meta_data(meta_data);
-            db.add_dataset(
-                AddDataset {
-                    id: Some(dataset_id),
-                    name: "Ogr Test".to_owned(),
-                    description: "desc".to_owned(),
-                    source_operator: "OgrSource".to_owned(),
-                    symbology: None,
-                    provenance: Some(vec![Provenance {
-                        citation: "citation".to_owned(),
-                        license: "license".to_owned(),
-                        uri: "uri".to_owned(),
-                    }]),
-                },
-                wrap,
-            )
-            .await
-            .unwrap();
+            let internal_dataset_id = db
+                .add_dataset(
+                    AddDataset {
+                        id: Some(dataset_id),
+                        name: "Ogr Test".to_owned(),
+                        description: "desc".to_owned(),
+                        source_operator: "OgrSource".to_owned(),
+                        symbology: None,
+                        provenance: Some(vec![Provenance {
+                            citation: "citation".to_owned(),
+                            license: "license".to_owned(),
+                            uri: "uri".to_owned(),
+                        }]),
+                    },
+                    wrap,
+                )
+                .await
+                .unwrap();
 
-            assert!(db.load_dataset(&dataset_id).await.is_ok());
+            assert!(db.load_dataset(&internal_dataset_id).await.is_ok());
 
-            db.delete_dataset(dataset_id).await.unwrap();
+            db.delete_dataset(internal_dataset_id).await.unwrap();
 
-            assert!(db.load_dataset(&dataset_id).await.is_err());
+            assert!(db.load_dataset(&internal_dataset_id).await.is_err());
         })
         .await;
     }

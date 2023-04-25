@@ -200,6 +200,8 @@ pub enum Error {
         source: actix_multipart::MultipartError,
     },
     InvalidUploadFileName,
+    InvalidDatasetIdNamespace,
+    DuplicateDatasetId,
     InvalidDatasetName,
     DatasetHasNoAutoImportableLayer,
     #[snafu(display("GdalError: {}", source))]

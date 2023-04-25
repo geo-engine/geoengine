@@ -228,7 +228,7 @@ impl
     > {
         let id = match id {
             geoengine_datatypes::dataset::DataId::External(id) => id,
-            geoengine_datatypes::dataset::DataId::Internal { dataset_id: _ } => {
+            geoengine_datatypes::dataset::DataId::Internal { dataset: _ } => {
                 return Err(geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(error::Error::InvalidDataId),
                 })

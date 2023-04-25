@@ -1,6 +1,6 @@
 {
   "properties": {
-    "id": "b526b59c-19f1-4d99-8773-5364b757f6d8",
+    "id": "_:points_with_time",
     "name": "Points with Time",
     "description": "Some points in Europe in 2014",
     "sourceOperator": "OgrSource"

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use std::sync::Arc;
 
-use crate::api::model::datatypes::{DataId, TimeInterval};
+use crate::api::model::datatypes::{DataId, InternalDataId, TimeInterval};
 use crate::contexts::ApplicationContext;
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
 use crate::error::Result;
@@ -419,7 +419,10 @@ async fn resolve_provenance<C: SessionContext>(
     id: &DataId,
 ) -> Result<ProvenanceOutput> {
     match id {
-        DataId::Internal { dataset_id } => db.load_provenance(dataset_id).await,
+        DataId::Internal(InternalDataId { dataset }) => {
+            db.load_provenance(&db.resolve_dataset(&dataset.clone().into()).await?.into())
+                .await
+        }
         DataId::External(e) => {
             db.load_layer_provider(e.provider_id)
                 .await?

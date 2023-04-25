@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::{DataProviderId, DatasetId};
+use crate::api::model::datatypes::{DataProviderId, DatasetId, DatasetName};
 use crate::api::model::operators::TypedResultDescriptor;
 use crate::api::model::services::AddDataset;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
@@ -31,10 +31,11 @@ pub const DATASET_DB_LAYER_PROVIDER_ID: DataProviderId =
 pub const DATASET_DB_ROOT_COLLECTION_ID: Uuid =
     Uuid::from_u128(0x5460_73b6_d535_4205_b601_9967_5c9f_6dd7);
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct Dataset {
-    pub id: DatasetId,
+    pub internal_id: DatasetId,
+    pub id: DatasetName,
     pub name: String,
     pub description: String,
     pub result_descriptor: TypedResultDescriptor,
@@ -46,7 +47,7 @@ pub struct Dataset {
 impl Dataset {
     pub fn listing(&self) -> DatasetListing {
         DatasetListing {
-            id: self.id,
+            id: self.id.clone(),
             name: self.name.clone(),
             description: self.description.clone(),
             tags: vec![], // TODO
@@ -191,6 +192,9 @@ pub trait DatasetStore: DatasetStorer {
     ) -> Result<DatasetId>;
 
     async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
+
+    /// Check whether the namepsace of the given dataset is allowed for insertion
+    async fn check_namespace(&self, id: &DatasetName) -> Result<()>;
 
     /// turn given `meta` data definition into the corresponding `StorageType` for the `DatasetStore`
     /// for use in the `add_dataset` method

@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::{DataId, DatasetId};
+use crate::api::model::datatypes::{DataId, DatasetId, DatasetName};
 use crate::api::model::operators::TypedResultDescriptor;
 use crate::datasets::storage::Dataset;
 use crate::error::Result;
@@ -21,7 +21,7 @@ use validator::{Validate, ValidationError};
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetListing {
-    pub id: DatasetId,
+    pub id: DatasetName,
     pub name: String,
     pub description: String,
     pub tags: Vec<String>,
@@ -78,6 +78,11 @@ pub trait DatasetProvider: Send
     async fn load_dataset(&self, dataset: &DatasetId) -> Result<Dataset>;
 
     async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
+
+    async fn resolve_dataset(
+        &self,
+        dataset: &geoengine_datatypes::dataset::InternalDataset,
+    ) -> Result<geoengine_datatypes::dataset::DatasetId>;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
