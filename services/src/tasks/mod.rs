@@ -5,40 +5,35 @@ pub mod util;
 
 use self::time_estimation::TimeEstimation;
 use crate::identifier;
-use crate::{
-    error::Result,
-    util::{
-        config::get_config_element,
-        user_input::{UserInput, Validated},
-    },
-};
+use crate::{error::Result, util::config::get_config_element};
 pub use error::TaskError;
 use futures::channel::oneshot;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::{error::ErrorSource, util::AsAnyArc};
-pub use in_memory::{SimpleTaskManager, SimpleTaskManagerContext};
+pub use in_memory::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
-use snafu::ensure;
+use std::borrow::Cow;
 use std::{fmt, sync::Arc};
 use utoipa::{IntoParams, ToSchema};
+use validator::{Validate, ValidationError};
 
 /// A database that allows scheduling and retrieving tasks.
 #[async_trait::async_trait]
 pub trait TaskManager<C: TaskContext>: Send + Sync {
     #[must_use]
-    async fn schedule(
+    async fn schedule_task(
         &self,
         task: Box<dyn Task<C>>,
         notify: Option<oneshot::Sender<TaskStatus>>,
     ) -> Result<TaskId, TaskError>;
 
     #[must_use]
-    async fn status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError>;
+    async fn get_task_status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError>;
 
     #[must_use]
-    async fn list(
+    async fn list_tasks(
         &self,
-        options: Validated<TaskListOptions>,
+        options: TaskListOptions,
     ) -> Result<Vec<TaskStatusWithId>, TaskError>;
 
     /// Abort a running task.
@@ -46,7 +41,7 @@ pub trait TaskManager<C: TaskContext>: Send + Sync {
     /// # Parameters
     ///  - `force`: If `true`, the task will be aborted without calling clean-up functions.
     ///
-    async fn abort(&self, task_id: TaskId, force: bool) -> Result<(), TaskError>;
+    async fn abort_tasks(&self, task_id: TaskId, force: bool) -> Result<(), TaskError>;
 }
 
 identifier!(TaskId);
@@ -198,7 +193,7 @@ pub enum TaskCleanUpStatus {
     },
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskStatusWithId {
     pub task_id: TaskId,
@@ -349,7 +344,7 @@ erased_serde::serialize_trait_object!(TaskStatusInfo);
 impl TaskStatusInfo for () {}
 impl TaskStatusInfo for String {}
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, IntoParams)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, IntoParams, Validate)]
 pub struct TaskListOptions {
     #[serde(default)]
     pub filter: Option<TaskFilter>,
@@ -358,21 +353,31 @@ pub struct TaskListOptions {
     pub offset: u32,
     #[serde(default = "task_list_limit_default")]
     #[param(example = 20)]
+    #[validate(custom = "validate_list_limit")]
     pub limit: u32,
 }
 
-impl UserInput for TaskListOptions {
-    fn validate(&self) -> Result<()> {
-        let limit = get_config_element::<crate::util::config::TaskManager>()?.list_limit;
-        ensure!(
-            self.limit <= limit,
-            crate::error::InvalidListLimit {
-                limit: limit as usize
-            }
-        );
-
-        Ok(())
+impl Default for TaskListOptions {
+    fn default() -> Self {
+        Self {
+            filter: None,
+            offset: 0,
+            limit: 20,
+        }
     }
+}
+
+fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
+    let limit = get_config_element::<crate::util::config::TaskManager>()
+        .expect("should exist because it is defined in the default config")
+        .list_limit;
+    if value <= limit {
+        return Ok(());
+    }
+
+    let mut err = ValidationError::new("limit (too large)");
+    err.add_param::<u32>(Cow::Borrowed("max limit"), &limit);
+    Err(err)
 }
 
 fn task_list_limit_default() -> u32 {

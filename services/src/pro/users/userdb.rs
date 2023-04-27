@@ -1,21 +1,21 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
+use crate::pro::permissions::RoleId;
 use crate::pro::users::oidc::ExternalUserClaims;
 use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
-use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::Duration;
 
 #[async_trait]
-pub trait UserDb: Send + Sync {
+pub trait UserAuth {
     /// Registers a user by providing `UserRegistration` parameters
     ///
     /// # Errors
     ///
     /// This call fails if the `UserRegistration` is invalid.
     ///
-    async fn register(&self, user: Validated<UserRegistration>) -> Result<UserId>;
+    async fn register_user(&self, user: UserRegistration) -> Result<UserId>;
 
     /// Creates session for anonymous user
     ///
@@ -23,7 +23,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the `UserRegistration` is invalid.
     ///
-    async fn anonymous(&self) -> Result<UserSession>;
+    async fn create_anonymous_session(&self) -> Result<UserSession>;
 
     /// Creates a `Session` by providing `UserCredentials`
     ///
@@ -46,21 +46,24 @@ pub trait UserDb: Send + Sync {
         duration: Duration,
     ) -> Result<UserSession>;
 
-    /// Removes a session from the `UserDB`
-    ///
-    /// # Errors
-    ///
-    /// This call fails if the session is invalid.
-    ///
-    async fn logout(&self, session: SessionId) -> Result<()>;
-
     /// Get session by id
     ///
     /// # Errors
     ///
     /// This call fails if the session is invalid.
     ///
-    async fn session(&self, session: SessionId) -> Result<UserSession>;
+    async fn user_session_by_id(&self, session: SessionId) -> Result<UserSession>;
+}
+
+#[async_trait]
+pub trait UserDb: Send + Sync {
+    /// Removes the session from the `UserDB`
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the session is invalid.
+    ///
+    async fn logout(&self) -> Result<()>;
 
     /// Sets the session project
     ///
@@ -68,7 +71,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn set_session_project(&self, session: &UserSession, project: ProjectId) -> Result<()>;
+    async fn set_session_project(&self, project: ProjectId) -> Result<()>;
 
     /// Sets the session view
     ///
@@ -76,7 +79,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn set_session_view(&self, session: &UserSession, view: STRectangle) -> Result<()>;
+    async fn set_session_view(&self, view: STRectangle) -> Result<()>;
 
     /// Gets the current users total used quota. `session` is used to identify the user.
     ///
@@ -84,7 +87,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn quota_used(&self, session: &UserSession) -> Result<u64>;
+    async fn quota_used(&self) -> Result<u64>;
 
     /// Gets the current users available quota. `session` is used to identify the user.
     ///
@@ -92,7 +95,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn quota_available(&self, session: &UserSession) -> Result<i64>;
+    async fn quota_available(&self) -> Result<i64>;
 
     /// Increments a users quota by the given amount
     ///
@@ -133,4 +136,19 @@ pub trait UserDb: Send + Sync {
         user: &UserId,
         new_available_quota: i64,
     ) -> Result<()>;
+}
+
+#[async_trait]
+pub trait RoleDb {
+    /// Add a new role
+    async fn add_role(&self, role_name: &str) -> Result<RoleId>;
+
+    /// Remove an existing role
+    async fn remove_role(&self, role_id: &RoleId) -> Result<()>;
+
+    /// Remove an existing role
+    async fn assign_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()>;
+
+    /// Remove an existing role
+    async fn revoke_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()>;
 }

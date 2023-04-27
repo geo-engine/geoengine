@@ -13,10 +13,10 @@ use geoengine_operators::{
     source::{GdalSource, GdalSourceParameters},
 };
 use geoengine_services::{
-    contexts::Context,
+    contexts::{ApplicationContext, SessionContext},
     pro::{
-        contexts::{ProContext, ProInMemoryContext},
-        users::UserDb,
+        contexts::ProInMemoryContext,
+        users::{UserAuth, UserDb},
         util::tests::{add_ndvi_to_datasets, send_pro_test_request},
     },
     util::config,
@@ -24,11 +24,12 @@ use geoengine_services::{
 };
 
 async fn bench() {
-    let ctx = ProInMemoryContext::test_default();
+    let app_ctx = ProInMemoryContext::test_default();
 
-    let session = ctx.user_db_ref().anonymous().await.unwrap();
+    let session = app_ctx.create_anonymous_session().await.unwrap();
+    let ctx = app_ctx.session_context(session.clone());
 
-    let dataset = add_ndvi_to_datasets(&ctx).await;
+    let dataset = add_ndvi_to_datasets(&app_ctx, true, true).await;
 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
@@ -57,11 +58,7 @@ async fn bench() {
         ),
     };
 
-    let id = ctx
-        .workflow_registry_ref()
-        .register(workflow.clone())
-        .await
-        .unwrap();
+    let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
     let colorizer = Colorizer::linear_gradient(
         vec![
@@ -93,7 +90,7 @@ async fn bench() {
         ("time", "2014-04-01T12:00:00.0Z"),
         ("exceptions", "JSON"),
     ];
-    ctx.user_db_ref()
+    ctx.db()
         .update_quota_available_by_user(&session.user.id, 9999)
         .await
         .unwrap();
@@ -105,7 +102,7 @@ async fn bench() {
             serde_urlencoded::to_string(params).unwrap()
         ))
         .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-    let res = send_pro_test_request(req, ctx).await;
+    let res = send_pro_test_request(req, app_ctx).await;
 
     assert_eq!(res.status(), 200);
     assert_eq!(

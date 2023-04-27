@@ -18,6 +18,10 @@ use crate::api::model::operators::{
     TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
     VectorResultDescriptor,
 };
+use crate::api::model::responses::{
+    BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
+    UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+};
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
 };
@@ -33,6 +37,8 @@ use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
+use crate::handlers::workflows::RasterStreamWebsocketResultType;
+use crate::handlers::ErrorResponse;
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
@@ -42,21 +48,21 @@ use crate::ogc::util::OgcBoundingBox;
 use crate::ogc::{wcs, wfs, wms};
 use crate::pro;
 use crate::pro::handlers::users::{Quota, UpdateQuota};
-use crate::pro::projects::{ProjectPermission, UserProjectPermission};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
     ProjectFilter, ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId,
     RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
-use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
-use crate::util::server::ServerInfo;
-use crate::util::{apidoc::OpenApiServerInfo, IdResponse};
+use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
+use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
-use super::datasets::RoleId;
+use super::handlers::permissions::PermissionRequest;
+use super::handlers::users::AddRole;
+use super::permissions::{Permission, ResourceId, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 
 #[derive(OpenApi)]
@@ -102,6 +108,10 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::update_user_quota_handler,
         pro::handlers::users::register_user_handler,
         pro::handlers::users::session_handler,
+        pro::handlers::users::add_role_handler,
+        pro::handlers::users::remove_role_handler,
+        pro::handlers::users::assign_role_handler,
+        pro::handlers::users::revoke_role_handler,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
@@ -112,18 +122,26 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::projects::list_projects_handler,
         pro::handlers::projects::project_versions_handler,
-        pro::handlers::projects::add_permission_handler,
-        pro::handlers::projects::remove_permission_handler,
         handlers::projects::create_project_handler,
         pro::handlers::projects::load_project_latest_handler,
         handlers::projects::update_project_handler,
         handlers::projects::delete_project_handler,
-        pro::handlers::projects::list_permissions_handler,
         pro::handlers::projects::load_project_version_handler,
-        handlers::upload::upload_handler
+        handlers::upload::upload_handler,
+        pro::handlers::permissions::add_permission_handler,
+        pro::handlers::permissions::remove_permission_handler
     ),
     components(
+        responses(
+            UnsupportedMediaTypeForJsonResponse,
+            PayloadTooLargeResponse,
+            IdResponse,
+            UnauthorizedAdminResponse,
+            UnauthorizedUserResponse,
+            BadRequestQueryResponse
+        ),
         schemas(
+            ErrorResponse,
             UserSession,
             UserCredentials,
             UserRegistration,
@@ -136,7 +154,6 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             DataProviderId,
             DatasetId,
             ExternalDataId,
-            IdResponse<WorkflowId>,
             LayerId,
             ProjectId,
             RoleId,
@@ -193,6 +210,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             TaskFilter,
             TaskListOptions,
             TaskStatus,
+            TaskStatusWithId,
             TaskResponse,
 
             Layer,
@@ -311,18 +329,22 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             WrappedPlotOutput,
 
             CreateProject,
-            UserProjectPermission,
             Project,
             UpdateProject,
             ProjectFilter,
             ProjectListing,
-            ProjectPermission,
             ProjectVersion,
             LayerUpdate,
             PlotUpdate,
             Plot,
             ProjectLayer,
-            LayerVisibility
+            LayerVisibility,
+            RasterStreamWebsocketResultType,
+
+            PermissionRequest,
+            ResourceId,
+            Permission,
+            AddRole,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
@@ -369,5 +391,34 @@ impl Modify for ApiDocInfo {
                 ))
                 .build(),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contexts::Session;
+    use crate::pro::contexts::ProInMemoryContext;
+    use crate::pro::users::UserAuth;
+    use crate::pro::util::tests::send_pro_test_request;
+    use geoengine_datatypes::util::test::TestDefault;
+
+    #[test]
+    fn can_resolve_api() {
+        crate::api::can_resolve_api(ApiDoc::openapi());
+    }
+
+    #[tokio::test]
+    async fn can_run_examples() {
+        crate::api::can_run_examples(
+            ApiDoc::openapi(),
+            move || async move {
+                let ctx = ProInMemoryContext::test_default();
+                let session_id = ctx.create_anonymous_session().await.unwrap().id();
+                (ctx, session_id)
+            },
+            send_pro_test_request,
+        )
+        .await;
     }
 }

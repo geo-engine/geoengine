@@ -1,15 +1,14 @@
 use crate::api::model::datatypes::{DataProviderId, DatasetId};
 use crate::api::model::operators::TypedResultDescriptor;
 use crate::api::model::services::AddDataset;
-use crate::contexts::Session;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
 use crate::error;
 use crate::error::Result;
-use crate::layers::listing::LayerCollectionProvider;
+
 use crate::projects::Symbology;
-use crate::util::user_input::{UserInput, Validated};
+
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::MetaData;
@@ -18,10 +17,11 @@ use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::ResultExt;
 use std::fmt::Debug;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
+use validator::{Validate, ValidationError};
 
 use super::listing::Provenance;
 
@@ -64,7 +64,7 @@ pub struct DatasetDefinition {
     pub meta_data: MetaDataDefinition,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
 #[schema(example = json!({
     "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
@@ -74,24 +74,19 @@ pub struct DatasetDefinition {
 }))]
 pub struct AutoCreateDataset {
     pub upload: UploadId,
+    #[validate(length(min = 1))]
     pub dataset_name: String,
     pub dataset_description: String,
+    #[validate(custom = "validate_main_file")]
     pub main_file: String,
 }
 
-impl UserInput for AutoCreateDataset {
-    fn validate(&self) -> Result<()> {
-        // TODO: more sophisticated input validation
-        ensure!(!self.dataset_name.is_empty(), error::InvalidDatasetName);
-        ensure!(
-            !self.main_file.is_empty()
-                && !self.main_file.contains('/')
-                && !self.main_file.contains(".."),
-            error::InvalidUploadFileName
-        );
-
-        Ok(())
+fn validate_main_file(main_file: &String) -> Result<(), ValidationError> {
+    if main_file.is_empty() || main_file.contains('/') || main_file.contains("..") {
+        return Err(ValidationError::new("Invalid upload file name"));
     }
+
+    Ok(())
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, IntoParams)]
@@ -178,10 +173,7 @@ impl MetaDataDefinition {
 
 /// Handling of datasets provided by geo engine internally, staged and by external providers
 #[async_trait]
-pub trait DatasetDb<S: Session>:
-    DatasetStore<S> + DatasetProvider<S> + UploadDb<S> + LayerCollectionProvider + Send + Sync
-{
-}
+pub trait DatasetDb: DatasetStore + DatasetProvider + UploadDb + Send + Sync {}
 
 /// Defines the type of meta data a `DatasetDB` is able to store
 pub trait DatasetStorer: Send + Sync {
@@ -191,15 +183,14 @@ pub trait DatasetStorer: Send + Sync {
 /// Allow storage of meta data of a particular storage type, e.g. `HashMapStorable` meta data for
 /// `HashMapDatasetDB`
 #[async_trait]
-pub trait DatasetStore<S: Session>: DatasetStorer {
+pub trait DatasetStore: DatasetStorer {
     async fn add_dataset(
         &self,
-        session: &S,
-        dataset: Validated<AddDataset>,
+        dataset: AddDataset,
         meta_data: Self::StorageType,
     ) -> Result<DatasetId>;
 
-    async fn delete_dataset(&self, session: &S, dataset: DatasetId) -> Result<()>;
+    async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
 
     /// turn given `meta` data definition into the corresponding `StorageType` for the `DatasetStore`
     /// for use in the `add_dataset` method

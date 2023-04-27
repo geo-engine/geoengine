@@ -4,7 +4,10 @@ use crate::api::model::datatypes::{
     TimeInstance, TimeStep, VectorQueryRectangle,
 };
 use async_trait::async_trait;
-use geoengine_operators::engine::{MetaData, ResultDescriptor};
+use geoengine_operators::{
+    engine::{MetaData, ResultDescriptor},
+    util::input::float_option_with_nan,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -897,8 +900,8 @@ pub struct GdalDatasetParameters {
     pub width: usize,
     pub height: usize,
     pub file_not_found_handling: FileNotFoundHandling,
+    #[serde(with = "float_option_with_nan")]
     #[serde(default)]
-    //#[serde(with = "float_option_with_nan")]
     pub no_data_value: Option<f64>,
     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
     // Dataset open option as strings, e.g. `vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]`

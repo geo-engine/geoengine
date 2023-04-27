@@ -23,7 +23,6 @@ use crate::{
         },
         listing::{LayerCollectionId, LayerCollectionProvider},
     },
-    util::user_input::Validated,
 };
 
 use super::{
@@ -246,6 +245,7 @@ impl EbvPortalDataProvider {
                     },
                     name: c.name,
                     description: String::new(),
+                    properties: Default::default(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -294,6 +294,7 @@ impl EbvPortalDataProvider {
                     },
                     name: ebv,
                     description: String::new(),
+                    properties: Default::default(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -338,6 +339,7 @@ impl EbvPortalDataProvider {
                     },
                     name: d.name.clone(),
                     description: d.description,
+                    properties: Default::default(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -402,6 +404,7 @@ impl EbvPortalDataProvider {
                     },
                     name: g.title,
                     description: g.description,
+                    properties: Default::default(),
                 }))
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
@@ -508,6 +511,7 @@ impl EbvPortalDataProvider {
                         },
                         name: group.title.clone(),
                         description: group.description.clone(),
+                        properties: Default::default(),
                     }))
                 })
                 .collect::<Result<Vec<CollectionItem>>>()?
@@ -533,14 +537,12 @@ impl EbvPortalDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for EbvPortalDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         let id: EbvCollectionId = EbvCollectionId::from_str(&collection.0)?;
-
-        let options = options.user_input;
 
         Ok(match id {
             EbvCollectionId::Classes => self.get_classes_collection(collection, &options).await?,
@@ -574,11 +576,11 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         EbvCollectionId::Classes.try_into()
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let ebv_id: EbvCollectionId = EbvCollectionId::from_str(&id.0)?;
 
         match &ebv_id {
@@ -665,8 +667,6 @@ mod tests {
 
     use geoengine_datatypes::test_data;
     use httptest::{matchers::request, responders::status_code, Expectation};
-
-    use crate::util::user_input::UserInput;
 
     use super::*;
 
@@ -824,17 +824,15 @@ mod tests {
         .await
         .unwrap();
 
-        let root_id = provider.root_collection_id().await.unwrap();
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &root_id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -861,6 +859,7 @@ mod tests {
                         },
                         name: "Community composition".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -874,6 +873,7 @@ mod tests {
                         },
                         name: "Ecosystem functioning".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -885,6 +885,7 @@ mod tests {
                         },
                         name: "Ecosystem structure".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -896,6 +897,7 @@ mod tests {
                         },
                         name: "Species populations".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     })
                 ],
                 entry_label: Some("EBV Class".to_string()),
@@ -961,14 +963,12 @@ mod tests {
 
         let id = LayerCollectionId("classes/Ecosystem functioning".into());
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -995,6 +995,7 @@ mod tests {
                         },
                         name: "Ecosystem phenology".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -1008,6 +1009,7 @@ mod tests {
                         },
                         name: "Primary productivity".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     })
                 ],
                 entry_label: Some("EBV Name".to_string()),
@@ -1127,14 +1129,12 @@ mod tests {
         let id = LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology".into());
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -1153,7 +1153,8 @@ mod tests {
                         collection_id: LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology/10".into()) 
                     },
                     name: "Vegetation Phenology in Finland".to_string(),
-                    description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(), 
+                    description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(),
+                    properties: Default::default(),
                 })],
             entry_label: Some("EBV Dataset".to_string()),
             properties: vec![],
@@ -1364,14 +1365,12 @@ mod tests {
         let id = LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology/10".into());
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -1396,6 +1395,7 @@ mod tests {
                     },
                     name: "Random metric 1".to_string(),
                     description: "Randomly created data".to_string(),
+                    properties: Default::default(),
                 }),
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
@@ -1404,6 +1404,7 @@ mod tests {
                     },
                     name: "Random metric 2".to_string(),
                     description: "Randomly created data".to_string(),
+                    properties: Default::default(),
                 })],
                 entry_label: Some("Metric".to_string()),
                 properties: vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()).into(),
@@ -1524,14 +1525,12 @@ mod tests {
         );
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();

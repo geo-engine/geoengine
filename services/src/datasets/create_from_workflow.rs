@@ -1,11 +1,10 @@
 use crate::api::model::datatypes::{DatasetId, RasterQueryRectangle};
 use crate::api::model::services::AddDataset;
-use crate::contexts::Context;
+use crate::contexts::SessionContext;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
-use crate::util::user_input::UserInput;
 use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{SpatialPartitioned, SpatialQuery, TimeInterval};
@@ -13,7 +12,7 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::engine::{
-    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor,
+    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
 };
 use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
@@ -56,9 +55,8 @@ pub struct RasterDatasetFromWorkflowResult {
 
 impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
 
-pub struct RasterDatasetFromWorkflowTask<C: Context> {
+pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
     pub workflow: Workflow,
-    pub session: C::Session,
     pub ctx: Arc<C>,
     pub info: RasterDatasetFromWorkflow,
     pub upload: UploadId,
@@ -66,15 +64,18 @@ pub struct RasterDatasetFromWorkflowTask<C: Context> {
     pub compression_num_threads: GdalCompressionNumThreads,
 }
 
-impl<C: Context> RasterDatasetFromWorkflowTask<C> {
+impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
     async fn process(&self) -> error::Result<RasterDatasetFromWorkflowResult> {
         let operator = self.workflow.operator.clone();
 
         let operator = operator.get_raster().context(crate::error::Operator)?;
 
-        let execution_context = self.ctx.execution_context(self.session.clone())?;
+        let execution_context = self.ctx.execution_context()?;
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
         let initialized = operator
-            .initialize(&execution_context)
+            .initialize(workflow_operator_path_root, &execution_context)
             .await
             .context(crate::error::Operator)?;
 
@@ -92,7 +93,7 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
             api_query_rect.time_interval.into(),
         );
 
-        let query_ctx = self.ctx.query_context(self.session.clone())?;
+        let query_ctx = self.ctx.query_context()?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
@@ -127,7 +128,6 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
             result_descriptor,
             query_rect,
             self.ctx.as_ref(),
-            self.session.clone(),
         )
         .await?;
 
@@ -139,7 +139,7 @@ impl<C: Context> RasterDatasetFromWorkflowTask<C> {
 }
 
 #[async_trait::async_trait]
-impl<C: Context> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
     async fn run(
         &self,
         _ctx: C::TaskContext,
@@ -174,9 +174,8 @@ impl<C: Context> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
     }
 }
 
-pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
+pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
     workflow: Workflow,
-    session: C::Session,
     ctx: Arc<C>,
     info: RasterDatasetFromWorkflow,
     compression_num_threads: GdalCompressionNumThreads,
@@ -190,7 +189,6 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
 
     let task = RasterDatasetFromWorkflowTask {
         workflow,
-        session,
         ctx: ctx.clone(),
         info,
         upload,
@@ -199,18 +197,17 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: Context>(
     }
     .boxed();
 
-    let task_id = ctx.tasks_ref().schedule(task, None).await?;
+    let task_id = ctx.tasks().schedule_task(task, None).await?;
 
     Ok(task_id)
 }
 
-async fn create_dataset<C: Context>(
+async fn create_dataset<C: SessionContext>(
     info: RasterDatasetFromWorkflow,
     mut slice_info: Vec<GdalLoadingInfoTemporalSlice>,
     origin_result_descriptor: &RasterResultDescriptor,
     query_rectangle: geoengine_datatypes::primitives::RasterQueryRectangle,
     ctx: &C,
-    session: <C as Context>::Session,
 ) -> error::Result<DatasetId> {
     ensure!(!slice_info.is_empty(), error::EmptyDatasetCannotBeImported);
 
@@ -266,11 +263,9 @@ async fn create_dataset<C: Context>(
         meta_data,
     };
 
-    let db = ctx.dataset_db_ref();
+    let db = ctx.db();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
-    let dataset = db
-        .add_dataset(&session, dataset_definition.properties.validated()?, meta)
-        .await?;
+    let dataset = db.add_dataset(dataset_definition.properties, meta).await?;
 
     Ok(dataset)
 }

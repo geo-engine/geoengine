@@ -36,10 +36,42 @@ pub struct SingleRasterOrVectorSource {
     pub source: RasterOrVectorOperator,
 }
 
+impl SingleRasterOrVectorSource {
+    pub fn raster(self) -> Option<SingleRasterSource> {
+        match self.source {
+            RasterOrVectorOperator::Raster(r) => Some(SingleRasterSource { raster: r }),
+            RasterOrVectorOperator::Vector(_) => None,
+        }
+    }
+
+    pub fn vector(self) -> Option<SingleVectorSource> {
+        match self.source {
+            RasterOrVectorOperator::Raster(_) => None,
+            RasterOrVectorOperator::Vector(v) => Some(SingleVectorSource { vector: v }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MultipleRasterOrSingleVectorSource {
     pub source: MultiRasterOrVectorOperator,
+}
+
+impl MultipleRasterOrSingleVectorSource {
+    pub fn raster(self) -> Option<MultipleRasterSources> {
+        match self.source {
+            MultiRasterOrVectorOperator::Raster(r) => Some(MultipleRasterSources { rasters: r }),
+            MultiRasterOrVectorOperator::Vector(_) => None,
+        }
+    }
+
+    pub fn vector(self) -> Option<SingleVectorSource> {
+        match self.source {
+            MultiRasterOrVectorOperator::Raster(_) => None,
+            MultiRasterOrVectorOperator::Vector(v) => Some(SingleVectorSource { vector: v }),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

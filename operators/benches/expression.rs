@@ -7,7 +7,7 @@ use geoengine_datatypes::{
     util::test::TestDefault,
 };
 use geoengine_operators::{
-    engine::{MockExecutionContext, MockQueryContext, RasterOperator},
+    engine::{MockExecutionContext, MockQueryContext, RasterOperator, WorkflowOperatorPath},
     processing::{Expression, ExpressionParams, ExpressionSources},
     source::{GdalSource, GdalSourceParameters},
     util::{gdal::add_ndvi_dataset, number_statistics::NumberStatistics, Result},
@@ -58,7 +58,7 @@ async fn main() {
     let expression = expression_on_sources(ndvi_source.clone(), ndvi_source);
 
     let expression_processor = expression
-        .initialize(&execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap()
         .query_processor()

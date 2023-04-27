@@ -57,7 +57,7 @@ mod test_util {
 
     use crate::engine::{
         MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterResultDescriptor,
+        RasterResultDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::meteosat::{
@@ -81,7 +81,9 @@ mod test_util {
     {
         // let input = make_raster(props, custom_data, measurement);
 
-        let op = make_op().initialize(ctx).await?;
+        let op = make_op()
+            .initialize(WorkflowOperatorPath::initialize_root(), ctx)
+            .await?;
 
         let processor = op.query_processor().unwrap().get_f32().unwrap();
 

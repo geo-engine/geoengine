@@ -8,11 +8,13 @@ use std::{
 
 use gdal::{Dataset, DatasetOptions, DriverManager};
 use geoengine_datatypes::{
+    collections::VectorDataType,
     dataset::{DataId, DatasetId},
     hashmap,
     primitives::{
-        DateTimeParseFormat, Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity,
-        TimeInstance, TimeInterval, TimeStep,
+        BoundingBox2D, DateTimeParseFormat, FeatureDataType, Measurement, SpatialPartition2D,
+        SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+        VectorQueryRectangle,
     },
     raster::{GeoTransform, RasterDataType},
     spatial_reference::SpatialReference,
@@ -24,11 +26,15 @@ use log::{debug, log_enabled};
 use snafu::ResultExt;
 
 use crate::{
-    engine::{MockExecutionContext, RasterResultDescriptor},
+    engine::{
+        MockExecutionContext, RasterResultDescriptor, StaticMetaData, VectorColumnInfo,
+        VectorResultDescriptor,
+    },
     error::{self, Error},
     source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
-        GdalSourceTimePlaceholder, TimeReference,
+        GdalSourceTimePlaceholder, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
+        OgrSourceErrorSpec, TimeReference,
     },
     test_data,
     util::Result,
@@ -92,6 +98,95 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
 pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DataId {
     let id: DataId = DatasetId::new().into();
     ctx.add_meta_data(id.clone(), Box::new(create_ndvi_meta_data()));
+    id
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub fn create_ports_meta_data(
+) -> StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle> {
+    StaticMetaData {
+        loading_info: OgrSourceDataset {
+            file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
+            layer_name: "ne_10m_ports".to_string(),
+            data_type: Some(VectorDataType::MultiPoint),
+            time: OgrSourceDatasetTimeType::None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: None,
+                x: String::new(),
+                y: None,
+                int: vec!["natlscale".to_string()],
+                float: vec!["scalerank".to_string()],
+                text: vec![
+                    "featurecla".to_string(),
+                    "name".to_string(),
+                    "website".to_string(),
+                ],
+                bool: vec![],
+                datetime: vec![],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+            default_geometry: None,
+        },
+        result_descriptor: VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            columns: [
+                (
+                    "natlscale".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "scalerank".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "featurecla".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "name".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "website".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            time: Some(TimeInterval::default()),
+            bbox: Some(BoundingBox2D::new_unchecked(
+                (-171.75795, -54.809_444).into(),
+                (179.309_364, 78.226_111).into(),
+            )),
+        },
+        phantom: std::marker::PhantomData,
+    }
+}
+
+pub fn add_ports_dataset(ctx: &mut MockExecutionContext) -> DataId {
+    let id: DataId = DatasetId::new().into();
+    ctx.add_meta_data(id.clone(), Box::new(create_ports_meta_data()));
     id
 }
 

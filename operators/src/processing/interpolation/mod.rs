@@ -5,9 +5,9 @@ use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
-    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor,
+    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
+    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -26,7 +26,6 @@ use geoengine_datatypes::raster::{
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
-use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -69,9 +68,11 @@ impl OperatorName for Interpolation {
 impl RasterOperator for Interpolation {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let raster_source = self.sources.raster.initialize(context).await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let raster_source = initialized_sources.raster;
         let in_descriptor = raster_source.result_descriptor();
 
         ensure!(
@@ -470,7 +471,7 @@ mod tests {
             sources: SingleRasterSource { raster },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let processor = operator.query_processor()?.get_i8().unwrap();

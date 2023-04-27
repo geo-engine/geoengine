@@ -3,16 +3,16 @@ use std::path::Path;
 
 use crate::api::model::datatypes::DatasetId;
 use crate::api::model::services::AddDataset;
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
-use crate::pro::contexts::ProContext;
+use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::pro::util::config::Odm;
 use crate::util::config::get_config_element;
-use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
-use actix_web::{web, Responder};
+use actix_web::{web, FromRequest, Responder};
 use futures_util::StreamExt;
 use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::RasterDataType;
@@ -34,7 +34,9 @@ use uuid::Uuid;
 
 pub(crate) fn init_drone_mapping_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ProContext,
+    C: ProApplicationContext,
+    C::Session: FromRequest,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     cfg.service(web::resource("/droneMapping/task").route(web::post().to(start_task_handler::<C>)))
         .service(
@@ -88,11 +90,14 @@ pub struct CreateDatasetResponse {
 ///   "id": "aae098a4-3272-439b-bd93-40b6c39560cb",
 /// },
 /// ```
-async fn start_task_handler<C: ProContext>(
+async fn start_task_handler<C: ProApplicationContext>(
     _session: C::Session,
-    _ctx: web::Data<C>,
+    _app_ctx: web::Data<C>,
     task_start: web::Json<TaskStart>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
     let base_url = get_config_element::<Odm>()?.endpoint;
 
     // TODO: auth
@@ -191,11 +196,14 @@ async fn start_task_handler<C: ProContext>(
 ///   }
 /// }
 /// ```
-async fn dataset_from_drone_mapping_handler<C: ProContext>(
+async fn dataset_from_drone_mapping_handler<C: ProApplicationContext>(
     task_id: web::Path<Uuid>,
     session: C::Session,
-    ctx: web::Data<C>,
-) -> Result<impl Responder> {
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
     let base_url = get_config_element::<Odm>()?.endpoint;
 
     // TODO: auth
@@ -258,12 +266,10 @@ async fn dataset_from_drone_mapping_handler<C: ProContext>(
 
     let dataset_definition = dataset_definition_from_geotiff(&tiff_path).await?;
 
-    let db = ctx.dataset_db_ref();
+    let db = app_ctx.session_context(session).db();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
 
-    let dataset = db
-        .add_dataset(&session, dataset_definition.properties.validated()?, meta)
-        .await?;
+    let dataset = db.add_dataset(dataset_definition.properties, meta).await?;
 
     Ok(web::Json(CreateDatasetResponse {
         upload: upload_id,
@@ -365,7 +371,7 @@ mod tests {
     use zip::write::FileOptions;
 
     use super::*;
-    use crate::contexts::{Context, Session};
+    use crate::contexts::{Session, SessionContext};
     use crate::error::Result;
     use crate::test_data;
     use crate::util::tests::TestDataUploads;
@@ -379,7 +385,7 @@ mod tests {
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_operators::engine::{
-        ExecutionContext, MetaData, MetaDataProvider, RasterOperator,
+        ExecutionContext, MetaData, MetaDataProvider, RasterOperator, WorkflowOperatorPath,
     };
     use serial_test::serial;
     use std::io::Write;
@@ -421,8 +427,9 @@ mod tests {
         // manipulate config to use the mock nodeodm server
         config::set_config("odm.endpoint", mock_nodeodm.url_str("/")).unwrap();
 
-        let ctx = ProInMemoryContext::test_default();
-        let session = create_session_helper(&ctx).await;
+        let app_ctx = ProInMemoryContext::test_default();
+        let session = create_session_helper(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
         // file upload into geo engine
         // TODO: properly upload the data using the handler once this is possible in a test (after migration to actix)
@@ -452,7 +459,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&task);
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -484,7 +491,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(task);
-        let res = send_pro_test_request(req, ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         let dataset_response: CreateDatasetResponse = test::read_body_json(res).await;
         test_data.uploads.push(dataset_response.upload);
@@ -566,12 +573,15 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
-        let initialized = op.initialize(&exe_ctx).await.unwrap();
+        let exe_ctx = ctx.execution_context().unwrap();
+        let initialized = op
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
 
         let processor = initialized.query_processor().unwrap().get_u8().unwrap();
 
-        let query_ctx = ctx.query_context(session).unwrap();
+        let query_ctx = ctx.query_context().unwrap();
         let result = processor.raster_query(query, &query_ctx).await.unwrap();
 
         let result = result

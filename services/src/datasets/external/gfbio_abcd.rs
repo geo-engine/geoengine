@@ -12,7 +12,6 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::postgres::DatabaseConnectionConfig;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::bb8::{Pool, PooledConnection};
@@ -183,21 +182,19 @@ impl GfbioAbcdDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for GfbioAbcdDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         ensure!(
-            *collection == self.root_collection_id().await?,
+            *collection == self.get_root_layer_collection_id().await?,
             error::UnknownLayerCollectionId {
                 id: collection.clone()
             }
         );
 
         let conn = self.pool.get().await?;
-
-        let options = options.user_input;
 
         let stmt = conn
             .prepare(&format!(
@@ -254,11 +251,11 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(LayerCollectionId("abcd".to_owned()))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let surrogate_key: i32 = id.0.parse().map_err(|_| Error::InvalidDataId)?;
 
         let conn = self.pool.get().await?;
@@ -477,7 +474,7 @@ mod tests {
 
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
-    use crate::util::{config, user_input::UserInput};
+    use crate::util::config;
     use std::{fs::File, io::Read, path::PathBuf};
 
     use super::*;
@@ -549,17 +546,15 @@ mod tests {
         .await
         .unwrap();
 
-        let root_id = provider.root_collection_id().await.unwrap();
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &root_id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 10,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await;
 

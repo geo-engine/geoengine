@@ -1,5 +1,5 @@
 use crate::adapters::SparseTilesFillAdapter;
-use crate::engine::{CreateSpan, MetaData, OperatorData, OperatorName, QueryProcessor};
+use crate::engine::{MetaData, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::util::retry::retry;
@@ -54,7 +54,6 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use tracing::{span, Level};
 
 mod error;
 mod loading_info;
@@ -748,11 +747,13 @@ impl OperatorName for GdalSource {
 impl RasterOperator for GdalSource {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let meta_data: GdalMetaData = context.meta_data(&self.params.data).await?;
 
         debug!("Initializing GdalSource for {:?}.", &self.params.data);
+        debug!("GdalSource path: {:?}", path);
 
         let op = InitializedGdalSourceOperator {
             result_descriptor: meta_data.result_descriptor().await?,
@@ -1183,7 +1184,10 @@ mod tests {
         let spatial_resolution =
             SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
 
-        let o = op.initialize(exe_ctx).await.unwrap();
+        let o = op
+            .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+            .await
+            .unwrap();
 
         o.query_processor()
             .unwrap()

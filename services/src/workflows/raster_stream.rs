@@ -1,4 +1,4 @@
-use crate::{contexts::Context, error::Result};
+use crate::{contexts::SessionContext, error::Result};
 use actix::{
     fut::wrap_future, Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler,
 };
@@ -10,7 +10,9 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
-    engine::{QueryAbortTrigger, QueryContext, QueryProcessorExt, RasterOperator},
+    engine::{
+        QueryAbortTrigger, QueryContext, QueryProcessorExt, RasterOperator, WorkflowOperatorPath,
+    },
 };
 
 pub struct RasterWebsocketStreamHandler {
@@ -62,13 +64,17 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RasterWebsocketSt
 }
 
 impl RasterWebsocketStreamHandler {
-    pub async fn new<C: Context>(
+    pub async fn new<C: SessionContext>(
         raster_operator: Box<dyn RasterOperator>,
         query_rectangle: RasterQueryRectangle,
         execution_ctx: C::ExecutionContext,
         mut query_ctx: C::QueryContext,
     ) -> Result<Self> {
-        let initialized_operator = raster_operator.initialize(&execution_ctx).await?;
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized_operator = raster_operator
+            .initialize(workflow_operator_path_root, &execution_ctx)
+            .await?;
 
         let spatial_reference = initialized_operator.result_descriptor().spatial_reference;
 
@@ -166,7 +172,7 @@ fn send_result(
 mod tests {
     use super::*;
     use crate::{
-        contexts::{InMemoryContext, SimpleContext},
+        contexts::{InMemoryContext, InMemorySessionContext, SimpleApplicationContext},
         util::tests::register_ndvi_workflow_helper,
     };
     use actix_http::error::PayloadError;
@@ -193,11 +199,13 @@ mod tests {
             input_sender.unbounded_send(Ok(buf.into())).unwrap();
         }
 
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
         let session = ctx.default_session_ref().await.clone();
         let tiling_origin_coordinate = (0.0, 0.0).into();
 
-        let (workflow, _workflow_id) = register_ndvi_workflow_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+
+        let (workflow, _workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
             SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
@@ -206,11 +214,11 @@ mod tests {
             TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
         );
 
-        let handler = RasterWebsocketStreamHandler::new::<InMemoryContext>(
+        let handler = RasterWebsocketStreamHandler::new::<InMemorySessionContext>(
             workflow.operator.get_raster().unwrap(),
             query_rectangle,
-            ctx.execution_context(session.clone()).unwrap(),
-            ctx.query_context(session).unwrap(),
+            ctx.execution_context().unwrap(),
+            ctx.query_context().unwrap(),
         )
         .await
         .unwrap();
@@ -225,7 +233,8 @@ mod tests {
 
             let bytes = websocket_context.next().await.unwrap().unwrap();
 
-            let bytes = &bytes[4..]; // the first four bytes are WS op bytes
+            let pos = bytes.windows(6).position(|w| w == b"ARROW1").unwrap();
+            let bytes = &bytes[pos..]; // the first "pos" bytes are WS op bytes
 
             let record_batches = arrow_ipc_file_to_record_batches(bytes).unwrap();
             assert_eq!(record_batches.len(), 1);

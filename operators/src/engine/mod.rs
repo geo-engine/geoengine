@@ -29,11 +29,22 @@ pub use result_descriptor::{
 };
 use tracing::Span;
 
+pub use workflow_path::WorkflowOperatorPath;
+
+pub use initialized_sources::{
+    InitializedMultiRasterOrVectorOperator, InitializedMultiRasterOrVectorSource,
+    InitializedSingleRasterOrVectorOperator, InitializedSingleRasterOrVectorSource,
+    InitializedSingleRasterSource, InitializedSingleVectorSource, InitializedSources,
+};
+
 mod clonable_operator;
 mod execution_context;
+mod initialized_sources;
 mod operator;
 mod operator_impl;
 mod query;
+mod workflow_path;
+
 #[macro_use]
 mod query_processor;
 mod result_descriptor;
@@ -177,8 +188,8 @@ pub type CreateSpan = fn() -> Span;
 /// Macro for creating a span-fn for a given type, e.g. `span_fn!(MyType)`
 macro_rules! span_fn {
     ($op: ty) => {
-        fn span(&self) -> CreateSpan {
-            || span!(Level::TRACE, <$op>::TYPE_NAME)
+        fn span(&self) -> crate::engine::CreateSpan {
+            || tracing::span!(tracing::Level::TRACE, <$op>::TYPE_NAME)
         }
     };
 }

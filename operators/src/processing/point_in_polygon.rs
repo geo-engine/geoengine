@@ -11,12 +11,12 @@ use geoengine_datatypes::primitives::VectorQueryRectangle;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use tracing::{span, Level};
 
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorName,
+    QueryContext, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::engine::{OperatorData, QueryProcessor};
 use crate::error;
@@ -56,18 +56,40 @@ impl OperatorData for PointInPolygonFilterSource {
     }
 }
 
+struct InitializedPointInPolygonFilterSource {
+    points: Box<dyn InitializedVectorOperator>,
+    polygons: Box<dyn InitializedVectorOperator>,
+}
+
+#[async_trait]
+impl InitializedSources<InitializedPointInPolygonFilterSource> for PointInPolygonFilterSource {
+    async fn initialize_sources(
+        self,
+        path: WorkflowOperatorPath,
+        context: &dyn ExecutionContext,
+    ) -> Result<InitializedPointInPolygonFilterSource> {
+        let points_path = path.clone_and_append(0);
+        let polygons_path = path.clone_and_append(1);
+
+        Ok(InitializedPointInPolygonFilterSource {
+            points: self.points.initialize(points_path, context).await?,
+            polygons: self.polygons.initialize(polygons_path, context).await?,
+        })
+    }
+}
+
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for PointInPolygonFilter {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        let points = self.sources.points.initialize(context).await?;
-        let polygons = self.sources.polygons.initialize(context).await?;
+        let initialized_source = self.sources.initialize_sources(path, context).await?;
 
-        let points_rd = points.result_descriptor();
-        let polygons_rd = polygons.result_descriptor();
+        let points_rd = initialized_source.points.result_descriptor();
+        let polygons_rd = initialized_source.polygons.result_descriptor();
 
         ensure!(
             points_rd.data_type == VectorDataType::MultiPoint,
@@ -95,12 +117,12 @@ impl VectorOperator for PointInPolygonFilter {
         // We use the result descriptor of the points because in the worst case no feature will be excluded.
         // We cannot use the polygon bbox because a `MultiPoint` could have one point within a polygon (and
         // thus be included in the result) and one point outside of the bbox of the polygons.
-        let out_desc = points.result_descriptor().clone();
+        let out_desc = initialized_source.points.result_descriptor().clone();
 
         let initialized_operator = InitializedPointInPolygonFilter {
             result_descriptor: out_desc,
-            points,
-            polygons,
+            points: initialized_source.points,
+            polygons: initialized_source.polygons,
         };
 
         Ok(initialized_operator.boxed())
@@ -390,7 +412,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -439,7 +464,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -501,7 +529,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -581,7 +612,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -657,7 +691,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await
         .unwrap();
 
@@ -719,7 +756,10 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await;
 
         assert!(matches!(

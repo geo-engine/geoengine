@@ -91,8 +91,8 @@ pub enum Error {
     #[snafu(display("Authentication scheme must be Bearer."))]
     InvalidAuthorizationScheme,
 
-    #[snafu(display("Authorization error: {:?}", source))]
-    Authorization {
+    #[snafu(display("Authorization error: {}", source))]
+    Unauthorized {
         source: Box<Error>,
     },
     AccessDenied,
@@ -156,10 +156,6 @@ pub enum Error {
 
     UnknownDatasetId,
 
-    UnknownVolume,
-    OnlyAdminsCanCreateDatasetFromVolume,
-    AdminsCannotCreateDatasetFromUpload,
-
     OperationRequiresAdminPrivilige,
     OperationRequiresOwnerPermission,
 
@@ -181,6 +177,9 @@ pub enum Error {
         dataset: DatasetId,
         permission: String,
     },
+
+    // TODO: move to pro folder, because permissions are pro only
+    PermissionDenied,
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
     InvalidStringLength {
@@ -279,6 +278,12 @@ pub enum Error {
 
     #[snafu(display("User registration is disabled"))]
     UserRegistrationDisabled,
+
+    UserDoesNotExist,
+    RoleDoesNotExist,
+    RoleWithNameAlreadyExists,
+    RoleAlreadyAssigned,
+    RoleNotAssigned,
 
     #[snafu(display(
         "WCS request endpoint {} must match identifier {}",
@@ -416,26 +421,20 @@ pub enum Error {
         field: String,
         cause: String,
     },
+
+    ProviderDoesNotSupportBrowsing,
+
+    InvalidPath,
 }
 
 impl actix_web::error::ResponseError for Error {
     fn error_response(&self) -> HttpResponse {
-        // TODO: rethink this error handling since errors
-        // only have `Display`, `Debug` and `Error` implementations
-        let (error, message) = match self {
-            Error::Authorization { source } => (
-                Into::<&str>::into(source.as_ref()).to_string(),
-                source.to_string(),
-            ),
-            _ => (Into::<&str>::into(self).to_string(), self.to_string()),
-        };
-
-        HttpResponse::build(self.status_code()).json(ErrorResponse { error, message })
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
     }
 
     fn status_code(&self) -> StatusCode {
         match self {
-            Error::Authorization { source: _ } => StatusCode::UNAUTHORIZED,
+            Error::Unauthorized { source: _ } => StatusCode::UNAUTHORIZED,
             Error::Duplicate { reason: _ } => StatusCode::CONFLICT,
             _ => StatusCode::BAD_REQUEST,
         }

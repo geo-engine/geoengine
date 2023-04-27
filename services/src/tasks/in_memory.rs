@@ -2,7 +2,7 @@ use super::{
     RunningTaskStatusInfo, Task, TaskCleanUpStatus, TaskContext, TaskError, TaskFilter, TaskId,
     TaskListOptions, TaskManager, TaskStatus, TaskStatusInfo, TaskStatusWithId,
 };
-use crate::{contexts::Db, error::Result, util::user_input::Validated};
+use crate::{contexts::Db, error::Result};
 use futures::channel::oneshot;
 use futures::StreamExt;
 use geoengine_datatypes::{error::ErrorSource, util::Identifier};
@@ -20,7 +20,7 @@ type SharedTask = Arc<Box<dyn Task<SimpleTaskManagerContext>>>;
 
 /// An in-memory implementation of the [`TaskManager`] trait.
 #[derive(Default, Clone)]
-pub struct SimpleTaskManager {
+pub struct SimpleTaskManagerBackend {
     tasks_by_id: Db<HashMap<TaskId, TaskHandle>>,
     unique_tasks: Db<HashSet<(&'static str, String)>>,
     // these two lists won't be cleaned-up
@@ -35,7 +35,7 @@ struct TaskHandle {
     unique_key: Option<(&'static str, String)>,
 }
 
-impl SimpleTaskManager {
+impl SimpleTaskManagerBackend {
     async fn write_lock_all(&self) -> WriteLockAll {
         let (tasks_by_id, status_by_id, task_list, unique_tasks) = tokio::join!(
             self.tasks_by_id.write(),
@@ -80,8 +80,8 @@ struct WriteLockForUpdate<'a> {
 }
 
 #[async_trait::async_trait]
-impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
-    async fn schedule(
+impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManagerBackend {
+    async fn schedule_task(
         &self,
         task: Box<dyn Task<SimpleTaskManagerContext>>,
         notify: Option<oneshot::Sender<TaskStatus>>,
@@ -145,7 +145,7 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
         Ok(task_id)
     }
 
-    async fn status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError> {
+    async fn get_task_status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError> {
         let task_status_map = self.status_by_id.read().await;
         let task_status = task_status_map
             .get(&task_id)
@@ -157,9 +157,9 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
         Ok(task_status)
     }
 
-    async fn list(
+    async fn list_tasks(
         &self,
-        options: Validated<TaskListOptions>,
+        options: TaskListOptions,
     ) -> Result<Vec<TaskStatusWithId>, TaskError> {
         let lock = self.status_list.read().await;
 
@@ -191,7 +191,7 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
         Ok(result)
     }
 
-    async fn abort(&self, task_id: TaskId, force: bool) -> Result<(), TaskError> {
+    async fn abort_tasks(&self, task_id: TaskId, force: bool) -> Result<(), TaskError> {
         let mut write_lock = self.write_lock_for_update().await;
 
         let mut task_handle = write_lock
@@ -249,14 +249,14 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
 }
 
 async fn abort_subtasks(
-    task_manager: SimpleTaskManager,
+    task_manager: SimpleTaskManagerBackend,
     subtask_ids: Vec<TaskId>,
     force: bool,
     supertask_id: TaskId,
 ) {
     for subtask_id in subtask_ids {
         // don't fail if subtask failed to abort
-        let subtask_abort_result = task_manager.abort(subtask_id, force).await;
+        let subtask_abort_result = task_manager.abort_tasks(subtask_id, force).await;
 
         if let Err(subtask_abort_result) = subtask_abort_result {
             warn!(
@@ -267,7 +267,7 @@ async fn abort_subtasks(
 }
 
 fn run_task(
-    task_manager: SimpleTaskManager,
+    task_manager: SimpleTaskManagerBackend,
     task_id: TaskId,
     task: SharedTask,
     task_ctx: SimpleTaskManagerContext,
@@ -388,7 +388,7 @@ async fn set_status_to_clean_up_failed(task_status: &Db<TaskStatus>, error: Box<
 }
 
 async fn clean_up_phase(
-    task_manager: SimpleTaskManager,
+    task_manager: SimpleTaskManagerBackend,
     mut task_handle: TaskHandle,
     write_lock: &mut WriteLockForUpdate<'_>,
     task_id: TaskId,
@@ -448,5 +448,41 @@ impl TaskContext for SimpleTaskManagerContext {
             ),
             _ => return, // already completed, aborted or failed, so we ignore the status update
         };
+    }
+}
+
+pub struct SimpleTaskManager {
+    backend: Arc<SimpleTaskManagerBackend>,
+}
+
+impl SimpleTaskManager {
+    pub fn new(backend: Arc<SimpleTaskManagerBackend>) -> Self {
+        Self { backend }
+    }
+}
+
+#[async_trait::async_trait]
+impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManager {
+    async fn schedule_task(
+        &self,
+        task: Box<dyn Task<SimpleTaskManagerContext>>,
+        notify: Option<oneshot::Sender<TaskStatus>>,
+    ) -> Result<TaskId, TaskError> {
+        self.backend.schedule_task(task, notify).await
+    }
+
+    async fn get_task_status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError> {
+        self.backend.get_task_status(task_id).await
+    }
+
+    async fn list_tasks(
+        &self,
+        options: TaskListOptions,
+    ) -> Result<Vec<TaskStatusWithId>, TaskError> {
+        self.backend.list_tasks(options).await
+    }
+
+    async fn abort_tasks(&self, task_id: TaskId, force: bool) -> Result<(), TaskError> {
+        self.backend.abort_tasks(task_id, force).await
     }
 }

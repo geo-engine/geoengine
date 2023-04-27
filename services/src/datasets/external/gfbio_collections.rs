@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
+use crate::error::Error::ProviderDoesNotSupportBrowsing;
 use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
@@ -14,7 +15,6 @@ use crate::layers::layer::{
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::parsing::string_or_string_array;
 use crate::util::postgres::DatabaseConnectionConfig;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::bb8::Pool;
@@ -277,19 +277,9 @@ impl GfbioCollectionsDataProvider {
     }
 
     fn get_collections() -> Result<LayerCollection> {
-        // return an empty collection because we do not support browsing the collections
+        // return an error because we do not support browsing the collections
         // but rather accessing them directly via their ID
-        Ok(LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
-                collection_id: GfBioCollectionId::Collections.try_into()?,
-            },
-            name: "GFBio Collections".to_owned(),
-            description: String::new(),
-            items: vec![],
-            entry_label: None,
-            properties: vec![],
-        })
+        Err(ProviderDoesNotSupportBrowsing)
     }
 
     async fn get_collection(
@@ -577,14 +567,12 @@ impl GfbioCollectionsDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for GfbioCollectionsDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         let collection = GfBioCollectionId::from_str(&collection.0)?;
-
-        let options = options.user_input;
 
         match collection {
             GfBioCollectionId::Collections => Self::get_collections(),
@@ -596,11 +584,13 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
         }
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
-        GfBioCollectionId::Collections.try_into()
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
+        // return an error because we do not support browsing the collections
+        // but rather accessing them directly via their ID
+        Err(ProviderDoesNotSupportBrowsing)
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let gfbio_collection_id = GfBioCollectionId::from_str(&id.0)?;
 
         match &gfbio_collection_id {
@@ -810,7 +800,7 @@ mod tests {
     use rand::RngCore;
     use tokio_postgres::Config;
 
-    use crate::{datasets::listing::Provenance, util::config, util::user_input::UserInput};
+    use crate::{datasets::listing::Provenance, util::config};
 
     use super::*;
 
@@ -939,36 +929,20 @@ mod tests {
             .await
             .unwrap();
 
-            let root_id = provider.root_collection_id().await.unwrap();
+            let root_id = provider.get_root_layer_collection_id().await;
+
+            // root collection id should be an error because we don't support browsing
+            assert!(root_id.is_err());
 
             let collection = provider
-                .collection(
-                    &root_id,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
-                .await;
-
-            let collection = collection.unwrap();
-
-            // root collection should be empty because we don't support browsing
-            assert_eq!(collection.items.len(), 0);
-
-            let collection = provider
-                .collection(
+                .load_layer_collection(
                     &LayerCollectionId(
                         "collections/63cf68e4-6e11-469d-8f35-af83ee6586dc".to_string(),
                     ),
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();

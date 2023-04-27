@@ -11,6 +11,8 @@ pub struct User {
     pub quota_check: bool,
     #[serde(default)]
     pub default_available_quota: i64,
+    pub admin_email: String,
+    pub admin_password: String,
 }
 
 impl ConfigElement for User {

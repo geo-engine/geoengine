@@ -9,9 +9,10 @@ use utoipa::openapi::ArrayBuilder;
 use utoipa::ToSchema;
 
 use crate::api::model::datatypes::TimeInterval;
+use crate::contexts::ApplicationContext;
 use crate::error;
 use crate::error::Result;
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature};
 use crate::util::config;
@@ -29,10 +30,10 @@ use geoengine_datatypes::{
     primitives::{FeatureData, Geometry, MultiPoint},
     spatial_reference::SpatialReference,
 };
-use geoengine_operators::engine::QueryProcessor;
 use geoengine_operators::engine::{
     QueryContext, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
+use geoengine_operators::engine::{QueryProcessor, WorkflowOperatorPath};
 use geoengine_operators::processing::{InitializedVectorReprojection, ReprojectionParams};
 use serde_json::json;
 use std::str::FromStr;
@@ -40,7 +41,7 @@ use std::time::Duration;
 
 pub(crate) fn init_wfs_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -168,23 +169,27 @@ where
 async fn wfs_capabilities_handler<C>(
     workflow_id: web::Path<WorkflowId>,
     _request: web::Query<GetCapabilities>,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse>
 where
-    C: Context,
+    C: ApplicationContext,
 {
     let workflow_id = workflow_id.into_inner();
     let wfs_url = wfs_url(workflow_id)?;
 
-    let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
+    let ctx = app_ctx.session_context(session);
 
-    let exe_ctx = ctx.execution_context(session)?;
+    let workflow = ctx.db().load_workflow(&workflow_id).await?;
+
+    let exe_ctx = ctx.execution_context()?;
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
     let operator = workflow
         .operator
         .get_vector()
         .context(error::Operator)?
-        .initialize(&exe_ctx)
+        .initialize(workflow_operator_path_root, &exe_ctx)
         .await
         .context(error::Operator)?;
 
@@ -293,7 +298,7 @@ where
 
 fn wfs_url(workflow: WorkflowId) -> Result<Url> {
     let web_config = crate::util::config::get_config_element::<crate::util::config::Web>()?;
-    let base = web_config.external_address()?;
+    let base = web_config.api_url()?;
 
     ogc_endpoint_url(&base, OgcProtocol::Wfs, workflow)
 }
@@ -411,11 +416,11 @@ fn wfs_url(workflow: WorkflowId) -> Result<Url> {
         ("session_token" = [])
     )
 )]
-async fn wfs_feature_handler<C: Context>(
+async fn wfs_feature_handler<C: ApplicationContext>(
     req: HttpRequest,
     endpoint: web::Path<WorkflowId>,
     request: web::Query<GetFeature>,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
     let endpoint = endpoint.into_inner();
@@ -449,14 +454,18 @@ async fn wfs_feature_handler<C: Context>(
             .map(Duration::from_secs),
     );
 
-    let workflow: Workflow = ctx.workflow_registry_ref().load(&type_names).await?;
+    let ctx = app_ctx.session_context(session);
+
+    let workflow: Workflow = ctx.db().load_workflow(&type_names).await?;
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session.clone())?;
+    let execution_context = ctx.execution_context()?;
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
     let initialized = operator
         .clone()
-        .initialize(&execution_context)
+        .initialize(workflow_operator_path_root, &execution_context)
         .await
         .context(error::Operator)?;
 
@@ -500,7 +509,7 @@ async fn wfs_feature_handler<C: Context>(
             .queryResolution
             .map_or_else(SpatialResolution::zero_point_one, |r| r.0),
     );
-    let query_ctx = ctx.query_context(session)?;
+    let query_ctx = ctx.query_context()?;
 
     let json = match processor {
         TypedVectorQueryProcessor::Data(p) => {
@@ -669,11 +678,10 @@ mod tests {
     use super::*;
 
     use crate::api::model::datatypes::{DataId, DatasetId};
-    use crate::contexts::{Session, SimpleContext};
+    use crate::contexts::{Session, SimpleApplicationContext};
     use crate::datasets::storage::{DatasetDefinition, DatasetStore};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
-    use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use actix_web::dev::ServiceResponse;
     use actix_web::http::header;
@@ -693,13 +701,15 @@ mod tests {
 
     #[tokio::test]
     async fn mock_test() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
 
         let req = test::TestRequest::get()
             .uri("/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?request=GetFeature&service=WFS&version=2.0.0&typeNames=93d6785e-5eea-4e0e-8074-e7f78733d988&bbox=1,2,3,4")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200);
         assert_eq!(
             read_body_string(res).await,
@@ -797,8 +807,10 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -814,9 +826,10 @@ x;y
             })),
         };
 
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
+        let workflow_id = app_ctx
+            .session_context(session)
+            .db()
+            .register_workflow(workflow)
             .await
             .unwrap();
 
@@ -825,7 +838,7 @@ x;y
         ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -862,8 +875,11 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -879,14 +895,10 @@ x;y
             })),
         };
 
-        let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
-            .await
-            .unwrap();
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
         let req = test::TestRequest::with_uri(&format!("/wfs/{id}?request=GetFeature&service=WFS&version=2.0.0&typeNames={id}&bbox=-90,-180,90,180&srsName=EPSG:4326", id = id.to_string())).method(method).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -947,13 +959,15 @@ x;y
 
     #[tokio::test]
     async fn get_feature_registry_missing_fields() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
 
         let req = test::TestRequest::get().uri(
             "/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?request=GetFeature&service=WFS&version=2.0.0&bbox=-90,-180,90,180&crs=EPSG:4326",
         ).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -978,8 +992,10 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -995,9 +1011,10 @@ x;y
             })),
         };
 
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
+        let workflow_id = app_ctx
+            .session_context(session)
+            .db()
+            .register_workflow(workflow)
             .await
             .unwrap();
 
@@ -1016,7 +1033,7 @@ x;y
         ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -1077,8 +1094,10 @@ x;y
 
     #[tokio::test]
     async fn get_feature_json_missing_fields() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
 
         let params = &[
             ("request", "GetFeature"),
@@ -1093,7 +1112,7 @@ x;y
                 &serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1105,22 +1124,18 @@ x;y
     }
 
     async fn add_dataset_definition_to_datasets(
-        ctx: &InMemoryContext,
+        app_ctx: &InMemoryContext,
         dataset_definition_path: &Path,
     ) -> DatasetId {
         let data = fs::read_to_string(dataset_definition_path).unwrap();
         let data = data.replace("test_data/", test_data!("./").to_str().unwrap());
         let def: DatasetDefinition = serde_json::from_str(&data).unwrap();
 
-        let db = ctx.dataset_db_ref();
+        let db = app_ctx.default_session_context().await.db();
 
-        db.add_dataset(
-            &*ctx.default_session_ref().await,
-            def.properties.validated().unwrap(),
-            Box::new(def.meta_data),
-        )
-        .await
-        .unwrap()
+        db.add_dataset(def.properties, Box::new(def.meta_data))
+            .await
+            .unwrap()
     }
 
     #[tokio::test]
@@ -1131,19 +1146,20 @@ x;y
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(
+        let app_ctx = InMemoryContext::new_with_context_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
         );
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let ndvi_id: DataId =
-            add_dataset_definition_to_datasets(&ctx, test_data!("dataset_defs/ndvi.json"))
+            add_dataset_definition_to_datasets(&app_ctx, test_data!("dataset_defs/ndvi.json"))
                 .await
                 .into();
         let ne_10m_ports_id: DataId = add_dataset_definition_to_datasets(
-            &ctx,
+            &app_ctx,
             test_data!("dataset_defs/points_with_time.json"),
         )
         .await
@@ -1182,9 +1198,10 @@ x;y
 
         let workflow = serde_json::from_str(&json).unwrap();
 
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
+        let workflow_id = app_ctx
+            .session_context(session)
+            .db()
+            .register_workflow(workflow)
             .await
             .unwrap();
 
@@ -1204,7 +1221,7 @@ x;y
                 &serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let body: serde_json::Value = test::read_body_json(res).await;
 

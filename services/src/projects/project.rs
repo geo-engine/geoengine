@@ -1,10 +1,10 @@
+use std::borrow::Cow;
 use std::{convert::TryInto, fmt::Debug};
 
 use crate::api::model::datatypes::Colorizer;
 use crate::error::{Error, Result};
 use crate::identifier;
 use crate::util::config::ProjectService;
-use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
 use geoengine_datatypes::operations::image::RgbaColor;
@@ -22,8 +22,9 @@ use geoengine_operators::string_token;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::ResultExt;
 use utoipa::{IntoParams, ToSchema};
+use validator::{Validate, ValidationError};
 
 identifier!(ProjectId);
 
@@ -310,6 +311,8 @@ pub struct LineSymbology {
     pub stroke: StrokeParam,
 
     pub text: Option<TextSymbology>,
+
+    pub auto_simplified: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
@@ -320,6 +323,8 @@ pub struct PolygonSymbology {
     pub stroke: StrokeParam,
 
     pub text: Option<TextSymbology>,
+
+    pub auto_simplified: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
@@ -437,7 +442,7 @@ impl Default for ProjectFilter {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
 #[schema(example = json!({
     "name": "Test",
@@ -459,24 +464,16 @@ impl Default for ProjectFilter {
     }
 }))]
 pub struct CreateProject {
+    #[validate(length(min = 1))]
+    #[validate(length(max = 256))]
     pub name: String,
+    #[validate(length(min = 1))]
     pub description: String,
     pub bounds: STRectangle,
     pub time_step: Option<TimeStep>,
 }
 
-impl UserInput for CreateProject {
-    fn validate(&self) -> Result<(), Error> {
-        ensure!(
-            !(self.name.is_empty() || self.name.len() > 256 || self.description.is_empty()),
-            error::ProjectCreateFailed
-        );
-
-        Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
 #[schema(example = json!({
     "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
@@ -501,7 +498,9 @@ impl UserInput for CreateProject {
 }))]
 pub struct UpdateProject {
     pub id: ProjectId,
+    #[validate(length(min = 1))]
     pub name: Option<String>,
+    #[validate(length(min = 1))]
     pub description: Option<String>,
     pub layers: Option<Vec<LayerUpdate>>,
     pub plots: Option<Vec<PlotUpdate>>,
@@ -567,23 +566,7 @@ impl<'a> ToSchema<'a> for PlotUpdate {
     }
 }
 
-impl UserInput for UpdateProject {
-    fn validate(&self) -> Result<(), Error> {
-        if let Some(name) = &self.name {
-            ensure!(!name.is_empty(), error::ProjectUpdateFailed);
-        }
-
-        if let Some(description) = &self.description {
-            ensure!(!description.is_empty(), error::ProjectUpdateFailed);
-        }
-
-        // TODO: layers
-
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, IntoParams)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, IntoParams, Validate)]
 pub struct ProjectListOptions {
     #[serde(default)]
     pub filter: ProjectFilter,
@@ -592,18 +575,21 @@ pub struct ProjectListOptions {
     #[param(example = 0)]
     pub offset: u32,
     #[param(example = 2)]
+    #[validate(custom = "validate_list_limit")]
     pub limit: u32,
 }
 
-impl UserInput for ProjectListOptions {
-    fn validate(&self) -> Result<(), Error> {
-        ensure!(
-            self.limit <= get_config_element::<ProjectService>()?.list_limit,
-            error::ProjectListFailed
-        );
-
-        Ok(())
+fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
+    let limit = get_config_element::<ProjectService>()
+        .expect("should exist because it is defined in the default config")
+        .list_limit;
+    if value <= limit {
+        return Ok(());
     }
+
+    let mut err = ValidationError::new("limit (too large)");
+    err.add_param::<u32>(Cow::Borrowed("max limit"), &limit);
+    Err(err)
 }
 
 identifier!(ProjectVersionId);

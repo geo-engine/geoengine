@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures::{future, StreamExt};
+use futures::StreamExt;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle,
     RasterSpatialQueryRectangle, SpatialResolution,
@@ -20,9 +20,9 @@ use snafu::{ensure, OptionExt, ResultExt};
 use xgboost_rs::{Booster, DMatrix, XGBError};
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, MultipleRasterSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, TypedRasterQueryProcessor,
+    ExecutionContext, InitializedRasterOperator, InitializedSources, MultipleRasterSources,
+    Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::stream_zip::StreamVectorZip;
 use crate::util::Result;
@@ -30,7 +30,6 @@ use futures::stream::BoxStream;
 use RasterDataType::F32 as RasterOut;
 
 use snafu::Snafu;
-use tracing::{span, Level};
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 #[derive(Debug, Snafu)]
@@ -105,17 +104,14 @@ type PixelOut = f32;
 impl RasterOperator for XgboostOperator {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let model = context.read_ml_model(self.params.model_sub_path).await?;
 
-        let init_rasters = future::try_join_all(
-            self.sources
-                .rasters
-                .iter()
-                .map(|raster| raster.clone().initialize(context)),
-        )
-        .await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+
+        let init_rasters = initialized_sources.rasters;
 
         let input = init_rasters.get(0).context(self::error::NoInputData)?;
 
@@ -372,7 +368,7 @@ where
 mod tests {
     use crate::engine::{
         MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
-        RasterOperator, RasterResultDescriptor,
+        RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
 
@@ -572,7 +568,7 @@ mod tests {
             .expect("The model file should be available.");
 
         let op = RasterOperator::boxed(xg)
-            .initialize(&exe_ctx)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -883,7 +879,7 @@ mod tests {
             .expect("The model file should be available.");
 
         let op = RasterOperator::boxed(xg)
-            .initialize(&exe_ctx)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 

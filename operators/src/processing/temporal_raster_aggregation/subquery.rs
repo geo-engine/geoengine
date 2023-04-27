@@ -25,7 +25,7 @@ pub async fn subquery_all_tiles_fold_fn<P: Pixel, F: TemporalRasterPixelAggregat
 ) -> Result<TileAccumulator<P, F>> {
     crate::util::spawn_blocking_with_thread_pool(accu.pool.clone(), || {
         let mut accu = accu;
-        accu.add_tile(tile)?;
+        accu.add_tile(tile);
         Ok(accu)
     })
     .await?
@@ -47,8 +47,17 @@ where
     P: Pixel,
     F: TemporalRasterPixelAggregator<P> + 'static,
 {
-    pub fn add_tile(&mut self, in_tile: RasterTile2D<P>) -> Result<()> {
-        self.time = self.time.union(&in_tile.time)?;
+    pub fn add_tile(&mut self, in_tile: RasterTile2D<P>) {
+        // Add a tile to the accumulator, which represents the aggregate over a time interval that contains the in_tile.
+        // TODO: for tiles which are only partially contained in the aggregate time interval, investigate whether the pixels have to be scaled (e.g. if the pixel is a count, assume uniform distribution and divide it by the fraction of time that is contained in the aggregate)".
+
+        // The tile must intersect the time of the query otherwise it includes wrong data
+        debug_assert!(
+            self.time.intersects(&in_tile.time),
+            "Tile time {:?} does not intersect the accumulator/query time {:?}",
+            in_tile.time,
+            self.time
+        );
 
         debug_assert!(self.state_grid.grid_shape() == in_tile.grid_shape());
 
@@ -56,7 +65,7 @@ where
             GridOrEmpty::Grid(g) => g,
             GridOrEmpty::Empty(_) => {
                 self.prestine = false;
-                return Ok(());
+                return;
             }
         };
 
@@ -87,7 +96,6 @@ where
         }
 
         self.prestine = false;
-        Ok(())
     }
 }
 

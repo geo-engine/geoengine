@@ -1,7 +1,7 @@
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName,
+    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
     RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -21,7 +21,6 @@ use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::sync::Arc;
-use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -89,10 +88,11 @@ pub struct InitializedRasterScalingOperator {
 impl RasterOperator for RasterScaling {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let input = self.sources.raster.initialize(context).await?;
-        let in_desc = input.result_descriptor();
+        let input = self.sources.initialize_sources(path, context).await?;
+        let in_desc = input.raster.result_descriptor();
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
@@ -110,7 +110,7 @@ impl RasterOperator for RasterScaling {
             slope: self.params.slope,
             offset: self.params.offset,
             result_descriptor: out_desc,
-            source: input,
+            source: input.raster,
             scaling_mode: self.params.scaling_mode,
         };
 
@@ -321,7 +321,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = op.initialize(&ctx).await.unwrap();
+        let initialized_op = op
+            .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+            .await
+            .unwrap();
 
         let result_descriptor = initialized_op.result_descriptor();
 
@@ -429,7 +432,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = op.initialize(&ctx).await.unwrap();
+        let initialized_op = op
+            .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+            .await
+            .unwrap();
 
         let result_descriptor = initialized_op.result_descriptor();
 

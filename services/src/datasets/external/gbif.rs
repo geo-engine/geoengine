@@ -5,6 +5,7 @@ use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
 use postgres_types::ToSql;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use tokio_postgres::NoTls;
 
 use geoengine_datatypes::collections::VectorDataType;
@@ -32,7 +33,6 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::postgres::DatabaseConnectionConfig;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 
 pub const GBIF_PROVIDER_ID: DataProviderId =
@@ -125,23 +125,33 @@ impl GbifDataProvider {
 
     async fn get_datasets_items(
         &self,
-        options: &Validated<LayerCollectionListOptions>,
+        options: &LayerCollectionListOptions,
         path: &str,
     ) -> Result<Vec<CollectionItem>> {
         let taxonrank = path
             .split_once('/')
             .map_or_else(String::new, |(taxonrank, _)| taxonrank.to_string());
+        ensure!(
+            ["family", "genus", "species"].contains(&taxonrank.as_str()),
+            crate::error::InvalidPath
+        );
         let path = path.split_once('/').map_or_else(|| "", |(_, path)| path);
         let filters = GbifDataProvider::get_filters(path);
         let conn = self.pool.get().await?;
         let query = &format!(
             r#"
-            SELECT DISTINCT canonicalname
-            FROM {schema}.species
-            WHERE taxonrank = $1{filter}
-            ORDER BY canonicalname
+            SELECT {taxonrank}, COUNT(*)
+            FROM {schema}.occurrences
+            WHERE {taxonrank} IN
+                (
+                    SELECT DISTINCT canonicalname
+                    FROM {schema}.species
+                    WHERE taxonrank = $1{filter}
+                )
+            GROUP BY {taxonrank}
+            ORDER BY {taxonrank} 
             LIMIT $2
-            OFFSET $3
+            OFFSET $3;
             "#,
             schema = self.db_config.schema,
             filter = filters
@@ -166,6 +176,7 @@ impl GbifDataProvider {
             .into_iter()
             .map(|row| {
                 let canonicalname = row.get::<usize, String>(0);
+                let num_points = row.get::<usize, i64>(1);
 
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
@@ -173,7 +184,7 @@ impl GbifDataProvider {
                         layer_id: LayerId(taxonrank.clone() + "/" + canonicalname.as_str()),
                     },
                     name: canonicalname.clone(),
-                    description: String::new(),
+                    description: format!("{num_points} occurrences"),
                     properties: vec![],
                 })
             })
@@ -182,7 +193,7 @@ impl GbifDataProvider {
 
     async fn get_filter_items(
         &self,
-        options: &Validated<LayerCollectionListOptions>,
+        options: &LayerCollectionListOptions,
         path: &str,
     ) -> Result<Vec<CollectionItem>> {
         let column = GbifDataProvider::level_name(path);
@@ -232,6 +243,7 @@ impl GbifDataProvider {
                     },
                     name,
                     description: String::new(),
+                    properties: Default::default(),
                 })
             })
             .collect::<Vec<_>>();
@@ -250,6 +262,7 @@ impl GbifDataProvider {
                 },
                 name: "Select ".to_string() + &level_name,
                 description: "Refine the current filter".to_string(),
+                properties: Default::default(),
             }));
         }
         if !GbifDataProvider::LEVELS[5..].contains(&level_name.as_str()) {
@@ -260,6 +273,7 @@ impl GbifDataProvider {
                 },
                 name: "Family datasets".to_string(),
                 description: "Apply the current filter".to_string(),
+                properties: Default::default(),
             }));
         }
         if !GbifDataProvider::LEVELS[6..].contains(&level_name.as_str()) {
@@ -270,6 +284,7 @@ impl GbifDataProvider {
                 },
                 name: "Genus datasets".to_string(),
                 description: "Apply the current filter".to_string(),
+                properties: Default::default(),
             }));
         }
         items.push(CollectionItem::Collection(LayerCollectionListing {
@@ -279,6 +294,7 @@ impl GbifDataProvider {
             },
             name: "Species datasets".to_string(),
             description: "Apply the current filter".to_string(),
+            properties: Default::default(),
         }));
 
         items
@@ -287,10 +303,10 @@ impl GbifDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for GbifDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         let selector = collection.0.split_once('/').map_or_else(
             || collection.clone().0,
@@ -321,11 +337,11 @@ impl LayerCollectionProvider for GbifDataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(LayerCollectionId("select".to_owned()))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let key = id.clone().0;
 
         let (taxonrank, canonicalname) =
@@ -947,7 +963,6 @@ mod tests {
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
     use crate::util::config::{get_config_element, Postgres};
-    use crate::util::user_input::UserInput;
 
     use super::*;
 
@@ -1044,17 +1059,15 @@ mod tests {
             .await
             .unwrap();
 
-            let root_id = provider.root_collection_id().await.unwrap();
+            let root_id = provider.get_root_layer_collection_id().await.unwrap();
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &root_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 
@@ -1077,6 +1090,7 @@ mod tests {
                             },
                             name: "Select kingdom".to_string(),
                             description: "Refine the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1085,6 +1099,7 @@ mod tests {
                             },
                             name: "Family datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1093,6 +1108,7 @@ mod tests {
                             },
                             name: "Genus datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1101,6 +1117,7 @@ mod tests {
                             },
                             name: "Species datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         })
                     ],
                     entry_label: None,
@@ -1125,14 +1142,12 @@ mod tests {
             let root_id = LayerCollectionId("select/Animalia/Chordata".to_string());
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &root_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 
@@ -1157,6 +1172,7 @@ mod tests {
                             },
                             name: "Select class".to_string(),
                             description: "Refine the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1167,6 +1183,7 @@ mod tests {
                             },
                             name: "Family datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1177,6 +1194,7 @@ mod tests {
                             },
                             name: "Genus datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -1187,6 +1205,7 @@ mod tests {
                             },
                             name: "Species datasets".to_string(),
                             description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
                         })
                     ],
                     entry_label: None,
@@ -1221,14 +1240,12 @@ mod tests {
                 let id = LayerCollectionId(id);
 
                 let collection = provider
-                    .collection(
+                    .load_layer_collection(
                         &id,
                         LayerCollectionListOptions {
                             offset: 0,
                             limit: 10,
-                        }
-                        .validated()
-                        .unwrap(),
+                        },
                     )
                     .await;
 
@@ -1294,17 +1311,30 @@ mod tests {
             .await
             .unwrap();
 
+            let invalid_root_id = LayerCollectionId("datasets/families/".to_string());
+
+            let collection = provider
+                .load_layer_collection(
+                    &invalid_root_id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 10,
+                    },
+                )
+                .await;
+
+            assert!(collection.is_err());
+            matches!(collection, Err(Error::InvalidPath));
+
             let root_id = LayerCollectionId("datasets/family/".to_string());
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &root_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 
@@ -1325,7 +1355,7 @@ mod tests {
                             layer_id: LayerId("family/Limoniidae".to_string()),
                         },
                         name: "Limoniidae".to_string(),
-                        description: String::new(),
+                        description: "3 occurrences".to_string(),
                         properties: vec![]
                     }),],
                     entry_label: None,
@@ -1350,14 +1380,12 @@ mod tests {
             let root_id = LayerCollectionId("datasets/family/Plantae/".to_string());
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &root_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 
@@ -1395,14 +1423,12 @@ mod tests {
             let layer_collection_id = LayerCollectionId("filter/".to_string());
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &layer_collection_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 
@@ -1424,6 +1450,7 @@ mod tests {
                         },
                         name: "Animalia".to_string(),
                         description: String::new(),
+                        properties: Default::default(),
                     })],
                     entry_label: None,
                     properties: vec![],
@@ -1447,14 +1474,12 @@ mod tests {
             let layer_collection_id = LayerCollectionId("filter/Plantae".to_string());
 
             let collection = provider
-                .collection(
+                .load_layer_collection(
                     &layer_collection_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await;
 
@@ -2121,7 +2146,7 @@ mod tests {
                 let layer_id = LayerId("species/Rhipidia willistoniana".to_owned());
 
                 let result = provider
-                    .get_layer(&layer_id)
+                    .load_layer(&layer_id)
                     .await
                     .map_err(|e| e.to_string())?;
 

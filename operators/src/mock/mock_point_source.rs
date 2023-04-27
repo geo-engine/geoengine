@@ -1,8 +1,9 @@
-use crate::engine::{CreateSpan, OperatorData, QueryContext};
+use crate::engine::{OperatorData, QueryContext};
 use crate::{
     engine::{
         ExecutionContext, InitializedVectorOperator, OperatorName, SourceOperator,
         TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        WorkflowOperatorPath,
     },
     util::Result,
 };
@@ -18,7 +19,6 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{span, Level};
 
 pub struct MockPointSourceProcessor {
     points: Vec<Coordinate2D>,
@@ -71,6 +71,7 @@ impl OperatorData for MockPointSource {
 impl VectorOperator for MockPointSource {
     async fn _initialize(
         self: Box<Self>,
+        _path: WorkflowOperatorPath,
         _context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         Ok(InitializedMockPointSource {
@@ -143,7 +144,10 @@ mod tests {
             params: MockPointSourceParams { points },
         }
         .boxed();
-        let initialized = mps.initialize(&execution_context).await.unwrap();
+        let initialized = mps
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap();
 
         let typed_processor = initialized.query_processor();
         let Ok(TypedVectorQueryProcessor::MultiPoint(point_processor)) = typed_processor else { panic!() };

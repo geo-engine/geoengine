@@ -5,12 +5,11 @@ use geoengine_datatypes::{
     raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
-use tracing::{span, Level};
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
-    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor,
+    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
+    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 
@@ -38,10 +37,11 @@ pub struct InitializedRasterTypeConversionOperator {
 impl RasterOperator for RasterTypeConversion {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let input = self.sources.raster.initialize(context).await?;
-        let in_desc = input.result_descriptor();
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let in_desc = initialized_sources.raster.result_descriptor();
 
         let out_data_type = self.params.output_data_type;
 
@@ -56,7 +56,7 @@ impl RasterOperator for RasterTypeConversion {
 
         let initialized_operator = InitializedRasterTypeConversionOperator {
             result_descriptor: out_desc,
-            source: input,
+            source: initialized_sources.raster,
         };
 
         Ok(initialized_operator.boxed())
@@ -202,7 +202,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = op.initialize(&ctx).await.unwrap();
+        let initialized_op = op
+            .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+            .await
+            .unwrap();
 
         let result_descriptor = initialized_op.result_descriptor();
 

@@ -23,7 +23,6 @@ use postgres_protocol::escape::{escape_identifier, escape_literal};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tokio::sync::Mutex;
-use tracing::{span, Level};
 
 use geoengine_datatypes::collections::{
     BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
@@ -38,7 +37,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::{CreateSpan, OperatorData, OperatorName, QueryProcessor};
+use crate::engine::{OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath};
 use crate::error::Error;
 use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
@@ -352,9 +351,12 @@ pub struct InitializedOgrSource {
 impl VectorOperator for OgrSource {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn crate::engine::InitializedVectorOperator>> {
         // TODO: check rename of fields are valid
+
+        debug!("Initializing OgrSource with path: {:?}", path);
 
         let info: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -1839,7 +1841,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -1935,7 +1937,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -2034,7 +2036,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -2184,7 +2186,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -2355,7 +2357,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -3757,7 +3759,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         assert_eq!(
@@ -4005,7 +4007,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4092,7 +4094,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4209,7 +4211,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4332,7 +4334,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4453,7 +4455,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4574,7 +4576,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4691,7 +4693,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4821,7 +4823,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -4937,7 +4939,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 

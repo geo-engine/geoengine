@@ -11,9 +11,10 @@ use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
 use utoipa::ToSchema;
 
 use crate::api::model::datatypes::{SpatialReference, SpatialReferenceOption, TimeInterval};
+use crate::contexts::ApplicationContext;
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat};
 use crate::util::config;
@@ -22,7 +23,7 @@ use crate::util::server::{connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
-use geoengine_operators::engine::{ExecutionContext, ResultDescriptor};
+use geoengine_operators::engine::{ExecutionContext, ResultDescriptor, WorkflowOperatorPath};
 use geoengine_operators::processing::{InitializedRasterReprojection, ReprojectionParams};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
@@ -32,7 +33,7 @@ use std::time::Duration;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -128,23 +129,27 @@ where
 async fn wms_capabilities_handler<C>(
     workflow: web::Path<WorkflowId>,
     _request: web::Query<GetCapabilities>,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse>
 where
-    C: Context,
+    C: ApplicationContext,
 {
     let workflow_id = workflow.into_inner();
     let wms_url = wms_url(workflow_id)?;
 
-    let workflow = ctx.workflow_registry_ref().load(&workflow_id).await?;
+    let ctx = app_ctx.session_context(session);
 
-    let exe_ctx = ctx.execution_context(session)?;
+    let workflow = ctx.db().load_workflow(&workflow_id).await?;
+
+    let exe_ctx = ctx.execution_context()?;
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
     let operator = workflow
         .operator
         .get_raster()
         .context(error::Operator)?
-        .initialize(&exe_ctx)
+        .initialize(workflow_operator_path_root, &exe_ctx)
         .await
         .context(error::Operator)?;
 
@@ -215,7 +220,7 @@ where
 
 fn wms_url(workflow: WorkflowId) -> Result<Url> {
     let web_config = crate::util::config::get_config_element::<crate::util::config::Web>()?;
-    let base = web_config.external_address()?;
+    let base = web_config.api_url()?;
 
     ogc_endpoint_url(&base, OgcProtocol::Wms, workflow)
 }
@@ -236,18 +241,18 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
         ("session_token" = [])
     )
 )]
-async fn wms_map_handler<C: Context>(
+async fn wms_map_handler<C: ApplicationContext>(
     req: HttpRequest,
     workflow: web::Path<WorkflowId>,
     request: web::Query<GetMap>,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    async fn compute_result<C: Context>(
+    async fn compute_result<C: ApplicationContext>(
         req: HttpRequest,
         workflow: web::Path<WorkflowId>,
         request: &web::Query<GetMap>,
-        ctx: web::Data<C>,
+        app_ctx: web::Data<C>,
         session: C::Session,
     ) -> Result<Vec<u8>> {
         let endpoint = workflow.into_inner();
@@ -267,18 +272,22 @@ async fn wms_map_handler<C: Context>(
                 .map(Duration::from_secs),
         );
 
+        let ctx = app_ctx.session_context(session);
+
         let workflow = ctx
-            .workflow_registry_ref()
-            .load(&WorkflowId::from_str(&request.layers)?)
+            .db()
+            .load_workflow(&WorkflowId::from_str(&request.layers)?)
             .await?;
 
         let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-        let execution_context = ctx.execution_context(session.clone())?;
+        let execution_context = ctx.execution_context()?;
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
         let initialized = operator
             .clone()
-            .initialize(&execution_context)
+            .initialize(workflow_operator_path_root, &execution_context)
             .await
             .context(error::Operator)?;
 
@@ -328,7 +337,7 @@ async fn wms_map_handler<C: Context>(
             request.time.unwrap_or_else(default_time_from_config).into(),
         );
 
-        let query_ctx = ctx.query_context(session)?;
+        let query_ctx = ctx.query_context()?;
 
         let colorizer = colorizer_from_style(&request.styles)?;
 
@@ -339,7 +348,7 @@ async fn wms_map_handler<C: Context>(
         ).map_err(error::Error::from)
     }
 
-    match compute_result(req, workflow, &request, ctx, session).await {
+    match compute_result(req, workflow, &request, app_ctx, session).await {
         Ok(image_bytes) => Ok(HttpResponse::Ok()
             .content_type(mime::IMAGE_PNG)
             .body(image_bytes)),
@@ -411,10 +420,10 @@ fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
     )
 )]
 #[allow(clippy::unused_async)] // required by handler signature
-async fn wms_legend_graphic_handler<C: Context>(
+async fn wms_legend_graphic_handler<C: ApplicationContext>(
     _workflow: web::Path<WorkflowId>,
     _request: web::Query<GetLegendGraphic>,
-    _ctx: web::Data<C>,
+    _app_ctx: web::Data<C>,
     _session: C::Session,
 ) -> HttpResponse {
     HttpResponse::NotImplemented().finish()
@@ -447,9 +456,7 @@ fn default_time_from_config() -> TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{
-        InMemoryContext, Session, SimpleContext, SimpleSession, /*SimpleSession*/
-    };
+    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
@@ -470,14 +477,16 @@ mod tests {
     use xml::ParserConfig;
 
     async fn test_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
 
         let req = actix_web::test::TestRequest::default()
             .method(method)
             .uri(path.unwrap_or("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -512,17 +521,19 @@ mod tests {
     }
 
     async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::with_uri(&format!(
             "/wms/{id}?request=GetCapabilities&service=WMS"
         ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -548,8 +559,10 @@ mod tests {
     // The result should be similar to the GDAL output of this command: gdalwarp -tr 1 1 -r near -srcnodata 0 -dstnodata 0  MOD13A2_M_NDVI_2014-01-01.TIFF MOD13A2_M_NDVI_2014-01-01_360_180_near_0.TIFF
     #[tokio::test]
     async fn png_from_stream_non_full() {
-        let ctx = InMemoryContext::test_default();
-        let exe_ctx = ctx.execution_context(SimpleSession::default()).unwrap();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let exe_ctx = ctx.execution_context().unwrap();
 
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification: exe_ctx.tiling_specification(),
@@ -572,7 +585,7 @@ mod tests {
                 )
                 .unwrap(),
             ),
-            ctx.query_context(SimpleSession::default()).unwrap(),
+            ctx.query_context().unwrap(),
             360,
             180,
             None,
@@ -597,19 +610,21 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(
+        let app_ctx = InMemoryContext::new_with_context_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
         );
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::with_uri(path.unwrap_or(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())))
             .method(method)
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -631,13 +646,15 @@ mod tests {
     /* FIXME: the pixels are wobbly
     #[tokio::test]
     async fn get_map_ndvi() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_test_request(req, ctx).await;
+        let response = send_test_request(req, app_ctx).await;
 
         assert_eq!(
             response.status(),
@@ -667,17 +684,19 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(
+        let app_ctx = InMemoryContext::new_with_context_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
         );
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={id}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -718,14 +737,16 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(
+        let app_ctx = InMemoryContext::new_with_context_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
         );
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -764,7 +785,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -780,10 +801,12 @@ mod tests {
 
     #[tokio::test]
     async fn it_zoomes_very_far() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -825,17 +848,19 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
     }
 
     #[tokio::test]
     async fn default_error() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -877,7 +902,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
         let body = read_body_string(res).await;
@@ -896,10 +921,12 @@ mod tests {
 
     #[tokio::test]
     async fn json_error() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -942,7 +969,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 200, "Operator", "Operator: DataTypeError: No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
     }

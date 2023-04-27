@@ -1,25 +1,25 @@
 use crate::{
     api::model::{datatypes::DatasetId, services::AddDataset},
-    contexts::{Context, SessionId},
+    contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
     },
     handlers, pro,
     pro::{
-        contexts::{ProContext, ProInMemoryContext},
-        datasets::{DatasetPermission, Permission, Role, UpdateDatasetPermissions},
-        users::{UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession},
+        contexts::{ProApplicationContext, ProGeoEngineDb},
+        permissions::{Permission, PermissionDb, Role},
+        users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
+    util::config::get_config_element,
     util::server::{configure_extractors, render_404, render_405},
-    util::user_input::UserInput,
     workflows::{
         registry::WorkflowRegistry,
         workflow::{Workflow, WorkflowId},
     },
 };
-use actix_web::dev::ServiceResponse;
+use actix_web::{dev::ServiceResponse, FromRequest};
 use actix_web::{http, middleware, test, web, App};
 use geoengine_datatypes::{
     primitives::DateTime, spatial_reference::SpatialReferenceOption, util::Identifier,
@@ -27,25 +27,21 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     engine::{RasterOperator, TypedOperator},
     source::{GdalSource, GdalSourceParameters},
-    util::gdal::create_ndvi_meta_data,
+    util::gdal::{create_ndvi_meta_data, create_ports_meta_data},
 };
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_session_helper<C: ProContext>(ctx: &C) -> UserSession {
-    ctx.user_db_ref()
-        .register(
-            UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret123".to_string(),
-                real_name: "Foo Bar".to_string(),
-            }
-            .validated()
-            .unwrap(),
-        )
+pub async fn create_session_helper<C: UserAuth>(app_ctx: &C) -> UserSession {
+    app_ctx
+        .register_user(UserRegistration {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+            real_name: "Foo Bar".to_string(),
+        })
         .await
         .unwrap();
 
-    ctx.user_db_ref()
+    app_ctx
         .login(UserCredentials {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
@@ -68,49 +64,44 @@ pub fn create_random_user_session_helper() -> UserSession {
         valid_until: DateTime::MAX,
         project: None,
         view: None,
-        roles: vec![user_id.into(), Role::user_role_id()],
+        roles: vec![user_id.into(), Role::registered_user_role_id()],
     }
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_project_helper<C: ProContext>(ctx: &C) -> (UserSession, ProjectId) {
-    let session = create_session_helper(ctx).await;
+pub async fn create_project_helper<C: ApplicationContext<Session = UserSession> + UserAuth>(
+    app_ctx: &C,
+) -> (UserSession, ProjectId)
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let session = create_session_helper(app_ctx).await;
 
-    let project = ctx
-        .project_db_ref()
-        .create(
-            &session,
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                bounds: STRectangle::new(
-                    SpatialReferenceOption::Unreferenced,
-                    0.,
-                    0.,
-                    1.,
-                    1.,
-                    0,
-                    1,
-                )
+    let project = app_ctx
+        .session_context(session.clone())
+        .db()
+        .create_project(CreateProject {
+            name: "Test".to_string(),
+            description: "Foo".to_string(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
-                time_step: None,
-            }
-            .validated()
-            .unwrap(),
-        )
+            time_step: None,
+        })
         .await
         .unwrap();
 
     (session, project)
 }
 
-pub async fn send_pro_test_request<C>(req: test::TestRequest, ctx: C) -> ServiceResponse
+pub async fn send_pro_test_request<C>(req: test::TestRequest, app_ctx: C) -> ServiceResponse
 where
-    C: ProContext,
+    C: ProApplicationContext,
+    C::Session: FromRequest,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     #[allow(unused_mut)]
     let mut app = App::new()
-        .app_data(web::Data::new(ctx))
+        .app_data(web::Data::new(app_ctx))
         .wrap(
             middleware::ErrorHandlers::default()
                 .handler(http::StatusCode::NOT_FOUND, render_404)
@@ -119,6 +110,8 @@ where
         .wrap(middleware::NormalizePath::trim())
         .configure(configure_extractors)
         .configure(pro::handlers::datasets::init_dataset_routes::<C>)
+        .configure(handlers::layers::init_layer_routes::<C>)
+        .configure(pro::handlers::permissions::init_permissions_routes::<C>)
         .configure(handlers::plots::init_plot_routes::<C>)
         .configure(pro::handlers::projects::init_project_routes::<C>)
         .configure(pro::handlers::users::init_user_routes::<C>)
@@ -312,8 +305,13 @@ pub(in crate::pro) mod mock_oidc {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper(ctx: &ProInMemoryContext) -> (Workflow, WorkflowId) {
-    let dataset = add_ndvi_to_datasets(ctx).await;
+pub async fn register_ndvi_workflow_helper<C: ProApplicationContext>(
+    app_ctx: &C,
+) -> (Workflow, WorkflowId)
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let dataset = add_ndvi_to_datasets(app_ctx, true, true).await;
 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
@@ -326,9 +324,12 @@ pub async fn register_ndvi_workflow_helper(ctx: &ProInMemoryContext) -> (Workflo
         ),
     };
 
-    let id = ctx
-        .workflow_registry_ref()
-        .register(workflow.clone())
+    let session = UserSession::mock();
+
+    let id = app_ctx
+        .session_context(session)
+        .db()
+        .register_workflow(workflow.clone())
         .await
         .unwrap();
 
@@ -336,7 +337,14 @@ pub async fn register_ndvi_workflow_helper(ctx: &ProInMemoryContext) -> (Workflo
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
+pub async fn add_ndvi_to_datasets<C: ProApplicationContext>(
+    app_ctx: &C,
+    share_with_users: bool,
+    share_with_anonymous: bool,
+) -> DatasetId
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
     let ndvi = DatasetDefinition {
         properties: AddDataset {
             id: None,
@@ -353,44 +361,98 @@ pub async fn add_ndvi_to_datasets(ctx: &ProInMemoryContext) -> DatasetId {
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
 
-    let system_session = UserSession::system_session();
+    let system_session = UserSession::admin_session();
 
-    let dataset_db = ctx.dataset_db_ref();
+    let db = app_ctx.session_context(system_session).db();
 
-    let dataset_id = dataset_db
-        .add_dataset(
-            &system_session,
-            ndvi.properties
-                .validated()
-                .expect("valid dataset description"),
-            Box::new(ndvi.meta_data),
-        )
+    let dataset_id = db
+        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
         .await
         .expect("dataset db access");
 
-    dataset_db
-        .add_dataset_permission(
-            &system_session,
-            DatasetPermission {
-                role: Role::user_role_id(),
-                dataset: dataset_id,
-                permission: Permission::Read,
-            },
+    if share_with_users {
+        db.add_permission(
+            Role::registered_user_role_id(),
+            dataset_id,
+            Permission::Read,
         )
         .await
         .unwrap();
+    }
 
-    dataset_db
-        .add_dataset_permission(
-            &system_session,
-            DatasetPermission {
-                role: Role::anonymous_role_id(),
-                dataset: dataset_id,
-                permission: Permission::Read,
-            },
-        )
-        .await
-        .unwrap();
+    if share_with_anonymous {
+        db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+            .await
+            .unwrap();
+    }
 
     dataset_id
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_ports_to_datasets<C: ProApplicationContext>(
+    app_ctx: &C,
+    share_with_users: bool,
+    share_with_anonymous: bool,
+) -> DatasetId
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let ndvi = DatasetDefinition {
+        properties: AddDataset {
+            id: None,
+            name: "Natural Earth 10m Ports".to_string(),
+            description: "Ports from Natural Earth".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: Some(vec![Provenance {
+                citation: "Sample Citation".to_owned(),
+                license: "Sample License".to_owned(),
+                uri: "http://example.org/".to_owned(),
+            }]),
+        },
+        meta_data: MetaDataDefinition::OgrMetaData(create_ports_meta_data()),
+    };
+
+    let system_session = UserSession::admin_session();
+
+    let db = app_ctx.session_context(system_session).db();
+
+    let dataset_id = db
+        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
+        .await
+        .expect("dataset db access");
+
+    if share_with_users {
+        db.add_permission(
+            Role::registered_user_role_id(),
+            dataset_id,
+            Permission::Read,
+        )
+        .await
+        .unwrap();
+    }
+
+    if share_with_anonymous {
+        db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+            .await
+            .unwrap();
+    }
+
+    dataset_id
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn admin_login<C: ProApplicationContext>(ctx: &C) -> UserSession
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let user_config = get_config_element::<super::config::User>().unwrap();
+
+    ctx.login(UserCredentials {
+        email: user_config.admin_email.clone(),
+        password: user_config.admin_password.clone(),
+    })
+    .await
+    .unwrap()
 }

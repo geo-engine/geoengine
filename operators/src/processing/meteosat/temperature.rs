@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
-    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor,
+    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
+    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use rayon::ThreadPool;
-use tracing::{span, Level};
+
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
@@ -58,9 +58,11 @@ pub struct InitializedTemperature {
 impl RasterOperator for Temperature {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let input = self.sources.raster.initialize(context).await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let input = initialized_sources.raster;
 
         let in_desc = input.result_descriptor();
 

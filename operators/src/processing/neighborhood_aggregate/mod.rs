@@ -5,9 +5,9 @@ use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
 use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
 use crate::adapters::RasterSubQueryAdapter;
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorName, QueryContext,
-    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor,
+    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
+    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -21,7 +21,6 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::marker::PhantomData;
-use tracing::{span, Level};
 
 /// A neighborhood aggregate operator applies an aggregate function to each raster pixel and its surrounding.
 /// For each output pixel, the aggregate function is applied to an input pixel plus its neighborhood.
@@ -129,6 +128,7 @@ pub enum NeighborhoodAggregateError {
 impl RasterOperator for NeighborhoodAggregate {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let tiling_specification = context.tiling_specification();
@@ -145,7 +145,8 @@ impl RasterOperator for NeighborhoodAggregate {
             }
         );
 
-        let raster_source = self.sources.raster.initialize(context).await?;
+        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let raster_source = initialized_source.raster;
 
         let initialized_operator = InitializedNeighborhoodAggregate {
             result_descriptor: raster_source.result_descriptor().clone(),
@@ -422,7 +423,7 @@ mod tests {
             sources: SingleRasterSource { raster },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -475,7 +476,10 @@ mod tests {
 
         let raster = make_raster();
 
-        let operator = raster.initialize(&exe_ctx).await.unwrap();
+        let operator = raster
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
 
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
@@ -643,7 +647,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -712,7 +716,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 

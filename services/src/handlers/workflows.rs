@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::io::{Cursor, Write};
+use std::sync::Arc;
 
 use crate::api::model::datatypes::{DataId, TimeInterval};
+use crate::contexts::ApplicationContext;
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
 use crate::error::Result;
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::layers::storage::LayerProviderDb;
 use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::parsing::{parse_spatial_partition, parse_spatial_resolution};
@@ -22,9 +24,10 @@ use geoengine_datatypes::primitives::{
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
     ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor,
+    WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
-use utoipa::IntoParams;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::handlers::tasks::TaskResponse;
@@ -34,7 +37,7 @@ use zip::{write::FileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -112,42 +115,44 @@ where
         }))))
     ),
     responses(
-        (status = 200, description = "OK", body = IdResponse,
-            example = json!({"id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"})
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse)
     ),
     security(
         ("session_token" = [])
     )
 )]
-async fn register_workflow_handler<C: Context>(
+async fn register_workflow_handler<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     workflow: web::Json<Workflow>,
 ) -> Result<impl Responder> {
+    let ctx = app_ctx.session_context(session);
+
     let workflow = workflow.into_inner();
 
     // ensure the workflow is valid by initializing it
-    let execution_context = ctx.execution_context(session)?;
+    let execution_context = ctx.execution_context()?;
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
     match workflow.clone().operator {
         TypedOperator::Vector(o) => {
-            o.initialize(&execution_context)
+            o.initialize(workflow_operator_path_root, &execution_context)
                 .await
                 .context(crate::error::Operator)?;
         }
         TypedOperator::Raster(o) => {
-            o.initialize(&execution_context)
+            o.initialize(workflow_operator_path_root, &execution_context)
                 .await
                 .context(crate::error::Operator)?;
         }
         TypedOperator::Plot(o) => {
-            o.initialize(&execution_context)
+            o.initialize(workflow_operator_path_root, &execution_context)
                 .await
                 .context(crate::error::Operator)?;
         }
     }
 
-    let id = ctx.workflow_registry_ref().register(workflow).await?;
+    let id = ctx.db().register_workflow(workflow).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -168,12 +173,16 @@ async fn register_workflow_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-async fn load_workflow_handler<C: Context>(
+async fn load_workflow_handler<C: ApplicationContext>(
     id: web::Path<WorkflowId>,
-    _session: C::Session,
-    ctx: web::Data<C>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let wf = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let wf = app_ctx
+        .session_context(session)
+        .db()
+        .load_workflow(&id.into_inner())
+        .await?;
     Ok(web::Json(wf))
 }
 
@@ -194,30 +203,35 @@ async fn load_workflow_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-async fn get_workflow_metadata_handler<C: Context>(
+async fn get_workflow_metadata_handler<C: ApplicationContext>(
     id: web::Path<WorkflowId>,
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let ctx = app_ctx.session_context(session);
 
-    let execution_context = ctx.execution_context(session)?;
+    let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
 
-    let result_descriptor = workflow_metadata::<C>(workflow, execution_context).await?;
+    let execution_context = ctx.execution_context()?;
+
+    let result_descriptor =
+        workflow_metadata::<C::SessionContext>(workflow, execution_context).await?;
 
     Ok(web::Json(result_descriptor))
 }
 
-async fn workflow_metadata<C: Context>(
+async fn workflow_metadata<C: SessionContext>(
     workflow: Workflow,
     execution_context: C::ExecutionContext,
 ) -> Result<TypedResultDescriptor> {
     // TODO: use cache here
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
     let result_descriptor: TypedResultDescriptor = call_on_typed_operator!(
         workflow.operator,
         operator => {
             let operator = operator
-                .initialize(&execution_context).await
+                .initialize(workflow_operator_path_root, &execution_context).await
                 .context(crate::error::Operator)?;
 
             #[allow(clippy::clone_on_copy)]
@@ -245,14 +259,16 @@ async fn workflow_metadata<C: Context>(
         ("session_token" = [])
     )
 )]
-async fn get_workflow_provenance_handler<C: Context>(
+async fn get_workflow_provenance_handler<C: ApplicationContext>(
     id: web::Path<WorkflowId>,
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let workflow: Workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let ctx = app_ctx.session_context(session);
 
-    let provenance = workflow_provenance(&workflow, ctx.get_ref(), session).await?;
+    let workflow: Workflow = ctx.db().load_workflow(&id.into_inner()).await?;
+
+    let provenance = workflow_provenance(&workflow, &ctx).await?;
 
     Ok(web::Json(provenance))
 }
@@ -263,10 +279,9 @@ struct ProvenanceEntry {
     data: Vec<DataId>,
 }
 
-async fn workflow_provenance<C: Context>(
+async fn workflow_provenance<C: SessionContext>(
     workflow: &Workflow,
     ctx: &C,
-    session: C::Session,
 ) -> Result<Vec<ProvenanceEntry>> {
     let datasets: Vec<DataId> = workflow
         .operator
@@ -275,12 +290,11 @@ async fn workflow_provenance<C: Context>(
         .map(Into::into)
         .collect();
 
-    let db = ctx.dataset_db_ref();
-    let providers = ctx.layer_provider_db_ref();
+    let db = ctx.db();
 
     let provenance: Vec<_> = datasets
         .iter()
-        .map(|id| resolve_provenance::<C>(&session, db, providers, id))
+        .map(|id| resolve_provenance::<C>(&db, id))
         .collect();
     let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
 
@@ -322,18 +336,20 @@ async fn workflow_provenance<C: Context>(
 /// Response:
 /// <zip archive>
 /// ```
-async fn get_workflow_all_metadata_zip_handler<C: Context>(
+async fn get_workflow_all_metadata_zip_handler<C: ApplicationContext>(
     id: web::Path<WorkflowId>,
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder> {
+    let ctx = app_ctx.session_context(session);
+
     let id = id.into_inner();
 
-    let workflow = ctx.workflow_registry_ref().load(&id).await?;
+    let workflow = ctx.db().load_workflow(&id).await?;
 
     let (metadata, provenance) = futures::try_join!(
-        workflow_metadata::<C>(workflow.clone(), ctx.execution_context(session.clone())?),
-        workflow_provenance(&workflow, ctx.get_ref(), session),
+        workflow_metadata::<C::SessionContext>(workflow.clone(), ctx.execution_context()?),
+        workflow_provenance(&workflow, &ctx),
     )?;
 
     let output = crate::util::spawn_blocking(move || {
@@ -399,17 +415,14 @@ async fn get_workflow_all_metadata_zip_handler<C: Context>(
     Ok(response)
 }
 
-async fn resolve_provenance<C: Context>(
-    session: &C::Session,
-    datasets: &C::DatasetDB,
-    providers: &C::LayerProviderDB,
+async fn resolve_provenance<C: SessionContext>(
+    db: &C::GeoEngineDB,
     id: &DataId,
 ) -> Result<ProvenanceOutput> {
     match id {
-        DataId::Internal { dataset_id } => datasets.provenance(session, dataset_id).await,
+        DataId::Internal { dataset_id } => db.load_provenance(dataset_id).await,
         DataId::External(e) => {
-            providers
-                .layer_provider(e.provider_id)
+            db.load_layer_provider(e.provider_id)
                 .await?
                 .provenance(id)
                 .await
@@ -436,20 +449,21 @@ async fn resolve_provenance<C: Context>(
         ("session_token" = [])
     )
 )]
-async fn dataset_from_workflow_handler<C: Context>(
+async fn dataset_from_workflow_handler<C: ApplicationContext>(
     id: web::Path<WorkflowId>,
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     info: web::Json<RasterDatasetFromWorkflow>,
 ) -> Result<impl Responder> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let ctx = Arc::new(app_ctx.session_context(session));
+
+    let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
     let compression_num_threads =
         get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         workflow,
-        session,
-        ctx.into_inner(),
+        ctx,
         info.into_inner(),
         compression_num_threads,
     )
@@ -472,7 +486,7 @@ pub struct RasterStreamWebsocketQuery {
 }
 
 /// The stream result type for `raster_stream_websocket`.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum RasterStreamWebsocketResultType {
     Arrow,
@@ -503,15 +517,17 @@ pub enum RasterStreamWebsocketResultType {
         ("session_token" = [])
     )
 )]
-async fn raster_stream_websocket<C: Context>(
-    ctx: web::Data<C>,
+async fn raster_stream_websocket<C: ApplicationContext>(
+    app_ctx: web::Data<C>,
     session: C::Session,
     id: web::Path<WorkflowId>,
     query: web::Query<RasterStreamWebsocketQuery>,
     request: HttpRequest,
     stream: web::Payload,
 ) -> Result<HttpResponse> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let ctx = app_ctx.session_context(session);
+
+    let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
 
     let operator = workflow
         .operator
@@ -533,11 +549,11 @@ async fn raster_stream_websocket<C: Context>(
         RasterStreamWebsocketResultType::Arrow
     ));
 
-    let stream_handler = RasterWebsocketStreamHandler::new::<C>(
+    let stream_handler = RasterWebsocketStreamHandler::new::<C::SessionContext>(
         operator,
         query_rectangle,
         execution_context,
-        ctx.query_context(session.clone())?,
+        ctx.query_context()?,
     )
     .await?;
 
@@ -585,15 +601,17 @@ pub struct VectorStreamWebsocketQuery {
         ("session_token" = [])
     )
 )]
-async fn vector_stream_websocket<C: Context>(
-    ctx: web::Data<C>,
+async fn vector_stream_websocket<C: ApplicationContext>(
+    app_ctx: web::Data<C>,
     session: C::Session,
     id: web::Path<WorkflowId>,
     query: web::Query<VectorStreamWebsocketQuery>,
     request: HttpRequest,
     stream: web::Payload,
 ) -> Result<HttpResponse> {
-    let workflow = ctx.workflow_registry_ref().load(&id.into_inner()).await?;
+    let ctx = app_ctx.session_context(session);
+
+    let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
 
     let operator = workflow
         .operator
@@ -612,11 +630,11 @@ async fn vector_stream_websocket<C: Context>(
         RasterStreamWebsocketResultType::Arrow
     ));
 
-    let stream_handler = VectorWebsocketStreamHandler::new::<C>(
+    let stream_handler = VectorWebsocketStreamHandler::new::<C::SessionContext>(
         operator,
         query_rectangle,
-        ctx.execution_context(session.clone())?,
-        ctx.query_context(session.clone())?,
+        ctx.execution_context()?,
+        ctx.query_context()?,
     )
     .await?;
 
@@ -647,7 +665,7 @@ pub enum WorkflowApiError {
 mod tests {
 
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::handlers::ErrorResponse;
     use crate::tasks::util::test::wait_for_task_to_finish;
@@ -687,13 +705,16 @@ mod tests {
     };
     use serde_json::json;
     use std::io::Read;
+    use std::sync::Arc;
     use zip::read::ZipFile;
     use zip::ZipArchive;
 
     async fn register_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session_id = ctx.session().id();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -712,7 +733,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&workflow);
-        send_test_request(req, ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -731,7 +752,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_missing_header() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -748,22 +769,24 @@ mod tests {
             .uri("/workflow")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&workflow);
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }
 
     #[tokio::test]
     async fn register_invalid_body() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session_id = ctx.session().id();
 
         // insert workflow
         let req = test::TestRequest::post()
@@ -772,7 +795,7 @@ mod tests {
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_payload("no json");
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -785,9 +808,11 @@ mod tests {
 
     #[tokio::test]
     async fn register_missing_fields() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session_id = ctx.session().id();
 
         let workflow = json!({});
 
@@ -797,7 +822,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&workflow);
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -809,17 +834,19 @@ mod tests {
     }
 
     async fn load_test_helper(method: Method) -> (Workflow, ServiceResponse) {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
 
-        let (workflow, id) = register_ndvi_workflow_helper(&ctx).await;
+        let session_id = ctx.session().id();
+
+        let (workflow, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = test::TestRequest::default()
             .method(method)
             .uri(&format!("/workflow/{id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         (workflow, res)
     }
@@ -842,40 +869,45 @@ mod tests {
 
     #[tokio::test]
     async fn load_missing_header() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = test::TestRequest::get().uri(&format!("/workflow/{id}"));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }
 
     #[tokio::test]
     async fn load_not_exist() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session_id = ctx.session().id();
 
         let req = test::TestRequest::get()
             .uri("/workflow/1")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 404, "NotFound", "Not Found").await;
     }
 
     async fn vector_metadata_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -896,17 +928,13 @@ mod tests {
             .into(),
         };
 
-        let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
-            .await
-            .unwrap();
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
         let req = test::TestRequest::default()
             .method(method)
             .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -945,9 +973,12 @@ mod tests {
 
     #[tokio::test]
     async fn raster_metadata() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockRasterSource::<u8> {
@@ -970,16 +1001,12 @@ mod tests {
             .into(),
         };
 
-        let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
-            .await
-            .unwrap();
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -1010,7 +1037,9 @@ mod tests {
 
     #[tokio::test]
     async fn metadata_missing_header() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -1031,29 +1060,28 @@ mod tests {
             .into(),
         };
 
-        let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
-            .await
-            .unwrap();
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
         let req = test::TestRequest::get().uri(&format!("/workflow/{id}/metadata"));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }
 
     #[tokio::test]
     async fn plot_metadata() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -1068,16 +1096,12 @@ mod tests {
             .into(),
         };
 
-        let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
-            .await
-            .unwrap();
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -1096,11 +1120,13 @@ mod tests {
 
     #[tokio::test]
     async fn provenance() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
 
-        let dataset = add_ndvi_to_datasets(&ctx).await;
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+        let dataset = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
@@ -1113,16 +1139,12 @@ mod tests {
             ),
         };
 
-        let id = ctx
-            .workflow_registry_ref()
-            .register(workflow.clone())
-            .await
-            .unwrap();
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{id}/provenance"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -1150,8 +1172,10 @@ mod tests {
 
     #[tokio::test]
     async fn it_does_not_register_invalid_workflow() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
 
         let workflow = json!({
           "type": "Vector",
@@ -1179,7 +1203,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(workflow.to_string());
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 400);
 
@@ -1206,14 +1230,15 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(
+        let app_ctx = InMemoryContext::new_with_context_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
         );
 
-        let session_id = ctx.default_session_ref().await.id();
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
-        let dataset = add_ndvi_to_datasets(&ctx).await;
+        let dataset = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
@@ -1226,9 +1251,10 @@ mod tests {
             ),
         };
 
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
+        let workflow_id = app_ctx
+            .session_context(session)
+            .db()
+            .register_workflow(workflow)
             .await
             .unwrap();
 
@@ -1236,7 +1262,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{workflow_id}/allMetadata/zip"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1321,14 +1347,17 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let ctx = InMemoryContext::new_with_context_spec(
+        let app_ctx = InMemoryContext::new_with_context_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
         );
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
 
-        let dataset = add_ndvi_to_datasets(&ctx).await;
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let dataset = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
@@ -1341,11 +1370,7 @@ mod tests {
             ),
         };
 
-        let workflow_id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
 
         // create dataset from workflow
         let req = test::TestRequest::post()
@@ -1378,16 +1403,18 @@ mod tests {
                 }
             }"#,
             );
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         let task_response =
             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_response.task_id).await;
+        let tasks = Arc::new(ctx.tasks());
 
-        let status = ctx.tasks().status(task_response.task_id).await.unwrap();
+        wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
+
+        let status = tasks.get_task_status(task_response.task_id).await.unwrap();
 
         let response = if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()
@@ -1413,12 +1440,14 @@ mod tests {
         }
         .boxed();
 
-        let session = ctx.default_session_ref().await.clone();
-        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
+        let exe_ctx = ctx.execution_context().unwrap();
 
-        let o = op.initialize(&exe_ctx).await.unwrap();
+        let o = op
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
 
-        let query_ctx = ctx.query_context(session.clone()).unwrap();
+        let query_ctx = ctx.query_context().unwrap();
         let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
             SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
             SpatialResolution::zero_point_one(),

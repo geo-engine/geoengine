@@ -1,13 +1,14 @@
+use crate::contexts::ApplicationContext;
 use crate::error::Result;
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::projects::{CreateProject, ProjectDb, ProjectId, ProjectListOptions, UpdateProject};
-use crate::util::user_input::UserInput;
+use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use crate::util::IdResponse;
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(web::resource("/project").route(web::post().to(create_project_handler::<C>)))
@@ -27,21 +28,23 @@ where
     path = "/project",
     request_body = CreateProject,
     responses(
-        (status = 200, description = "OK", body = IdResponse,
-            example = json!({"id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"})
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse)
     ),
     security(
         ("session_token" = [])
     )
 )]
-pub(crate) async fn create_project_handler<C: Context>(
+pub(crate) async fn create_project_handler<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
-    create: web::Json<CreateProject>,
+    app_ctx: web::Data<C>,
+    create: ValidatedJson<CreateProject>,
 ) -> Result<impl Responder> {
-    let create = create.into_inner().validated()?;
-    let id = ctx.project_db_ref().create(&session, create).await?;
+    let create = create.into_inner();
+    let id = app_ctx
+        .session_context(session)
+        .db()
+        .create_project(create)
+        .await?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -69,13 +72,17 @@ pub(crate) async fn create_project_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-pub(crate) async fn list_projects_handler<C: Context>(
+pub(crate) async fn list_projects_handler<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
-    options: web::Query<ProjectListOptions>,
+    app_ctx: web::Data<C>,
+    options: ValidatedQuery<ProjectListOptions>,
 ) -> Result<impl Responder> {
-    let options = options.into_inner().validated()?;
-    let listing = ctx.project_db_ref().list(&session, options).await?;
+    let options = options.into_inner();
+    let listing = app_ctx
+        .session_context(session)
+        .db()
+        .list_projects(options)
+        .await?;
     Ok(web::Json(listing))
 }
 
@@ -128,14 +135,15 @@ pub(crate) async fn list_projects_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-async fn load_project_handler<C: Context>(
+async fn load_project_handler<C: ApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let id = ctx
-        .project_db_ref()
-        .load(&session, project.into_inner())
+    let id = app_ctx
+        .session_context(session)
+        .db()
+        .load_project(project.into_inner())
         .await?;
     Ok(web::Json(id))
 }
@@ -157,15 +165,19 @@ async fn load_project_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-pub(crate) async fn update_project_handler<C: Context>(
+pub(crate) async fn update_project_handler<C: ApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
-    ctx: web::Data<C>,
-    mut update: web::Json<UpdateProject>,
+    app_ctx: web::Data<C>,
+    update: ValidatedJson<UpdateProject>,
 ) -> Result<impl Responder> {
+    let mut update = update.into_inner();
     update.id = project.into_inner(); // TODO: avoid passing project id in path AND body
-    let update = update.into_inner().validated()?;
-    ctx.project_db_ref().update(&session, update).await?;
+    app_ctx
+        .session_context(session)
+        .db()
+        .update_project(update)
+        .await?;
     Ok(HttpResponse::Ok())
 }
 
@@ -184,12 +196,16 @@ pub(crate) async fn update_project_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-pub(crate) async fn delete_project_handler<C: Context>(
+pub(crate) async fn delete_project_handler<C: ApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    ctx.project_db_ref().delete(&session, *project).await?;
+    app_ctx
+        .session_context(session)
+        .db()
+        .delete_project(*project)
+        .await?;
     Ok(HttpResponse::Ok())
 }
 
@@ -197,7 +213,7 @@ pub(crate) async fn delete_project_handler<C: Context>(
 mod tests {
     use super::*;
     use crate::api::model::datatypes::Colorizer;
-    use crate::contexts::{Session, SimpleContext, SimpleSession};
+    use crate::contexts::{Session, SimpleApplicationContext, SimpleSession};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
@@ -220,9 +236,11 @@ mod tests {
     use serde_json::json;
 
     async fn create_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session_id = ctx.session().id();
 
         let create = CreateProject {
             name: "Test".to_string(),
@@ -240,7 +258,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&create);
-        send_test_request(req, ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -259,16 +277,18 @@ mod tests {
 
     #[tokio::test]
     async fn create_invalid_body() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session_id = ctx.session().id();
 
         let req = test::TestRequest::post()
             .uri("/project")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_payload("no json");
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -281,9 +301,11 @@ mod tests {
 
     #[tokio::test]
     async fn create_missing_fields() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session_id = ctx.session().id();
 
         let create = json!({
             "description": "Foo".to_string(),
@@ -294,7 +316,7 @@ mod tests {
             .uri("/project")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&create);
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -307,7 +329,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_missing_header() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
         let create = json!({
             "description": "Foo".to_string(),
@@ -315,21 +337,24 @@ mod tests {
         });
 
         let req = test::TestRequest::post().uri("/project").set_json(&create);
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }
 
     async fn list_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (session, _) = create_project_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = ctx.session();
+        let _ = create_project_helper(&app_ctx).await;
 
         let req = test::TestRequest::default()
             .method(method)
@@ -351,7 +376,7 @@ mod tests {
             ))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        send_test_request(req, ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -371,9 +396,9 @@ mod tests {
 
     #[tokio::test]
     async fn list_missing_header() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        create_project_helper(&ctx).await;
+        create_project_helper(&app_ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!(
@@ -393,28 +418,31 @@ mod tests {
                 .unwrap()
             ))
             .append_header((header::CONTENT_LENGTH, 0));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }
 
     async fn load_test_helper(method: Method) -> ServiceResponse {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = ctx.session().clone();
+        let project = create_project_helper(&app_ctx).await;
 
         let req = test::TestRequest::default()
             .method(method)
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        send_test_request(req, ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[tokio::test]
@@ -437,35 +465,37 @@ mod tests {
 
     #[tokio::test]
     async fn load_missing_header() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (_, project) = create_project_helper(&ctx).await;
+        let project = create_project_helper(&app_ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
             401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
         )
         .await;
     }
 
     #[tokio::test]
     async fn load_not_found() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let session_id = ctx.default_session_ref().await.id();
+        let ctx = app_ctx.default_session_context().await;
+
+        let session_id = ctx.session().id();
 
         let req = test::TestRequest::get()
             .uri("/project")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 405, "MethodNotAllowed", "HTTP method not allowed.").await;
     }
@@ -473,9 +503,12 @@ mod tests {
     async fn update_test_helper(
         method: Method,
     ) -> (InMemoryContext, SimpleSession, ProjectId, ServiceResponse) {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = ctx.session().clone();
+        let project = create_project_helper(&app_ctx).await;
 
         let update = update_project_helper(project);
 
@@ -485,27 +518,35 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&update);
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-        (ctx, session, project, res)
+        (app_ctx, session, project, res)
     }
 
     #[tokio::test]
     async fn update() {
-        let (ctx, session, project, res) = update_test_helper(Method::PATCH).await;
+        let (app_ctx, session, project, res) = update_test_helper(Method::PATCH).await;
 
         assert_eq!(res.status(), 200);
 
-        let loaded = ctx.project_db().load(&session, project).await.unwrap();
+        let loaded = app_ctx
+            .session_context(session)
+            .db()
+            .load_project(project)
+            .await
+            .unwrap();
         assert_eq!(loaded.name, "TestUpdate");
         assert_eq!(loaded.layers.len(), 1);
     }
 
     #[tokio::test]
     async fn update_invalid_body() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = ctx.session().clone();
+        let project = create_project_helper(&app_ctx).await;
 
         let req = test::TestRequest::patch()
             .uri(&format!("/project/{project}"))
@@ -513,7 +554,7 @@ mod tests {
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_payload("no json");
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -526,9 +567,12 @@ mod tests {
 
     #[tokio::test]
     async fn update_missing_fields() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = ctx.session().clone();
+        let project = create_project_helper(&app_ctx).await;
 
         let update = json!({
             "name": "TestUpdate",
@@ -550,7 +594,7 @@ mod tests {
             .uri(&format!("/project/{project}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&update);
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -565,7 +609,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn update_layers() {
         async fn update_and_load_latest(
-            ctx: &InMemoryContext,
+            app_ctx: &InMemoryContext,
             session: &SimpleSession,
             project_id: ProjectId,
             update: UpdateProject,
@@ -574,18 +618,26 @@ mod tests {
                 .uri(&format!("/project/{project_id}"))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
                 .set_json(&update);
-            let res = send_test_request(req, ctx.clone()).await;
+            let res = send_test_request(req, app_ctx.clone()).await;
 
             assert_eq!(res.status(), 200);
 
-            let loaded = ctx.project_db().load(session, project_id).await.unwrap();
+            let loaded = app_ctx
+                .session_context(session.clone())
+                .db()
+                .load_project(project_id)
+                .await
+                .unwrap();
 
             loaded.layers
         }
 
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = ctx.session().clone();
+        let project = create_project_helper(&app_ctx).await;
 
         let layer_1 = ProjectLayer {
             workflow: WorkflowId::new(),
@@ -616,7 +668,7 @@ mod tests {
         // add first layer
         assert_eq!(
             update_and_load_latest(
-                &ctx,
+                &app_ctx,
                 &session,
                 project,
                 UpdateProject {
@@ -636,7 +688,7 @@ mod tests {
         // add second layer
         assert_eq!(
             update_and_load_latest(
-                &ctx,
+                &app_ctx,
                 &session,
                 project,
                 UpdateProject {
@@ -659,7 +711,7 @@ mod tests {
         // remove first layer
         assert_eq!(
             update_and_load_latest(
-                &ctx,
+                &app_ctx,
                 &session,
                 project,
                 UpdateProject {
@@ -682,7 +734,7 @@ mod tests {
         // clear layers
         assert_eq!(
             update_and_load_latest(
-                &ctx,
+                &app_ctx,
                 &session,
                 project,
                 UpdateProject {
@@ -704,7 +756,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn update_plots() {
         async fn update_and_load_latest(
-            ctx: &InMemoryContext,
+            app_ctx: &InMemoryContext,
             session: &SimpleSession,
             project_id: ProjectId,
             update: UpdateProject,
@@ -713,18 +765,26 @@ mod tests {
                 .uri(&format!("/project/{project_id}"))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
                 .set_json(&update);
-            let res = send_test_request(req, ctx.clone()).await;
+            let res = send_test_request(req, app_ctx.clone()).await;
 
             assert_eq!(res.status(), 200);
 
-            let loaded = ctx.project_db().load(session, project_id).await.unwrap();
+            let loaded = app_ctx
+                .session_context(session.clone())
+                .db()
+                .load_project(project_id)
+                .await
+                .unwrap();
 
             loaded.plots
         }
 
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = ctx.session().clone();
+        let project = create_project_helper(&app_ctx).await;
 
         let plot_1 = Plot {
             workflow: WorkflowId::new(),
@@ -739,7 +799,7 @@ mod tests {
         // add first plot
         assert_eq!(
             update_and_load_latest(
-                &ctx,
+                &app_ctx,
                 &session,
                 project,
                 UpdateProject {
@@ -759,7 +819,7 @@ mod tests {
         // add second plot
         assert_eq!(
             update_and_load_latest(
-                &ctx,
+                &app_ctx,
                 &session,
                 project,
                 UpdateProject {
@@ -782,7 +842,7 @@ mod tests {
         // remove first plot
         assert_eq!(
             update_and_load_latest(
-                &ctx,
+                &app_ctx,
                 &session,
                 project,
                 UpdateProject {
@@ -805,7 +865,7 @@ mod tests {
         // clear plots
         assert_eq!(
             update_and_load_latest(
-                &ctx,
+                &app_ctx,
                 &session,
                 project,
                 UpdateProject {
@@ -825,25 +885,28 @@ mod tests {
 
     #[tokio::test]
     async fn delete() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
 
-        let (session, project) = create_project_helper(&ctx).await;
+        let ctx = app_ctx.default_session_context().await;
+
+        let session = ctx.session().clone();
+        let project = create_project_helper(&app_ctx).await;
 
         let req = test::TestRequest::delete()
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
-        assert!(ctx.project_db_ref().load(&session, project).await.is_err());
+        assert!(ctx.db().load_project(project).await.is_err());
 
         let req = test::TestRequest::delete()
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,

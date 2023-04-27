@@ -10,7 +10,6 @@ use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
 use crate::util::operators::source_operator_from_dataset;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
@@ -249,19 +248,17 @@ impl DataProvider for SentinelS2L2aCogsDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         ensure!(
-            *collection == self.root_collection_id().await?,
+            *collection == self.get_root_layer_collection_id().await?,
             error::UnknownLayerCollectionId {
                 id: collection.clone()
             }
         );
-
-        let options = options.user_input;
 
         let mut items = self
             .datasets
@@ -296,11 +293,11 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(LayerCollectionId("SentinelS2L2ACogs".to_owned()))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let dataset = self.datasets.get(id).ok_or(Error::UnknownDataId)?;
 
         Ok(Layer {
@@ -745,7 +742,10 @@ mod tests {
         util::{gdal::hide_gdal_errors, test::TestDefault, Identifier},
     };
     use geoengine_operators::{
-        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator},
+        engine::{
+            ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
+            WorkflowOperatorPath,
+        },
         source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     };
     use httptest::{
@@ -878,7 +878,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe)
         .await
         .unwrap();
 
@@ -1240,7 +1240,7 @@ mod tests {
             params: GdalSourceParameters { data: id },
         }
         .boxed()
-        .initialize(&execution_context)
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap()
         .query_processor()

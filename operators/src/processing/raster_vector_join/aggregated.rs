@@ -219,7 +219,9 @@ where
 mod tests {
     use super::*;
 
-    use crate::engine::{ChunkByteSize, MockExecutionContext, RasterResultDescriptor};
+    use crate::engine::{
+        ChunkByteSize, MockExecutionContext, RasterResultDescriptor, WorkflowOperatorPath,
+    };
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::collections::{MultiPointCollection, MultiPolygonCollection};
@@ -267,7 +269,10 @@ mod tests {
             TilingSpecification::new((0., 0.).into(), [3, 2].into()),
         );
 
-        let raster_source = raster_source.initialize(&execution_context).await.unwrap();
+        let raster_source = raster_source
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap();
 
         let points = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -352,7 +357,10 @@ mod tests {
             TilingSpecification::new((0., 0.).into(), [3, 2].into()),
         );
 
-        let raster_source = raster_source.initialize(&execution_context).await.unwrap();
+        let raster_source = raster_source
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap();
 
         let points = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -393,7 +401,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::float_cmp)]
+    #[allow(clippy::float_cmp, clippy::too_many_lines)]
     async fn extract_raster_values_two_spatial_tiles_per_time_step() {
         let raster_tile_a_0 = RasterTile2D::<u8>::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -464,7 +472,10 @@ mod tests {
             TilingSpecification::new((0., 0.).into(), [3, 2].into()),
         );
 
-        let raster_source = raster_source.initialize(&execution_context).await.unwrap();
+        let raster_source = raster_source
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap();
 
         let points = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -600,7 +611,10 @@ mod tests {
             TilingSpecification::new((0., 0.).into(), [3, 2].into()),
         );
 
-        let raster_source = raster_source.initialize(&execution_context).await.unwrap();
+        let raster_source = raster_source
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap();
 
         let polygons = MultiPolygonCollection::from_data(
             vec![MultiPolygon::new(vec![vec![vec![

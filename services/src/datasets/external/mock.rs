@@ -11,7 +11,7 @@ use crate::layers::layer::{
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::projects::Symbology;
 use crate::workflows::workflow::Workflow;
-use crate::{datasets::storage::MetaDataDefinition, error, util::user_input::Validated};
+use crate::{datasets::storage::MetaDataDefinition, error};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::{
@@ -131,13 +131,11 @@ impl DataProvider for MockExternalDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for MockExternalDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
-        let options = options.user_input;
-
         let collection =
             self.collection(collection)
                 .ok_or(error::Error::UnknownLayerCollectionId {
@@ -162,6 +160,7 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                         },
                         name: c.name.clone(),
                         description: c.description.clone(),
+                        properties: Default::default(),
                     })
                 })
                 .chain(collection.layers.iter().map(|l| {
@@ -185,11 +184,11 @@ impl LayerCollectionProvider for MockExternalDataProvider {
         Ok(out)
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(LayerCollectionId(self.root_collection.id.to_string()))
     }
 
-    async fn get_layer(&self, id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let layer = self
             .layer(id)
             .ok_or(error::Error::UnknownLayerId { id: id.clone() })?;

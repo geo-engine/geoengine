@@ -1,7 +1,7 @@
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
-    QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorName,
+    QueryContext, QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::util::input::StringOrNumberRange;
@@ -20,7 +20,6 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::ops::RangeInclusive;
-use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -41,13 +40,14 @@ impl OperatorName for ColumnRangeFilter {
 impl VectorOperator for ColumnRangeFilter {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        let vector_source = self.sources.vector.initialize(context).await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
 
         let initialized_operator = InitializedColumnRangeFilter {
-            result_descriptor: vector_source.result_descriptor().clone(),
-            vector_source,
+            result_descriptor: initialized_sources.vector.result_descriptor().clone(),
+            vector_source: initialized_sources.vector,
             state: self.params,
         };
 
@@ -252,7 +252,10 @@ mod tests {
         .boxed();
 
         let initialized = filter
-            .initialize(&MockExecutionContext::test_default())
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default(),
+            )
             .await
             .unwrap();
 

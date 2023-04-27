@@ -1,38 +1,35 @@
-use crate::contexts::Db;
+use crate::contexts::InMemoryDb;
+use crate::error;
 use crate::error::Result;
 use crate::projects::{
     CreateProject, OrderBy, Project, ProjectDb, ProjectFilter, ProjectId, ProjectListOptions,
     ProjectListing, UpdateProject,
 };
-use crate::util::user_input::Validated;
-use crate::{contexts::SimpleSession, error};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
 #[derive(Default)]
-pub struct HashMapProjectDb {
-    projects: Db<HashMap<ProjectId, Project>>,
+pub struct HashMapProjectDbBackend {
+    projects: HashMap<ProjectId, Project>,
 }
 
 #[async_trait]
-impl ProjectDb<SimpleSession> for HashMapProjectDb {
+impl ProjectDb for InMemoryDb {
     /// List projects
-    async fn list(
-        &self,
-        _session: &SimpleSession,
-        options: Validated<ProjectListOptions>,
-    ) -> Result<Vec<ProjectListing>> {
+    async fn list_projects(&self, options: ProjectListOptions) -> Result<Vec<ProjectListing>> {
         let ProjectListOptions {
             filter,
             order,
             offset,
             limit,
-        } = options.user_input;
+        } = options;
 
         let mut projects = self
-            .projects
+            .backend
+            .project_db
             .read()
             .await
+            .projects
             .values()
             .map(ProjectListing::from)
             .filter(|p| match &filter {
@@ -57,37 +54,38 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
     }
 
     /// Load a project
-    async fn load(&self, _session: &SimpleSession, project: ProjectId) -> Result<Project> {
-        self.projects
+    async fn load_project(&self, project: ProjectId) -> Result<Project> {
+        self.backend
+            .project_db
             .read()
             .await
+            .projects
             .get(&project)
             .cloned()
             .ok_or(error::Error::ProjectLoadFailed)
     }
 
     /// Create a project
-    async fn create(
-        &self,
-        _session: &SimpleSession,
-        create: Validated<CreateProject>,
-    ) -> Result<ProjectId> {
-        let project: Project = Project::from_create_project(create.user_input);
+    async fn create_project(&self, create: CreateProject) -> Result<ProjectId> {
+        let project: Project = Project::from_create_project(create);
         let id = project.id;
-        self.projects.write().await.insert(id, project);
+        self.backend
+            .project_db
+            .write()
+            .await
+            .projects
+            .insert(id, project);
         Ok(id)
     }
 
     /// Update a project
-    async fn update(
-        &self,
-        _session: &SimpleSession,
-        update: Validated<UpdateProject>,
-    ) -> Result<()> {
-        let update = update.user_input;
+    async fn update_project(&self, update: UpdateProject) -> Result<()> {
+        let update = update;
 
-        let mut projects = self.projects.write().await;
-        let project = projects
+        let mut backend = self.backend.project_db.write().await;
+
+        let project = backend
+            .projects
             .get_mut(&update.id)
             .ok_or(error::Error::ProjectUpdateFailed)?;
 
@@ -99,10 +97,12 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
     }
 
     /// Delete a project
-    async fn delete(&self, _session: &SimpleSession, project: ProjectId) -> Result<()> {
-        self.projects
+    async fn delete_project(&self, project: ProjectId) -> Result<()> {
+        self.backend
+            .project_db
             .write()
             .await
+            .projects
             .remove(&project)
             .map(|_| ())
             .ok_or(error::Error::ProjectDeleteFailed)
@@ -112,16 +112,13 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::contexts::MockableSession;
     use crate::projects::project::STRectangle;
-    use crate::util::user_input::UserInput;
     use crate::util::Identifier;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 
     #[tokio::test]
     async fn list() {
-        let project_db = HashMapProjectDb::default();
-        let session = SimpleSession::mock();
+        let project_db = InMemoryDb::default();
 
         for i in 0..10 {
             let create = CreateProject {
@@ -138,20 +135,16 @@ mod test {
                 )
                 .unwrap(),
                 time_step: None,
-            }
-            .validated()
-            .unwrap();
-            project_db.create(&session, create).await.unwrap();
+            };
+            project_db.create_project(create).await.unwrap();
         }
         let options = ProjectListOptions {
             filter: ProjectFilter::None,
             order: OrderBy::NameDesc,
             offset: 0,
             limit: 2,
-        }
-        .validated()
-        .unwrap();
-        let projects = project_db.list(&session, options).await.unwrap();
+        };
+        let projects = project_db.list_projects(options).await.unwrap();
 
         assert_eq!(projects.len(), 2);
         assert_eq!(projects[0].name, "Test9");
@@ -160,8 +153,7 @@ mod test {
 
     #[tokio::test]
     async fn load() {
-        let project_db = HashMapProjectDb::default();
-        let session = SimpleSession::default();
+        let project_db = InMemoryDb::default();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -169,20 +161,17 @@ mod test {
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
             time_step: None,
-        }
-        .validated()
-        .unwrap();
+        };
 
-        let id = project_db.create(&session, create.clone()).await.unwrap();
-        assert!(project_db.load(&session, id).await.is_ok());
+        let id = project_db.create_project(create.clone()).await.unwrap();
+        assert!(project_db.load_project(id).await.is_ok());
 
-        assert!(project_db.load(&session, ProjectId::new()).await.is_err());
+        assert!(project_db.load_project(ProjectId::new()).await.is_err());
     }
 
     #[tokio::test]
     async fn create() {
-        let project_db = HashMapProjectDb::default();
-        let session = SimpleSession::default();
+        let project_db = InMemoryDb::default();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -190,19 +179,16 @@ mod test {
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
             time_step: None,
-        }
-        .validated()
-        .unwrap();
+        };
 
-        let id = project_db.create(&session, create).await.unwrap();
+        let id = project_db.create_project(create).await.unwrap();
 
-        assert!(project_db.load(&session, id).await.is_ok());
+        assert!(project_db.load_project(id).await.is_ok());
     }
 
     #[tokio::test]
     async fn update() {
-        let project_db = HashMapProjectDb::default();
-        let session = SimpleSession::default();
+        let project_db = InMemoryDb::default();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -210,11 +196,9 @@ mod test {
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
             time_step: None,
-        }
-        .validated()
-        .unwrap();
+        };
 
-        let id = project_db.create(&session, create).await.unwrap();
+        let id = project_db.create_project(create).await.unwrap();
 
         let update = UpdateProject {
             id,
@@ -224,19 +208,16 @@ mod test {
             plots: None,
             bounds: None,
             time_step: None,
-        }
-        .validated()
-        .unwrap();
+        };
 
-        project_db.update(&session, update).await.unwrap();
+        project_db.update_project(update).await.unwrap();
 
-        assert_eq!(project_db.load(&session, id).await.unwrap().name, "Foo");
+        assert_eq!(project_db.load_project(id).await.unwrap().name, "Foo");
     }
 
     #[tokio::test]
     async fn delete() {
-        let project_db = HashMapProjectDb::default();
-        let session = SimpleSession::default();
+        let project_db = InMemoryDb::default();
 
         let create = CreateProject {
             name: "Test".into(),
@@ -244,12 +225,10 @@ mod test {
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
             time_step: None,
-        }
-        .validated()
-        .unwrap();
+        };
 
-        let id = project_db.create(&session, create).await.unwrap();
+        let id = project_db.create_project(create).await.unwrap();
 
-        assert!(project_db.delete(&session, id).await.is_ok());
+        assert!(project_db.delete_project(id).await.is_ok());
     }
 }

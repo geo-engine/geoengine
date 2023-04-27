@@ -6,10 +6,7 @@ use arrow::{
         Field, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, Schema,
         UInt16Type, UInt32Type, UInt64Type, UInt8Type,
     },
-    ipc::{
-        writer::{FileWriter, IpcWriteOptions},
-        CompressionType,
-    },
+    ipc::writer::{FileWriter, IpcWriteOptions},
     record_batch::RecordBatch,
 };
 use std::{collections::HashMap, sync::Arc};
@@ -30,7 +27,7 @@ pub fn raster_tile_2d_to_arrow_ipc_file<P: Pixel>(
     let mut file_writer = FileWriter::try_new_with_options(
         Vec::new(),
         &record_batch.schema(),
-        IpcWriteOptions::default().try_with_compression(Some(CompressionType::LZ4_FRAME))?,
+        IpcWriteOptions::default(), //.try_with_compression(Some(CompressionType::LZ4_FRAME))?, // TODO: enable compression when pyarrow >= 12. Also: make this configurable.
     )?;
     file_writer.write(&record_batch)?;
     file_writer.finish()?;
@@ -199,6 +196,37 @@ mod tests {
 
         assert_eq!(array.len(), 16);
         assert_eq!(array.null_count(), 3);
+        assert_eq!(*array.data_type(), arrow_data_type::<u8>());
+        assert_eq!(*array.data_type(), arrow::datatypes::DataType::UInt8);
+    }
+
+    #[test]
+    fn test_grid_2d_to_arrow_array_u16() {
+        let values = Grid2D::new_filled([4, 4].into(), 3);
+        let validity = Grid2D::new_filled([4, 4].into(), true);
+
+        let masked_grid = MaskedGrid2D::new(values.clone(), validity).unwrap();
+
+        let array = grid_2d_to_arrow_array::<u16>(masked_grid.into());
+
+        assert_eq!(array.len(), 16);
+        assert_eq!(array.null_count(), 0);
+
+        // with nulls
+
+        let mut validity = Grid2D::new_filled([4, 4].into(), true);
+        validity.set_at_grid_index([1, 1], false).unwrap();
+        validity.set_at_grid_index([2, 2], false).unwrap();
+        validity.set_at_grid_index([3, 3], false).unwrap();
+
+        let masked_grid = MaskedGrid2D::new(values, validity).unwrap();
+
+        let array = grid_2d_to_arrow_array::<u16>(masked_grid.into());
+
+        assert_eq!(array.len(), 16);
+        assert_eq!(array.null_count(), 3);
+        assert_eq!(*array.data_type(), arrow_data_type::<u16>());
+        assert_eq!(*array.data_type(), arrow::datatypes::DataType::UInt16);
     }
 
     #[test]

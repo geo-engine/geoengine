@@ -1,22 +1,22 @@
 use crate::api::model::datatypes::{DataId, DatasetId};
 use crate::api::model::operators::TypedResultDescriptor;
-use crate::contexts::Session;
 use crate::datasets::storage::Dataset;
-use crate::error;
 use crate::error::Result;
 use crate::projects::Symbology;
 use crate::util::config::{get_config_element, DatasetService};
-use crate::util::user_input::{UserInput, Validated};
+
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaData, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
+    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use std::borrow::Cow;
 use utoipa::{IntoParams, ToSchema};
+
+use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -31,42 +31,31 @@ pub struct DatasetListing {
     // TODO: meta data like bounds, resolution
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, IntoParams)]
+#[derive(Debug, Deserialize, Serialize, Clone, IntoParams, Validate)]
 pub struct DatasetListOptions {
-    // TODO: permissions
     #[param(example = "Germany")]
+    #[validate(length(min = 3, max = 256))]
     pub filter: Option<String>,
     #[param(example = "NameAsc")]
     pub order: OrderBy,
     #[param(example = 0)]
     pub offset: u32,
     #[param(example = 2)]
+    #[validate(custom = "validate_list_limit")]
     pub limit: u32,
 }
 
-impl UserInput for DatasetListOptions {
-    fn validate(&self) -> Result<()> {
-        let limit = get_config_element::<DatasetService>()?.list_limit;
-        ensure!(
-            self.limit <= limit,
-            error::InvalidListLimit {
-                limit: limit as usize
-            }
-        );
-
-        if let Some(filter) = &self.filter {
-            ensure!(
-                filter.len() >= 3 && filter.len() <= 256,
-                error::InvalidStringLength {
-                    parameter: "filter".to_string(),
-                    min: 3_usize,
-                    max: 256_usize
-                }
-            );
-        }
-
-        Ok(())
+fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
+    let limit = get_config_element::<DatasetService>()
+        .expect("should exist because it is defined in the default config")
+        .list_limit;
+    if value <= limit {
+        return Ok(());
     }
+
+    let mut err = ValidationError::new("limit (too large)");
+    err.add_param::<u32>(Cow::Borrowed("max limit"), &limit);
+    Err(err)
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
@@ -75,43 +64,20 @@ pub enum OrderBy {
     NameDesc,
 }
 
-/// This is like the `MetaDataProvider` trait but also accepts a session
-#[async_trait]
-pub trait SessionMetaDataProvider<S, L, R, Q>
-where
-    S: Session,
-    R: ResultDescriptor,
-{
-    async fn session_meta_data(
-        &self,
-        session: &S,
-        id: &DataId,
-    ) -> Result<Box<dyn MetaData<L, R, Q>>>;
-}
-
 /// Listing of stored datasets
 #[async_trait]
-pub trait DatasetProvider<S: Session>:
-    Send
+pub trait DatasetProvider: Send
     + Sync
-    + SessionMetaDataProvider<
-        S,
-        MockDatasetDataSourceLoadingInfo,
-        VectorResultDescriptor,
-        VectorQueryRectangle,
-    > + SessionMetaDataProvider<S, OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    + SessionMetaDataProvider<S, GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
+    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 {
     // TODO: filter, paging
-    async fn list(
-        &self,
-        session: &S,
-        options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>>;
+    async fn list_datasets(&self, options: DatasetListOptions) -> Result<Vec<DatasetListing>>;
 
-    async fn load(&self, session: &S, dataset: &DatasetId) -> Result<Dataset>;
+    async fn load_dataset(&self, dataset: &DatasetId) -> Result<Dataset>;
 
-    async fn provenance(&self, session: &S, dataset: &DatasetId) -> Result<ProvenanceOutput>;
+    async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]

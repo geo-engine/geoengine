@@ -1,9 +1,9 @@
 use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser};
 use crate::{
     engine::{
-        CreateSpan, ExecutionContext, InitializedRasterOperator, Operator, OperatorData,
+        ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorData,
         OperatorName, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-        TypedRasterQueryProcessor,
+        TypedRasterQueryProcessor, WorkflowOperatorPath,
     },
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::Result,
@@ -17,7 +17,6 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use tracing::{span, Level};
 
 pub use self::error::ExpressionError;
 
@@ -123,6 +122,7 @@ impl ExpressionSources {
     #[allow(clippy::many_single_char_names)]
     async fn initialize(
         self,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<ExpressionInitializedSources> {
         if self.iter().count() != self.iter_consecutive().count() {
@@ -130,14 +130,14 @@ impl ExpressionSources {
         }
 
         let (a, b, c, d, e, f, g, h) = try_join!(
-            self.a.initialize(context),
-            Self::initialize_source(self.b, context),
-            Self::initialize_source(self.c, context),
-            Self::initialize_source(self.d, context),
-            Self::initialize_source(self.e, context),
-            Self::initialize_source(self.f, context),
-            Self::initialize_source(self.g, context),
-            Self::initialize_source(self.h, context),
+            self.a.initialize(path.clone_and_append(0), context),
+            Self::initialize_source(self.b, path.clone_and_append(1), context),
+            Self::initialize_source(self.c, path.clone_and_append(2), context),
+            Self::initialize_source(self.d, path.clone_and_append(3), context),
+            Self::initialize_source(self.e, path.clone_and_append(4), context),
+            Self::initialize_source(self.f, path.clone_and_append(5), context),
+            Self::initialize_source(self.g, path.clone_and_append(6), context),
+            Self::initialize_source(self.h, path.clone_and_append(7), context),
         )?;
 
         Ok(ExpressionInitializedSources {
@@ -154,10 +154,11 @@ impl ExpressionSources {
 
     async fn initialize_source(
         source: Option<Box<dyn RasterOperator>>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Option<Box<dyn InitializedRasterOperator>>> {
         if let Some(source) = source {
-            Ok(Some(source.initialize(context).await?))
+            Ok(Some(source.initialize(path, context).await?))
         } else {
             Ok(None)
         }
@@ -220,6 +221,7 @@ fn index_to_parameter(index: usize) -> String {
 impl RasterOperator for Expression {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         // TODO: handle more then 2 inputs, i.e. 1-8
@@ -244,7 +246,7 @@ impl RasterOperator for Expression {
             &self.params.expression,
         )?;
 
-        let sources = self.sources.initialize(context).await?;
+        let sources = self.sources.initialize_sources(path, context).await?;
 
         let spatial_reference = sources.a.result_descriptor().spatial_reference;
 
@@ -340,6 +342,17 @@ impl ExpressionInitializedSources {
         ]
         .into_iter()
         .flatten()
+    }
+}
+
+#[async_trait]
+impl InitializedSources<ExpressionInitializedSources> for ExpressionSources {
+    async fn initialize_sources(
+        self,
+        path: WorkflowOperatorPath,
+        context: &dyn ExecutionContext,
+    ) -> Result<ExpressionInitializedSources> {
+        self.initialize(path, context).await
     }
 }
 
@@ -603,7 +616,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -670,7 +683,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -738,7 +751,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -809,7 +822,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -881,7 +894,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -963,7 +976,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1027,7 +1040,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 

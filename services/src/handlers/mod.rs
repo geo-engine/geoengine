@@ -1,4 +1,4 @@
-use crate::contexts::Context;
+use crate::contexts::SessionContext;
 use crate::contexts::SessionId;
 use crate::error::{Error, Result};
 use actix_web::dev::ServiceResponse;
@@ -8,6 +8,7 @@ use actix_web_httpauth::headers::authorization::{Bearer, Scheme};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
+use utoipa::ToSchema;
 
 pub mod datasets;
 #[cfg(feature = "ebv")]
@@ -24,7 +25,7 @@ pub mod wfs;
 pub mod wms;
 pub mod workflows;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub struct ErrorResponse {
     pub error: String,
     pub message: String,
@@ -50,6 +51,19 @@ impl ErrorResponse {
     }
 }
 
+impl<'a, T> From<&'a T> for ErrorResponse
+where
+    T: snafu::Error,
+    &'static str: From<&'a T>,
+{
+    fn from(value: &'a T) -> Self {
+        ErrorResponse {
+            error: Into::<&str>::into(value).to_string(),
+            message: value.to_string(),
+        }
+    }
+}
+
 impl actix_web::ResponseError for ErrorResponse {
     fn error_response(&self) -> HttpResponse {
         HttpResponse::build(self.status_code()).json(self)
@@ -70,13 +84,13 @@ pub fn get_token(req: &HttpRequest) -> Result<SessionId> {
     let header = req
         .headers()
         .get(header::AUTHORIZATION)
-        .ok_or(Error::Authorization {
+        .ok_or(Error::Unauthorized {
             source: Box::new(Error::MissingAuthorizationHeader),
         })?;
-    let scheme = Bearer::parse(header).map_err(|_| Error::Authorization {
+    let scheme = Bearer::parse(header).map_err(|_| Error::Unauthorized {
         source: Box::new(Error::InvalidAuthorizationScheme),
     })?;
-    SessionId::from_str(scheme.token()).map_err(|_err| Error::Authorization {
+    SessionId::from_str(scheme.token()).map_err(|_err| Error::Unauthorized {
         source: Box::new(Error::InvalidUuid),
     })
 }

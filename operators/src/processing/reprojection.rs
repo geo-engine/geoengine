@@ -7,13 +7,14 @@ use crate::{
         TileReprojectionSubQuery,
     },
     engine::{
-        CreateSpan, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
+        ExecutionContext, InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
         Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
         RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
         TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        WorkflowOperatorPath,
     },
     error::{self, Error},
-    util::{input::RasterOrVectorOperator, Result},
+    util::Result,
 };
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -33,7 +34,6 @@ use geoengine_datatypes::{
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
-use tracing::{span, Level};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -195,21 +195,22 @@ impl InitializedRasterReprojection {
 impl VectorOperator for Reprojection {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        let vector_operator = match self.sources.source {
-            RasterOrVectorOperator::Vector(operator) => operator,
-            RasterOrVectorOperator::Raster(_) => {
-                return Err(error::Error::InvalidOperatorType {
+        let vector_source =
+            self.sources
+                .vector()
+                .ok_or_else(|| error::Error::InvalidOperatorType {
                     expected: "Vector".to_owned(),
                     found: "Raster".to_owned(),
-                })
-            }
-        };
+                })?;
+
+        let initilaized_source = vector_source.initialize_sources(path, context).await?;
 
         let initialized_operator = InitializedVectorReprojection::try_new_with_input(
             self.params,
-            vector_operator.initialize(context).await?,
+            initilaized_source.vector,
         )?;
 
         Ok(initialized_operator.boxed())
@@ -323,21 +324,22 @@ where
 impl RasterOperator for Reprojection {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let raster_operator = match self.sources.source {
-            RasterOrVectorOperator::Raster(operator) => operator,
-            RasterOrVectorOperator::Vector(_) => {
-                return Err(error::Error::InvalidOperatorType {
+        let raster_source =
+            self.sources
+                .raster()
+                .ok_or_else(|| error::Error::InvalidOperatorType {
                     expected: "Raster".to_owned(),
                     found: "Vector".to_owned(),
-                })
-            }
-        };
+                })?;
+
+        let initialized_source = raster_source.initialize_sources(path, context).await?;
 
         let initialized_operator = InitializedRasterReprojection::try_new_with_input(
             self.params,
-            raster_operator.initialize(context).await?,
+            initialized_source.raster,
             context.tiling_specification(),
         )?;
 
@@ -646,7 +648,10 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -717,7 +722,10 @@ mod tests {
                 source: lines_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -795,7 +803,10 @@ mod tests {
                 source: polygon_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::test_default())
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -906,7 +917,7 @@ mod tests {
                 source: mrs1.into(),
             },
         })
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let qp = initialized_operator
@@ -966,7 +977,7 @@ mod tests {
                 source: gdal_op.into(),
             },
         })
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
@@ -1120,7 +1131,7 @@ mod tests {
                 source: gdal_op.into(),
             },
         })
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let x_query_resolution = output_bounds.size_x() / 480.; // since we request x -180 to 180 and y -90 to 90 with 60x60 tiles this will result in 8 x 4 tiles
@@ -1253,7 +1264,7 @@ mod tests {
                 source: gdal_op.into(),
             },
         })
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1322,7 +1333,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1398,7 +1409,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1475,7 +1486,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(&exe_ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 

@@ -285,7 +285,7 @@ mod tests {
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterResultDescriptor, VectorOperator,
+        RasterResultDescriptor, VectorOperator, WorkflowOperatorPath,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -332,7 +332,7 @@ mod tests {
         .boxed();
 
         let points = points
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -341,7 +341,7 @@ mod tests {
             .unwrap();
 
         let rasters = raster_source
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -420,7 +420,7 @@ mod tests {
         .boxed();
 
         let points = points
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -429,7 +429,7 @@ mod tests {
             .unwrap();
 
         let rasters = raster_source
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -518,7 +518,7 @@ mod tests {
         .boxed();
 
         let points = points
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -527,7 +527,7 @@ mod tests {
             .unwrap();
 
         let rasters = raster_source
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -617,7 +617,7 @@ mod tests {
         .boxed();
 
         let points = points
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -626,7 +626,7 @@ mod tests {
             .unwrap();
 
         let rasters = raster_source
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -771,7 +771,7 @@ mod tests {
         );
 
         let raster = raster_source
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -791,7 +791,7 @@ mod tests {
         let points = MockFeatureCollectionSource::single(points).boxed();
 
         let points = points
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -952,7 +952,7 @@ mod tests {
         );
 
         let raster = raster_source
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -974,7 +974,7 @@ mod tests {
         let polygons = MockFeatureCollectionSource::single(polygons).boxed();
 
         let points = polygons
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()

@@ -25,7 +25,6 @@ use crate::layers::listing::LayerCollectionProvider;
 use crate::projects::RasterSymbology;
 use crate::projects::Symbology;
 use crate::tasks::TaskContext;
-use crate::util::user_input::Validated;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use gdal::raster::{Dimension, GdalDataType, Group};
@@ -1075,6 +1074,7 @@ async fn listing_from_dir(
                 },
                 name: entry.file_name().to_string_lossy().to_string(),
                 description: String::new(),
+                properties: Default::default(),
             }));
         } else if entry.path().extension() == Some("nc".as_ref()) {
             let fp = entry
@@ -1106,6 +1106,7 @@ async fn listing_from_dir(
                 },
                 name: tree.title,
                 description: tree.summary,
+                properties: Default::default(),
             }));
         }
     }
@@ -1345,6 +1346,7 @@ async fn listing_from_netcdf_file(
                     },
                     name: group.title.clone(),
                     description: group.description,
+                    properties: Default::default(),
                 }))
             })
             .collect::<crate::error::Result<Vec<CollectionItem>>>()?
@@ -1365,10 +1367,10 @@ async fn listing_from_netcdf_file(
 
 #[async_trait]
 impl LayerCollectionProvider for NetCdfCfDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
-        options: Validated<LayerCollectionListOptions>,
+        options: LayerCollectionListOptions,
     ) -> crate::error::Result<LayerCollection> {
         let id = NetCdfLayerCollectionId::from_str(&collection.0)?;
         Ok(match id {
@@ -1382,7 +1384,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     &self.overviews,
                     &self.path,
                     &path,
-                    &options.user_input,
+                    &options,
                 )
                 .await?
             }
@@ -1396,7 +1398,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     &[],
                     self.path.clone(),
                     self.overviews.clone(),
-                    &options.user_input,
+                    &options,
                 )
                 .await?
             }
@@ -1410,7 +1412,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     &groups,
                     self.path.clone(),
                     self.overviews.clone(),
-                    &options.user_input,
+                    &options,
                 )
                 .await?
             }
@@ -1418,11 +1420,11 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
         })
     }
 
-    async fn root_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
         Ok(NetCdfLayerCollectionId::Path { path: ".".into() }.try_into()?)
     }
 
-    async fn get_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
+    async fn load_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
         let netcdf_id = NetCdfLayerCollectionId::from_str(&id.0)?;
 
         match netcdf_id {
@@ -1520,10 +1522,10 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use super::*;
 
-    use crate::contexts::{Context, MockableSession, SimpleSession};
+    use crate::contexts::{SessionContext, SimpleApplicationContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::layers::storage::LayerProviderDb;
-    use crate::util::user_input::UserInput;
+
     use crate::{
         contexts::InMemoryContext, tasks::util::NopTaskContext,
         util::tests::add_land_cover_to_datasets,
@@ -1538,7 +1540,7 @@ mod tests {
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
     use geoengine_operators::{
-        engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor},
+        engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
         plot::{
             MeanRasterPixelValuesOverTime, MeanRasterPixelValuesOverTimeParams,
             MeanRasterPixelValuesOverTimePosition,
@@ -1717,17 +1719,15 @@ mod tests {
         .await
         .unwrap();
 
-        let root_id = provider.root_collection_id().await.unwrap();
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &root_id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -1748,7 +1748,8 @@ mod tests {
                             collection_id: LayerCollectionId("dataset_irr_ts.nc".to_string())
                         },
                         name: "Test dataset irregular timesteps".to_string(),
-                        description: "Fake description of test dataset with metric and irregular timestep definition.".to_string()
+                        description: "Fake description of test dataset with metric and irregular timestep definition.".to_string(),
+                        properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -1756,7 +1757,8 @@ mod tests {
                             collection_id: LayerCollectionId("dataset_m.nc".to_string())
                         },
                         name: "Test dataset metric".to_string(),
-                        description: "CFake description of test dataset with metric.".to_string()
+                        description: "CFake description of test dataset with metric.".to_string(),
+                        properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
@@ -1764,8 +1766,8 @@ mod tests {
                             collection_id: LayerCollectionId("dataset_sm.nc".to_string())
                         },
                         name: "Test dataset metric and scenario".to_string(),
-                        description: "Fake description of test dataset with metric and scenario."
-                            .to_string()
+                        description: "Fake description of test dataset with metric and scenario.".to_string(),
+                        properties: Default::default(),
                     })
                 ],
                 entry_label: None,
@@ -1788,14 +1790,12 @@ mod tests {
         let id = LayerCollectionId("dataset_m.nc".to_string());
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -1815,14 +1815,16 @@ mod tests {
                         collection_id: LayerCollectionId("dataset_m.nc/metric_1".to_string())
                     },
                     name: "Random metric 1".to_string(),
-                    description: "Randomly created data" .to_string()
+                    description: "Randomly created data" .to_string(),
+                    properties: Default::default(),
                 }), CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_m.nc/metric_2".to_string()) 
                     },
                     name: "Random metric 2".to_string(), 
-                    description: "Randomly created data".to_string()
+                    description: "Randomly created data".to_string(),
+                    properties: Default::default(),
                 })],
                 entry_label: None,
                 properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string()).into()]
@@ -1844,14 +1846,12 @@ mod tests {
         let id = LayerCollectionId("dataset_sm.nc".to_string());
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -1871,35 +1871,40 @@ mod tests {
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string())
                     },
                     name: "Sustainability".to_string(),
-                    description: "SSP1-RCP2.6" .to_string()
+                    description: "SSP1-RCP2.6" .to_string(),
+                    properties: Default::default(),
                 }), CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string())
                     },
                     name: "Middle of the Road ".to_string(),
-                    description: "SSP2-RCP4.5".to_string()
+                    description: "SSP2-RCP4.5".to_string(),
+                    properties: Default::default(),
                 }), CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
                     },
                     name: "Regional Rivalry".to_string(), 
-                    description: "SSP3-RCP6.0".to_string()
+                    description: "SSP3-RCP6.0".to_string(),
+                    properties: Default::default(),
                 }), CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string())
                     },
                     name: "Inequality".to_string(),
-                    description: "SSP4-RCP6.0".to_string()
+                    description: "SSP4-RCP6.0".to_string(),
+                    properties: Default::default(),
                 }), CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string())
                     },
                     name: "Fossil-fueled Development".to_string(),
-                    description: "SSP5-RCP8.5".to_string()
+                    description: "SSP5-RCP8.5".to_string(),
+                    properties: Default::default(),
                 })],
                 entry_label: None,
                 properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string()).into()]
@@ -2141,14 +2146,12 @@ mod tests {
         let id = LayerCollectionId("dataset_sm.nc".to_string());
 
         let collection = provider
-            .collection(
+            .load_layer_collection(
                 &id,
                 LayerCollectionListOptions {
                     offset: 0,
                     limit: 20,
-                }
-                .validated()
-                .unwrap(),
+                },
             )
             .await
             .unwrap();
@@ -2168,35 +2171,40 @@ mod tests {
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string())
                     },
                     name: "Sustainability".to_string(),
-                    description: "SSP1-RCP2.6" .to_string()
+                    description: "SSP1-RCP2.6" .to_string(),
+                    properties: Default::default(),
                 }), CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string())
                     },
                     name: "Middle of the Road ".to_string(),
-                    description: "SSP2-RCP4.5".to_string()
+                    description: "SSP2-RCP4.5".to_string(),
+                    properties: Default::default(),
                 }), CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
                     },
                     name: "Regional Rivalry".to_string(),
-                    description: "SSP3-RCP6.0".to_string()
+                    description: "SSP3-RCP6.0".to_string(),
+                    properties: Default::default(),
                 }), CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string())
                     },
                     name: "Inequality".to_string(),
-                    description: "SSP4-RCP6.0".to_string()
+                    description: "SSP4-RCP6.0".to_string(),
+                    properties: Default::default(),
                 }), CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string()) 
                     },
                     name: "Fossil-fueled Development".to_string(), 
-                    description: "SSP5-RCP8.5".to_string()
+                    description: "SSP5-RCP8.5".to_string(),
+                    properties: Default::default(),
                 })],
                 entry_label: None,
                 properties: vec![("author".to_string(), "Luise Quoß, luise.quoss@idiv.de, German Centre for Integrative Biodiversity Research (iDiv)".to_string()).into()]
@@ -2206,7 +2214,9 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_irregular_time_series() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
 
         let land_cover_dataset_id = add_land_cover_to_datasets(&ctx).await;
 
@@ -2217,7 +2227,8 @@ mod tests {
                 base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
                 overviews: test_data!("netcdf4d/overviews/").into(),
             });
-        ctx.layer_provider_db_ref()
+
+        ctx.db()
             .add_layer_provider(provider_definition)
             .await
             .unwrap();
@@ -2266,9 +2277,12 @@ mod tests {
         .boxed();
 
         // let execution_context = MockExecutionContext::test_default();
-        let execution_context = ctx.execution_context(SimpleSession::mock()).unwrap();
+        let execution_context = ctx.execution_context().unwrap();
 
-        let initialized_operator = operator.initialize(&execution_context).await.unwrap();
+        let initialized_operator = operator
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap();
 
         let TypedPlotQueryProcessor::JsonVega(processor) = initialized_operator.query_processor().unwrap() else {
             panic!("wrong plot type");

@@ -7,8 +7,9 @@ use crate::api::model::operators::GdalDatasetParameters;
 use crate::api::model::operators::GdalMetaDataStatic;
 use crate::api::model::operators::RasterResultDescriptor;
 use crate::api::model::services::AddDataset;
-use crate::contexts::SimpleContext;
-use crate::contexts::SimpleSession;
+use crate::contexts::ApplicationContext;
+use crate::contexts::InMemorySessionContext;
+use crate::contexts::SimpleApplicationContext;
 use crate::datasets::listing::Provenance;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
@@ -19,12 +20,11 @@ use crate::projects::{
     Symbology, UpdateProject,
 };
 use crate::util::server::{configure_extractors, render_404, render_405};
-use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
-    contexts::{Context, InMemoryContext},
+    contexts::{InMemoryContext, SessionContext},
     datasets::storage::{DatasetDefinition, MetaDataDefinition},
     handlers,
 };
@@ -44,35 +44,22 @@ use std::io::Write;
 use std::path::PathBuf;
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_project_helper<C: SimpleContext>(ctx: &C) -> (SimpleSession, ProjectId) {
-    let session = ctx.default_session_ref().await;
-
-    let project = ctx
-        .project_db_ref()
-        .create(
-            &session,
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                bounds: STRectangle::new(
-                    SpatialReferenceOption::Unreferenced,
-                    0.,
-                    0.,
-                    1.,
-                    1.,
-                    0,
-                    1,
-                )
+pub async fn create_project_helper<C: SimpleApplicationContext>(app_ctx: &C) -> ProjectId {
+    let project = app_ctx
+        .default_session_context()
+        .await
+        .db()
+        .create_project(CreateProject {
+            name: "Test".to_string(),
+            description: "Foo".to_string(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
-                time_step: None,
-            }
-            .validated()
-            .unwrap(),
-        )
+            time_step: None,
+        })
         .await
         .unwrap();
 
-    (session.clone(), project)
+    project
 }
 
 pub fn update_project_helper(project: ProjectId) -> UpdateProject {
@@ -96,8 +83,8 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, WorkflowId) {
-    let dataset = add_ndvi_to_datasets(ctx).await;
+pub async fn register_ndvi_workflow_helper(app_ctx: &InMemoryContext) -> (Workflow, WorkflowId) {
+    let dataset = add_ndvi_to_datasets(app_ctx).await;
 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
@@ -110,16 +97,19 @@ pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, 
         ),
     };
 
-    let id = ctx
-        .workflow_registry_ref()
-        .register(workflow.clone())
+    let session = app_ctx.default_session_ref().await.clone();
+
+    let id = app_ctx
+        .session_context(session)
+        .db()
+        .register_workflow(workflow.clone())
         .await
         .unwrap();
 
     (workflow, id)
 }
 
-pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
+pub async fn add_ndvi_to_datasets(app_ctx: &InMemoryContext) -> DatasetId {
     let ndvi = DatasetDefinition {
         properties: AddDataset {
             id: None,
@@ -136,21 +126,18 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
 
-    ctx.dataset_db_ref()
-        .add_dataset(
-            &SimpleSession::default(),
-            ndvi.properties
-                .validated()
-                .expect("valid dataset description"),
-            Box::new(ndvi.meta_data),
-        )
+    app_ctx
+        .default_session_context()
+        .await
+        .db()
+        .add_dataset(ndvi.properties, Box::new(ndvi.meta_data))
         .await
         .expect("dataset db access")
         .into()
 }
 
 #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
-pub async fn add_land_cover_to_datasets(ctx: &InMemoryContext) -> DatasetId {
+pub async fn add_land_cover_to_datasets(ctx: &InMemorySessionContext) -> DatasetId {
     let ndvi = DatasetDefinition {
         properties: AddDataset {
             id: None,
@@ -245,14 +232,8 @@ pub async fn add_land_cover_to_datasets(ctx: &InMemoryContext) -> DatasetId {
         }.into()),
     };
 
-    ctx.dataset_db_ref()
-        .add_dataset(
-            &SimpleSession::default(),
-            ndvi.properties
-                .validated()
-                .expect("valid dataset description"),
-            Box::new(ndvi.meta_data),
-        )
+    ctx.db()
+        .add_dataset(ndvi.properties, Box::new(ndvi.meta_data))
         .await
         .expect("dataset db access")
         .into()
@@ -300,13 +281,13 @@ where
     check_allowed_http_methods2(test_helper, allowed_methods, |res| res)
 }
 
-pub async fn send_test_request<C: SimpleContext>(
+pub async fn send_test_request<C: SimpleApplicationContext>(
     req: test::TestRequest,
-    ctx: C,
+    app_ctx: C,
 ) -> ServiceResponse {
     let app = test::init_service(
         App::new()
-            .app_data(web::Data::new(ctx))
+            .app_data(web::Data::new(app_ctx))
             .wrap(
                 middleware::ErrorHandlers::default()
                     .handler(http::StatusCode::NOT_FOUND, render_404)

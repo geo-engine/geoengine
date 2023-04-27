@@ -1,7 +1,8 @@
 use crate::api::model::datatypes::TimeInterval;
+use crate::contexts::ApplicationContext;
 use crate::error;
 use crate::error::Result;
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::config;
 use crate::util::parsing::parse_spatial_resolution;
@@ -16,7 +17,9 @@ use geoengine_datatypes::primitives::{
     BoundingBox2D, PlotQueryRectangle, SpatialQuery, SpatialResolution,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::{QueryContext, ResultDescriptor, TypedPlotQueryProcessor};
+use geoengine_operators::engine::{
+    QueryContext, ResultDescriptor, TypedPlotQueryProcessor, WorkflowOperatorPath,
+};
 use geoengine_operators::util::abortable_query_execution;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -26,7 +29,7 @@ use uuid::Uuid;
 
 pub(crate) fn init_plot_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(web::resource("/plot/{id}").route(web::get().to(get_plot_handler::<C>)));
@@ -92,12 +95,12 @@ pub(crate) struct GetPlot {
         ("session_token" = [])
     )
 )]
-async fn get_plot_handler<C: Context>(
+async fn get_plot_handler<C: ApplicationContext>(
     req: HttpRequest,
     id: web::Path<Uuid>,
     params: web::Query<GetPlot>,
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let conn_closed = connection_closed(
         &req,
@@ -106,17 +109,17 @@ async fn get_plot_handler<C: Context>(
             .map(Duration::from_secs),
     );
 
-    let workflow = ctx
-        .workflow_registry_ref()
-        .load(&WorkflowId(id.into_inner()))
-        .await?;
+    let ctx = app_ctx.session_context(session);
+    let workflow = ctx.db().load_workflow(&WorkflowId(id.into_inner())).await?;
 
     let operator = workflow.operator.get_plot().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(session.clone())?;
+    let execution_context = ctx.execution_context()?;
+
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let initialized = operator
-        .initialize(&execution_context)
+        .initialize(workflow_operator_path_root, &execution_context)
         .await
         .context(error::Operator)?;
 
@@ -157,7 +160,7 @@ async fn get_plot_handler<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let mut query_ctx = ctx.query_context(session)?;
+    let mut query_ctx = ctx.query_context()?;
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
@@ -213,7 +216,7 @@ pub struct WrappedPlotOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
     use crate::util::tests::{
         check_allowed_http_methods, read_body_json, read_body_string, send_test_request,
     };
@@ -267,11 +270,12 @@ mod tests {
     #[tokio::test]
     async fn json() {
         let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
-        let ctx = InMemoryContext::new_with_context_spec(
+        let app_ctx = InMemoryContext::new_with_context_spec(
             tiling_specification,
             ChunkByteSize::test_default(),
         );
-        let session_id = ctx.default_session_ref().await.id();
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -284,9 +288,10 @@ mod tests {
             .into(),
         };
 
-        let id = ctx
-            .workflow_registry_ref()
-            .register(workflow)
+        let id = app_ctx
+            .session_context(session)
+            .db()
+            .register_workflow(workflow)
             .await
             .unwrap();
 
@@ -303,7 +308,7 @@ mod tests {
                 &serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -329,11 +334,12 @@ mod tests {
     #[tokio::test]
     async fn json_vega() {
         let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
-        let ctx = InMemoryContext::new_with_context_spec(
+        let app_ctx = InMemoryContext::new_with_context_spec(
             tiling_specification,
             ChunkByteSize::test_default(),
         );
-        let session_id = ctx.default_session_ref().await.id();
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: Histogram {
@@ -352,7 +358,12 @@ mod tests {
             .into(),
         };
 
-        let id = ctx.workflow_registry().register(workflow).await.unwrap();
+        let id = app_ctx
+            .session_context(session)
+            .db()
+            .register_workflow(workflow)
+            .await
+            .unwrap();
 
         let params = &[
             ("bbox", "0,-0.3,0.2,0"),
@@ -367,7 +378,7 @@ mod tests {
                 &serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -456,8 +467,11 @@ mod tests {
     #[tokio::test]
     async fn check_request_types() {
         async fn get_workflow_json(method: Method) -> ServiceResponse {
-            let ctx = InMemoryContext::test_default();
-            let session_id = ctx.default_session_ref().await.id();
+            let app_ctx = InMemoryContext::test_default();
+
+            let ctx = app_ctx.default_session_context().await;
+            let session = app_ctx.default_session_ref().await.clone();
+            let session_id = session.id();
 
             let workflow = Workflow {
                 operator: Statistics {
@@ -470,11 +484,7 @@ mod tests {
                 .into(),
             };
 
-            let id = ctx
-                .workflow_registry_ref()
-                .register(workflow)
-                .await
-                .unwrap();
+            let id = ctx.db().register_workflow(workflow).await.unwrap();
 
             let params = &[
                 ("bbox", "-180,-90,180,90"),
@@ -489,7 +499,7 @@ mod tests {
                     &serde_urlencoded::to_string(params).unwrap()
                 ))
                 .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            send_test_request(req, ctx).await
+            send_test_request(req, app_ctx).await
         }
 
         check_allowed_http_methods(get_workflow_json, &[Method::GET]).await;

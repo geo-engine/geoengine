@@ -12,17 +12,17 @@ use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
 use geoengine_datatypes::raster::GridOrEmpty;
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
     PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
 use crate::util::input::MultiRasterOrVectorOperator;
 use crate::util::statistics::PSquareQuantileEstimator;
 use crate::util::Result;
 use snafu::ensure;
-use tracing::{span, Level};
 
 pub const BOXPLOT_OPERATOR_NAME: &str = "BoxPlot";
 const EXACT_CALC_BOUND: usize = 10_000;
@@ -50,6 +50,7 @@ pub struct BoxPlotParams {
 impl PlotOperator for BoxPlot {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         match self.sources.source {
@@ -67,6 +68,14 @@ impl PlotOperator for BoxPlot {
                             .to_string(),
                 });
 
+                let raster_sources = futures::future::try_join_all(
+                    raster_sources
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, op)| op.initialize(path.clone_and_append(i as u8), context)),
+                )
+                .await?;
+
                 let output_names = if self.params.column_names.is_empty() {
                     (1..=raster_sources.len())
                         .map(|i| format!("Raster-{i}"))
@@ -75,24 +84,17 @@ impl PlotOperator for BoxPlot {
                     self.params.column_names.clone()
                 };
 
-                let initialized = futures::future::join_all(
-                    raster_sources.into_iter().map(|op| op.initialize(context)),
-                )
-                .await
-                .into_iter()
-                .collect::<Result<Vec<_>>>()?;
-
-                if initialized.len() > 1 {
-                    let srs = initialized[0].result_descriptor().spatial_reference;
+                if raster_sources.len() > 1 {
+                    let srs = raster_sources[0].result_descriptor().spatial_reference;
                     ensure!(
-                        initialized
+                        raster_sources
                             .iter()
                             .all(|op| op.result_descriptor().spatial_reference == srs),
                         error::AllSourcesMustHaveSameSpatialReference
                     );
                 }
 
-                let in_descriptors = initialized
+                let in_descriptors = raster_sources
                     .iter()
                     .map(InitializedRasterOperator::result_descriptor)
                     .collect::<Vec<_>>();
@@ -109,7 +111,7 @@ impl PlotOperator for BoxPlot {
                             .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
                     },
                     output_names,
-                    initialized,
+                    raster_sources,
                 )
                 .boxed())
             }
@@ -121,9 +123,15 @@ impl PlotOperator for BoxPlot {
                     }
                 );
 
-                let source = vector_source.initialize(context).await?;
+                let vector_source = vector_source
+                    .initialize(path.clone_and_append(0), context)
+                    .await?;
+
                 for cn in &self.params.column_names {
-                    match source.result_descriptor().column_data_type(cn.as_str()) {
+                    match vector_source
+                        .result_descriptor()
+                        .column_data_type(cn.as_str())
+                    {
                         Some(column) if !column.is_numeric() => {
                             return Err(Error::InvalidOperatorSpec {
                                 reason: format!("Column '{cn}' is not numeric."),
@@ -140,7 +148,7 @@ impl PlotOperator for BoxPlot {
                     }
                 }
 
-                let in_desc = source.result_descriptor();
+                let in_desc = vector_source.result_descriptor();
 
                 Ok(InitializedBoxPlot::new(
                     PlotResultDescriptor {
@@ -149,7 +157,7 @@ impl PlotOperator for BoxPlot {
                         bbox: in_desc.bbox,
                     },
                     self.params.column_names.clone(),
-                    source,
+                    vector_source,
                 )
                 .boxed())
             }
@@ -580,7 +588,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -645,7 +653,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -694,7 +702,10 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(&execution_context).await;
+        let init = box_plot
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await;
 
         assert!(init.is_err());
     }
@@ -720,7 +731,10 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        let init = box_plot.boxed().initialize(&execution_context).await;
+        let init = box_plot
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await;
 
         assert!(init.is_err());
     }
@@ -747,7 +761,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -797,7 +811,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -849,7 +863,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -926,7 +940,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -993,7 +1007,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1061,7 +1075,7 @@ mod tests {
 
         let query_processor = box_plot
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1125,7 +1139,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1202,7 +1216,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1272,7 +1286,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -1354,7 +1368,7 @@ mod tests {
 
         let query_processor = histogram
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()

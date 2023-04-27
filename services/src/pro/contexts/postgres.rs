@@ -1,20 +1,22 @@
+use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId};
+use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::add_from_directory::add_providers_from_directory;
+use crate::datasets::upload::{Volume, Volumes};
 use crate::error::{self, Result};
-use crate::layers::add_from_directory::{
-    add_layer_collections_from_directory, add_layers_from_directory, UNSORTED_COLLECTION_ID,
-};
+use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
-use crate::pro::datasets::{add_datasets_from_directory, PostgresDatasetDb, Role};
-use crate::pro::layers::{PostgresLayerDb, PostgresLayerProviderDb};
-use crate::pro::projects::ProjectPermission;
+use crate::pro::datasets::add_datasets_from_directory;
+use crate::pro::layers::add_from_directory::{
+    add_layer_collections_from_directory, add_layers_from_directory,
+};
+use crate::pro::permissions::Role;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
-use crate::pro::users::{OidcRequestDb, UserDb, UserId, UserSession};
+use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
+use crate::pro::users::{OidcRequestDb, UserAuth, UserSession};
 use crate::pro::util::config::Oidc;
-use crate::pro::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
-use crate::projects::ProjectId;
-use crate::tasks::{SimpleTaskManager, SimpleTaskManagerContext};
-use crate::{contexts::Context, pro::users::PostgresUserDb};
-use crate::{contexts::QueryContextImpl, pro::projects::PostgresProjectDb};
+
+use crate::tasks::SimpleTaskManagerContext;
+use crate::util::config::get_config_element;
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -27,13 +29,15 @@ use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
-use log::{debug, warn};
+use log::{debug, info};
+use postgres_protocol::escape::escape_literal;
+use pwhash::bcrypt;
 use rayon::ThreadPool;
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{ExecutionContextImpl, ProContext, QuotaCheckerImpl};
+use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 
 // TODO: do not report postgres error details to user
 
@@ -46,18 +50,14 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    user_db: Arc<PostgresUserDb<Tls>>,
-    project_db: Arc<PostgresProjectDb<Tls>>,
-    workflow_registry: Arc<PostgresWorkflowRegistry<Tls>>,
-    dataset_db: Arc<PostgresDatasetDb<Tls>>,
-    layer_db: Arc<PostgresLayerDb<Tls>>,
-    layer_provider_db: Arc<PostgresLayerProviderDb<Tls>>,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
-    task_manager: Arc<SimpleTaskManager>,
+    task_manager: Arc<ProTaskManagerBackend>,
     oidc_request_db: Arc<Option<OidcRequestDb>>,
     quota: QuotaTrackingFactory,
+    pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
+    volumes: Volumes,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -76,25 +76,20 @@ where
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
-
         Self::update_schema(pool.get().await?).await?;
 
-        let user_db = Arc::new(PostgresUserDb::new(pool.clone()));
-        let quota = initialize_quota_tracking(user_db.clone());
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
+        let quota = initialize_quota_tracking(db);
 
-        Ok(Self {
-            user_db,
-            project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
-            workflow_registry: Arc::new(PostgresWorkflowRegistry::new(pool.clone())),
-            dataset_db: Arc::new(PostgresDatasetDb::new(pool.clone())),
-            layer_db: Arc::new(PostgresLayerDb::new(pool.clone())),
-            layer_provider_db: Arc::new(PostgresLayerProviderDb::new(pool.clone())),
-            task_manager: Arc::new(SimpleTaskManager::default()),
+        Ok(PostgresContext {
+            task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             oidc_request_db: Arc::new(None),
             quota,
+            pool,
+            volumes: Default::default(),
         })
     }
 
@@ -114,45 +109,43 @@ where
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
+        let conn = pool.get().await?;
+        let uninitialized = Self::schema_version(&conn).await? == 0;
+        Self::update_schema(conn).await?;
 
-        Self::update_schema(pool.get().await?).await?;
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
+        let quota = initialize_quota_tracking(db);
 
-        let workflow_db = PostgresWorkflowRegistry::new(pool.clone());
-        let mut layer_db = PostgresLayerDb::new(pool.clone());
-
-        add_layers_from_directory(&mut layer_db, layer_defs_path).await;
-        add_layer_collections_from_directory(&mut layer_db, layer_collection_defs_path).await;
-
-        let mut dataset_db = PostgresDatasetDb::new(pool.clone());
-
-        add_datasets_from_directory(&mut dataset_db, dataset_defs_path).await;
-
-        let mut layer_provider_db = PostgresLayerProviderDb::new(pool.clone());
-
-        add_providers_from_directory(
-            &mut layer_provider_db,
-            provider_defs_path.clone(),
-            &[provider_defs_path.join("pro")],
-        )
-        .await;
-
-        let user_db = Arc::new(PostgresUserDb::new(pool.clone()));
-        let quota = initialize_quota_tracking(user_db.clone());
-
-        Ok(Self {
-            user_db,
-            project_db: Arc::new(PostgresProjectDb::new(pool.clone())),
-            workflow_registry: Arc::new(workflow_db),
-            dataset_db: Arc::new(dataset_db),
-            layer_db: Arc::new(layer_db),
-            layer_provider_db: Arc::new(PostgresLayerProviderDb::new(pool.clone())),
-            task_manager: Arc::new(SimpleTaskManager::default()),
+        let app_ctx = PostgresContext {
+            task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
             quota,
-        })
+            pool,
+            volumes: Default::default(),
+        };
+
+        if uninitialized {
+            info!("Populating database with initial data...");
+
+            let mut db = app_ctx.session_context(UserSession::admin_session()).db();
+
+            add_layers_from_directory(&mut db, layer_defs_path).await;
+            add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
+
+            add_datasets_from_directory(&mut db, dataset_defs_path).await;
+
+            add_providers_from_directory(
+                &mut db,
+                provider_defs_path.clone(),
+                &[provider_defs_path.join("pro")],
+            )
+            .await;
+        }
+
+        Ok(app_ctx)
     }
 
     async fn schema_version(
@@ -163,7 +156,7 @@ where
             Err(e) => {
                 if let Some(code) = e.code() {
                     if *code == SqlState::UNDEFINED_TABLE {
-                        warn!("UserDB: Uninitialized schema");
+                        info!("Version table not found. Initializing schema.");
                         return Ok(0);
                     }
                 }
@@ -177,14 +170,17 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
+    /// Updates the schema, returns the new schema version
     async fn update_schema(
         conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<()> {
+    ) -> Result<i32> {
         let mut version = Self::schema_version(&conn).await?;
 
         loop {
             match version {
                 0 => {
+                    let user_config = get_config_element::<crate::pro::util::config::User>()?;
+
                     conn.batch_execute(
                         &format!(r#"
                         CREATE TABLE version (
@@ -192,15 +188,17 @@ where
                         );
                         INSERT INTO version VALUES (1);
 
+                        -- TODO: distinguish between roles that are (correspond to) users and roles that are not
+                        -- TODO: integrity constraint for roles that correspond to users + DELETE CASCADE
                         CREATE TABLE roles (
                             id UUID PRIMARY KEY,
-                            name text NOT NULL
+                            name text UNIQUE NOT NULL
                         );
 
                         INSERT INTO roles (id, name) VALUES
-                            ('{system_role_id}', 'system'),
-                            ('{user_role_id}', 'user'),
-                            ('{anonymous_role_id}', 'anonymous');
+                            ({admin_role_id}, 'admin'),
+                            ({user_role_id}, 'user'),
+                            ({anonymous_role_id}, 'anonymous');
 
                         CREATE TABLE users (
                             id UUID PRIMARY KEY REFERENCES roles(id),
@@ -225,10 +223,10 @@ where
                             real_name,
                             active)
                         VALUES (
-                            '{system_role_id}', 
-                            'system@geoengine.io',
-                            '',
-                            'system',
+                            {admin_role_id}, 
+                            {admin_email},
+                            {admin_password},
+                            'admin',
                             true
                         );
 
@@ -240,12 +238,12 @@ where
                             PRIMARY KEY (user_id, role_id)
                         );
 
-                        -- system user role
+                        -- admin user role
                         INSERT INTO user_roles 
                             (user_id, role_id)
                         VALUES 
-                            ('{system_role_id}', 
-                            '{system_role_id}');
+                            ({admin_role_id}, 
+                            {admin_role_id});
 
                         CREATE TYPE "SpatialReferenceAuthority" AS ENUM (
                             'Epsg', 'SrOrg', 'Iau2000', 'Esri'
@@ -308,12 +306,11 @@ where
                             bounds "STRectangle" NOT NULL,
                             time_step "TimeStep" NOT NULL,
                             changed timestamp with time zone,
-                            author_user_id UUID REFERENCES users(id) NOT NULL,
-                            latest boolean
+                            author_user_id UUID REFERENCES users(id) NOT NULL
                         );
 
-                        CREATE INDEX project_version_latest_idx 
-                        ON project_versions (project_id, latest DESC, changed DESC, author_user_id DESC);
+                        CREATE INDEX project_version_idx
+                        ON project_versions (project_id, changed DESC, author_user_id DESC);
 
                         CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
                         
@@ -340,15 +337,6 @@ where
                             name character varying (256) NOT NULL,
                             workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
                             PRIMARY KEY (project_id, project_version_id, plot_index)            
-                        );
-
-                        CREATE TYPE "ProjectPermission" AS ENUM ('Read', 'Write', 'Owner');
-
-                        CREATE TABLE user_project_permissions (
-                            user_id UUID REFERENCES users(id) NOT NULL,
-                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
-                            permission "ProjectPermission" NOT NULL,
-                            PRIMARY KEY (user_id, project_id)
                         );
 
                         CREATE TABLE workflows (
@@ -388,52 +376,45 @@ where
                         );
 
                         CREATE TYPE "Permission" AS ENUM (
-                            'Read', 'Write', 'Owner'
+                            'Read', 'Owner'
+                        );  
+
+                        CREATE TYPE "PropertyType" AS (
+                            key text,
+                            value text
                         );
-
-                        -- TODO: add indexes
-                        CREATE TABLE dataset_permissions (
-                            role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
-                            dataset_id UUID REFERENCES datasets(id) ON DELETE CASCADE NOT NULL,
-                            permission "Permission" NOT NULL,
-                            PRIMARY KEY (role_id, dataset_id)
-                        );
-
-                        CREATE VIEW user_permitted_datasets AS
-                            SELECT 
-                                r.user_id,
-                                p.dataset_id,
-                                p.permission
-                            FROM 
-                                user_roles r JOIN dataset_permissions p ON (r.role_id = p.role_id);
-
 
                         CREATE TABLE layer_collections (
                             id UUID PRIMARY KEY,
                             name text NOT NULL,
-                            description text NOT NULL
+                            description text NOT NULL,
+                            properties "PropertyType"[] NOT NULL
                         );
 
                         -- insert the root layer collection
                         INSERT INTO layer_collections (
                             id,
                             name,
-                            description
+                            description,
+                            properties
                         ) VALUES (
-                            '{root_layer_collection_id}',
+                            {root_layer_collection_id},
                             'Layers',
-                            'All available Geo Engine layers'
+                            'All available Geo Engine layers',
+                            ARRAY[]::"PropertyType"[]
                         );
 
                         -- insert the unsorted layer collection
                         INSERT INTO layer_collections (
                             id,
                             name,
-                            description
+                            description,
+                            properties
                         ) VALUES (
-                            '{unsorted_layer_collection_id}',
+                            {unsorted_layer_collection_id},
                             'Unsorted',
-                            'Unsorted Layers'
+                            'Unsorted Layers',
+                            ARRAY[]::"PropertyType"[]
                         );
     
 
@@ -442,7 +423,9 @@ where
                             name text NOT NULL,
                             description text NOT NULL,
                             workflow json NOT NULL,
-                            symbology json 
+                            symbology json,
+                            properties "PropertyType"[] NOT NULL,
+                            metadata json NOT NULL
                         );
 
                         CREATE TABLE collection_layers (
@@ -459,7 +442,7 @@ where
 
                         -- add unsorted layers to root layer collection
                         INSERT INTO collection_children (parent, child) VALUES
-                        ('{root_layer_collection_id}', '{unsorted_layer_collection_id}');
+                        ({root_layer_collection_id}, {unsorted_layer_collection_id});
 
                         -- TODO: should name be unique (per user)?
                         CREATE TABLE layer_providers (
@@ -481,13 +464,81 @@ where
                             real_name character varying (256),
                             active boolean NOT NULL
                         );
+
+                        CREATE TABLE permissions (
+                            -- resource_type "ResourceType" NOT NULL,
+                            role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
+                            permission "Permission" NOT NULL,
+                            dataset_id UUID REFERENCES datasets(id) ON DELETE CASCADE,
+                            layer_id UUID REFERENCES layers(id) ON DELETE CASCADE,
+                            layer_collection_id UUID REFERENCES layer_collections(id) ON DELETE CASCADE,
+                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+                            check(
+                                (
+                                    (dataset_id is not null)::integer +
+                                    (layer_id is not null)::integer +
+                                    (layer_collection_id is not null)::integer +
+                                    (project_id is not null)::integer 
+                                ) = 1
+                            )
+                        );
+
+                        CREATE UNIQUE INDEX ON permissions (role_id, permission, dataset_id);
+                        CREATE UNIQUE INDEX ON permissions (role_id, permission, layer_id);
+                        CREATE UNIQUE INDEX ON permissions (role_id, permission, layer_collection_id);
+                        CREATE UNIQUE INDEX ON permissions (role_id, permission, project_id);   
+
+                        CREATE VIEW user_permitted_datasets AS
+                            SELECT 
+                                r.user_id,
+                                p.dataset_id,
+                                p.permission
+                            FROM 
+                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND dataset_id IS NOT NULL);
+
+                        CREATE VIEW user_permitted_projects AS
+                            SELECT 
+                                r.user_id,
+                                p.project_id,
+                                p.permission
+                            FROM 
+                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND project_id IS NOT NULL); 
+
+                        CREATE VIEW user_permitted_layer_collections AS
+                            SELECT 
+                                r.user_id,
+                                p.layer_collection_id,
+                                p.permission
+                            FROM 
+                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_collection_id IS NOT NULL); 
+
+                        CREATE VIEW user_permitted_layers AS
+                            SELECT 
+                                r.user_id,
+                                p.layer_id,
+                                p.permission
+                            FROM 
+                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_id IS NOT NULL); 
+
+                        --- permission for unsorted layers and root layer collection
+                        INSERT INTO permissions
+                            (role_id, layer_collection_id, permission)  
+                        VALUES 
+                            ({admin_role_id}, {root_layer_collection_id}, 'Owner'),
+                            ({user_role_id}, {root_layer_collection_id}, 'Read'),
+                            ({anonymous_role_id}, {root_layer_collection_id}, 'Read'),
+                            ({admin_role_id}, {unsorted_layer_collection_id}, 'Owner'),
+                            ({user_role_id}, {unsorted_layer_collection_id}, 'Read'),
+                            ({anonymous_role_id}, {unsorted_layer_collection_id}, 'Read');
                         "#
                     ,
-                    system_role_id = Role::system_role_id(),
-                    user_role_id = Role::user_role_id(),
-                    anonymous_role_id = Role::anonymous_role_id(),
-                    root_layer_collection_id = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
-                    unsorted_layer_collection_id = UNSORTED_COLLECTION_ID))
+                    admin_role_id = escape_literal(&Role::admin_role_id().to_string()),
+                    admin_email = escape_literal(&user_config.admin_email),
+                    admin_password = escape_literal(&bcrypt::hash(user_config.admin_password).expect("Admin password hash should be valid")),
+                    user_role_id = escape_literal(&Role::registered_user_role_id().to_string()),
+                    anonymous_role_id = escape_literal(&Role::anonymous_role_id().to_string()),
+                    root_layer_collection_id = escape_literal(&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
+                    unsorted_layer_collection_id = escape_literal(&UNSORTED_COLLECTION_ID.to_string())))
                     .await?;
                     debug!("Updated user database to schema version {}", version + 1);
                 }
@@ -503,74 +554,66 @@ where
                 // .await?;
                 // eprintln!("Updated user database to schema version {}", version + 1);
                 // }
-                _ => return Ok(()),
+                _ => return Ok(version),
             }
             version += 1;
         }
     }
-
-    pub(crate) async fn check_user_project_permission(
-        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
-        user: UserId,
-        project: ProjectId,
-        permissions: &[ProjectPermission],
-    ) -> Result<()> {
-        let stmt = conn
-            .prepare(
-                "
-                SELECT TRUE
-                FROM user_project_permissions
-                WHERE user_id = $1 AND project_id = $2 AND permission = ANY ($3);",
-            )
-            .await?;
-
-        conn.query_one(&stmt, &[&user, &project, &permissions])
-            .await
-            .map_err(|_error| error::Error::ProjectDbUnauthorized)?;
-
-        Ok(())
-    }
 }
 
 #[async_trait]
-impl<Tls> ProContext for PostgresContext<Tls>
+impl<Tls> ApplicationContext for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    type UserDB = PostgresUserDb<Tls>;
-    type ProDatasetDB = PostgresDatasetDb<Tls>;
-    type ProProjectDB = PostgresProjectDb<Tls>;
+    type SessionContext = PostgresSessionContext<Tls>;
+    type Session = UserSession;
 
-    fn user_db(&self) -> Arc<Self::UserDB> {
-        self.user_db.clone()
-    }
-    fn user_db_ref(&self) -> &Self::UserDB {
-        &self.user_db
-    }
-    fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
-        self.oidc_request_db.as_ref().as_ref()
+    fn session_context(&self, session: Self::Session) -> Self::SessionContext {
+        PostgresSessionContext {
+            session,
+            context: self.clone(),
+        }
     }
 
-    fn pro_dataset_db(&self) -> Arc<Self::ProDatasetDB> {
-        self.dataset_db.clone()
-    }
-    fn pro_dataset_db_ref(&self) -> &Self::ProDatasetDB {
-        &self.dataset_db
-    }
-
-    fn pro_project_db(&self) -> Arc<Self::ProProjectDB> {
-        self.project_db.clone()
-    }
-    fn pro_project_db_ref(&self) -> &Self::ProProjectDB {
-        &self.project_db
+    async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {
+        self.user_session_by_id(session_id)
+            .await
+            .map_err(Box::new)
+            .context(error::Unauthorized)
     }
 }
 
 #[async_trait]
-impl<Tls> Context for PostgresContext<Tls>
+impl<Tls> ProApplicationContext for PostgresContext<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
+        self.oidc_request_db.as_ref().as_ref()
+    }
+}
+
+#[derive(Clone)]
+pub struct PostgresSessionContext<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    session: UserSession,
+    context: PostgresContext<Tls>,
+}
+
+#[async_trait]
+impl<Tls> SessionContext for PostgresSessionContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -578,112 +621,107 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type Session = UserSession;
-    type ProjectDB = PostgresProjectDb<Tls>;
-    type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
-    type DatasetDB = PostgresDatasetDb<Tls>;
-    type LayerDB = PostgresLayerDb<Tls>;
-    type LayerProviderDB = PostgresLayerProviderDb<Tls>;
+    type GeoEngineDB = PostgresDb<Tls>;
+
     type TaskContext = SimpleTaskManagerContext;
-    type TaskManager = SimpleTaskManager; // this does not persist across restarts
+    type TaskManager = ProTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
-    type ExecutionContext =
-        ExecutionContextImpl<PostgresDatasetDb<Tls>, PostgresLayerProviderDb<Tls>>;
+    type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
-    fn project_db(&self) -> Arc<Self::ProjectDB> {
-        self.project_db.clone()
-    }
-    fn project_db_ref(&self) -> &Self::ProjectDB {
-        &self.project_db
+    fn db(&self) -> Self::GeoEngineDB {
+        PostgresDb::new(self.context.pool.clone(), self.session.clone())
     }
 
-    fn workflow_registry(&self) -> Arc<Self::WorkflowRegistry> {
-        self.workflow_registry.clone()
-    }
-    fn workflow_registry_ref(&self) -> &Self::WorkflowRegistry {
-        &self.workflow_registry
+    fn tasks(&self) -> Self::TaskManager {
+        ProTaskManager::new(self.context.task_manager.clone(), self.session.clone())
     }
 
-    fn dataset_db(&self) -> Arc<Self::DatasetDB> {
-        self.dataset_db.clone()
-    }
-    fn dataset_db_ref(&self) -> &Self::DatasetDB {
-        &self.dataset_db
-    }
-
-    fn layer_db(&self) -> Arc<Self::LayerDB> {
-        self.layer_db.clone()
-    }
-    fn layer_db_ref(&self) -> &Self::LayerDB {
-        &self.layer_db
-    }
-
-    fn layer_provider_db(&self) -> Arc<Self::LayerProviderDB> {
-        self.layer_provider_db.clone()
-    }
-    fn layer_provider_db_ref(&self) -> &Self::LayerProviderDB {
-        &self.layer_provider_db
-    }
-
-    fn tasks(&self) -> Arc<Self::TaskManager> {
-        self.task_manager.clone()
-    }
-    fn tasks_ref(&self) -> &Self::TaskManager {
-        &self.task_manager
-    }
-
-    fn query_context(&self, session: UserSession) -> Result<Self::QueryContext> {
+    fn query_context(&self) -> Result<Self::QueryContext> {
         // TODO: load config only once
 
         let mut extensions = QueryContextExtensions::default();
         extensions.insert(
-            self.quota
-                .create_quota_tracking(&session, ComputationContext::new()),
+            self.context
+                .quota
+                .create_quota_tracking(&self.session, ComputationContext::new()),
         );
-        extensions.insert(Box::new(QuotaCheckerImpl {
-            user_db: self.user_db.clone(),
-            session,
-        }) as QuotaChecker);
+        extensions.insert(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker);
 
         Ok(QueryContextImpl::new_with_extensions(
-            self.query_ctx_chunk_size,
-            self.thread_pool.clone(),
+            self.context.query_ctx_chunk_size,
+            self.context.thread_pool.clone(),
             extensions,
         ))
     }
 
-    fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<
-            PostgresDatasetDb<Tls>,
-            PostgresLayerProviderDb<Tls>,
-        >::new(
-            self.dataset_db.clone(),
-            self.layer_provider_db.clone(),
-            self.thread_pool.clone(),
-            session,
-            self.exe_ctx_tiling_spec,
+    fn execution_context(&self) -> Result<Self::ExecutionContext> {
+        Ok(ExecutionContextImpl::<PostgresDb<Tls>>::new(
+            self.db(),
+            self.context.thread_pool.clone(),
+            self.context.exe_ctx_tiling_spec,
         ))
     }
 
-    async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
-        self.user_db_ref()
-            .session(session_id)
-            .await
-            .map_err(Box::new)
-            .context(error::Authorization)
+    fn volumes(&self) -> Result<Vec<Volume>> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        Ok(self.context.volumes.volumes.clone())
     }
+
+    fn session(&self) -> &Self::Session {
+        &self.session
+    }
+}
+
+pub struct PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    pub(crate) conn_pool: Pool<PostgresConnectionManager<Tls>>,
+    pub(crate) session: UserSession,
+}
+
+impl<Tls> PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>, session: UserSession) -> Self {
+        Self { conn_pool, session }
+    }
+}
+
+impl<Tls> GeoEngineDb for PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+}
+
+impl<Tls> ProGeoEngineDb for PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::str::FromStr;
 
     use super::*;
     use crate::api::model::datatypes::{DataProviderId, DatasetId, LayerId};
     use crate::api::model::services::AddDataset;
-    use crate::contexts::AdminSession;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
-    use crate::datasets::listing::SessionMetaDataProvider;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
     use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
@@ -698,42 +736,50 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
-    use crate::pro::datasets::{DatasetPermission, Permission, UpdateDatasetPermissions};
-    use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
-    use crate::pro::users::{ExternalUserClaims, UserCredentials, UserDb, UserRegistration};
+    use crate::pro::permissions::{Permission, PermissionDb};
+    use crate::pro::projects::{LoadVersion, ProProjectDb};
+    use crate::pro::users::{
+        ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
+    };
+    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::projects::{
         CreateProject, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
         ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
         UpdateProject,
     };
     use crate::util::config::{get_config_element, Postgres};
-    use crate::util::user_input::UserInput;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
     use bb8_postgres::bb8::ManageConnection;
     use bb8_postgres::tokio_postgres::{self, NoTls};
-    use futures::Future;
+    use futures::{join, Future};
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
-        SpatialResolution, TimeInterval, VectorQueryRectangle,
+        RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
+        TimeStep, VectorQueryRectangle,
     };
+    use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
-        MetaData, MultipleRasterOrSingleVectorSource, PlotOperator, StaticMetaData, TypedOperator,
-        TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+        MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
+        RasterResultDescriptor, StaticMetaData, TypedOperator, TypedResultDescriptor,
+        VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{
-        CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDataset,
+        CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
+        GdalDatasetParameters, GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular,
+        GdalMetaDataStatic, GdalMetadataNetCdfCf, OgrSourceColumnSpec, OgrSourceDataset,
         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
     };
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use openidconnect::SubjectIdentifier;
     use rand::RngCore;
+    use serde_json::json;
     use tokio::runtime::Handle;
 
     /// Setup database schema and return its name.
@@ -815,13 +861,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test() {
-        with_temp_context(|ctx, _| async move {
-            anonymous(&ctx).await;
+        with_temp_context(|app_ctx, _| async move {
+            anonymous(&app_ctx).await;
 
-            let _user_id = user_reg_login(&ctx).await;
+            let _user_id = user_reg_login(&app_ctx).await;
 
-            let session = ctx
-                .user_db_ref()
+            let session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".into(),
                     password: "secret123".into(),
@@ -829,182 +874,167 @@ mod tests {
                 .await
                 .unwrap();
 
-            create_projects(&ctx, &session).await;
+            create_projects(&app_ctx, &session).await;
 
-            let projects = list_projects(&ctx, &session).await;
+            let projects = list_projects(&app_ctx, &session).await;
 
-            set_session(&ctx, &projects).await;
+            set_session(&app_ctx, &projects).await;
 
             let project_id = projects[0].id;
 
-            update_projects(&ctx, &session, project_id).await;
+            update_projects(&app_ctx, &session, project_id).await;
 
-            add_permission(&ctx, &session, project_id).await;
+            add_permission(&app_ctx, &session, project_id).await;
 
-            delete_project(&ctx, &session, project_id).await;
+            delete_project(&app_ctx, &session, project_id).await;
         })
         .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_external() {
-        with_temp_context(|ctx, _| async move {
-            anonymous(&ctx).await;
+        with_temp_context(|app_ctx, _| async move {
+            anonymous(&app_ctx).await;
 
-            let session = external_user_login_twice(&ctx).await;
+            let session = external_user_login_twice(&app_ctx).await;
 
-            create_projects(&ctx, &session).await;
+            create_projects(&app_ctx, &session).await;
 
-            let projects = list_projects(&ctx, &session).await;
+            let projects = list_projects(&app_ctx, &session).await;
 
-            set_session_external(&ctx, &projects).await;
+            set_session_external(&app_ctx, &projects).await;
 
             let project_id = projects[0].id;
 
-            update_projects(&ctx, &session, project_id).await;
+            update_projects(&app_ctx, &session, project_id).await;
 
-            add_permission(&ctx, &session, project_id).await;
+            add_permission(&app_ctx, &session, project_id).await;
 
-            delete_project(&ctx, &session, project_id).await;
+            delete_project(&app_ctx, &session, project_id).await;
         })
         .await;
     }
 
-    async fn set_session(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+    async fn set_session(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let credentials = UserCredentials {
             email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
-        let user_db = ctx.user_db_ref();
+        let session = app_ctx.login(credentials).await.unwrap();
 
-        let session = user_db.login(credentials).await.unwrap();
-
-        set_session_in_database(user_db, projects, session).await;
+        set_session_in_database(app_ctx, projects, session).await;
     }
 
-    async fn set_session_external(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+    async fn set_session_external(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let external_user_claims = ExternalUserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
             real_name: "Foo Bar".into(),
         };
 
-        let user_db = ctx.user_db_ref();
-
-        let session = user_db
+        let session = app_ctx
             .login_external(external_user_claims, Duration::minutes(10))
             .await
             .unwrap();
 
-        set_session_in_database(user_db, projects, session).await;
+        set_session_in_database(app_ctx, projects, session).await;
     }
 
     async fn set_session_in_database(
-        user_db: &PostgresUserDb<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         projects: &[ProjectListing],
         session: UserSession,
     ) {
-        user_db
-            .set_session_project(&session, projects[0].id)
-            .await
-            .unwrap();
+        let db = app_ctx.session_context(session.clone()).db();
+
+        db.set_session_project(projects[0].id).await.unwrap();
 
         assert_eq!(
-            user_db.session(session.id).await.unwrap().project,
+            app_ctx.session_by_id(session.id).await.unwrap().project,
             Some(projects[0].id)
         );
 
         let rect = STRectangle::new_unchecked(SpatialReference::epsg_4326(), 0., 1., 2., 3., 1, 2);
-        user_db
-            .set_session_view(&session, rect.clone())
-            .await
-            .unwrap();
-        assert_eq!(user_db.session(session.id).await.unwrap().view, Some(rect));
+        db.set_session_view(rect.clone()).await.unwrap();
+        assert_eq!(
+            app_ctx.session_by_id(session.id).await.unwrap().view,
+            Some(rect)
+        );
     }
 
     async fn delete_project(
-        ctx: &PostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
-        ctx.project_db_ref()
-            .delete(session, project_id)
-            .await
-            .unwrap();
+        let db = app_ctx.session_context(session.clone()).db();
 
-        assert!(ctx
-            .project_db_ref()
-            .load(session, project_id)
-            .await
-            .is_err());
+        db.delete_project(project_id).await.unwrap();
+
+        assert!(db.load_project(project_id).await.is_err());
     }
 
     async fn add_permission(
-        ctx: &PostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
-        assert_eq!(
-            ctx.project_db_ref()
-                .list_permissions(session, project_id)
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
+        let db = app_ctx.session_context(session.clone()).db();
 
-        let user2 = ctx
-            .user_db_ref()
-            .register(
-                UserRegistration {
-                    email: "user2@example.com".into(),
-                    password: "12345678".into(),
-                    real_name: "User2".into(),
-                }
-                .validated()
-                .unwrap(),
-            )
+        assert!(db
+            .has_permission(project_id, Permission::Owner)
+            .await
+            .unwrap());
+
+        let user2 = app_ctx
+            .register_user(UserRegistration {
+                email: "user2@example.com".into(),
+                password: "12345678".into(),
+                real_name: "User2".into(),
+            })
             .await
             .unwrap();
 
-        ctx.project_db_ref()
-            .add_permission(
-                session,
-                UserProjectPermission {
-                    project: project_id,
-                    permission: ProjectPermission::Read,
-                    user: user2,
-                },
-            )
+        let session2 = app_ctx
+            .login(UserCredentials {
+                email: "user2@example.com".into(),
+                password: "12345678".into(),
+            })
             .await
             .unwrap();
 
-        assert_eq!(
-            ctx.project_db_ref()
-                .list_permissions(session, project_id)
-                .await
-                .unwrap()
-                .len(),
-            2
-        );
+        let db2 = app_ctx.session_context(session2.clone()).db();
+        assert!(!db2
+            .has_permission(project_id, Permission::Owner)
+            .await
+            .unwrap());
+
+        db.add_permission(user2.into(), project_id, Permission::Read)
+            .await
+            .unwrap();
+
+        assert!(db2
+            .has_permission(project_id, Permission::Read)
+            .await
+            .unwrap());
     }
 
     #[allow(clippy::too_many_lines)]
     async fn update_projects(
-        ctx: &PostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
-        let project = ctx
-            .project_db_ref()
-            .load_version(session, project_id, LoadVersion::Latest)
+        let db = app_ctx.session_context(session.clone()).db();
+
+        let project = db
+            .load_project_version(project_id, LoadVersion::Latest)
             .await
             .unwrap();
 
-        let layer_workflow_id = ctx
-            .workflow_registry_ref()
-            .register(Workflow {
+        let layer_workflow_id = db
+            .register_workflow(Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams {
@@ -1017,15 +1047,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(ctx
-            .workflow_registry_ref()
-            .load(&layer_workflow_id)
-            .await
-            .is_ok());
+        assert!(db.load_workflow(&layer_workflow_id).await.is_ok());
 
-        let plot_workflow_id = ctx
-            .workflow_registry_ref()
-            .register(Workflow {
+        let plot_workflow_id = db
+            .register_workflow(Workflow {
                 operator: Statistics {
                     params: StatisticsParams {
                         column_names: vec![],
@@ -1040,11 +1065,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(ctx
-            .workflow_registry_ref()
-            .load(&plot_workflow_id)
-            .await
-            .is_ok());
+        assert!(db.load_workflow(&plot_workflow_id).await.is_ok());
 
         // add a plot
         let update = UpdateProject {
@@ -1064,16 +1085,9 @@ mod tests {
             bounds: None,
             time_step: None,
         };
-        ctx.project_db_ref()
-            .update(session, update.validated().unwrap())
-            .await
-            .unwrap();
+        db.update_project(update).await.unwrap();
 
-        let versions = ctx
-            .project_db_ref()
-            .versions(session, project_id)
-            .await
-            .unwrap();
+        let versions = db.list_project_versions(project_id).await.unwrap();
         assert_eq!(versions.len(), 2);
 
         // add second plot
@@ -1100,16 +1114,9 @@ mod tests {
             bounds: None,
             time_step: None,
         };
-        ctx.project_db_ref()
-            .update(session, update.validated().unwrap())
-            .await
-            .unwrap();
+        db.update_project(update).await.unwrap();
 
-        let versions = ctx
-            .project_db_ref()
-            .versions(session, project_id)
-            .await
-            .unwrap();
+        let versions = db.list_project_versions(project_id).await.unwrap();
         assert_eq!(versions.len(), 3);
 
         // delete plots
@@ -1122,21 +1129,14 @@ mod tests {
             bounds: None,
             time_step: None,
         };
-        ctx.project_db_ref()
-            .update(session, update.validated().unwrap())
-            .await
-            .unwrap();
+        db.update_project(update).await.unwrap();
 
-        let versions = ctx
-            .project_db_ref()
-            .versions(session, project_id)
-            .await
-            .unwrap();
+        let versions = db.list_project_versions(project_id).await.unwrap();
         assert_eq!(versions.len(), 4);
     }
 
     async fn list_projects(
-        ctx: &PostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
@@ -1144,10 +1144,11 @@ mod tests {
             order: OrderBy::NameDesc,
             offset: 0,
             limit: 2,
-        }
-        .validated()
-        .unwrap();
-        let projects = ctx.project_db_ref().list(session, options).await.unwrap();
+        };
+
+        let db = app_ctx.session_context(session.clone()).db();
+
+        let projects = db.list_projects(options).await.unwrap();
 
         assert_eq!(projects.len(), 2);
         assert_eq!(projects[0].name, "Test9");
@@ -1155,7 +1156,9 @@ mod tests {
         projects
     }
 
-    async fn create_projects(ctx: &PostgresContext<NoTls>, session: &UserSession) {
+    async fn create_projects(app_ctx: &PostgresContext<NoTls>, session: &UserSession) {
+        let db = app_ctx.session_context(session.clone()).db();
+
         for i in 0..10 {
             let create = CreateProject {
                 name: format!("Test{i}"),
@@ -1171,46 +1174,40 @@ mod tests {
                 )
                 .unwrap(),
                 time_step: None,
-            }
-            .validated()
-            .unwrap();
-            ctx.project_db_ref().create(session, create).await.unwrap();
+            };
+            db.create_project(create).await.unwrap();
         }
     }
 
-    async fn user_reg_login(ctx: &PostgresContext<NoTls>) -> UserId {
-        let db = ctx.user_db_ref();
-
+    async fn user_reg_login(app_ctx: &PostgresContext<NoTls>) -> UserId {
         let user_registration = UserRegistration {
             email: "foo@example.com".into(),
             password: "secret123".into(),
             real_name: "Foo Bar".into(),
-        }
-        .validated()
-        .unwrap();
+        };
 
-        let user_id = db.register(user_registration).await.unwrap();
+        let user_id = app_ctx.register_user(user_registration).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@example.com".into(),
             password: "secret123".into(),
         };
 
-        let session = db.login(credentials).await.unwrap();
+        let session = app_ctx.login(credentials).await.unwrap();
 
-        db.session(session.id).await.unwrap();
+        let db = app_ctx.session_context(session.clone()).db();
 
-        db.logout(session.id).await.unwrap();
+        app_ctx.session_by_id(session.id).await.unwrap();
 
-        assert!(db.session(session.id).await.is_err());
+        db.logout().await.unwrap();
+
+        assert!(app_ctx.session_by_id(session.id).await.is_err());
 
         user_id
     }
 
     //TODO: No duplicate tests for postgres and hashmap implementation possible?
-    async fn external_user_login_twice(ctx: &PostgresContext<NoTls>) -> UserSession {
-        let db = ctx.user_db_ref();
-
+    async fn external_user_login_twice(app_ctx: &PostgresContext<NoTls>) -> UserSession {
         let external_user_claims = ExternalUserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -1219,13 +1216,15 @@ mod tests {
         let duration = Duration::minutes(30);
 
         //NEW
-        let login_result = db
+        let login_result = app_ctx
             .login_external(external_user_claims.clone(), duration)
             .await;
         assert!(login_result.is_ok());
 
         let session_1 = login_result.unwrap();
         let user_id = session_1.user.id; //TODO: Not a deterministic test.
+
+        let db1 = app_ctx.session_context(session_1.clone()).db();
 
         assert!(session_1.user.email.is_some());
         assert_eq!(session_1.user.email.unwrap(), "foo@bar.de");
@@ -1235,14 +1234,14 @@ mod tests {
         let expected_duration = session_1.created + duration;
         assert_eq!(session_1.valid_until, expected_duration);
 
-        assert!(db.session(session_1.id).await.is_ok());
+        assert!(app_ctx.session_by_id(session_1.id).await.is_ok());
 
-        assert!(db.logout(session_1.id).await.is_ok());
+        assert!(db1.logout().await.is_ok());
 
-        assert!(db.session(session_1.id).await.is_err());
+        assert!(app_ctx.session_by_id(session_1.id).await.is_err());
 
         let duration = Duration::minutes(10);
-        let login_result = db
+        let login_result = app_ctx
             .login_external(external_user_claims.clone(), duration)
             .await;
         assert!(login_result.is_ok());
@@ -1259,31 +1258,31 @@ mod tests {
         let expected_duration = session_2.created + duration;
         assert_eq!(session_2.valid_until, expected_duration);
 
-        assert!(db.session(session_2.id).await.is_ok());
+        assert!(app_ctx.session_by_id(session_2.id).await.is_ok());
 
         result
     }
 
-    async fn anonymous(ctx: &PostgresContext<NoTls>) {
-        let db = ctx.user_db_ref();
-
+    async fn anonymous(app_ctx: &PostgresContext<NoTls>) {
         let now: DateTime = chrono::offset::Utc::now().into();
-        let session = db.anonymous().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
         let then: DateTime = chrono::offset::Utc::now().into();
 
         assert!(session.created >= now && session.created <= then);
         assert!(session.valid_until > session.created);
 
-        let session = db.session(session.id).await.unwrap();
+        let session = app_ctx.session_by_id(session.id).await.unwrap();
 
-        db.logout(session.id).await.unwrap();
+        let db = app_ctx.session_context(session.clone()).db();
 
-        assert!(db.session(session.id).await.is_err());
+        db.logout().await.unwrap();
+
+        assert!(app_ctx.session_by_id(session.id).await.is_err());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_workflows() {
-        with_temp_context(|ctx, pg_config| async move {
+        with_temp_context(|app_ctx, _pg_config| async move {
             let workflow = Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
@@ -1295,19 +1294,19 @@ mod tests {
                 ),
             };
 
-            let id = ctx
-                .workflow_registry_ref()
-                .register(workflow)
+            let session = app_ctx.create_anonymous_session().await.unwrap();
+let ctx = app_ctx.session_context(session);
+
+            let db = ctx
+                .db();
+            let id = db
+                .register_workflow(workflow)
                 .await
                 .unwrap();
 
             drop(ctx);
 
-            let ctx = PostgresContext::new_with_context_spec(pg_config.clone(), tokio_postgres::NoTls, TestDefault::test_default(), TestDefault::test_default())
-                .await
-                .unwrap();
-
-            let workflow = ctx.workflow_registry_ref().load(&id).await.unwrap();
+            let workflow = db.load_workflow(&id).await.unwrap();
 
             let json = serde_json::to_string(&workflow).unwrap();
             assert_eq!(json, r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}]}}}"#);
@@ -1318,7 +1317,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_datasets() {
-        with_temp_context(|ctx, _| async move {
+        with_temp_context(|app_ctx, _| async move {
             let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
 
             let loading_info = OgrSourceDataset {
@@ -1375,12 +1374,11 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let session = ctx.user_db_ref().anonymous().await.unwrap();
+            let session = app_ctx.create_anonymous_session().await.unwrap();
 
-            let db = ctx.dataset_db_ref();
+            let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
             db.add_dataset(
-                &session,
                 AddDataset {
                     id: Some(dataset_id),
                     name: "Ogr Test".to_owned(),
@@ -1392,26 +1390,19 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
-                }
-                .validated()
-                .unwrap(),
+                },
                 wrap,
             )
             .await
             .unwrap();
 
             let datasets = db
-                .list(
-                    &session,
-                    DatasetListOptions {
-                        filter: None,
-                        order: crate::datasets::listing::OrderBy::NameAsc,
-                        offset: 0,
-                        limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+                .list_datasets(DatasetListOptions {
+                    filter: None,
+                    order: crate::datasets::listing::OrderBy::NameAsc,
+                    offset: 0,
+                    limit: 10,
+                })
                 .await
                 .unwrap();
 
@@ -1445,7 +1436,7 @@ mod tests {
                 },
             );
 
-            let provenance = db.provenance(&session, &dataset_id).await.unwrap();
+            let provenance = db.load_provenance(&dataset_id).await.unwrap();
 
             assert_eq!(
                 provenance,
@@ -1459,10 +1450,8 @@ mod tests {
                 }
             );
 
-            let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> = db
-                .session_meta_data(&session, &dataset_id.into())
-                .await
-                .unwrap();
+            let meta_data: Box<dyn MetaData<OgrSourceDataset, _, _>> =
+                db.meta_data(&dataset_id.into()).await.unwrap();
 
             assert_eq!(
                 meta_data
@@ -1481,9 +1470,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_uploads() {
-        with_temp_context(|ctx, _| async move {
-            let db = ctx.dataset_db_ref();
-
+        with_temp_context(|app_ctx, _| async move {
             let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
             let input = Upload {
                 id,
@@ -1494,10 +1481,13 @@ mod tests {
                 }],
             };
 
-            let session = ctx.user_db_ref().anonymous().await.unwrap();
-            db.create_upload(&session, input.clone()).await.unwrap();
+            let session = app_ctx.create_anonymous_session().await.unwrap();
 
-            let upload = db.get_upload(&session, id).await.unwrap();
+            let db = app_ctx.session_context(session.clone()).db();
+
+            db.create_upload(input.clone()).await.unwrap();
+
+            let upload = db.load_upload(id).await.unwrap();
 
             assert_eq!(upload, input);
         })
@@ -1507,8 +1497,8 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_layer_providers() {
-        with_temp_context(|ctx, _| async move {
-            let db = ctx.layer_provider_db_ref();
+        with_temp_context(|app_ctx, _| async move {
+            let db = app_ctx.session_context(UserSession::admin_session()).db();
 
             let provider_id =
                 DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
@@ -1588,14 +1578,10 @@ mod tests {
             db.add_layer_provider(Box::new(provider)).await.unwrap();
 
             let providers = db
-                .list_layer_providers(
-                    LayerProviderListingOptions {
-                        offset: 0,
-                        limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+                .list_layer_providers(LayerProviderListingOptions {
+                    offset: 0,
+                    limit: 10,
+                })
                 .await
                 .unwrap();
 
@@ -1610,17 +1596,15 @@ mod tests {
                 }
             );
 
-            let provider = db.layer_provider(provider_id).await.unwrap();
+            let provider = db.load_layer_provider(provider_id).await.unwrap();
 
             let datasets = provider
-                .collection(
-                    &provider.root_collection_id().await.unwrap(),
+                .load_layer_collection(
+                    &provider.get_root_layer_collection_id().await.unwrap(),
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -1632,9 +1616,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_only_permitted_datasets() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1671,47 +1658,29 @@ mod tests {
                 phantom: Default::default(),
             };
 
-            let meta = ctx
-                .dataset_db_ref()
-                .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let _id = ctx
-                .dataset_db_ref()
-                .add_dataset(&session1, ds.validated().unwrap(), meta)
-                .await
-                .unwrap();
+            let _id = db1.add_dataset(ds, meta).await.unwrap();
 
-            let list1 = ctx
-                .dataset_db_ref()
-                .list(
-                    &session1,
-                    DatasetListOptions {
-                        filter: None,
-                        order: crate::datasets::listing::OrderBy::NameAsc,
-                        offset: 0,
-                        limit: 1,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+            let list1 = db1
+                .list_datasets(DatasetListOptions {
+                    filter: None,
+                    order: crate::datasets::listing::OrderBy::NameAsc,
+                    offset: 0,
+                    limit: 1,
+                })
                 .await
                 .unwrap();
 
             assert_eq!(list1.len(), 1);
 
-            let list2 = ctx
-                .dataset_db_ref()
-                .list(
-                    &session2,
-                    DatasetListOptions {
-                        filter: None,
-                        order: crate::datasets::listing::OrderBy::NameAsc,
-                        offset: 0,
-                        limit: 1,
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+            let list2 = db2
+                .list_datasets(DatasetListOptions {
+                    filter: None,
+                    order: crate::datasets::listing::OrderBy::NameAsc,
+                    offset: 0,
+                    limit: 1,
+                })
                 .await
                 .unwrap();
 
@@ -1722,9 +1691,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_shows_only_permitted_provenance() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1761,36 +1733,25 @@ mod tests {
                 phantom: Default::default(),
             };
 
-            let meta = ctx
-                .dataset_db_ref()
-                .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = ctx
-                .dataset_db_ref()
-                .add_dataset(&session1, ds.validated().unwrap(), meta)
-                .await
-                .unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap();
 
-            assert!(ctx
-                .dataset_db_ref()
-                .provenance(&session1, &id)
-                .await
-                .is_ok());
+            assert!(db1.load_provenance(&id).await.is_ok());
 
-            assert!(ctx
-                .dataset_db_ref()
-                .provenance(&session2, &id)
-                .await
-                .is_err());
+            assert!(db2.load_provenance(&id).await.is_err());
         })
         .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_updates_permissions() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1827,42 +1788,31 @@ mod tests {
                 phantom: Default::default(),
             };
 
-            let meta = ctx
-                .dataset_db_ref()
-                .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = ctx
-                .dataset_db_ref()
-                .add_dataset(&session1, ds.validated().unwrap(), meta)
+            let id = db1.add_dataset(ds, meta).await.unwrap();
+
+            assert!(db1.load_dataset(&id).await.is_ok());
+
+            assert!(db2.load_dataset(&id).await.is_err());
+
+            db1.add_permission(session2.user.id.into(), id, Permission::Read)
                 .await
                 .unwrap();
 
-            assert!(ctx.dataset_db_ref().load(&session1, &id).await.is_ok());
-
-            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_err());
-
-            ctx.dataset_db_ref()
-                .add_dataset_permission(
-                    &session1,
-                    DatasetPermission {
-                        role: session2.user.id.into(),
-                        dataset: id,
-                        permission: Permission::Read,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_ok());
+            assert!(db2.load_dataset(&id).await.is_ok());
         })
         .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_uses_roles_for_permissions() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1899,42 +1849,31 @@ mod tests {
                 phantom: Default::default(),
             };
 
-            let meta = ctx
-                .dataset_db_ref()
-                .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = ctx
-                .dataset_db_ref()
-                .add_dataset(&session1, ds.validated().unwrap(), meta)
+            let id = db1.add_dataset(ds, meta).await.unwrap();
+
+            assert!(db1.load_dataset(&id).await.is_ok());
+
+            assert!(db2.load_dataset(&id).await.is_err());
+
+            db1.add_permission(session2.user.id.into(), id, Permission::Read)
                 .await
                 .unwrap();
 
-            assert!(ctx.dataset_db_ref().load(&session1, &id).await.is_ok());
-
-            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_err());
-
-            ctx.dataset_db_ref()
-                .add_dataset_permission(
-                    &session1,
-                    DatasetPermission {
-                        role: session2.user.id.into(),
-                        dataset: id,
-                        permission: Permission::Read,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert!(ctx.dataset_db_ref().load(&session2, &id).await.is_ok());
+            assert!(db2.load_dataset(&id).await.is_ok());
         })
         .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_meta_data() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let descriptor = VectorResultDescriptor {
                 data_type: VectorDataType::Data,
@@ -1971,52 +1910,196 @@ mod tests {
                 phantom: Default::default(),
             };
 
-            let meta = ctx
-                .dataset_db_ref()
-                .wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = ctx
-                .dataset_db_ref()
-                .add_dataset(&session1, ds.validated().unwrap(), meta)
-                .await
-                .unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap();
 
-            let meta: Result<
+            let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx
-                .dataset_db_ref()
-                .session_meta_data(&session1, &id.into())
-                .await;
+            > = db1.meta_data(&id.into()).await;
 
             assert!(meta.is_ok());
 
-            let meta: Result<
+            let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx
-                .dataset_db_ref()
-                .session_meta_data(&session2, &id.into())
-                .await;
+            > = db2.meta_data(&id.into()).await;
 
             assert!(meta.is_err());
 
-            ctx.dataset_db_ref()
-                .add_dataset_permission(
-                    &session1,
-                    DatasetPermission {
-                        role: session2.user.id.into(),
-                        dataset: id,
-                        permission: Permission::Read,
-                    },
-                )
+            db1.add_permission(session2.user.id.into(), id, Permission::Read)
                 .await
                 .unwrap();
 
-            let meta: Result<
+            let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = ctx
-                .dataset_db_ref()
-                .session_meta_data(&session2, &id.into())
-                .await;
+            > = db2.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_loads_all_meta_data_types() {
+        with_temp_context(|app_ctx, _| async move {
+            let session = app_ctx.create_anonymous_session().await.unwrap();
+
+            let db = app_ctx.session_context(session.clone()).db();
+
+            let vector_descriptor = VectorResultDescriptor {
+                data_type: VectorDataType::Data,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
+                time: None,
+                bbox: None,
+            };
+
+            let raster_descriptor = RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                measurement: Default::default(),
+                time: None,
+                bbox: None,
+                resolution: None,
+            };
+
+            let vector_ds = AddDataset {
+                id: None,
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
+                source_operator: "OgrSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let raster_ds = AddDataset {
+                id: None,
+                name: "GdalDataset".to_string(),
+                description: "My Gdal dataset".to_string(),
+                source_operator: "GdalSource".to_string(),
+                symbology: None,
+                provenance: None,
+            };
+
+            let gdal_params = GdalDatasetParameters {
+                file_path: Default::default(),
+                rasterband_channel: 0,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: Default::default(),
+                    x_pixel_size: 0.0,
+                    y_pixel_size: 0.0,
+                },
+                width: 0,
+                height: 0,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+                allow_alphaband_as_mask: false,
+                retry: None,
+            };
+
+            let meta = StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: Default::default(),
+                    layer_name: String::new(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                },
+                result_descriptor: vector_descriptor.clone(),
+                phantom: Default::default(),
+            };
+
+            let meta = db.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
+
+            let id = db.add_dataset(vector_ds, meta).await.unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+            > = db.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+
+            let meta = GdalMetaDataRegular {
+                result_descriptor: raster_descriptor.clone(),
+                params: gdal_params.clone(),
+                time_placeholders: Default::default(),
+                data_time: Default::default(),
+                step: TimeStep {
+                    granularity: TimeGranularity::Millis,
+                    step: 0,
+                },
+            };
+
+            let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataRegular(meta));
+
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+            > = db.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+
+            let meta = GdalMetaDataStatic {
+                time: None,
+                params: gdal_params.clone(),
+                result_descriptor: raster_descriptor.clone(),
+            };
+
+            let meta = db.wrap_meta_data(MetaDataDefinition::GdalStatic(meta));
+
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+            > = db.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+
+            let meta = GdalMetaDataList {
+                result_descriptor: raster_descriptor.clone(),
+                params: vec![],
+            };
+
+            let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataList(meta));
+
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+            > = db.meta_data(&id.into()).await;
+
+            assert!(meta.is_ok());
+
+            let meta = GdalMetadataNetCdfCf {
+                result_descriptor: raster_descriptor.clone(),
+                params: gdal_params.clone(),
+                start: TimeInstance::MIN,
+                end: TimeInstance::MAX,
+                step: TimeStep {
+                    granularity: TimeGranularity::Millis,
+                    step: 0,
+                },
+                band_offset: 0,
+            };
+
+            let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetadataNetCdfCf(meta));
+
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+
+            let meta: geoengine_operators::util::Result<
+                Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+            > = db.meta_data(&id.into()).await;
 
             assert!(meta.is_ok());
         })
@@ -2025,9 +2108,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_uploads() {
-        with_temp_context(|ctx, _| async move {
-            let session1 = ctx.user_db_ref().anonymous().await.unwrap();
-            let session2 = ctx.user_db_ref().anonymous().await.unwrap();
+        with_temp_context(|app_ctx, _| async move {
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+            let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+            let db1 = app_ctx.session_context(session1.clone()).db();
+            let db2 = app_ctx.session_context(session2.clone()).db();
 
             let upload_id = UploadId::new();
 
@@ -2040,22 +2126,11 @@ mod tests {
                 }],
             };
 
-            ctx.dataset_db_ref()
-                .create_upload(&session1, upload)
-                .await
-                .unwrap();
+            db1.create_upload(upload).await.unwrap();
 
-            assert!(ctx
-                .dataset_db_ref()
-                .get_upload(&session1, upload_id)
-                .await
-                .is_ok());
+            assert!(db1.load_upload(upload_id).await.is_ok());
 
-            assert!(ctx
-                .dataset_db_ref()
-                .get_upload(&session2, upload_id)
-                .await
-                .is_err());
+            assert!(db2.load_upload(upload_id).await.is_err());
         })
         .await;
     }
@@ -2063,8 +2138,10 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_collects_layers() {
-        with_temp_context(|ctx, _| async move {
-            let layer_db = ctx.layer_db_ref();
+        with_temp_context(|app_ctx, _| async move {
+            let session = admin_login(&app_ctx).await;
+
+            let layer_db = app_ctx.session_context(session).db();
 
             let workflow = Workflow {
                 operator: TypedOperator::Vector(
@@ -2077,7 +2154,7 @@ mod tests {
                 ),
             };
 
-            let root_collection_id = layer_db.root_collection_id().await.unwrap();
+            let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
 
             let layer1 = layer_db
                 .add_layer(
@@ -2086,16 +2163,16 @@ mod tests {
                         description: "Layer 1".to_string(),
                         symbology: None,
                         workflow: workflow.clone(),
-                    }
-                    .validated()
-                    .unwrap(),
+                        metadata: [("meta".to_string(), "datum".to_string())].into(),
+                        properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                    },
                     &root_collection_id,
                 )
                 .await
                 .unwrap();
 
             assert_eq!(
-                layer_db.get_layer(&layer1).await.unwrap(),
+                layer_db.load_layer(&layer1).await.unwrap(),
                 crate::layers::layer::Layer {
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
@@ -2105,19 +2182,18 @@ mod tests {
                     description: "Layer 1".to_string(),
                     symbology: None,
                     workflow: workflow.clone(),
-                    properties: vec![],
-                    metadata: HashMap::new(),
+                    metadata: [("meta".to_string(), "datum".to_string())].into(),
+                    properties: vec![("proper".to_string(), "tee".to_string()).into()],
                 }
             );
 
             let collection1_id = layer_db
-                .add_collection(
+                .add_layer_collection(
                     AddLayerCollection {
                         name: "Collection1".to_string(),
                         description: "Collection 1".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
+                        properties: Default::default(),
+                    },
                     &root_collection_id,
                 )
                 .await
@@ -2130,22 +2206,21 @@ mod tests {
                         description: "Layer 2".to_string(),
                         symbology: None,
                         workflow: workflow.clone(),
-                    }
-                    .validated()
-                    .unwrap(),
+                        metadata: Default::default(),
+                        properties: Default::default(),
+                    },
                     &collection1_id,
                 )
                 .await
                 .unwrap();
 
             let collection2_id = layer_db
-                .add_collection(
+                .add_layer_collection(
                     AddLayerCollection {
                         name: "Collection2".to_string(),
                         description: "Collection 2".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
+                        properties: Default::default(),
+                    },
                     &collection1_id,
                 )
                 .await
@@ -2157,14 +2232,12 @@ mod tests {
                 .unwrap();
 
             let root_collection = layer_db
-                .collection(
+                .load_layer_collection(
                     &root_collection_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -2186,6 +2259,7 @@ mod tests {
                             },
                             name: "Collection1".to_string(),
                             description: "Collection 1".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Collection(LayerCollectionListing {
                             id: ProviderLayerCollectionId {
@@ -2196,6 +2270,7 @@ mod tests {
                             },
                             name: "Unsorted".to_string(),
                             description: "Unsorted Layers".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
@@ -2204,7 +2279,7 @@ mod tests {
                             },
                             name: "Layer1".to_string(),
                             description: "Layer 1".to_string(),
-                            properties: vec![],
+                            properties: vec![("proper".to_string(), "tee".to_string()).into()],
                         })
                     ],
                     entry_label: None,
@@ -2213,14 +2288,12 @@ mod tests {
             );
 
             let collection1 = layer_db
-                .collection(
+                .load_layer_collection(
                     &collection1_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -2242,6 +2315,7 @@ mod tests {
                             },
                             name: "Collection2".to_string(),
                             description: "Collection 2".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
@@ -2263,23 +2337,17 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_tracks_used_quota_in_postgres() {
-        with_temp_context(|ctx, _| async move {
-            let _user = ctx
-                .user_db_ref()
-                .register(
-                    UserRegistration {
-                        email: "foo@example.com".to_string(),
-                        password: "secret1234".to_string(),
-                        real_name: "Foo Bar".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+        with_temp_context(|app_ctx, _| async move {
+            let _user = app_ctx
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
                 .await
                 .unwrap();
 
-            let session = ctx
-                .user_db_ref()
+            let session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".to_string(),
                     password: "secret1234".to_string(),
@@ -2287,17 +2355,21 @@ mod tests {
                 .await
                 .unwrap();
 
-            let quota = initialize_quota_tracking(ctx.user_db());
+            let admin_session = admin_login(&app_ctx).await;
+
+            let quota = initialize_quota_tracking(app_ctx.session_context(admin_session).db());
 
             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
             tracking.work_unit_done();
             tracking.work_unit_done();
 
+            let db = app_ctx.session_context(session).db();
+
             // wait for quota to be recorded
             let mut success = false;
             for _ in 0..10 {
-                let used = ctx.user_db_ref().quota_used(&session).await.unwrap();
+                let used = db.quota_used().await.unwrap();
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
                 if used == 2 {
@@ -2313,23 +2385,17 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_tracks_available_quota() {
-        with_temp_context(|ctx, _| async move {
-            let user = ctx
-                .user_db_ref()
-                .register(
-                    UserRegistration {
-                        email: "foo@example.com".to_string(),
-                        password: "secret1234".to_string(),
-                        real_name: "Foo Bar".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+        with_temp_context(|app_ctx, _| async move {
+            let user = app_ctx
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
                 .await
                 .unwrap();
 
-            let session = ctx
-                .user_db_ref()
+            let session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".to_string(),
                     password: "secret1234".to_string(),
@@ -2337,22 +2403,28 @@ mod tests {
                 .await
                 .unwrap();
 
-            ctx.user_db_ref()
+            let admin_session = admin_login(&app_ctx).await;
+
+            app_ctx
+                .session_context(admin_session.clone())
+                .db()
                 .update_quota_available_by_user(&user, 1)
                 .await
                 .unwrap();
 
-            let quota = initialize_quota_tracking(ctx.user_db());
+            let quota = initialize_quota_tracking(app_ctx.session_context(admin_session).db());
 
             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
             tracking.work_unit_done();
             tracking.work_unit_done();
 
+            let db = app_ctx.session_context(session).db();
+
             // wait for quota to be recorded
             let mut success = false;
             for _ in 0..10 {
-                let available = ctx.user_db_ref().quota_available(&session).await.unwrap();
+                let available = db.quota_available().await.unwrap();
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
                 if available == -1 {
@@ -2368,23 +2440,17 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_updates_quota_in_postgres() {
-        with_temp_context(|ctx, _| async move {
-            let user = ctx
-                .user_db_ref()
-                .register(
-                    UserRegistration {
-                        email: "foo@example.com".to_string(),
-                        password: "secret1234".to_string(),
-                        real_name: "Foo Bar".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
-                )
+        with_temp_context(|app_ctx, _| async move {
+            let user = app_ctx
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
                 .await
                 .unwrap();
 
-            let session = ctx
-                .user_db_ref()
+            let session = app_ctx
                 .login(UserCredentials {
                     email: "foo@example.com".to_string(),
                     password: "secret1234".to_string(),
@@ -2392,40 +2458,31 @@ mod tests {
                 .await
                 .unwrap();
 
+            let db = app_ctx.session_context(session.clone()).db();
+            let admin_db = app_ctx.session_context(UserSession::admin_session()).db();
+
             assert_eq!(
-                ctx.user_db_ref().quota_available(&session).await.unwrap(),
+                db.quota_available().await.unwrap(),
                 crate::util::config::get_config_element::<crate::pro::util::config::User>()
                     .unwrap()
                     .default_available_quota
             );
 
             assert_eq!(
-                ctx.user_db_ref()
-                    .quota_available_by_user(&user)
-                    .await
-                    .unwrap(),
+                admin_db.quota_available_by_user(&user).await.unwrap(),
                 crate::util::config::get_config_element::<crate::pro::util::config::User>()
                     .unwrap()
                     .default_available_quota
             );
 
-            ctx.user_db_ref()
+            admin_db
                 .update_quota_available_by_user(&user, 123)
                 .await
                 .unwrap();
 
-            assert_eq!(
-                ctx.user_db_ref().quota_available(&session).await.unwrap(),
-                123
-            );
+            assert_eq!(db.quota_available().await.unwrap(), 123);
 
-            assert_eq!(
-                ctx.user_db_ref()
-                    .quota_available_by_user(&user)
-                    .await
-                    .unwrap(),
-                123
-            );
+            assert_eq!(admin_db.quota_available_by_user(&user).await.unwrap(), 123);
         })
         .await;
     }
@@ -2433,8 +2490,10 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_removes_layer_collections() {
-        with_temp_context(|ctx, _| async move {
-            let layer_db = ctx.layer_db_ref();
+        with_temp_context(|app_ctx, _| async move {
+            let session = admin_login(&app_ctx).await;
+
+            let layer_db = app_ctx.session_context(session).db();
 
             let layer = AddLayer {
                 name: "layer".to_string(),
@@ -2450,21 +2509,20 @@ mod tests {
                     ),
                 },
                 symbology: None,
-            }
-            .validated()
-            .unwrap();
+                metadata: Default::default(),
+                properties: Default::default(),
+            };
 
-            let root_collection = &layer_db.root_collection_id().await.unwrap();
+            let root_collection = &layer_db.get_root_layer_collection_id().await.unwrap();
 
             let collection = AddLayerCollection {
                 name: "top collection".to_string(),
                 description: "description".to_string(),
-            }
-            .validated()
-            .unwrap();
+                properties: Default::default(),
+            };
 
             let top_c_id = layer_db
-                .add_collection(collection, root_collection)
+                .add_layer_collection(collection, root_collection)
                 .await
                 .unwrap();
 
@@ -2473,24 +2531,21 @@ mod tests {
             let collection = AddLayerCollection {
                 name: "empty collection".to_string(),
                 description: "description".to_string(),
-            }
-            .validated()
-            .unwrap();
+                properties: Default::default(),
+            };
 
             let empty_c_id = layer_db
-                .add_collection(collection, &top_c_id)
+                .add_layer_collection(collection, &top_c_id)
                 .await
                 .unwrap();
 
             let items = layer_db
-                .collection(
+                .load_layer_collection(
                     &top_c_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -2512,6 +2567,7 @@ mod tests {
                             },
                             name: "empty collection".to_string(),
                             description: "description".to_string(),
+                            properties: Default::default(),
                         }),
                         CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
@@ -2529,17 +2585,15 @@ mod tests {
             );
 
             // remove empty collection
-            layer_db.remove_collection(&empty_c_id).await.unwrap();
+            layer_db.remove_layer_collection(&empty_c_id).await.unwrap();
 
             let items = layer_db
-                .collection(
+                .load_layer_collection(
                     &top_c_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -2568,38 +2622,34 @@ mod tests {
             );
 
             // remove top (not root) collection
-            layer_db.remove_collection(&top_c_id).await.unwrap();
+            layer_db.remove_layer_collection(&top_c_id).await.unwrap();
 
             layer_db
-                .collection(
+                .load_layer_collection(
                     &top_c_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap_err();
 
             // should be deleted automatically
-            layer_db.get_layer(&l_id).await.unwrap_err();
+            layer_db.load_layer(&l_id).await.unwrap_err();
 
             // it is not allowed to remove the root collection
             layer_db
-                .remove_collection(root_collection)
+                .remove_layer_collection(root_collection)
                 .await
                 .unwrap_err();
             layer_db
-                .collection(
+                .load_layer_collection(
                     root_collection,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -2610,32 +2660,32 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_removes_collections_from_collections() {
-        with_temp_context(|ctx, _| async move {
-            let db = ctx.layer_db_ref();
+        with_temp_context(|app_ctx, _| async move {
+            let session = admin_login(&app_ctx).await;
 
-            let root_collection_id = &db.root_collection_id().await.unwrap();
+            let db = app_ctx.session_context(session).db();
+
+            let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
 
             let mid_collection_id = db
-                .add_collection(
+                .add_layer_collection(
                     AddLayerCollection {
                         name: "mid collection".to_string(),
                         description: "description".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
+                        properties: Default::default(),
+                    },
                     root_collection_id,
                 )
                 .await
                 .unwrap();
 
             let bottom_collection_id = db
-                .add_collection(
+                .add_layer_collection(
                     AddLayerCollection {
                         name: "bottom collection".to_string(),
                         description: "description".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
+                        properties: Default::default(),
+                    },
                     &mid_collection_id,
                 )
                 .await
@@ -2657,45 +2707,36 @@ mod tests {
                             ),
                         },
                         symbology: None,
-                    }
-                    .validated()
-                    .unwrap(),
+                        metadata: Default::default(),
+                        properties: Default::default(),
+                    },
                     &mid_collection_id,
                 )
                 .await
                 .unwrap();
 
             // removing the mid collection…
-            db.remove_collection_from_parent(&mid_collection_id, root_collection_id)
+            db.remove_layer_collection_from_parent(&mid_collection_id, root_collection_id)
                 .await
                 .unwrap();
 
             // …should remove itself
-            db.collection(
-                &mid_collection_id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
-            .await
-            .unwrap_err();
+            db.load_layer_collection(&mid_collection_id, LayerCollectionListOptions::default())
+                .await
+                .unwrap_err();
 
             // …should remove the bottom collection
-            db.collection(
-                &bottom_collection_id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
-            .await
-            .unwrap_err();
+            db.load_layer_collection(&bottom_collection_id, LayerCollectionListOptions::default())
+                .await
+                .unwrap_err();
 
             // … and should remove the layer of the bottom collection
-            db.get_layer(&layer_id).await.unwrap_err();
+            db.load_layer(&layer_id).await.unwrap_err();
 
             // the root collection is still there
-            db.collection(
-                root_collection_id,
-                LayerCollectionListOptions::default().validated().unwrap(),
-            )
-            .await
-            .unwrap();
+            db.load_layer_collection(root_collection_id, LayerCollectionListOptions::default())
+                .await
+                .unwrap();
         })
         .await;
     }
@@ -2703,19 +2744,20 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_removes_layers_from_collections() {
-        with_temp_context(|ctx, _| async move {
-            let db = ctx.layer_db_ref();
+        with_temp_context(|app_ctx, _| async move {
+            let session = admin_login(&app_ctx).await;
 
-            let root_collection = &db.root_collection_id().await.unwrap();
+            let db = app_ctx.session_context(session).db();
+
+            let root_collection = &db.get_root_layer_collection_id().await.unwrap();
 
             let another_collection = db
-                .add_collection(
+                .add_layer_collection(
                     AddLayerCollection {
                         name: "top collection".to_string(),
                         description: "description".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
+                        properties: Default::default(),
+                    },
                     root_collection,
                 )
                 .await
@@ -2737,9 +2779,9 @@ mod tests {
                             ),
                         },
                         symbology: None,
-                    }
-                    .validated()
-                    .unwrap(),
+                        metadata: Default::default(),
+                        properties: Default::default(),
+                    },
                     &another_collection,
                 )
                 .await
@@ -2761,9 +2803,9 @@ mod tests {
                             ),
                         },
                         symbology: None,
-                    }
-                    .validated()
-                    .unwrap(),
+                        metadata: Default::default(),
+                        properties: Default::default(),
+                    },
                     &another_collection,
                 )
                 .await
@@ -2780,14 +2822,12 @@ mod tests {
                 .unwrap();
 
             let number_of_layer_in_collection = db
-                .collection(
+                .load_layer_collection(
                     &another_collection,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap()
@@ -2798,7 +2838,7 @@ mod tests {
                 1 /* only the other collection should be here */
             );
 
-            db.get_layer(&layer_in_one_collection).await.unwrap_err();
+            db.load_layer(&layer_in_one_collection).await.unwrap_err();
 
             // remove second layer --> should only be gone in collection
 
@@ -2807,14 +2847,12 @@ mod tests {
                 .unwrap();
 
             let number_of_layer_in_collection = db
-                .collection(
+                .load_layer_collection(
                     &another_collection,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap()
@@ -2825,7 +2863,7 @@ mod tests {
                 0 /* both layers were deleted */
             );
 
-            db.get_layer(&layer_in_two_collections).await.unwrap();
+            db.load_layer(&layer_in_two_collections).await.unwrap();
         })
         .await;
     }
@@ -2833,7 +2871,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_deletes_dataset() {
-        with_temp_context(|ctx, _| async move {
+        with_temp_context(|app_ctx, _| async move {
             let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
 
             let loading_info = OgrSourceDataset {
@@ -2890,12 +2928,11 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let session = ctx.user_db_ref().anonymous().await.unwrap();
+            let session = app_ctx.create_anonymous_session().await.unwrap();
 
-            let db = ctx.dataset_db_ref();
+            let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
             db.add_dataset(
-                &session,
                 AddDataset {
                     id: Some(dataset_id),
                     name: "Ogr Test".to_owned(),
@@ -2907,19 +2944,17 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
-                }
-                .validated()
-                .unwrap(),
+                },
                 wrap,
             )
             .await
             .unwrap();
 
-            assert!(db.load(&session, &dataset_id).await.is_ok());
+            assert!(db.load_dataset(&dataset_id).await.is_ok());
 
-            db.delete_dataset(&session, dataset_id).await.unwrap();
+            db.delete_dataset(dataset_id).await.unwrap();
 
-            assert!(db.load(&session, &dataset_id).await.is_err());
+            assert!(db.load_dataset(&dataset_id).await.is_err());
         })
         .await;
     }
@@ -2927,7 +2962,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_deletes_admin_dataset() {
-        with_temp_context(|ctx, _| async move {
+        with_temp_context(|app_ctx, _| async move {
             let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
 
             let loading_info = OgrSourceDataset {
@@ -2984,12 +3019,11 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let session: UserSession = AdminSession::default().into();
+            let session = admin_login(&app_ctx).await;
 
-            let db = ctx.dataset_db_ref();
+            let db = app_ctx.session_context(session).db();
             let wrap = db.wrap_meta_data(meta_data);
             db.add_dataset(
-                &session,
                 AddDataset {
                     id: Some(dataset_id),
                     name: "Ogr Test".to_owned(),
@@ -3001,38 +3035,36 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
-                }
-                .validated()
-                .unwrap(),
+                },
                 wrap,
             )
             .await
             .unwrap();
 
-            assert!(db.load(&session, &dataset_id).await.is_ok());
+            assert!(db.load_dataset(&dataset_id).await.is_ok());
 
-            db.delete_dataset(&session, dataset_id).await.unwrap();
+            db.delete_dataset(dataset_id).await.unwrap();
 
-            assert!(db.load(&session, &dataset_id).await.is_err());
+            assert!(db.load_dataset(&dataset_id).await.is_err());
         })
         .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_missing_layer_dataset_in_collection_listing() {
-        with_temp_context(|ctx, _| async move {
-            let db = ctx.layer_db_ref();
+        with_temp_context(|app_ctx, _| async move {
+            let session = admin_login(&app_ctx).await;
+            let db = app_ctx.session_context(session).db();
 
-            let root_collection_id = &db.root_collection_id().await.unwrap();
+            let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
 
             let top_collection_id = db
-                .add_collection(
+                .add_layer_collection(
                     AddLayerCollection {
                         name: "top collection".to_string(),
                         description: "description".to_string(),
-                    }
-                    .validated()
-                    .unwrap(),
+                        properties: Default::default(),
+                    },
                     root_collection_id,
                 )
                 .await
@@ -3046,14 +3078,12 @@ mod tests {
                 .unwrap_err();
 
             let root_collection_layers = db
-                .collection(
+                .load_layer_collection(
                     &top_collection_id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 20,
-                    }
-                    .validated()
-                    .unwrap(),
+                    },
                 )
                 .await
                 .unwrap();
@@ -3074,6 +3104,540 @@ mod tests {
                     properties: vec![],
                 }
             );
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_restricts_layer_permissions() {
+        with_temp_context(|app_ctx, _| async move {
+            let admin_session = admin_login(&app_ctx).await;
+            let session1 = app_ctx.create_anonymous_session().await.unwrap();
+
+            let admin_db = app_ctx.session_context(admin_session.clone()).db();
+            let db1 = app_ctx.session_context(session1.clone()).db();
+
+            let root = admin_db.get_root_layer_collection_id().await.unwrap();
+
+            // add new collection as admin
+            let new_collection_id = admin_db
+                .add_layer_collection(
+                    AddLayerCollection {
+                        name: "admin collection".to_string(),
+                        description: String::new(),
+                        properties: Default::default(),
+                    },
+                    &root,
+                )
+                .await
+                .unwrap();
+
+            // load as regular user, not visible
+            let collection = db1
+                .load_layer_collection(
+                    &root,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 10,
+                    },
+                )
+                .await
+                .unwrap();
+            assert!(!collection.items.iter().any(|c| match c {
+                CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
+                CollectionItem::Layer(_) => false,
+            }));
+
+            // give user read permission
+            admin_db
+                .add_permission(
+                    session1.user.id.into(),
+                    new_collection_id.clone(),
+                    Permission::Read,
+                )
+                .await
+                .unwrap();
+
+            // now visible
+            let collection = db1
+                .load_layer_collection(
+                    &root,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 10,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert!(collection.items.iter().any(|c| match c {
+                CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
+                CollectionItem::Layer(_) => false,
+            }));
+
+            // add new layer in the collection as user, fails because only read permission
+            let result = db1
+                .add_layer_collection(
+                    AddLayerCollection {
+                        name: "user layer".to_string(),
+                        description: String::new(),
+                        properties: Default::default(),
+                    },
+                    &new_collection_id,
+                )
+                .await;
+
+            assert!(result.is_err());
+
+            // give user owner permission
+            admin_db
+                .add_permission(
+                    session1.user.id.into(),
+                    new_collection_id.clone(),
+                    Permission::Owner,
+                )
+                .await
+                .unwrap();
+
+            // add now works
+            db1.add_layer_collection(
+                AddLayerCollection {
+                    name: "user layer".to_string(),
+                    description: String::new(),
+                    properties: Default::default(),
+                },
+                &new_collection_id,
+            )
+            .await
+            .unwrap();
+
+            // remove permissions again
+            admin_db
+                .remove_permission(
+                    session1.user.id.into(),
+                    new_collection_id.clone(),
+                    Permission::Read,
+                )
+                .await
+                .unwrap();
+            admin_db
+                .remove_permission(
+                    session1.user.id.into(),
+                    new_collection_id.clone(),
+                    Permission::Owner,
+                )
+                .await
+                .unwrap();
+
+            // access is gone now
+            let result = db1
+                .add_layer_collection(
+                    AddLayerCollection {
+                        name: "user layer".to_string(),
+                        description: String::new(),
+                        properties: Default::default(),
+                    },
+                    &root,
+                )
+                .await;
+
+            assert!(result.is_err());
+
+            let collection = db1
+                .load_layer_collection(
+                    &root,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 10,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert!(!collection.items.iter().any(|c| match c {
+                CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
+                CollectionItem::Layer(_) => false,
+            }));
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_handles_user_roles() {
+        with_temp_context(|app_ctx, _| async move {
+            let admin_session = admin_login(&app_ctx).await;
+            let user_id = app_ctx
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
+                .await
+                .unwrap();
+
+            let admin_db = app_ctx.session_context(admin_session.clone()).db();
+
+            // create a new role
+            let role_id = admin_db.add_role("foo").await.unwrap();
+
+            let user_session = app_ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                })
+                .await
+                .unwrap();
+
+            // user does not have the role yet
+
+            assert!(!user_session.roles.contains(&role_id));
+
+            // we assign the role to the user
+            admin_db.assign_role(&role_id, &user_id).await.unwrap();
+
+            let user_session = app_ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                })
+                .await
+                .unwrap();
+
+            // should be present now
+            assert!(user_session.roles.contains(&role_id));
+
+            // we revoke it
+            admin_db.revoke_role(&role_id, &user_id).await.unwrap();
+
+            let user_session = app_ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                })
+                .await
+                .unwrap();
+
+            // the role is gone now
+            assert!(!user_session.roles.contains(&role_id));
+
+            // assign it again and then delete the whole role, should not be present at user
+
+            admin_db.assign_role(&role_id, &user_id).await.unwrap();
+
+            admin_db.remove_role(&role_id).await.unwrap();
+
+            let user_session = app_ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                })
+                .await
+                .unwrap();
+
+            assert!(!user_session.roles.contains(&role_id));
+        })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_updates_project_layer_symbology() {
+        with_temp_context(|app_ctx, _| async move {
+            let session = app_ctx.create_anonymous_session().await.unwrap();
+
+            let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
+
+            let db = app_ctx.session_context(session.clone()).db();
+
+            let create_project: CreateProject = serde_json::from_value(json!({
+                "name": "Default",
+                "description": "Default project",
+                "bounds": {
+                    "boundingBox": {
+                        "lowerLeftCoordinate": {
+                            "x": -180,
+                            "y": -90
+                        },
+                        "upperRightCoordinate": {
+                            "x": 180,
+                            "y": 90
+                        }
+                    },
+                    "spatialReference": "EPSG:4326",
+                    "timeInterval": {
+                        "start": 1_396_353_600_000i64,
+                        "end": 1_396_353_600_000i64
+                    }
+                },
+                "timeStep": {
+                    "step": 1,
+                    "granularity": "months"
+                }
+            }))
+            .unwrap();
+
+            let project_id = db.create_project(create_project).await.unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 0, 255]
+                            }, {
+                                "value": 255,
+                                "color": [255, 255, 255, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            db.update_project(update).await.unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 4, 255]
+                            }, {
+                                "value": 17.866_666_666_666_667,
+                                "color": [11, 9, 36, 255]
+                            }, {
+                                "value": 34.733_333_333_333_334,
+                                "color": [32, 17, 75, 255]
+                            }, {
+                                "value": 51.6,
+                                "color": [59, 15, 112, 255]
+                            }, {
+                                "value": 68.466_666_666_666_67,
+                                "color": [87, 21, 126, 255]
+                            }, {
+                                "value": 85.333_333_333_333_33,
+                                "color": [114, 31, 129, 255]
+                            }, {
+                                "value": 102.199_999_999_999_99,
+                                "color": [140, 41, 129, 255]
+                            }, {
+                                "value": 119.066_666_666_666_65,
+                                "color": [168, 50, 125, 255]
+                            }, {
+                                "value": 135.933_333_333_333_34,
+                                "color": [196, 60, 117, 255]
+                            }, {
+                                "value": 152.799_999_999_999_98,
+                                "color": [222, 73, 104, 255]
+                            }, {
+                                "value": 169.666_666_666_666_66,
+                                "color": [241, 96, 93, 255]
+                            }, {
+                                "value": 186.533_333_333_333_33,
+                                "color": [250, 127, 94, 255]
+                            }, {
+                                "value": 203.399_999_999_999_98,
+                                "color": [254, 159, 109, 255]
+                            }, {
+                                "value": 220.266_666_666_666_65,
+                                "color": [254, 191, 132, 255]
+                            }, {
+                                "value": 237.133_333_333_333_3,
+                                "color": [253, 222, 160, 255]
+                            }, {
+                                "value": 254,
+                                "color": [252, 253, 191, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            db.update_project(update).await.unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 4, 255]
+                            }, {
+                                "value": 17.866_666_666_666_667,
+                                "color": [11, 9, 36, 255]
+                            }, {
+                                "value": 34.733_333_333_333_334,
+                                "color": [32, 17, 75, 255]
+                            }, {
+                                "value": 51.6,
+                                "color": [59, 15, 112, 255]
+                            }, {
+                                "value": 68.466_666_666_666_67,
+                                "color": [87, 21, 126, 255]
+                            }, {
+                                "value": 85.333_333_333_333_33,
+                                "color": [114, 31, 129, 255]
+                            }, {
+                                "value": 102.199_999_999_999_99,
+                                "color": [140, 41, 129, 255]
+                            }, {
+                                "value": 119.066_666_666_666_65,
+                                "color": [168, 50, 125, 255]
+                            }, {
+                                "value": 135.933_333_333_333_34,
+                                "color": [196, 60, 117, 255]
+                            }, {
+                                "value": 152.799_999_999_999_98,
+                                "color": [222, 73, 104, 255]
+                            }, {
+                                "value": 169.666_666_666_666_66,
+                                "color": [241, 96, 93, 255]
+                            }, {
+                                "value": 186.533_333_333_333_33,
+                                "color": [250, 127, 94, 255]
+                            }, {
+                                "value": 203.399_999_999_999_98,
+                                "color": [254, 159, 109, 255]
+                            }, {
+                                "value": 220.266_666_666_666_65,
+                                "color": [254, 191, 132, 255]
+                            }, {
+                                "value": 237.133_333_333_333_3,
+                                "color": [253, 222, 160, 255]
+                            }, {
+                                "value": 254,
+                                "color": [252, 253, 191, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            db.update_project(update).await.unwrap();
+
+            let update: UpdateProject = serde_json::from_value(json!({
+                "id": project_id.to_string(),
+                "layers": [{
+                    "name": "NDVI",
+                    "workflow": workflow_id.to_string(),
+                    "visibility": {
+                        "data": true,
+                        "legend": false
+                    },
+                    "symbology": {
+                        "type": "raster",
+                        "opacity": 1,
+                        "colorizer": {
+                            "type": "linearGradient",
+                            "breakpoints": [{
+                                "value": 1,
+                                "color": [0, 0, 4, 255]
+                            }, {
+                                "value": 17.933_333_333_333_334,
+                                "color": [11, 9, 36, 255]
+                            }, {
+                                "value": 34.866_666_666_666_67,
+                                "color": [32, 17, 75, 255]
+                            }, {
+                                "value": 51.800_000_000_000_004,
+                                "color": [59, 15, 112, 255]
+                            }, {
+                                "value": 68.733_333_333_333_33,
+                                "color": [87, 21, 126, 255]
+                            }, {
+                                "value": 85.666_666_666_666_66,
+                                "color": [114, 31, 129, 255]
+                            }, {
+                                "value": 102.6,
+                                "color": [140, 41, 129, 255]
+                            }, {
+                                "value": 119.533_333_333_333_32,
+                                "color": [168, 50, 125, 255]
+                            }, {
+                                "value": 136.466_666_666_666_67,
+                                "color": [196, 60, 117, 255]
+                            }, {
+                                "value": 153.4,
+                                "color": [222, 73, 104, 255]
+                            }, {
+                                "value": 170.333_333_333_333_31,
+                                "color": [241, 96, 93, 255]
+                            }, {
+                                "value": 187.266_666_666_666_65,
+                                "color": [250, 127, 94, 255]
+                            }, {
+                                "value": 204.2,
+                                "color": [254, 159, 109, 255]
+                            }, {
+                                "value": 221.133_333_333_333_33,
+                                "color": [254, 191, 132, 255]
+                            }, {
+                                "value": 238.066_666_666_666_63,
+                                "color": [253, 222, 160, 255]
+                            }, {
+                                "value": 255,
+                                "color": [252, 253, 191, 255]
+                            }],
+                            "noDataColor": [0, 0, 0, 0],
+                            "overColor": [255, 255, 255, 127],
+                            "underColor": [255, 255, 255, 127]
+                        }
+                    }
+                }]
+            }))
+            .unwrap();
+
+            let update = update;
+
+            // run two updates concurrently
+            let (r0, r1) = join!(db.update_project(update.clone()), db.update_project(update));
+
+            assert!(r0.is_ok());
+            assert!(r1.is_ok());
         })
         .await;
     }

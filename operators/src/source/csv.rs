@@ -13,7 +13,6 @@ use geoengine_datatypes::primitives::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
-use tracing::{span, Level};
 
 use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
@@ -23,11 +22,11 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 
-use crate::engine::{CreateSpan, QueryProcessor};
 use crate::engine::{
     InitializedVectorOperator, OperatorData, OperatorName, QueryContext, SourceOperator,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
+use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -161,6 +160,7 @@ impl OperatorData for CsvSourceParameters {
 impl VectorOperator for CsvSource {
     async fn _initialize(
         self: Box<Self>,
+        _path: WorkflowOperatorPath,
         _context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let initialized_source = InitializedCsvSource {

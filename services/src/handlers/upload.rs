@@ -5,17 +5,18 @@ use actix_web::{web, FromRequest, Responder};
 use futures::StreamExt;
 use geoengine_datatypes::util::Identifier;
 
+use crate::contexts::ApplicationContext;
 use crate::datasets::upload::{FileId, FileUpload, Upload, UploadDb, UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
-use crate::handlers::Context;
+use crate::handlers::SessionContext;
 use crate::util::IdResponse;
 use snafu::ResultExt;
 use utoipa::ToSchema;
 
 pub(crate) fn init_upload_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(web::resource("/upload").route(web::post().to(upload_handler::<C>)));
@@ -50,17 +51,15 @@ impl<'a> ToSchema<'a> for FileUploadRequest {
     path = "/upload",
     request_body(content = inline(FileUploadRequest), content_type = "multipart/form-data"),
     responses(
-        (status = 200, description = "File uploaded", body = IdResponse,
-            example = json!({"id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69"})
-        )
+        (status = 200, response = crate::api::model::responses::IdResponse)
     ),
     security(
         ("session_token" = [])
     )
 )]
-async fn upload_handler<C: Context>(
+async fn upload_handler<C: ApplicationContext>(
     session: C::Session,
-    ctx: web::Data<C>,
+    app_ctx: web::Data<C>,
     mut body: Multipart,
 ) -> Result<impl Responder> {
     let upload_id = UploadId::new();
@@ -98,14 +97,13 @@ async fn upload_handler<C: Context>(
         });
     }
 
-    ctx.dataset_db_ref()
-        .create_upload(
-            &session,
-            Upload {
-                id: upload_id,
-                files,
-            },
-        )
+    app_ctx
+        .session_context(session)
+        .db()
+        .create_upload(Upload {
+            id: upload_id,
+            files,
+        })
         .await?;
 
     Ok(web::Json(IdResponse::from(upload_id)))
@@ -114,7 +112,7 @@ async fn upload_handler<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleContext};
+    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
     use crate::util::tests::{send_test_request, SetMultipartBody, TestDataUploads};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -124,8 +122,10 @@ mod tests {
     async fn upload() {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
 
         let body = vec![("bar.txt", "bar"), ("foo.txt", "foo")];
 
@@ -134,7 +134,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart(body);
 
-        let res = send_test_request(req, ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 

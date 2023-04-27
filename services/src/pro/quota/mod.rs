@@ -1,6 +1,6 @@
 use geoengine_operators::pro::meta::quota::{ComputationContext, ComputationUnit, QuotaTracking};
 use snafu::Snafu;
-use std::sync::Arc;
+
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use geoengine_datatypes::util::test::TestDefault;
@@ -49,12 +49,12 @@ impl TestDefault for QuotaTrackingFactory {
 }
 
 pub struct QuotaManager<U: UserDb + 'static> {
-    user_db: Arc<U>,
+    user_db: U,
     quota_receiver: UnboundedReceiver<ComputationUnit>,
 }
 
 impl<U: UserDb + 'static> QuotaManager<U> {
-    pub fn new(user_db: Arc<U>, quota_receiver: UnboundedReceiver<ComputationUnit>) -> Self {
+    pub fn new(user_db: U, quota_receiver: UnboundedReceiver<ComputationUnit>) -> Self {
         Self {
             user_db,
             quota_receiver,
@@ -86,7 +86,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
     }
 }
 
-pub fn initialize_quota_tracking<U: UserDb + 'static>(user_db: Arc<U>) -> QuotaTrackingFactory {
+pub fn initialize_quota_tracking<U: UserDb + 'static>(user_db: U) -> QuotaTrackingFactory {
     let (quota_sender, quota_receiver) = unbounded_channel::<ComputationUnit>();
 
     QuotaManager::new(user_db, quota_receiver).run();
@@ -99,35 +99,30 @@ mod tests {
     use geoengine_datatypes::util::Identifier;
 
     use crate::{
+        contexts::{ApplicationContext, SessionContext},
         pro::{
-            contexts::{ProContext, ProInMemoryContext},
-            users::{UserCredentials, UserRegistration},
+            contexts::ProInMemoryContext,
+            users::{UserAuth, UserCredentials, UserRegistration},
+            util::tests::admin_login,
         },
-        util::user_input::UserInput,
     };
 
     use super::*;
 
     #[tokio::test]
     async fn it_tracks_quota() {
-        let ctx = ProInMemoryContext::test_default();
+        let app_ctx = ProInMemoryContext::test_default();
 
-        let _user = ctx
-            .user_db_ref()
-            .register(
-                UserRegistration {
-                    email: "foo@example.com".to_string(),
-                    password: "secret1234".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
+        let _user = app_ctx
+            .register_user(UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret1234".to_string(),
+                real_name: "Foo Bar".to_string(),
+            })
             .await
             .unwrap();
 
-        let session = ctx
-            .user_db_ref()
+        let session = app_ctx
             .login(UserCredentials {
                 email: "foo@example.com".to_string(),
                 password: "secret1234".to_string(),
@@ -135,18 +130,22 @@ mod tests {
             .await
             .unwrap();
 
-        let quota = initialize_quota_tracking(ctx.user_db());
+        let admin_session = admin_login(&app_ctx).await;
+
+        let quota = initialize_quota_tracking(app_ctx.session_context(admin_session.clone()).db());
 
         let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
         tracking.work_unit_done();
         tracking.work_unit_done();
 
+        let db = app_ctx.session_context(session).db();
+
         // wait for quota to be recorded
         let mut success = false;
         for _ in 0..10 {
-            let used = ctx.user_db_ref().quota_used(&session).await.unwrap();
-            let available = ctx.user_db_ref().quota_available(&session).await.unwrap();
+            let used = db.quota_used().await.unwrap();
+            let available = db.quota_available().await.unwrap();
 
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 

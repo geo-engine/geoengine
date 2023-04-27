@@ -1,15 +1,15 @@
-use crate::contexts::AdminSession;
+use crate::contexts::ApplicationContext;
 use crate::error::Result;
-use crate::tasks::{TaskListOptions, TaskManager};
-use crate::util::user_input::UserInput;
-use crate::{contexts::Context, tasks::TaskId};
-use actix_web::{web, Either, FromRequest, HttpResponse, Responder};
+use crate::tasks::{TaskListOptions, TaskManager, TaskStatusWithId};
+use crate::util::extractors::ValidatedQuery;
+use crate::{contexts::SessionContext, tasks::TaskId};
+use actix_web::{web, FromRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
 pub(crate) fn init_task_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: Context,
+    C: ApplicationContext,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -18,7 +18,7 @@ where
             .service(
                 web::scope("/{task_id}")
                     .service(web::resource("/status").route(web::get().to(status_handler::<C>)))
-                    .service(web::resource("/abort").route(web::get().to(abort_handler::<C>))),
+                    .service(web::resource("").route(web::delete().to(abort_handler::<C>))),
             ),
     );
 }
@@ -58,14 +58,18 @@ impl TaskResponse {
         ("session_token" = [])
     )
 )]
-async fn status_handler<C: Context>(
-    _session: Either<AdminSession, C::Session>, // TODO: check for session auth
-    ctx: web::Data<C>,
+async fn status_handler<C: ApplicationContext>(
+    session: C::Session, // TODO: check for session auth
+    app_ctx: web::Data<C>,
     task_id: web::Path<TaskId>,
 ) -> Result<impl Responder> {
     let task_id = task_id.into_inner();
 
-    let task = ctx.tasks_ref().status(task_id).await?;
+    let task = app_ctx
+        .session_context(session)
+        .tasks()
+        .get_task_status(task_id)
+        .await?;
 
     Ok(web::Json(task))
 }
@@ -76,7 +80,7 @@ async fn status_handler<C: Context>(
     get,
     path = "/tasks/list",
     responses(
-        (status = 200, description = "Status of all tasks", body = TaskStatus,
+        (status = 200, description = "Status of all tasks", body = Vec<TaskStatusWithId>,
             example = json!([
                 {
                     "taskId": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
@@ -95,14 +99,18 @@ async fn status_handler<C: Context>(
         ("session_token" = [])
     )
 )]
-async fn list_handler<C: Context>(
-    _session: Either<AdminSession, C::Session>, // TODO: check for session auth
-    ctx: web::Data<C>,
-    task_list_options: web::Query<TaskListOptions>,
-) -> Result<impl Responder> {
-    let task_list_options = task_list_options.into_inner().validated()?;
+async fn list_handler<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    task_list_options: ValidatedQuery<TaskListOptions>,
+) -> Result<web::Json<Vec<TaskStatusWithId>>> {
+    let task_list_options = task_list_options.into_inner();
 
-    let task = ctx.tasks_ref().list(task_list_options).await?;
+    let task = app_ctx
+        .session_context(session)
+        .tasks()
+        .list_tasks(task_list_options)
+        .await?;
 
     Ok(web::Json(task))
 }
@@ -121,10 +129,10 @@ pub struct TaskAbortOptions {
 ///             You can abort a task that is already in the process of aborting.
 #[utoipa::path(
     tag = "Tasks",
-    get,
-    path = "/tasks/{id}/abort",
+    delete,
+    path = "/tasks/{id}",
     responses(
-        (status = 200, description = "Task successfully aborted.")
+        (status = 202, description = "Task will be aborted.")
     ),
     params(
         TaskAbortOptions,
@@ -134,17 +142,21 @@ pub struct TaskAbortOptions {
         ("session_token" = [])
     )
 )]
-async fn abort_handler<C: Context>(
-    _session: Either<AdminSession, C::Session>, // TODO: check for session auth
-    ctx: web::Data<C>,
+async fn abort_handler<C: ApplicationContext>(
+    session: C::Session, // TODO: check for session auth
+    app_ctx: web::Data<C>,
     task_id: web::Path<TaskId>,
     options: web::Query<TaskAbortOptions>,
-) -> Result<impl Responder> {
+) -> Result<HttpResponse> {
     let task_id = task_id.into_inner();
 
-    ctx.tasks_ref().abort(task_id, options.force).await?;
+    app_ctx
+        .session_context(session)
+        .tasks()
+        .abort_tasks(task_id, options.force)
+        .await?;
 
-    Ok(HttpResponse::Ok())
+    Ok(HttpResponse::Accepted().finish())
 }
 
 #[cfg(test)]
@@ -154,7 +166,7 @@ mod tests {
 
     use crate::util::tests::read_body_json;
     use crate::{
-        contexts::{InMemoryContext, Session, SimpleContext},
+        contexts::{InMemoryContext, Session, SimpleApplicationContext},
         tasks::{
             util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
         },
@@ -256,7 +268,7 @@ mod tests {
             for subtask in self.subtasks.lock().await.drain(..) {
                 let subtask_id = self
                     .task_manager
-                    .schedule(subtask, None)
+                    .schedule_task(subtask, None)
                     .await
                     .map_err(ErrorSource::boxed)?;
                 self.subtask_ids.lock().await.push(subtask_id);
@@ -321,11 +333,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_status() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let (task, complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+
+        let tasks = Arc::new(ctx.tasks());
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 1. initially, we should get a running status
 
@@ -334,7 +351,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -350,7 +367,7 @@ mod tests {
 
         complete_tx.send(()).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks, task_id).await;
 
         // 3. finally, it should complete
 
@@ -359,9 +376,9 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let ctx_clone = ctx.clone();
+        let app_ctx_clone = app_ctx.clone();
 
-        let res = send_test_request(req, ctx_clone).await;
+        let res = send_test_request(req, app_ctx_clone).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -381,22 +398,23 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
 
         let (task, _complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = ctx.tasks().schedule_task(task.boxed(), None).await.unwrap();
 
         // 1. initially, we should get a running status
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/tasks/{task_id}/status"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((
-                header::AUTHORIZATION,
-                Bearer::new(AdminSession::default().id().to_string()),
-            ));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -411,22 +429,27 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_list() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let tasks = Arc::new(ctx.tasks());
 
         let (task, complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         complete_tx.send(()).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks, task_id).await;
 
         let req = actix_web::test::TestRequest::get()
             .uri("/tasks/list")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -442,30 +465,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_abort_task() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. Create task
 
         let (task, complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 2. Abort task
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // 3. Wait for abortion to complete
 
         complete_tx.send(()).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks, task_id).await;
 
         // 4. check status
 
@@ -474,7 +502,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -494,28 +522,33 @@ mod tests {
 
     #[tokio::test]
     async fn test_force_abort_task() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. Create task
 
         let (task, _complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 2. Abort task
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort?force=true"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}?force=true"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // 3. Wait for abortion to complete
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks, task_id).await;
 
         // 4. check status
 
@@ -524,7 +557,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -543,35 +576,40 @@ mod tests {
 
     #[tokio::test]
     async fn test_abort_after_abort() {
-        let ctx = InMemoryContext::test_default();
-        let session_id = ctx.default_session_ref().await.id();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session = app_ctx.default_session_ref().await.clone();
+        let session_id = session.id();
+
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. Create task
 
         let (task, _complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 2. Abort task
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // do not call `_complete_tx`
 
         // 3. Abort again without force
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 400, "{:?}", res.response().error());
 
@@ -587,14 +625,14 @@ mod tests {
 
         // 5. Abort again with force
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/abort?force=true"))
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/tasks/{task_id}?force=true"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+        assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
         // 6. Check abortion status
 
@@ -603,7 +641,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -623,13 +661,17 @@ mod tests {
     #[tokio::test]
     async fn test_duplicate() {
         let unique_id = "highlander".to_string();
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
+
+        let session = app_ctx.default_session_ref().await.clone();
+
+        let tasks = app_ctx.session_context(session).tasks();
 
         let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         let (task, _) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        assert!(ctx.tasks_ref().schedule(task.boxed(), None).await.is_err());
+        assert!(tasks.schedule_task(task.boxed(), None).await.is_err());
 
         complete_tx.send(()).unwrap();
     }
@@ -637,38 +679,46 @@ mod tests {
     #[tokio::test]
     async fn test_duplicate_after_finish() {
         let unique_id = "highlander".to_string();
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. start first task
 
         let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 2. wait for task to finish
 
         complete_tx.send(()).unwrap();
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks.clone(), task_id).await;
 
         // 3. start second task
 
         let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        assert!(ctx.tasks_ref().schedule(task.boxed(), None).await.is_ok());
+        assert!(tasks.schedule_task(task.boxed(), None).await.is_ok());
 
         complete_tx.send(()).unwrap();
     }
 
     #[tokio::test]
     async fn test_notify() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
+
+        let session = app_ctx.default_session_ref().await.clone();
+
+        let tasks = app_ctx.session_context(session).tasks();
 
         // 1. start first task
 
         let (schedule_complete_tx, schedule_complete_rx) = oneshot::channel();
         let (task, complete_tx) = NopTask::new_with_sender();
 
-        ctx.tasks_ref()
-            .schedule(task.boxed(), Some(schedule_complete_tx))
+        tasks
+            .schedule_task(task.boxed(), Some(schedule_complete_tx))
             .await
             .unwrap();
 
@@ -685,7 +735,11 @@ mod tests {
 
     #[tokio::test]
     async fn abort_subtasks() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. start super task
 
@@ -693,26 +747,22 @@ mod tests {
         let (subtask_b, complete_tx_b) = NopTask::new_with_sender();
 
         let (task, _complete_tx) =
-            TaskTree::new_with_sender(vec![subtask_a.boxed(), subtask_b.boxed()], ctx.tasks());
+            TaskTree::new_with_sender(vec![subtask_a.boxed(), subtask_b.boxed()], tasks.clone());
 
-        let task_id = ctx.tasks_ref().schedule(task.boxed(), None).await.unwrap();
+        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
         // 2. wait for all subtasks to schedule
 
         let all_task_ids: Vec<TaskId> =
             geoengine_operators::util::retry::retry(5, 100, 2., None, || {
-                let task_manager = ctx.tasks();
+                let task_manager = tasks.clone();
                 async move {
                     let task_list = task_manager
-                        .list(
-                            TaskListOptions {
-                                filter: None,
-                                offset: 0,
-                                limit: 10,
-                            }
-                            .validated()
-                            .unwrap(),
-                        )
+                        .list_tasks(TaskListOptions {
+                            filter: None,
+                            offset: 0,
+                            limit: 10,
+                        })
                         .await
                         .unwrap();
 
@@ -728,7 +778,7 @@ mod tests {
 
         // 3. abort task
 
-        ctx.tasks_ref().abort(task_id, false).await.unwrap();
+        tasks.abort_tasks(task_id, false).await.unwrap();
 
         // allow clean-up to complete
         complete_tx_a.send(()).unwrap();
@@ -737,22 +787,17 @@ mod tests {
         // 4. wait for completion
 
         for task_id in all_task_ids {
-            wait_for_task_to_finish(ctx.tasks(), task_id).await;
+            wait_for_task_to_finish(tasks.clone(), task_id).await;
         }
 
         // 5. check results
 
-        let list = ctx
-            .tasks_ref()
-            .list(
-                TaskListOptions {
-                    filter: None,
-                    offset: 0,
-                    limit: 10,
-                }
-                .validated()
-                .unwrap(),
-            )
+        let list = tasks
+            .list_tasks(TaskListOptions {
+                filter: None,
+                offset: 0,
+                limit: 10,
+            })
             .await
             .unwrap();
 
@@ -782,24 +827,27 @@ mod tests {
 
     #[tokio::test]
     async fn test_failing_task_with_failing_cleanup() {
-        let ctx = InMemoryContext::test_default();
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+
+        let tasks = Arc::new(ctx.tasks());
 
         // 1. start task
 
-        let task_id = ctx
-            .tasks_ref()
-            .schedule(FailingTaskWithFailingCleanup.boxed(), None)
+        let task_id = tasks
+            .schedule_task(FailingTaskWithFailingCleanup.boxed(), None)
             .await
             .unwrap();
 
         // 2. wait for completion
 
-        wait_for_task_to_finish(ctx.tasks(), task_id).await;
+        wait_for_task_to_finish(tasks.clone(), task_id).await;
 
         // 3. check results
 
         assert_eq!(
-            serde_json::to_value(ctx.tasks_ref().status(task_id).await.unwrap()).unwrap(),
+            serde_json::to_value(tasks.get_task_status(task_id).await.unwrap()).unwrap(),
             json!({
                 "status": "failed",
                 "error": "FailingTaskWithFailingCleanupError",

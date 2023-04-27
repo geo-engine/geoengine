@@ -1,7 +1,7 @@
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator,
-    OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
-    SingleVectorSource, TypedPlotQueryProcessor, VectorQueryProcessor,
+    ExecutionContext, InitializedPlotOperator, InitializedSources, InitializedVectorOperator,
+    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
+    SingleVectorSource, TypedPlotQueryProcessor, VectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::engine::{QueryProcessor, VectorColumnInfo};
 use crate::error;
@@ -28,7 +28,6 @@ use std::{
     cmp::Ordering,
     collections::hash_map::Entry::{Occupied, Vacant},
 };
-use tracing::{span, Level};
 
 pub const FEATURE_ATTRIBUTE_OVER_TIME_NAME: &str = "Feature Attribute over Time";
 const MAX_FEATURES: usize = 20;
@@ -54,9 +53,11 @@ pub struct FeatureAttributeValuesOverTimeParams {
 impl PlotOperator for FeatureAttributeValuesOverTime {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
-        let source = self.sources.vector.initialize(context).await?;
+        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let source = initialized_source.vector;
         let result_descriptor = source.result_descriptor();
         let columns: &HashMap<String, VectorColumnInfo> = &result_descriptor.columns;
 
@@ -333,7 +334,11 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
+        let operator = operator
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+            .await
+            .unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 
@@ -475,7 +480,11 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
+        let operator = operator
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+            .await
+            .unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 
@@ -605,7 +614,11 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
+        let operator = operator
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+            .await
+            .unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 

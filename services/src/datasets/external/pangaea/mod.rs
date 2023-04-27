@@ -14,7 +14,6 @@ use reqwest::Client;
 use url::Url;
 
 use crate::error::{Error, Result};
-use crate::util::user_input::Validated;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use serde::{Deserialize, Serialize};
 
@@ -110,19 +109,19 @@ impl DataProvider for PangaeaDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for PangaeaDataProvider {
-    async fn collection(
+    async fn load_layer_collection(
         &self,
         _collection: &LayerCollectionId,
-        _options: Validated<LayerCollectionListOptions>,
+        _options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
-        Err(Error::NotYetImplemented)
+        Err(Error::ProviderDoesNotSupportBrowsing)
     }
 
-    async fn root_collection_id(&self) -> Result<LayerCollectionId> {
-        Err(Error::NotYetImplemented)
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
+        Err(Error::ProviderDoesNotSupportBrowsing)
     }
 
-    async fn get_layer(&self, _id: &LayerId) -> Result<Layer> {
+    async fn load_layer(&self, _id: &LayerId) -> Result<Layer> {
         Err(Error::NotYetImplemented)
     }
 }
@@ -228,6 +227,7 @@ mod tests {
     use geoengine_operators::engine::{
         InitializedVectorOperator, MetaData, MockExecutionContext, MockQueryContext,
         QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
+        WorkflowOperatorPath,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
     use httptest::{
@@ -441,7 +441,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src
+            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .await
+            .unwrap();
         let proc = initialized_op.query_processor().unwrap();
 
         let TypedVectorQueryProcessor::Data(proc) = proc else {
@@ -496,7 +499,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src
+            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .await
+            .unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
 
@@ -563,7 +569,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src
+            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .await
+            .unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
 
@@ -626,7 +635,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized_op = src.initialize(&context).await.unwrap();
+        let initialized_op = src
+            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .await
+            .unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
         let TypedVectorQueryProcessor::MultiPoint(proc) = proc else {

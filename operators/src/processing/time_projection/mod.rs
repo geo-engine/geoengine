@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedVectorOperator, Operator, OperatorName, QueryContext,
-    SingleVectorSource, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorName,
+    QueryContext, SingleVectorSource, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -20,7 +20,6 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt, Snafu};
-use tracing::{span, Level};
 
 /// Projection of time information in queries and data
 ///
@@ -64,11 +63,12 @@ pub enum TimeProjectionError {
 impl VectorOperator for TimeProjection {
     async fn _initialize(
         self: Box<Self>,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(self.params.step.step > 0, error::WindowSizeMustNotBeZero);
 
-        let source = self.sources.vector.initialize(context).await?;
+        let initialized_sources = self.sources.initialize_sources(path, context).await?;
 
         debug!("Initializing `TimeProjection` with {:?}.", &self.params);
 
@@ -78,11 +78,11 @@ impl VectorOperator for TimeProjection {
             // use UTC 0 as default
             .unwrap_or(TimeInstance::EPOCH_START);
 
-        let mut result_descriptor = source.result_descriptor().clone();
+        let mut result_descriptor = initialized_sources.vector.result_descriptor().clone();
         rewrite_result_descriptor(&mut result_descriptor, self.params.step, step_reference)?;
 
         let initialized_operator = InitializedVectorTimeProjection {
-            source,
+            source: initialized_sources.vector,
             result_descriptor,
             step: self.params.step,
             step_reference,
@@ -437,7 +437,7 @@ mod tests {
 
         let query_processor = time_projection
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()
@@ -539,7 +539,7 @@ mod tests {
 
         let query_processor = time_projection
             .boxed()
-            .initialize(&execution_context)
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
             .query_processor()

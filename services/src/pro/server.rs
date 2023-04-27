@@ -1,17 +1,18 @@
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::pro;
 use crate::pro::apidoc::ApiDoc;
 #[cfg(feature = "postgres")]
 use crate::pro::contexts::PostgresContext;
-use crate::pro::contexts::{ProContext, ProInMemoryContext};
+use crate::pro::contexts::ProInMemoryContext;
 use crate::util::config::{self, get_config_element, Backend};
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
     log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
 };
 use actix_files::Files;
-use actix_web::{http, middleware, web, App, HttpServer};
+use actix_web::{http, middleware, web, App, FromRequest, HttpServer};
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
 use geoengine_datatypes::raster::TilingSpecification;
@@ -24,17 +25,21 @@ use tracing_actix_web::TracingLogger;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
+use super::contexts::{ProApplicationContext, ProGeoEngineDb};
+
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
     api_prefix: String,
     version_api: bool,
-    ctx: C,
+    app_ctx: C,
 ) -> Result<(), Error>
 where
-    C: ProContext,
+    C: ProApplicationContext,
+    C::Session: FromRequest,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    let wrapped_ctx = web::Data::new(ctx);
+    let wrapped_ctx = web::Data::new(app_ctx);
 
     let openapi = ApiDoc::openapi();
 
@@ -43,6 +48,7 @@ where
             .configure(configure_extractors)
             .configure(pro::handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
+            .configure(pro::handlers::permissions::init_permissions_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(pro::handlers::projects::init_project_routes::<C>)
             .configure(pro::handlers::users::init_user_routes::<C>)

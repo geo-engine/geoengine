@@ -18,6 +18,10 @@ use crate::api::model::operators::{
     TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
     VectorResultDescriptor,
 };
+use crate::api::model::responses::{
+    BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
+    UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+};
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
 };
@@ -33,6 +37,8 @@ use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
+use crate::handlers::workflows::RasterStreamWebsocketResultType;
+use crate::handlers::ErrorResponse;
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
@@ -46,8 +52,8 @@ use crate::projects::{
     ProjectFilter, ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId,
     RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
-use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus};
-use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo, IdResponse};
+use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
+use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -107,14 +113,22 @@ use utoipa::{Modify, OpenApi};
         handlers::upload::upload_handler
     ),
     components(
+        responses(
+            UnsupportedMediaTypeForJsonResponse,
+            PayloadTooLargeResponse,
+            IdResponse,
+            UnauthorizedAdminResponse,
+            UnauthorizedUserResponse,
+            BadRequestQueryResponse
+        ),
         schemas(
+            ErrorResponse,
             SimpleSession,
 
             DataId,
             DataProviderId,
             DatasetId,
             ExternalDataId,
-            IdResponse<WorkflowId>,
             LayerId,
             ProjectId,
             SessionId,
@@ -169,6 +183,7 @@ use utoipa::{Modify, OpenApi};
             TaskFilter,
             TaskListOptions,
             TaskStatus,
+            TaskStatusWithId,
             TaskResponse,
 
             Layer,
@@ -300,7 +315,8 @@ use utoipa::{Modify, OpenApi};
             LayerVisibility,
             ProjectFilter,
             Plot,
-            ProjectVersion
+            ProjectVersion,
+            RasterStreamWebsocketResultType
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
@@ -347,5 +363,32 @@ impl Modify for ApiDocInfo {
                 ))
                 .build(),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
+    use crate::util::tests::send_test_request;
+    use geoengine_datatypes::util::test::TestDefault;
+
+    #[test]
+    fn can_resolve_api() {
+        crate::api::can_resolve_api(ApiDoc::openapi());
+    }
+
+    #[tokio::test]
+    async fn can_run_examples() {
+        crate::api::can_run_examples(
+            ApiDoc::openapi(),
+            move || async move {
+                let ctx = InMemoryContext::test_default();
+                let session_id = ctx.default_session_ref().await.id();
+                (ctx, session_id)
+            },
+            send_test_request,
+        )
+        .await;
     }
 }

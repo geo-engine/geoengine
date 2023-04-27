@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crate::engine::QueryContext;
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName,
-    ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName, ResultDescriptor,
+    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -20,7 +20,6 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
-use tracing::{span, Level};
 
 pub struct MockFeatureCollectionSourceProcessor<G>
 where
@@ -164,6 +163,7 @@ macro_rules! impl_mock_feature_collection_source {
         impl VectorOperator for $newtype {
             async fn _initialize(
                 self: Box<Self>,
+                _path: WorkflowOperatorPath,
                 _context: &dyn ExecutionContext,
             ) -> Result<Box<dyn InitializedVectorOperator>> {
                 let columns = self.params.collections[0]
@@ -355,7 +355,10 @@ mod tests {
         let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
         let source = source
-            .initialize(&MockExecutionContext::test_default())
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default(),
+            )
             .await
             .unwrap();
 
