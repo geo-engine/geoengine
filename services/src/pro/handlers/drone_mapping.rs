@@ -498,7 +498,7 @@ mod tests {
 
         // test if the meta data is correct
         let dataset_id = dataset_response.dataset;
-        let exe_ctx = ctx.execution_context(session.clone()).unwrap();
+        let exe_ctx = ctx.execution_context().unwrap();
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             exe_ctx.meta_data(&dataset_id.into()).await.unwrap();
 

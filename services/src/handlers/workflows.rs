@@ -534,7 +534,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         .get_raster()
         .boxed_context(error::WorkflowMustBeOfTypeRaster)?;
 
-    let execution_context = ctx.execution_context(session.clone())?;
+    let execution_context = ctx.execution_context()?;
 
     let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
         query.spatial_bounds,

@@ -200,7 +200,6 @@ mod tests {
         }
 
         let app_ctx = InMemoryContext::test_default();
-        let session = ctx.default_session_ref().await.clone();
         let tiling_origin_coordinate = (0.0, 0.0).into();
 
         let ctx = app_ctx.default_session_context().await;

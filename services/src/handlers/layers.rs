@@ -20,7 +20,6 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
-use geoengine_datatypes::primitives::QueryRectangle;
 use geoengine_operators::engine::WorkflowOperatorPath;
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;

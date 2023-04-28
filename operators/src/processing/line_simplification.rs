@@ -14,8 +14,8 @@ use geoengine_datatypes::{
     },
     error::{BoxedResultExt, ErrorSource},
     primitives::{
-        BoundingBox2D, Geometry, MultiLineString, MultiLineStringRef, MultiPolygon,
-        MultiPolygonRef, SpatialResolution, VectorQueryRectangle,
+        Geometry, MultiLineString, MultiLineStringRef, MultiPolygon,
+        MultiPolygonRef, SpatialResolution, VectorQueryRectangle, VectorSpatialQueryRectangle, SpatialQuery,
     },
     util::arrow::ArrowTyped,
 };
@@ -263,7 +263,7 @@ where
 #[async_trait]
 impl<P, G, A> QueryProcessor for LineSimplificationProcessor<P, G, A>
 where
-    P: QueryProcessor<Output = FeatureCollection<G>, SpatialBounds = BoundingBox2D>,
+    P: QueryProcessor<Output = FeatureCollection<G>, SpatialQuery = VectorSpatialQueryRectangle>,
     G: Geometry + ArrowTyped + 'static,
     for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>
         + GeoFeatureCollectionModifications<G, Output = FeatureCollection<G>>,
@@ -273,7 +273,7 @@ where
     >,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
@@ -284,7 +284,7 @@ where
 
         let epsilon = self
             .epsilon
-            .unwrap_or_else(|| A::derive_epsilon(query.spatial_resolution));
+            .unwrap_or_else(|| A::derive_epsilon(query.spatial_query().spatial_resolution));
 
         let simplified_chunks = chunks.and_then(move |chunk| async move {
             crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
@@ -328,7 +328,7 @@ mod tests {
             MultiPointCollection, MultiPolygonCollection,
         },
         dataset::{DataId, DatasetId},
-        primitives::{FeatureData, MultiLineString, MultiPoint, TimeInterval},
+        primitives::{FeatureData, MultiLineString, MultiPoint, TimeInterval, BoundingBox2D},
         spatial_reference::SpatialReference,
         test_data,
         util::{test::TestDefault, Identifier},
@@ -483,11 +483,11 @@ mod tests {
             .multi_line_string()
             .unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+            TimeInterval::default(),
+            SpatialResolution::one(),
+        );
 
         let query_ctx = MockQueryContext::test_default();
 
@@ -597,11 +597,11 @@ mod tests {
         let query_context = MockQueryContext::test_default();
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                },
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    query_bbox,
+                    Default::default(),
+                    SpatialResolution::new(1., 1.).unwrap(),
+                ),
                 &query_context,
             )
             .await
