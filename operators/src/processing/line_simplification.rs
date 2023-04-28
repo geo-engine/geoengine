@@ -14,8 +14,8 @@ use geoengine_datatypes::{
     },
     error::{BoxedResultExt, ErrorSource},
     primitives::{
-        Geometry, MultiLineString, MultiLineStringRef, MultiPolygon,
-        MultiPolygonRef, SpatialResolution, VectorQueryRectangle, VectorSpatialQueryRectangle, SpatialQuery,
+        Geometry, MultiLineString, MultiLineStringRef, MultiPolygon, MultiPolygonRef, SpatialQuery,
+        SpatialResolution, VectorQueryRectangle, VectorSpatialQueryRectangle,
     },
     util::arrow::ArrowTyped,
 };
@@ -328,7 +328,7 @@ mod tests {
             MultiPointCollection, MultiPolygonCollection,
         },
         dataset::{DataId, DatasetId},
-        primitives::{FeatureData, MultiLineString, MultiPoint, TimeInterval, BoundingBox2D},
+        primitives::{BoundingBox2D, FeatureData, MultiLineString, MultiPoint, TimeInterval},
         spatial_reference::SpatialReference,
         test_data,
         util::{test::TestDefault, Identifier},

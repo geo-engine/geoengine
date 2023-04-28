@@ -23,8 +23,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
-    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor,
-    WorkflowOperatorPath,
+    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
