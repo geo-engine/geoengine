@@ -133,7 +133,7 @@ impl Web {
     /// Use this e.g. for generating links to API handlers by joining it with a relative path.
     pub fn api_url(&self) -> Result<Url> {
         Ok(self.external_address.clone().unwrap_or(Url::parse(&format!(
-            "http://{}{}/",
+            "http://{}{}",
             self.bind_address, self.api_prefix
         ))?))
     }

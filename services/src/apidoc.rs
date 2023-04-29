@@ -1,15 +1,15 @@
 use crate::api::model::datatypes::{
-    BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, DefaultColors,
-    ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
-    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, OverUnderColors, Palette,
-    PlotOutputFormat, PlotQueryRectangle, RasterDataType, RasterPropertiesEntryType,
-    RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
-    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
+    AxisLabels, BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer,
+    ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat,
+    DefaultColors, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId, LinearGradient,
+    LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+    OverUnderColors, Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType,
+    RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
+    SpatialPartition2D, SpatialReference, SpatialReferenceAuthority, SpatialResolution,
     TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
-    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
+    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
     GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
     GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
     MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
@@ -32,7 +32,7 @@ use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::datasets::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::handlers;
 use crate::handlers::plots::WrappedPlotOutput;
-use crate::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
+use crate::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
@@ -148,7 +148,6 @@ use utoipa::{Modify, OpenApi};
             SpatialPartition2D,
             SpatialResolution,
             SpatialReference,
-            SpatialReferenceOption,
             SpatialReferenceAuthority,
             SpatialReferenceSpecification,
             AxisOrder,
@@ -275,7 +274,6 @@ use utoipa::{Modify, OpenApi};
             RasterPropertiesKey,
             RasterPropertiesEntryType,
             OgrMetaData,
-            StringPair,
             GdalConfigOption,
             AxisLabels,
             MockDatasetDataSourceLoadingInfo,

@@ -1,6 +1,6 @@
 use crate::api::model::datatypes::{
-    Coordinate2D, DateTimeParseFormat, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
-    QueryRectangle, RasterPropertiesEntryType, RasterPropertiesKey, SpatialResolution, StringPair,
+    Coordinate2D, DateTimeParseFormat, GdalConfigOption, MultiLineString, MultiPoint, MultiPolygon,
+    NoGeometry, QueryRectangle, RasterPropertiesEntryType, RasterPropertiesKey, SpatialResolution,
     TimeInstance, TimeStep, VectorQueryRectangle,
 };
 use async_trait::async_trait;
@@ -25,6 +25,7 @@ use super::datatypes::{
 #[serde(rename_all = "camelCase")]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
+    #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
     pub measurement: Measurement,
     pub time: Option<TimeInterval>,
@@ -111,6 +112,7 @@ impl<'a> ToSchema<'a> for TypedOperator {
 #[serde(rename_all = "camelCase")]
 pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
+    #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
     pub columns: HashMap<String, VectorColumnInfo>,
     pub time: Option<TimeInterval>,
@@ -178,6 +180,7 @@ impl From<VectorColumnInfo> for geoengine_operators::engine::VectorColumnInfo {
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotResultDescriptor {
+    #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
     pub time: Option<TimeInterval>,
     pub bbox: Option<BoundingBox2D>,
@@ -272,7 +275,11 @@ impl From<MockDatasetDataSourceLoadingInfo>
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[aliases(
+    MockMetaData = StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>,
+    OgrMetaData = StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticMetaData<L, R, Q> {
     pub loading_info: L,
@@ -362,11 +369,6 @@ where
     }
 }
 
-pub type MockMetaData =
-    StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>;
-pub type OgrMetaData =
-    StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>;
-
 impl From<MockMetaData>
     for geoengine_operators::engine::StaticMetaData<
         geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
@@ -400,45 +402,6 @@ impl From<OgrMetaData>
             result_descriptor: value.result_descriptor.into(),
             phantom: Default::default(),
         }
-    }
-}
-
-impl<'a> ToSchema<'a> for MockMetaData {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "MockMetaData",
-            ObjectBuilder::new()
-                .property(
-                    "loadingInfo",
-                    Ref::from_schema_name("MockDatasetDataSourceLoadingInfo"),
-                )
-                .required("loadingInfo")
-                .property(
-                    "resultDescriptor",
-                    Ref::from_schema_name("VectorResultDescriptor"),
-                )
-                .required("resultDescriptor")
-                .into(),
-        )
-    }
-}
-
-impl<'a> ToSchema<'a> for OgrMetaData {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "MockMetaData",
-            ObjectBuilder::new()
-                .property("loadingInfo", Ref::from_schema_name("OgrSourceDataset"))
-                .required("loadingInfo")
-                .property(
-                    "resultDescriptor",
-                    Ref::from_schema_name("VectorResultDescriptor"),
-                )
-                .required("resultDescriptor")
-                .into(),
-        )
     }
 }
 
@@ -898,8 +861,6 @@ impl From<GdalMetaDataRegular> for geoengine_operators::source::GdalMetaDataRegu
         }
     }
 }
-
-pub type GdalConfigOption = StringPair;
 
 /// Parameters for loading data using Gdal
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]

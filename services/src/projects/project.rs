@@ -147,6 +147,7 @@ impl Project {
 //     }
 // }))]
 pub struct STRectangle {
+    #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
     pub bounding_box: BoundingBox2D,
     pub time_interval: TimeInterval,
@@ -538,7 +539,7 @@ impl<'a> ToSchema<'a> for LayerUpdate {
                         .schema_type(SchemaType::String)
                         .enum_values::<[&str; 1], &str>(Some(["delete"])),
                 )
-                .item(Ref::from_schema_name("ShortLayerInfo"))
+                .item(Ref::from_schema_name("ProjectLayer"))
                 .into(),
         )
     }

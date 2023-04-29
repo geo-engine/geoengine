@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{
-    BoundingBox2D, Coordinate2D, SpatialReference, SpatialReferenceAuthority, StringPair,
+    AxisLabels, BoundingBox2D, Coordinate2D, SpatialReference, SpatialReferenceAuthority,
 };
 use crate::contexts::ApplicationContext;
 use crate::{error, error::Error, error::Result};
@@ -20,8 +20,6 @@ where
             .route(web::get().to(get_spatial_reference_specification_handler::<C>)),
     );
 }
-
-pub type AxisLabels = StringPair;
 
 /// The specification of a spatial reference, where extent and axis labels are given
 /// in natural order (x, y) = (east, north)

@@ -1531,6 +1531,9 @@ impl From<MultiPolygon> for geoengine_datatypes::primitives::MultiPolygon {
 #[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
 pub struct StringPair((String, String));
 
+pub type GdalConfigOption = StringPair;
+pub type AxisLabels = StringPair;
+
 impl<'a> ToSchema<'a> for StringPair {
     fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
@@ -1542,6 +1545,18 @@ impl<'a> ToSchema<'a> for StringPair {
                 .max_items(Some(2))
                 .into(),
         )
+    }
+
+    fn aliases() -> Vec<(&'a str, utoipa::openapi::Schema)> {
+        let unpacked_schema = if let utoipa::openapi::RefOr::T(t) = Self::schema().1 {
+            t
+        } else {
+            unreachable!()
+        };
+        vec![
+            ("GdalConfigOption", unpacked_schema.clone()),
+            ("AxisLabels", unpacked_schema),
+        ]
     }
 }
 
