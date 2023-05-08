@@ -64,6 +64,10 @@ pub struct Properties {
     pub created: DateTime,
     pub updated: DateTime,
     pub collection: Option<String>,
+
+    // Creodias Datahub specific:
+    #[serde(rename = "productType")]
+    pub product_type: Option<String>,
 }
 
 with_prefix!(prefix_sentinel "sentinel:");
