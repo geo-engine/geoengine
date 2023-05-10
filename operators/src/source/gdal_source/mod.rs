@@ -24,10 +24,12 @@ use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
+use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
     SpatialPartition2D, SpatialPartitioned,
 };
+use geoengine_datatypes::raster::TileInformation;
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
     MapElements, MaskedGrid, NoDataValueGrid, Pixel, RasterDataType, RasterProperties,
@@ -35,7 +37,6 @@ use geoengine_datatypes::raster::{
     TilingStrategy,
 };
 use geoengine_datatypes::util::test::TestDefault;
-use geoengine_datatypes::{dataset::DataId, raster::TileInformation};
 use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{Grid, GridBlit, GridBoundingBox2D, GridIdx, GridSize, TilingSpecification},
@@ -77,10 +78,7 @@ static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 ///     {
 ///         "type": "GdalSource",
 ///         "params": {
-///             "data": {
-///                 "type": "internal",
-///                 "datasetId": "a626c880-1c41-489b-9e19-9596d129859c"
-///             }
+///             "data": "ns:dataset"
 ///         }
 ///     }"#;
 ///
@@ -94,12 +92,12 @@ static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 /// ```
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct GdalSourceParameters {
-    pub data: DataId,
+    pub data: NamedData,
 }
 
 impl OperatorData for GdalSourceParameters {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        data_ids.push(self.data.clone());
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        data_names.push(self.data.clone());
     }
 }
 
@@ -742,7 +740,8 @@ impl RasterOperator for GdalSource {
         path: WorkflowOperatorPath,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let meta_data: GdalMetaData = context.meta_data(&self.params.data).await?;
+        let data_id = context.resolve_named_data(&self.params.data).await?;
+        let meta_data: GdalMetaData = context.meta_data(&data_id).await?;
 
         debug!("Initializing GdalSource for {:?}.", &self.params.data);
         debug!("GdalSource path: {:?}", path);
@@ -1148,7 +1147,6 @@ mod tests {
     use crate::test_data;
     use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
-
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{EmptyGrid2D, GridBounds, GridIdx2D};
@@ -1161,13 +1159,13 @@ mod tests {
     async fn query_gdal_source(
         exe_ctx: &MockExecutionContext,
         query_ctx: &MockQueryContext,
-        id: DataId,
+        name: NamedData,
         output_shape: GridShape2D,
         output_bounds: SpatialPartition2D,
         time_interval: TimeInterval,
     ) -> Vec<Result<RasterTile2D<u8>>> {
         let op = GdalSource {
-            params: GdalSourceParameters { data: id.clone() },
+            params: GdalSourceParameters { data: name.clone() },
         }
         .boxed();
 

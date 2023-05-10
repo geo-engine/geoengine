@@ -386,7 +386,7 @@ mod tests {
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
     use crate::test_data;
-    use geoengine_datatypes::dataset::{DataId, DatasetId};
+    use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
@@ -743,9 +743,8 @@ mod tests {
 
         let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
-            DataId::Internal {
-                dataset: dataset_id.into(),
-            },
+            DataId::Internal { dataset_id },
+            NamedData::with_global_name("ne_10m_ports"),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),

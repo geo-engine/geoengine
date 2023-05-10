@@ -245,11 +245,10 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         source::GdalSourceParameters,
     };
-    use geoengine_datatypes::{dataset::DatasetId, plots::PlotMetaData, primitives::DateTime};
-    use geoengine_datatypes::{
-        primitives::{BoundingBox2D, Measurement, SpatialResolution, TimeInterval},
-        util::Identifier,
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::{dataset::NamedData, plots::PlotMetaData, primitives::DateTime};
     use geoengine_datatypes::{raster::TilingSpecification, spatial_reference::SpatialReference};
     use geoengine_datatypes::{
         raster::{Grid2D, RasterDataType, TileInformation},
@@ -267,7 +266,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: GdalSource {
                     params: GdalSourceParameters {
-                        data: DatasetId::new().into(),
+                        data: NamedData::with_global_name("test"),
                     },
                 }
                 .boxed(),
@@ -284,10 +283,7 @@ mod tests {
                 "raster": {
                     "type": "GdalSource",
                     "params": {
-                        "data": {
-                            "type": "internal",
-                            "datasetId": "a626c880-1c41-489b-9e19-9596d129859c"
-                        }
+                        "data": "test"
                     }
                 }
             },

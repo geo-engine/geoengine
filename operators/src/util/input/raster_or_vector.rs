@@ -1,5 +1,5 @@
 use crate::engine::{OperatorData, RasterOperator, TypedOperator, VectorOperator};
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 use serde::{Deserialize, Serialize};
 
 /// It is either a `RasterOperator` or a `VectorOperator`
@@ -48,10 +48,10 @@ impl From<Box<dyn VectorOperator>> for RasterOrVectorOperator {
 }
 
 impl OperatorData for RasterOrVectorOperator {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
         match self {
-            RasterOrVectorOperator::Raster(r) => r.data_ids_collect(data_ids),
-            RasterOrVectorOperator::Vector(v) => v.data_ids_collect(data_ids),
+            RasterOrVectorOperator::Raster(r) => r.data_names_collect(data_names),
+            RasterOrVectorOperator::Vector(v) => v.data_names_collect(data_names),
         }
     }
 }
@@ -59,8 +59,7 @@ impl OperatorData for RasterOrVectorOperator {
 #[cfg(test)]
 mod tests {
     use crate::source::{GdalSource, GdalSourceParameters};
-    use geoengine_datatypes::dataset::DatasetId;
-    use std::str::FromStr;
+    use geoengine_datatypes::dataset::NamedData;
 
     use super::*;
 
@@ -69,9 +68,7 @@ mod tests {
         let operator = RasterOrVectorOperator::Raster(
             GdalSource {
                 params: GdalSourceParameters {
-                    data: DatasetId::from_str("fc734022-61e0-49da-b327-257ba9d602a7")
-                        .unwrap()
-                        .into(),
+                    data: NamedData::with_namespaced_name("foo", "bar"),
                 },
             }
             .boxed(),

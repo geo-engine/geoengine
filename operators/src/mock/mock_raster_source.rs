@@ -6,7 +6,7 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
@@ -151,7 +151,7 @@ pub struct MockRasterSourceParams<T: Pixel> {
 pub type MockRasterSource<T> = SourceOperator<MockRasterSourceParams<T>>;
 
 impl<T: Pixel> OperatorData for MockRasterSource<T> {
-    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
+    fn data_names_collect(&self, _data_names: &mut Vec<NamedData>) {}
 }
 
 /// Implement a mock raster source with typetag for a specific generic type

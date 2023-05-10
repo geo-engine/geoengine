@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -50,9 +50,9 @@ pub struct PointInPolygonFilterSource {
 }
 
 impl OperatorData for PointInPolygonFilterSource {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        self.points.data_ids_collect(data_ids);
-        self.polygons.data_ids_collect(data_ids);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        self.points.data_names_collect(data_names);
+        self.polygons.data_names_collect(data_names);
     }
 }
 

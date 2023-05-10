@@ -573,6 +573,7 @@ mod tests {
     use float_cmp::approx_eq;
     use futures::StreamExt;
     use geoengine_datatypes::collections::IntoGeometryIterator;
+    use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::{
         AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat,
     };
@@ -1093,7 +1094,8 @@ mod tests {
         };
 
         let id: DataId = DatasetId::new().into();
-        exe_ctx.add_meta_data(id.clone(), Box::new(m));
+        let name = NamedData::with_global_name("ndvi");
+        exe_ctx.add_meta_data(id.clone(), name.clone(), Box::new(m));
 
         exe_ctx.tiling_specification = TilingSpecification::new((0.0, 0.0).into(), [60, 60].into());
 
@@ -1103,7 +1105,7 @@ mod tests {
         // 2014-04-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters { data: id.clone() },
+            params: GdalSourceParameters { data: name },
         }
         .boxed();
 
@@ -1224,7 +1226,8 @@ mod tests {
         };
 
         let id: DataId = DatasetId::new().into();
-        exe_ctx.add_meta_data(id.clone(), Box::new(m));
+        let name = NamedData::with_global_name("ndvi");
+        exe_ctx.add_meta_data(id.clone(), name.clone(), Box::new(m));
 
         exe_ctx.tiling_specification =
             TilingSpecification::new((0.0, 0.0).into(), [600, 600].into());
@@ -1235,7 +1238,7 @@ mod tests {
         let time_interval = TimeInterval::new_instant(1_388_534_400_000).unwrap(); // 2014-01-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters { data: id.clone() },
+            params: GdalSourceParameters { data: name },
         }
         .boxed();
 

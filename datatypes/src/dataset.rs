@@ -12,127 +12,9 @@ identifier!(DatasetId);
 /// for accessing the data. Internal data is loaded from datasets, external from `DataProvider`s.
 pub enum DataId {
     #[serde(rename_all = "camelCase")]
-    Internal {
-        #[serde(flatten)]
-        dataset: InternalDataset,
-    },
+    Internal { dataset_id: DatasetId },
     #[serde(rename_all = "camelCase")]
     External(ExternalDataId),
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum InternalDataset {
-    #[serde(rename_all = "camelCase")]
-    DatasetId { dataset_id: DatasetId },
-    #[serde(rename_all = "camelCase")]
-    Name { name: DatasetName },
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub struct DatasetName {
-    pub namespace: String,
-    pub name: String,
-}
-
-pub const SYSTEM_NAMESPACE: &str = "_";
-
-// TODO: move this to services at some point
-impl<'de> Deserialize<'de> for DatasetName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(DatasetNameDeserializeVisitor)
-    }
-}
-
-// TODO: move this to services at some point
-impl Serialize for DatasetName {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!("{}:{}", self.namespace, self.name))
-    }
-}
-
-struct DatasetNameDeserializeVisitor;
-
-/// Checks if a character is allowed in a dataset name.
-#[inline]
-pub fn is_allowed_name_char(c: char) -> bool {
-    // `is_ascii_alphanumeric` plus some special characters
-
-    matches!(
-        c,
-        '0'..='9' // digits
-        | 'A'..='Z' | 'a'..='z' // ascii
-        | '_' | '-' // special characters
-    )
-}
-
-impl<'de> Visitor<'de> for DatasetNameDeserializeVisitor {
-    type Value = DatasetName;
-
-    /// always keep in sync with [`is_allowed_name_char`]
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            formatter,
-            "a string consisting of a namespace and name name, separated by a colon, only using alphanumeric characters, underscores & dashes"
-        )
-    }
-
-    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        let mut chars = s.chars();
-
-        let mut namespace = String::new();
-
-        for c in &mut chars {
-            if c == ':' {
-                break;
-            }
-
-            if !is_allowed_name_char(c) {
-                return Err(E::custom(format!(
-                    "invalid character '{c}' in dataset name"
-                )));
-            }
-
-            namespace.push(c);
-        }
-
-        if namespace.is_empty() {
-            return Err(E::custom("empty namespace in dataset name"));
-        }
-
-        let mut name = String::new();
-
-        for c in chars {
-            if c == ':' {
-                return Err(E::custom(format!(
-                    "invalid separator '{c}' after dataset name's name part"
-                )));
-            }
-
-            if !is_allowed_name_char(c) {
-                return Err(E::custom(format!(
-                    "invalid character '{c}' in dataset name"
-                )));
-            }
-
-            name.push(c);
-        }
-
-        if name.is_empty() {
-            return Err(E::custom("empty name in dataset name"));
-        }
-
-        Ok(DatasetName { namespace, name })
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -152,11 +34,12 @@ pub struct ExternalDataId {
 }
 
 impl DataId {
-    pub fn internal(&self) -> Option<InternalDataset> {
-        let Self::Internal { dataset } = self else {
+    pub fn internal(&self) -> Option<DatasetId> {
+        let Self::Internal { dataset_id } = self else {
             return None;
         };
-        Some(dataset.clone())
+
+        Some(*dataset_id)
     }
 
     pub fn external(&self) -> Option<ExternalDataId> {
@@ -168,16 +51,8 @@ impl DataId {
 }
 
 impl From<DatasetId> for DataId {
-    fn from(value: DatasetId) -> Self {
-        DataId::Internal {
-            dataset: InternalDataset::from(value),
-        }
-    }
-}
-
-impl From<DatasetId> for InternalDataset {
     fn from(dataset_id: DatasetId) -> Self {
-        InternalDataset::DatasetId { dataset_id }
+        DataId::Internal { dataset_id }
     }
 }
 
@@ -187,52 +62,267 @@ impl From<ExternalDataId> for DataId {
     }
 }
 
+pub const NAME_DELIMITER: char = ':';
+pub const SYSTEM_NAMESPACE: &str = "_";
+pub const SYSTEM_PROVIDER: &str = "_";
+
+/// The user-facing identifier for loadable data.
+/// It can be resolved into a [`DataId`].
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct NamedData {
+    pub namespace: Option<String>,
+    pub provider: Option<String>,
+    pub name: String,
+}
+
+impl NamedData {
+    /// Canonicalize a name that reflects the system namespace and provider.
+    fn canonicalize<S: Into<String> + PartialEq<&'static str>>(
+        name: S,
+        system_name: &'static str,
+    ) -> Option<String> {
+        if name == system_name {
+            None
+        } else {
+            Some(name.into())
+        }
+    }
+
+    pub fn with_global_name<S: Into<String>>(name: S) -> Self {
+        Self {
+            namespace: None,
+            provider: None,
+            name: name.into(),
+        }
+    }
+
+    pub fn with_namespaced_name<S1: Into<String> + PartialEq<&'static str>, S2: Into<String>>(
+        namespace: S1,
+        name: S2,
+    ) -> Self {
+        Self {
+            namespace: Self::canonicalize(namespace, SYSTEM_NAMESPACE),
+            provider: None,
+            name: name.into(),
+        }
+    }
+}
+
+// TODO: move this to services at some point
+impl Serialize for NamedData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let d = NAME_DELIMITER;
+        let serialized = match (&self.namespace, &self.provider, &self.name) {
+            (None, None, name) => name.to_string(),
+            (None, Some(provider), name) => {
+                format!("{SYSTEM_NAMESPACE}{d}{provider}{d}{name}")
+            }
+            (Some(namespace), None, name) => {
+                format!("{namespace}{d}{name}")
+            }
+            (Some(namespace), Some(provider), name) => {
+                format!("{namespace}{d}{provider}{d}{name}")
+            }
+        };
+
+        serializer.serialize_str(&serialized)
+    }
+}
+
+// TODO: move this to services at some point
+impl<'de> Deserialize<'de> for NamedData {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(NamedDataDeserializeVisitor)
+    }
+}
+
+struct NamedDataDeserializeVisitor;
+
+impl<'de> Visitor<'de> for NamedDataDeserializeVisitor {
+    type Value = NamedData;
+
+    /// always keep in sync with [`is_allowed_name_char`]
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            formatter,
+            "a string consisting of a namespace and name name, separated by a colon, only using alphanumeric characters, underscores & dashes"
+        )
+    }
+
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let mut strings = [None, None, None];
+        let mut split = s.split(NAME_DELIMITER);
+
+        for (buffer, part) in strings.iter_mut().zip(&mut split) {
+            if part.is_empty() {
+                return Err(E::custom("empty part in named data"));
+            }
+
+            if let Some(c) = part.matches(is_invalid_name_char).next() {
+                return Err(E::custom(format!("invalid character '{c}' in named data")));
+            }
+
+            *buffer = Some(part.to_string());
+        }
+
+        if split.next().is_some() {
+            return Err(E::custom("named data must consist of at most three parts"));
+        }
+
+        match strings {
+            [Some(namespace), Some(provider), Some(name)] => Ok(NamedData {
+                namespace: NamedData::canonicalize(namespace, SYSTEM_NAMESPACE),
+                provider: NamedData::canonicalize(provider, SYSTEM_PROVIDER),
+                name,
+            }),
+            [Some(namespace), Some(name), None] => Ok(NamedData {
+                namespace: NamedData::canonicalize(namespace, SYSTEM_NAMESPACE),
+                provider: None,
+                name,
+            }),
+            [Some(name), None, None] => Ok(NamedData {
+                namespace: None,
+                provider: None,
+                name,
+            }),
+            _ => Err(E::custom("empty named data")),
+        }
+    }
+}
+
+/// Checks if a character is allowed in a dataset name.
+#[inline]
+pub fn is_allowed_name_char(c: char) -> bool {
+    // `is_ascii_alphanumeric` plus some special characters
+
+    matches!(
+        c,
+        '0'..='9' // digits
+        | 'A'..='Z' | 'a'..='z' // ascii
+        | '_' | '-' // special characters
+    )
+}
+
+/// Checks if a character is not allowed in a dataset name.
+#[inline]
+pub fn is_invalid_name_char(c: char) -> bool {
+    !is_allowed_name_char(c)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_ser_de_dataset_id() {
-        let json = serde_json::json!({
-            "type": "internal",
-            "datasetId": "2bfa5144-1da0-4f62-83c1-e15ae333081b"
-        });
+    fn test_ser_de_dataset_name_only_name() {
+        let json = serde_json::json!("foobar");
 
-        let data_id: DataId = serde_json::from_value(json.clone()).unwrap();
+        let named_data: NamedData = serde_json::from_value(json.clone()).unwrap();
 
         assert_eq!(
-            data_id,
-            DataId::Internal {
-                dataset: InternalDataset::DatasetId {
-                    dataset_id: DatasetId::from_u128(0x2bfa_5144_1da0_4f62_83c1_e15a_e333_081b)
-                }
+            named_data,
+            NamedData {
+                namespace: None,
+                provider: None,
+                name: "foobar".to_string()
             }
         );
 
-        assert_eq!(serde_json::to_value(&data_id).unwrap(), json);
+        assert_eq!(serde_json::to_value(&named_data).unwrap(), json);
     }
 
     #[test]
-    fn test_ser_de_dataset_name() {
-        let json = serde_json::json!({
-            "type": "internal",
-            "name": "foo:bar"
-        });
+    fn test_ser_de_dataset_name_namespace() {
+        let json = serde_json::json!("foo:bar");
 
-        let data_id: DataId = serde_json::from_value(json.clone()).unwrap();
+        let named_data: NamedData = serde_json::from_value(json.clone()).unwrap();
 
         assert_eq!(
-            data_id,
-            DataId::Internal {
-                dataset: InternalDataset::Name {
-                    name: DatasetName {
-                        namespace: "foo".to_string(),
-                        name: "bar".to_string(),
-                    }
-                }
+            named_data,
+            NamedData {
+                namespace: Some("foo".to_string()),
+                provider: None,
+                name: "bar".to_string()
             }
         );
 
-        assert_eq!(serde_json::to_value(&data_id).unwrap(), json);
+        assert_eq!(serde_json::to_value(&named_data).unwrap(), json);
+    }
+
+    #[test]
+    fn test_ser_de_dataset_name_system_namespace() {
+        let json = serde_json::json!("_:bar");
+
+        let named_data: NamedData = serde_json::from_value(json).unwrap();
+
+        assert_eq!(
+            named_data,
+            NamedData {
+                namespace: None,
+                provider: None,
+                name: "bar".to_string()
+            }
+        );
+
+        assert_eq!(
+            serde_json::to_value(&named_data).unwrap(),
+            serde_json::json!("bar")
+        );
+    }
+
+    #[test]
+    fn test_ser_de_dataset_name_provider() {
+        let json = serde_json::json!("foo:bar:baz");
+
+        let named_data: NamedData = serde_json::from_value(json.clone()).unwrap();
+
+        assert_eq!(
+            named_data,
+            NamedData {
+                namespace: Some("foo".to_string()),
+                provider: Some("bar".to_string()),
+                name: "baz".to_string()
+            }
+        );
+
+        assert_eq!(serde_json::to_value(&named_data).unwrap(), json);
+    }
+
+    #[test]
+    fn test_ser_de_dataset_name_system_provider() {
+        let json = serde_json::json!("foo:_:baz");
+
+        let named_data: NamedData = serde_json::from_value(json).unwrap();
+
+        assert_eq!(
+            named_data,
+            NamedData {
+                namespace: Some("foo".to_string()),
+                provider: None,
+                name: "baz".to_string()
+            }
+        );
+
+        assert_eq!(
+            serde_json::to_value(&named_data).unwrap(),
+            serde_json::json!("foo:baz")
+        );
+    }
+
+    #[test]
+    fn test_ser_de_dataset_name_errors() {
+        serde_json::from_value::<NamedData>(serde_json::json!("foo:bar:baz:boo")).unwrap_err();
+        serde_json::from_value::<NamedData>(serde_json::json!("")).unwrap_err();
+        serde_json::from_value::<NamedData>(serde_json::json!(":b:c")).unwrap_err();
+        serde_json::from_value::<NamedData>(serde_json::json!(":::")).unwrap_err();
     }
 }

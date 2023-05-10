@@ -281,7 +281,7 @@ mod tests {
         OgrSourceDatasetTimeType, OgrSourceErrorSpec, OgrSourceParameters,
     };
     use crate::test_data;
-    use geoengine_datatypes::dataset::{DataId, DatasetId};
+    use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, FeatureDataType, NoGeometry, SpatialResolution, TimeInterval,
     };
@@ -493,12 +493,12 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn text_attribute() {
         let dataset_id = DatasetId::new();
+        let dataset_name = NamedData::with_global_name("ne_10m_ports");
 
         let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
-            DataId::Internal {
-                dataset: dataset_id.into(),
-            },
+            DataId::Internal { dataset_id },
+            dataset_name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -584,7 +584,7 @@ mod tests {
             },
             sources: OgrSource {
                 params: OgrSourceParameters {
-                    data: dataset_id.into(),
+                    data: dataset_name.clone(),
                     attribute_projection: None,
                     attribute_filters: None,
                 },
@@ -628,7 +628,7 @@ mod tests {
             },
             sources: OgrSource {
                 params: OgrSourceParameters {
-                    data: dataset_id.into(),
+                    data: dataset_name,
                     attribute_projection: None,
                     attribute_filters: Some(vec![AttributeFilter {
                         attribute: "name".to_string(),
