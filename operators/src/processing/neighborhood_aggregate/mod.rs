@@ -5,9 +5,9 @@ use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
 use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
 use crate::adapters::RasterSubQueryAdapter;
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
+    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -131,6 +131,8 @@ impl RasterOperator for NeighborhoodAggregate {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let tiling_specification = context.tiling_specification();
 
         // dimensions must not be larger as the neighboring tiles
@@ -149,6 +151,7 @@ impl RasterOperator for NeighborhoodAggregate {
         let raster_source = initialized_source.raster;
 
         let initialized_operator = InitializedNeighborhoodAggregate {
+            name,
             result_descriptor: raster_source.result_descriptor().clone(),
             raster_source,
             neighborhood: self.params.neighborhood.try_into()?,
@@ -163,6 +166,7 @@ impl RasterOperator for NeighborhoodAggregate {
 }
 
 pub struct InitializedNeighborhoodAggregate {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     raster_source: Box<dyn InitializedRasterOperator>,
     neighborhood: Neighborhood,
@@ -196,6 +200,10 @@ impl InitializedRasterOperator for InitializedNeighborhoodAggregate {
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

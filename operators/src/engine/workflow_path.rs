@@ -37,6 +37,11 @@ impl WorkflowOperatorPath {
     pub fn starts_with(&self, prefix: &[u8]) -> bool {
         self.id.starts_with(prefix)
     }
+
+    /// checks if the path is the root path
+    pub fn is_root(&self) -> bool {
+        self.id.is_empty()
+    }
 }
 
 impl AsRef<[u8]> for WorkflowOperatorPath {

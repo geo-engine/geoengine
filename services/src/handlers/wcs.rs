@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
+use geoengine_operators::util::input::RasterOrVectorOperator;
 use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_multiband_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
 };
@@ -31,9 +32,11 @@ use crate::util::server::{connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
-use geoengine_operators::engine::ResultDescriptor;
-use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
-use geoengine_operators::processing::{InitializedRasterReprojection, ReprojectionParams};
+use geoengine_operators::engine::{CanonicOperatorName, ExecutionContext, WorkflowOperatorPath};
+use geoengine_operators::engine::{ResultDescriptor, SingleRasterOrVectorSource};
+use geoengine_operators::processing::{
+    InitializedRasterReprojection, Reprojection, ReprojectionParams,
+};
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -392,10 +395,23 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
             request_spatial_ref,
             workflow_spatial_ref
         );
-        let irp = InitializedRasterReprojection::try_new_with_input(
-            ReprojectionParams {
-                target_spatial_reference: request_spatial_ref,
+
+        let reprojection_params = ReprojectionParams {
+            target_spatial_reference: request_spatial_ref,
+        };
+
+        // create the reprojection operator in order to get the canonic operator name
+        let reprojected_workflow = Reprojection {
+            params: reprojection_params,
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(operator),
             },
+        };
+
+        // create the inititalized operator directly, to avoid re-initializing everything
+        let irp = InitializedRasterReprojection::try_new_with_input(
+            CanonicOperatorName::from(&reprojected_workflow),
+            reprojection_params,
             initialized,
             execution_context.tiling_specification(),
         )

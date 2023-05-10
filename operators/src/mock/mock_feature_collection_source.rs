@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::engine::QueryContext;
+use crate::engine::{CanonicOperatorName, QueryContext};
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName, ResultDescriptor,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
@@ -135,6 +135,7 @@ where
 }
 
 pub struct InitializedMockFeatureCollectionSource<R: ResultDescriptor, G: Geometry> {
+    name: CanonicOperatorName,
     result_descriptor: R,
     collections: Vec<FeatureCollection<G>>,
 }
@@ -195,6 +196,7 @@ macro_rules! impl_mock_feature_collection_source {
                 };
 
                 Ok(InitializedMockFeatureCollectionSource {
+                    name: CanonicOperatorName::from(&self),
                     result_descriptor,
                     collections: self.params.collections,
                 }
@@ -217,6 +219,9 @@ macro_rules! impl_mock_feature_collection_source {
             }
             fn result_descriptor(&self) -> &VectorResultDescriptor {
                 &self.result_descriptor
+            }
+            fn canonic_name(&self) -> CanonicOperatorName {
+                self.name.clone()
             }
         }
     };

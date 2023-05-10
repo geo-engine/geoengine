@@ -14,6 +14,7 @@ use geoengine_operators::engine::{
     MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
+use geoengine_operators::pro::cache::cache_operator::InitializedCacheOperator;
 use geoengine_operators::pro::meta::quota::QuotaCheck;
 use geoengine_operators::pro::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -100,7 +101,15 @@ where
         span: CreateSpan,
         path: WorkflowOperatorPath,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
-        Box::new(InitializedOperatorWrapper::new(op, span, path))
+        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span, path.clone()))
+            as Box<dyn geoengine_operators::engine::InitializedRasterOperator>;
+
+        if path.is_root() {
+            // we only cache end results of workflows for now
+            return Box::new(InitializedCacheOperator::new(wrapped));
+        }
+
+        wrapped
     }
 
     fn wrap_initialized_vector_operator(

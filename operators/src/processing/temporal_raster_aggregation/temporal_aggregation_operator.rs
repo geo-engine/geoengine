@@ -9,8 +9,8 @@ use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
 use crate::engine::{
-    ExecutionContext, InitializedSources, Operator, QueryProcessor, RasterOperator,
-    SingleRasterSource, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
+    RasterOperator, SingleRasterSource, WorkflowOperatorPath,
 };
 use crate::{
     adapters::SubQueryTileAggregator,
@@ -82,6 +82,8 @@ impl RasterOperator for TemporalRasterAggregation {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         ensure!(self.params.window.step > 0, error::WindowSizeMustNotBeZero);
 
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_source = self.sources.initialize_sources(path, context).await?;
         let source = initialized_source.raster;
 
@@ -91,6 +93,7 @@ impl RasterOperator for TemporalRasterAggregation {
         );
 
         let initialized_operator = InitializedTemporalRasterAggregation {
+            name,
             aggregation_type: self.params.aggregation,
             window: self.params.window,
             window_reference: self
@@ -110,6 +113,7 @@ impl RasterOperator for TemporalRasterAggregation {
 }
 
 pub struct InitializedTemporalRasterAggregation {
+    name: CanonicOperatorName,
     aggregation_type: Aggregation,
     window: TimeStep,
     window_reference: TimeInstance,
@@ -155,6 +159,10 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
         );
 
         Ok(res)
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

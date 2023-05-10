@@ -15,9 +15,9 @@ use snafu::ensure;
 
 use crate::adapters::FeatureCollectionStreamExt;
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
-    SingleVectorSource, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    CanonicOperatorName, ExecutionContext, InitializedVectorOperator, Operator, QueryContext,
+    QueryProcessor, SingleVectorSource, TypedVectorQueryProcessor, VectorColumnInfo,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::engine::{InitializedSources, OperatorName, WorkflowOperatorPath};
 use crate::error::{self, Error};
@@ -58,6 +58,7 @@ impl OperatorName for VisualPointClustering {
 
 #[typetag::serde]
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl VectorOperator for VisualPointClustering {
     async fn _initialize(
         mut self: Box<Self>,
@@ -83,6 +84,8 @@ impl VectorOperator for VisualPointClustering {
             self.params.count_column != self.params.radius_column,
             error::DuplicateOutputColumns
         );
+
+        let name = CanonicOperatorName::from(&self);
 
         let radius_model = LogScaledRadius::new(self.params.min_radius_px, self.params.delta_px)?;
 
@@ -167,6 +170,7 @@ impl VectorOperator for VisualPointClustering {
         let in_desc = vector_source.result_descriptor();
 
         Ok(InitializedVisualPointClustering {
+            name,
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: in_desc.spatial_reference,
@@ -187,6 +191,7 @@ impl VectorOperator for VisualPointClustering {
 }
 
 pub struct InitializedVisualPointClustering {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     radius_model: LogScaledRadius,
@@ -228,6 +233,10 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

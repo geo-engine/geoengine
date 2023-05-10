@@ -1,8 +1,8 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, InitializedSources,
-    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
-    QueryProcessor, RasterQueryProcessor, SingleRasterSource, TypedPlotQueryProcessor,
-    WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedSources, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    PlotResultDescriptor, QueryContext, QueryProcessor, RasterQueryProcessor, SingleRasterSource,
+    TypedPlotQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::math::average_floor;
 use crate::util::Result;
@@ -60,12 +60,15 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initalized_sources = self.sources.initialize_sources(path, context).await?;
         let raster = initalized_sources.raster;
 
         let in_desc = raster.result_descriptor().clone();
 
         let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
+            name,
             result_descriptor: in_desc.into(),
             raster,
             state: self.params,
@@ -79,6 +82,7 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
 
 /// The initialization of `MeanRasterPixelValuesOverTime`
 pub struct InitializedMeanRasterPixelValuesOverTime {
+    name: CanonicOperatorName,
     result_descriptor: PlotResultDescriptor,
     raster: Box<dyn InitializedRasterOperator>,
     state: MeanRasterPixelValuesOverTimeParams,
@@ -100,6 +104,10 @@ impl InitializedPlotOperator for InitializedMeanRasterPixelValuesOverTime {
 
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
