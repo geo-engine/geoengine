@@ -75,8 +75,9 @@ where
             .prepare(
                 "
             SELECT 
-                d.id, 
-                d.name, 
+                d.id,
+                d.name,
+                d.display_name,
                 d.description,
                 d.tags,
                 d.source_operator,
@@ -98,11 +99,12 @@ where
                 Result::<DatasetListing>::Ok(DatasetListing {
                     id: row.get(0),
                     name: row.get(1),
-                    description: row.get(2),
-                    tags: row.get::<_, Option<_>>(3).unwrap_or_default(),
-                    source_operator: row.get(4),
-                    result_descriptor: serde_json::from_value(row.get(5))?,
-                    symbology: serde_json::from_value(row.get(6))?,
+                    display_name: row.get(2),
+                    description: row.get(3),
+                    tags: row.get::<_, Option<_>>(4).unwrap_or_default(),
+                    source_operator: row.get(5),
+                    result_descriptor: serde_json::from_value(row.get(6))?,
+                    symbology: serde_json::from_value(row.get(7))?,
                 })
             })
             .filter_map(Result::ok)
@@ -115,9 +117,9 @@ where
             .prepare(
                 "
             SELECT
-                d.internal_id,
                 d.id,
                 d.name,
+                d.display_name,
                 d.description,
                 d.result_descriptor,
                 d.source_operator,
@@ -139,9 +141,9 @@ where
             .await?;
 
         Ok(Dataset {
-            internal_id: row.get(0),
-            id: row.get(1),
-            name: row.get(2),
+            id: row.get(0),
+            name: row.get(1),
+            display_name: row.get(2),
             description: row.get(3),
             result_descriptor: serde_json::from_value(row.get(4))?,
             source_operator: row.get(5),
@@ -176,31 +178,18 @@ where
         })
     }
 
-    async fn resolve_dataset(
-        &self,
-        dataset: &geoengine_datatypes::dataset::InternalDataset,
-    ) -> Result<geoengine_datatypes::dataset::DatasetId> {
-        let dataset_name = match dataset {
-            geoengine_datatypes::dataset::InternalDataset::DatasetId { dataset_id } => {
-                // early return if we already have an id
-                return Ok(*dataset_id);
-            }
-            geoengine_datatypes::dataset::InternalDataset::Name { name } => name,
-        };
-
+    async fn resolve_dataset(&self, dataset_name: &DatasetName) -> Result<DatasetId> {
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
             .prepare(
-                "SELECT internal_id
+                "SELECT id
                 FROM datasets
-                WHERE id = $1",
+                WHERE name = $1",
             )
             .await?;
 
-        let row = conn
-            .query_one(&stmt, &[&DatasetName::from(dataset_name)])
-            .await?;
+        let row = conn.query_one(&stmt, &[&dataset_name]).await?;
 
         Ok(serde_json::from_value(row.get(0)).context(error::SerdeJson)?)
     }
@@ -250,14 +239,9 @@ where
         let id = id
             .internal()
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
-        let id: DatasetId = self
-            .resolve_dataset(&id)
-            .await
-            .map_err(|_| geoengine_operators::error::Error::UnknownDataId)?
-            .into();
 
         if !self
-            .has_permission(id, Permission::Read)
+            .has_permission(DatasetId::from(id), Permission::Read)
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -322,14 +306,9 @@ where
         let id = id
             .internal()
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
-        let id: DatasetId = self
-            .resolve_dataset(&id)
-            .await
-            .map_err(|_| geoengine_operators::error::Error::UnknownDataId)?
-            .into();
 
         if !self
-            .has_permission(id, Permission::Read)
+            .has_permission(DatasetId::from(id), Permission::Read)
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -346,13 +325,13 @@ where
         let stmt = conn
             .prepare(
                 "
-        SELECT
-            d.meta_data
-        FROM
-            user_permitted_datasets p JOIN datasets d
-                ON (p.dataset_id = d.internal_id)
-        WHERE
-            d.internal_id = $1 AND p.user_id = $2",
+            SELECT
+                d.meta_data
+            FROM
+                user_permitted_datasets p JOIN datasets d
+                    ON (p.dataset_id = d.internal_id)
+            WHERE
+                d.internal_id = $1 AND p.user_id = $2",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
@@ -466,13 +445,13 @@ where
         dataset: AddDataset,
         meta_data: Box<dyn PostgresStorable<Tls>>,
     ) -> Result<DatasetId> {
-        let internal_id = DatasetId::new();
-        let id = dataset.id.unwrap_or_else(|| DatasetName {
-            namespace: self.session.user.id.to_string(),
-            name: internal_id.to_string(),
+        let id = DatasetId::new();
+        let name = dataset.name.unwrap_or_else(|| DatasetName {
+            namespace: Some(self.session.user.id.to_string()),
+            name: id.to_string(),
         });
 
-        self.check_namespace(&id).await?;
+        self.check_namespace(&name).await?;
 
         let meta_data_json = meta_data.to_json()?;
 
@@ -486,9 +465,9 @@ where
             .prepare(
                 "
                 INSERT INTO datasets (
-                    internal_id,
                     id,
                     name,
+                    display_name,
                     description,
                     source_operator,
                     result_descriptor,
@@ -503,9 +482,9 @@ where
         tx.execute(
             &stmt,
             &[
-                &internal_id,
                 &id,
-                &dataset.name,
+                &name,
+                &dataset.display_name,
                 &dataset.description,
                 &dataset.source_operator,
                 &meta_data_json.result_descriptor,
@@ -532,7 +511,7 @@ where
             &stmt,
             &[
                 &RoleId::from(self.session.user.id),
-                &internal_id,
+                &name,
                 &Permission::Owner,
             ],
         )
@@ -540,7 +519,7 @@ where
 
         tx.commit().await?;
 
-        Ok(internal_id)
+        Ok(id)
     }
 
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {
@@ -588,10 +567,12 @@ where
     }
 
     async fn check_namespace(&self, id: &DatasetName) -> Result<()> {
-        if (id.namespace == self.session.user.id.to_string())
-            || (self.session.is_admin()
-                && id.namespace == geoengine_datatypes::dataset::SYSTEM_NAMESPACE)
-        {
+        let is_ok = match &id.namespace {
+            Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
+            None => self.session.is_admin(),
+        };
+
+        if is_ok {
             Ok(())
         } else {
             Err(Error::InvalidDatasetIdNamespace)
@@ -746,6 +727,7 @@ where
                 "
                 SELECT 
                     d.name, 
+                    d.display_name,
                     d.description,
                     d.source_operator,
                     d.symbology
@@ -766,19 +748,20 @@ where
             )
             .await?;
 
-        let name: String = row.get(0);
-        let description: String = row.get(1);
-        let source_operator: String = row.get(2);
-        let symbology: Option<Symbology> = serde_json::from_value(row.get(3))?;
+        let name: DatasetName = row.get(0);
+        let display_name: String = row.get(1);
+        let description: String = row.get(2);
+        let source_operator: String = row.get(3);
+        let symbology: Option<Symbology> = serde_json::from_value(row.get(4))?;
 
-        let operator = source_operator_from_dataset(&source_operator, &dataset_id.into())?;
+        let operator = source_operator_from_dataset(&source_operator, &name.into())?;
 
         Ok(Layer {
             id: ProviderLayerId {
                 provider_id: DATASET_DB_LAYER_PROVIDER_ID,
                 layer_id: id.clone(),
             },
-            name,
+            name: display_name,
             description,
             workflow: Workflow { operator },
             symbology,

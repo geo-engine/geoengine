@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId};
+use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId, NamedData};
 use crate::api::model::services::AddDataset;
 use crate::contexts::InMemoryDb;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
@@ -40,8 +40,8 @@ use super::{
 
 #[derive(Default)]
 pub struct HashMapDatasetDbBackend {
-    datasets_by_id: BTreeMap<DatasetName, Dataset>,
-    datasets_by_internal_id: HashMap<DatasetId, Dataset>,
+    datasets_by_id: HashMap<DatasetId, Dataset>,
+    datasets_by_name: BTreeMap<DatasetName, Dataset>,
     ogr_datasets: HashMap<
         DatasetId,
         StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -179,20 +179,19 @@ impl DatasetStore for InMemoryDb {
         dataset: AddDataset,
         meta_data: Box<dyn HashMapStorable>,
     ) -> Result<DatasetId> {
-        let internal_id = DatasetId::new();
-        let id = dataset.id.unwrap_or_else(|| DatasetName {
-            namespace: geoengine_datatypes::dataset::SYSTEM_NAMESPACE.to_string(),
-            name: internal_id.to_string(),
+        let id = DatasetId::new();
+        let name = dataset.name.unwrap_or_else(|| DatasetName {
+            namespace: None,
+            name: id.to_string(),
         });
 
-        self.check_namespace(&id).await?;
+        self.check_namespace(&name).await?;
 
         // check if dataset with same id exists
 
         let backend = self.backend.dataset_db.write().await;
 
-        if backend.datasets_by_id.contains_key(&id)
-            || backend.datasets_by_internal_id.contains_key(&internal_id)
+        if backend.datasets_by_name.contains_key(&name) || backend.datasets_by_id.contains_key(&id)
         {
             return Err(Error::DuplicateDatasetId);
         }
@@ -200,12 +199,12 @@ impl DatasetStore for InMemoryDb {
         // TODO: we should keep the lock for the whole function to avoid race conditions hereafter.
         drop(backend);
 
-        let result_descriptor = meta_data.store(internal_id, self).await;
+        let result_descriptor = meta_data.store(id, self).await;
 
         let d: Dataset = Dataset {
-            internal_id,
-            id: id.clone(),
-            name: dataset.name,
+            id,
+            name: name.clone(),
+            display_name: dataset.display_name,
             description: dataset.description,
             result_descriptor: result_descriptor.into(),
             source_operator: dataset.source_operator,
@@ -215,17 +214,17 @@ impl DatasetStore for InMemoryDb {
 
         let mut backend = self.backend.dataset_db.write().await;
 
-        backend.datasets_by_id.insert(id, d.clone());
-        backend.datasets_by_internal_id.insert(internal_id, d);
+        backend.datasets_by_name.insert(name, d.clone());
+        backend.datasets_by_id.insert(id, d);
 
-        Ok(internal_id)
+        Ok(id)
     }
 
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {
         let mut backend = self.backend.dataset_db.write().await;
 
         let Some(dataset) = backend
-            .datasets_by_internal_id
+            .datasets_by_id
             .remove(&dataset_id) else {
                 return Err(Error::UnknownDatasetId);
             };
@@ -258,7 +257,7 @@ impl DatasetStore for InMemoryDb {
 
     async fn check_namespace(&self, id: &DatasetName) -> Result<()> {
         // due to a lack of users, etc., we only allow one namespace for now
-        if id.namespace == geoengine_datatypes::dataset::SYSTEM_NAMESPACE {
+        if id.namespace.is_none() {
             Ok(())
         } else {
             Err(Error::InvalidDatasetIdNamespace)
@@ -275,7 +274,11 @@ impl DatasetProvider for InMemoryDb {
             backend
                 .datasets_by_id
                 .values()
-                .filter(|d| d.name.contains(filter) || d.description.contains(filter))
+                .filter(|d| {
+                    d.name.name.contains(filter)
+                        || d.display_name.contains(filter)
+                        || d.description.contains(filter)
+                })
                 .collect()
         } else {
             backend.datasets_by_id.values().collect()
@@ -301,7 +304,7 @@ impl DatasetProvider for InMemoryDb {
             .dataset_db
             .read()
             .await
-            .datasets_by_internal_id
+            .datasets_by_id
             .get(dataset)
             .cloned()
             .ok_or(error::Error::UnknownDatasetId)
@@ -312,39 +315,24 @@ impl DatasetProvider for InMemoryDb {
             .dataset_db
             .read()
             .await
-            .datasets_by_internal_id
+            .datasets_by_id
             .get(dataset)
             .map(|d| ProvenanceOutput {
-                data: d.internal_id.into(),
+                data: d.id.into(),
                 provenance: d.provenance.clone(),
             })
             .ok_or(error::Error::UnknownDatasetId)
     }
 
-    async fn resolve_dataset(
-        &self,
-        dataset: &geoengine_datatypes::dataset::InternalDataset,
-    ) -> Result<geoengine_datatypes::dataset::DatasetId> {
-        let dataset_name = match dataset {
-            geoengine_datatypes::dataset::InternalDataset::DatasetId { dataset_id } => {
-                // early return if we already have an id
-                return Ok(*dataset_id);
-            }
-            geoengine_datatypes::dataset::InternalDataset::Name { name } => name,
-        };
-
-        if dataset_name.namespace != geoengine_datatypes::dataset::SYSTEM_NAMESPACE {
-            return Err(error::Error::InvalidDatasetIdNamespace);
-        }
-
+    async fn resolve_dataset(&self, dataset_name: &DatasetName) -> Result<DatasetId> {
         let dataset_db = self.backend.dataset_db.read().await;
 
         let dataset = dataset_db
-            .datasets_by_id
-            .get(&dataset_name.into())
+            .datasets_by_name
+            .get(dataset_name)
             .ok_or(error::Error::UnknownDatasetId)?;
 
-        Ok(dataset.internal_id.into())
+        Ok(dataset.id)
     }
 }
 
@@ -368,10 +356,6 @@ impl
         let id = id
             .internal()
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
-        let id = self
-            .resolve_dataset(&id)
-            .await
-            .map_err(|_| geoengine_operators::error::Error::UnknownDataId)?;
 
         Ok(Box::new(
             self.backend
@@ -399,10 +383,6 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         let id = id
             .internal()
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
-        let id = self
-            .resolve_dataset(&id)
-            .await
-            .map_err(|_| geoengine_operators::error::Error::UnknownDataId)?;
 
         Ok(Box::new(
             self.backend
@@ -432,10 +412,6 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         let id = id
             .internal()
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
-        let id = self
-            .resolve_dataset(&id)
-            .await
-            .map_err(|_| geoengine_operators::error::Error::UnknownDataId)?;
 
         Ok(self
             .backend
@@ -499,9 +475,9 @@ impl DatasetLayerCollectionProvider for InMemoryDb {
                     id: ProviderLayerId {
                         provider_id: DATASET_DB_LAYER_PROVIDER_ID,
                         // use the dataset id also as layer id, TODO: maybe prefix it?
-                        layer_id: LayerId(d.internal_id.to_string()),
+                        layer_id: LayerId(d.id.to_string()),
                     },
-                    name: d.name.clone(),
+                    name: d.display_name.clone(),
                     description: d.description.clone(),
                     properties: vec![],
                 })
@@ -531,19 +507,25 @@ impl DatasetLayerCollectionProvider for InMemoryDb {
         let backend = self.backend.dataset_db.read().await;
 
         let dataset = backend
-            .datasets_by_internal_id
+            .datasets_by_id
             .get(&dataset_id)
             .ok_or(geoengine_operators::error::Error::UnknownDatasetId)?;
 
-        let operator =
-            source_operator_from_dataset(&dataset.source_operator, &dataset.internal_id.into())?;
+        let operator = source_operator_from_dataset(
+            &dataset.source_operator,
+            &NamedData {
+                namespace: dataset.name.namespace.clone(),
+                provider: None,
+                name: dataset.name.name.clone(),
+            },
+        )?;
 
         Ok(Layer {
             id: ProviderLayerId {
                 provider_id: DATASET_DB_LAYER_PROVIDER_ID,
                 layer_id: id.clone(),
             },
-            name: dataset.name.clone(),
+            name: dataset.display_name.clone(),
             description: dataset.description.clone(),
             workflow: Workflow { operator },
             symbology: dataset.symbology.clone(),
@@ -579,8 +561,8 @@ mod tests {
         };
 
         let ds = AddDataset {
-            id: None,
-            name: "OgrDataset".to_string(),
+            name: None,
+            display_name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
@@ -639,11 +621,12 @@ mod tests {
         assert_eq!(
             ds[0],
             DatasetListing {
-                id: DatasetName {
-                    namespace: geoengine_datatypes::dataset::SYSTEM_NAMESPACE.to_string(),
+                id,
+                name: DatasetName {
+                    namespace: None,
                     name: id.to_string()
                 },
-                name: "OgrDataset".to_string(),
+                display_name: "OgrDataset".to_string(),
                 description: "My Ogr dataset".to_string(),
                 tags: vec![],
                 source_operator: "OgrSource".to_string(),

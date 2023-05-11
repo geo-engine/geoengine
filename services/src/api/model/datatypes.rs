@@ -12,7 +12,6 @@ use std::{
     str::FromStr,
 };
 use utoipa::ToSchema;
-use validator::Validate;
 
 identifier!(DataProviderId);
 
@@ -31,158 +30,27 @@ impl From<DatasetId> for geoengine_datatypes::dataset::DatasetId {
     }
 }
 
-/// The identifier for loadable data. It is used in the source operators to get the loading info (aka parametrization)
-/// for accessing the data. Internal data is loaded from datasets, external from `DataProvider`s.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
+/// The identifier for loadable data. It is used in the source operators to get the loading info (aka parametrization)
+/// for accessing the data. Internal data is loaded from datasets, external from `DataProvider`s.
 pub enum DataId {
-    Internal(InternalDataId),
+    #[serde(rename_all = "camelCase")]
+    Internal {
+        dataset_id: DatasetId,
+    },
     External(ExternalDataId),
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct InternalDataId {
-    #[serde(flatten)]
-    pub dataset: InternalDataset,
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum InternalDataset {
-    #[serde(rename_all = "camelCase")]
-    DatasetId { dataset_id: DatasetId },
-    #[serde(rename_all = "camelCase")]
-    Name {
-        #[schema(value_type = String)]
-        name: DatasetName,
-    },
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Validate)]
-#[cfg_attr(
-    feature = "postgres",
-    derive(postgres_types::ToSql, postgres_types::FromSql)
-)]
-pub struct DatasetName {
-    #[validate(length(min = 1, max = 100))]
-    pub namespace: String,
-    #[validate(length(min = 1, max = 150))]
-    pub name: String,
-}
-
-impl DatasetName {
-    pub fn new<S1: Into<String>, S2: Into<String>>(namespace: S1, name: S2) -> Result<Self> {
-        let dataset_name = Self {
-            namespace: namespace.into(),
-            name: name.into(),
-        };
-
-        if dataset_name.validate().is_err() {
-            return Err(error::Error::InvalidDatasetId);
-        }
-
-        Ok(dataset_name)
-    }
-}
-
-impl std::fmt::Display for DatasetName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.namespace, self.name)
-    }
-}
-
-// TODO: move this to services at some point
-impl<'de> Deserialize<'de> for DatasetName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(DatasetNameDeserializeVisitor)
-    }
-}
-
-// TODO: move this to services at some point
-impl Serialize for DatasetName {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!("{}:{}", self.namespace, self.name))
-    }
-}
-
-struct DatasetNameDeserializeVisitor;
-
-impl<'de> Visitor<'de> for DatasetNameDeserializeVisitor {
-    type Value = DatasetName;
-
-    /// always keep in sync with [`is_allowed_name_char`]
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            formatter,
-            "a string consisting of a namespace and name name, separated by a colon, only using alphanumeric characters, underscores & dashes"
-        )
-    }
-
-    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        let mut chars = s.chars();
-
-        let mut namespace = String::new();
-
-        for c in &mut chars {
-            if c == ':' {
-                break;
-            }
-
-            if !geoengine_datatypes::dataset::is_allowed_name_char(c) {
-                return Err(E::custom(format!(
-                    "invalid character '{c}' in dataset name"
-                )));
-            }
-
-            namespace.push(c);
-        }
-
-        if namespace.is_empty() {
-            return Err(E::custom("empty namespace in dataset name"));
-        }
-
-        let mut name = String::new();
-
-        for c in chars {
-            if c == ':' {
-                return Err(E::custom(format!(
-                    "invalid separator '{c}' after dataset name's name part"
-                )));
-            }
-
-            if !geoengine_datatypes::dataset::is_allowed_name_char(c) {
-                return Err(E::custom(format!(
-                    "invalid character '{c}' in dataset name"
-                )));
-            }
-
-            name.push(c);
-        }
-
-        if name.is_empty() {
-            return Err(E::custom("empty name in dataset name"));
-        }
-
-        Ok(DatasetName { namespace, name })
-    }
-}
-
 impl DataId {
-    pub fn internal(&self) -> Option<InternalDataset> {
-        let Self::Internal(InternalDataId { dataset }) = self else {
-            return None;
-        };
-        Some(dataset.clone())
+    pub fn internal(&self) -> Option<DatasetId> {
+        if let Self::Internal {
+            dataset_id: dataset,
+        } = self
+        {
+            return Some(*dataset);
+        }
+        None
     }
 
     pub fn external(&self) -> Option<ExternalDataId> {
@@ -194,10 +62,8 @@ impl DataId {
 }
 
 impl From<DatasetId> for DataId {
-    fn from(dataset_id: DatasetId) -> Self {
-        DataId::Internal(InternalDataId {
-            dataset: InternalDataset::DatasetId { dataset_id },
-        })
+    fn from(value: DatasetId) -> Self {
+        Self::Internal { dataset_id: value }
     }
 }
 
@@ -216,24 +82,7 @@ impl From<ExternalDataId> for geoengine_datatypes::dataset::DataId {
 impl From<DatasetId> for geoengine_datatypes::dataset::DataId {
     fn from(value: DatasetId) -> Self {
         Self::Internal {
-            dataset: geoengine_datatypes::dataset::InternalDataset::DatasetId {
-                dataset_id: value.into(),
-            },
-        }
-    }
-}
-
-impl From<DatasetName> for geoengine_datatypes::dataset::DatasetName {
-    fn from(DatasetName { namespace, name }: DatasetName) -> Self {
-        Self { namespace, name }
-    }
-}
-
-impl From<&DatasetName> for geoengine_datatypes::dataset::DatasetName {
-    fn from(DatasetName { namespace, name }: &DatasetName) -> Self {
-        Self {
-            namespace: namespace.clone(),
-            name: name.clone(),
+            dataset_id: value.into(),
         }
     }
 }
@@ -247,47 +96,12 @@ impl From<ExternalDataId> for geoengine_datatypes::dataset::ExternalDataId {
     }
 }
 
-impl From<InternalDataset> for geoengine_datatypes::dataset::InternalDataset {
-    fn from(value: InternalDataset) -> Self {
-        match value {
-            InternalDataset::DatasetId { dataset_id } => Self::DatasetId {
-                dataset_id: dataset_id.into(),
-            },
-            InternalDataset::Name { name } => Self::Name { name: name.into() },
-        }
-    }
-}
-
-impl From<geoengine_datatypes::dataset::InternalDataset> for InternalDataset {
-    fn from(value: geoengine_datatypes::dataset::InternalDataset) -> Self {
-        match value {
-            geoengine_datatypes::dataset::InternalDataset::DatasetId { dataset_id } => {
-                Self::DatasetId {
-                    dataset_id: dataset_id.into(),
-                }
-            }
-            geoengine_datatypes::dataset::InternalDataset::Name { name } => {
-                Self::Name { name: name.into() }
-            }
-        }
-    }
-}
-
 impl From<geoengine_datatypes::dataset::DataId> for DataId {
     fn from(id: geoengine_datatypes::dataset::DataId) -> Self {
         match id {
-            geoengine_datatypes::dataset::DataId::Internal {
-                dataset: geoengine_datatypes::dataset::InternalDataset::DatasetId { dataset_id },
-            } => Self::Internal(InternalDataId {
-                dataset: InternalDataset::DatasetId {
-                    dataset_id: dataset_id.into(),
-                },
-            }),
-            geoengine_datatypes::dataset::DataId::Internal {
-                dataset: geoengine_datatypes::dataset::InternalDataset::Name { name },
-            } => Self::Internal(InternalDataId {
-                dataset: InternalDataset::Name { name: name.into() },
-            }),
+            geoengine_datatypes::dataset::DataId::Internal { dataset_id } => Self::Internal {
+                dataset_id: dataset_id.into(),
+            },
             geoengine_datatypes::dataset::DataId::External(external_id) => {
                 Self::External(external_id.into())
             }
@@ -298,17 +112,8 @@ impl From<geoengine_datatypes::dataset::DataId> for DataId {
 impl From<DataId> for geoengine_datatypes::dataset::DataId {
     fn from(id: DataId) -> Self {
         match id {
-            DataId::Internal(InternalDataId {
-                dataset: InternalDataset::DatasetId { dataset_id },
-            }) => Self::Internal {
-                dataset: geoengine_datatypes::dataset::InternalDataset::DatasetId {
-                    dataset_id: dataset_id.into(),
-                },
-            },
-            DataId::Internal(InternalDataId {
-                dataset: InternalDataset::Name { name },
-            }) => Self::Internal {
-                dataset: geoengine_datatypes::dataset::InternalDataset::Name { name: name.into() },
+            DataId::Internal { dataset_id } => Self::Internal {
+                dataset_id: dataset_id.into(),
             },
             DataId::External(external_id) => Self::External(external_id.into()),
         }
@@ -321,21 +126,121 @@ impl From<geoengine_datatypes::dataset::DatasetId> for DatasetId {
     }
 }
 
-impl From<geoengine_datatypes::dataset::DatasetName> for DatasetName {
+/// The user-facing identifier for loadable data.
+/// It can be resolved into a [`DataId`].
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
+// TODO: Have separate type once `geoengine_datatypes::dataset::NamedData` is not part of the API anymore.
+#[serde(
+    from = "geoengine_datatypes::dataset::NamedData",
+    into = "geoengine_datatypes::dataset::NamedData"
+)]
+pub struct NamedData {
+    pub namespace: Option<String>,
+    pub provider: Option<String>,
+    pub name: String,
+}
+
+impl From<geoengine_datatypes::dataset::NamedData> for NamedData {
     fn from(
-        geoengine_datatypes::dataset::DatasetName {namespace, name}: geoengine_datatypes::dataset::DatasetName,
+        geoengine_datatypes::dataset::NamedData {
+            namespace,
+            provider,
+            name,
+        }: geoengine_datatypes::dataset::NamedData,
+    ) -> Self {
+        Self {
+            namespace,
+            provider,
+            name,
+        }
+    }
+}
+
+impl From<&geoengine_datatypes::dataset::NamedData> for NamedData {
+    fn from(named_data: &geoengine_datatypes::dataset::NamedData) -> Self {
+        Self::from(named_data.clone())
+    }
+}
+
+impl From<NamedData> for geoengine_datatypes::dataset::NamedData {
+    fn from(
+        NamedData {
+            namespace,
+            provider,
+            name,
+        }: NamedData,
+    ) -> Self {
+        Self {
+            namespace,
+            provider,
+            name,
+        }
+    }
+}
+
+impl From<&NamedData> for geoengine_datatypes::dataset::NamedData {
+    fn from(named_data: &NamedData) -> Self {
+        Self::from(named_data.clone())
+    }
+}
+
+/// A (optionally namespaced) name for a `Dataset`.
+/// It can be resolved into a [`DataId`] if you know the data provider.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Deserialize, Serialize)]
+#[cfg_attr(
+    feature = "postgres",
+    derive(postgres_types::ToSql, postgres_types::FromSql)
+)]
+pub struct DatasetName {
+    pub namespace: Option<String>,
+    pub name: String,
+}
+
+impl DatasetName {
+    pub fn new<S: Into<String>>(namespace: Option<String>, name: S) -> Self {
+        Self {
+            namespace,
+            name: name.into(),
+        }
+    }
+}
+
+impl From<NamedData> for DatasetName {
+    fn from(
+        NamedData {
+            namespace,
+            provider: _,
+            name,
+        }: NamedData,
     ) -> Self {
         Self { namespace, name }
     }
 }
 
-impl From<&geoengine_datatypes::dataset::DatasetName> for DatasetName {
-    fn from(
-        geoengine_datatypes::dataset::DatasetName {namespace, name}: &geoengine_datatypes::dataset::DatasetName,
-    ) -> Self {
+impl From<&NamedData> for DatasetName {
+    fn from(named_data: &NamedData) -> Self {
         Self {
-            namespace: namespace.clone(),
-            name: name.clone(),
+            namespace: named_data.namespace.clone(),
+            name: named_data.name.clone(),
+        }
+    }
+}
+
+impl From<&geoengine_datatypes::dataset::NamedData> for DatasetName {
+    fn from(named_data: &geoengine_datatypes::dataset::NamedData) -> Self {
+        Self {
+            namespace: named_data.namespace.clone(),
+            name: named_data.name.clone(),
+        }
+    }
+}
+
+impl From<DatasetName> for NamedData {
+    fn from(DatasetName { namespace, name }: DatasetName) -> Self {
+        NamedData {
+            namespace,
+            provider: None,
+            name,
         }
     }
 }
@@ -1776,54 +1681,4 @@ pub enum PlotOutputFormat {
     JsonPlain,
     JsonVega,
     ImagePng,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_ser_de_dataset_id() {
-        let json = serde_json::json!({
-            "type": "internal",
-            "datasetId": "2bfa5144-1da0-4f62-83c1-e15ae333081b"
-        });
-
-        let data_id: DataId = serde_json::from_value(json.clone()).unwrap();
-
-        assert_eq!(
-            data_id,
-            DataId::Internal(InternalDataId {
-                dataset: InternalDataset::DatasetId {
-                    dataset_id: DatasetId::from_u128(0x2bfa_5144_1da0_4f62_83c1_e15a_e333_081b)
-                }
-            })
-        );
-
-        assert_eq!(serde_json::to_value(&data_id).unwrap(), json);
-    }
-
-    #[test]
-    fn test_ser_de_dataset_name() {
-        let json = serde_json::json!({
-            "type": "internal",
-            "name": "foo:bar"
-        });
-
-        let data_id: DataId = serde_json::from_value(json.clone()).unwrap();
-
-        assert_eq!(
-            data_id,
-            DataId::Internal(InternalDataId {
-                dataset: InternalDataset::Name {
-                    name: DatasetName {
-                        namespace: "foo".to_string(),
-                        name: "bar".to_string(),
-                    }
-                }
-            })
-        );
-
-        assert_eq!(serde_json::to_value(&data_id).unwrap(), json);
-    }
 }

@@ -79,10 +79,7 @@ mod tests {
             serde_json::json!({
                 "type": "GdalSource",
                 "params": {
-                    "data": {
-                        "type": "internal",
-                        "datasetId": "fc734022-61e0-49da-b327-257ba9d602a7"
-                    }
+                    "data": "foo:bar"
                 }
             })
         );
@@ -93,10 +90,7 @@ mod tests {
         let workflow = serde_json::json!({
             "type": "GdalSource",
             "params": {
-                "data": {
-                    "type": "internal",
-                    "datasetId":  "fc734022-61e0-49da-b327-257ba9d602a7"
-                }
+                "data": "foo:bar"
             }
         })
         .to_string();
@@ -113,10 +107,7 @@ mod tests {
         let workflow = serde_json::json!({
             "type": "OgrSource",
             "params": {
-                "data": {
-                    "type": "internal",
-                    "datasetId":  "fc734022-61e0-49da-b327-257ba9d602a7"
-                },
+                "data": "foo:bar",
                 "attribute_projection": null,
             }
         })

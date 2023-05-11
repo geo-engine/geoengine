@@ -70,9 +70,8 @@ static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 /// ```rust
 /// use serde_json::{Result, Value};
 /// use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-/// use geoengine_datatypes::dataset::{DatasetId, DataId};
+/// use geoengine_datatypes::dataset::{NamedData};
 /// use geoengine_datatypes::util::Identifier;
-/// use std::str::FromStr;
 ///
 /// let json_string = r#"
 ///     {
@@ -86,7 +85,7 @@ static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 ///
 /// assert_eq!(operator, GdalSource {
 ///     params: GdalSourceParameters {
-///         data: DatasetId::from_str("a626c880-1c41-489b-9e19-9596d129859c").unwrap().into()
+///         data: NamedData::with_namespaced_name("ns", "dataset"),
 ///     },
 /// });
 /// ```

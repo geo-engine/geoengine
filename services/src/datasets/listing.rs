@@ -21,8 +21,9 @@ use validator::{Validate, ValidationError};
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetListing {
-    pub id: DatasetName,
-    pub name: String,
+    pub id: DatasetId,
+    pub name: DatasetName,
+    pub display_name: String,
     pub description: String,
     pub tags: Vec<String>,
     pub source_operator: String,
@@ -79,10 +80,7 @@ pub trait DatasetProvider: Send
 
     async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
 
-    async fn resolve_dataset(
-        &self,
-        dataset: &geoengine_datatypes::dataset::InternalDataset,
-    ) -> Result<geoengine_datatypes::dataset::DatasetId>;
+    async fn resolve_dataset(&self, name: &DatasetName) -> Result<DatasetId>;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]

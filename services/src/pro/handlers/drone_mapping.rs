@@ -293,9 +293,9 @@ async fn dataset_definition_from_geotiff(
 
         Ok(DatasetDefinition {
             properties: AddDataset {
-                id: None,
-                name: "ODM Result".to_owned(), // TODO: more info
-                description: String::new(),    // TODO: more info
+                name: None,
+                display_name: "ODM Result".to_owned(), // TODO: more info
+                description: String::new(),            // TODO: more info
                 source_operator: "GdalSource".to_owned(),
                 symbology: None,
                 provenance: None,
@@ -573,7 +573,9 @@ mod tests {
         // test if the data can be loaded
         let op = GdalSource {
             params: GdalSourceParameters {
-                data: dataset_id.into(),
+                data: geoengine_datatypes::dataset::NamedData::with_global_name(
+                    dataset_id.to_string(),
+                ),
             },
         }
         .boxed();

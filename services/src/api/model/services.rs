@@ -5,7 +5,6 @@ use crate::api::model::operators::{
 use crate::datasets::listing::Provenance;
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::projects::Symbology;
-
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -72,8 +71,8 @@ pub struct MetaDataSuggestion {
 #[serde(rename_all = "camelCase")]
 // TODO: validate user input
 pub struct AddDataset {
-    pub id: Option<DatasetName>,
-    pub name: String,
+    pub name: Option<DatasetName>,
+    pub display_name: String,
     pub description: String,
     pub source_operator: String,
     pub symbology: Option<Symbology>,

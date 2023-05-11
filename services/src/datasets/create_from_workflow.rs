@@ -245,8 +245,8 @@ async fn create_dataset<C: SessionContext>(
 
     let dataset_definition = DatasetDefinition {
         properties: AddDataset {
-            id: None,
-            name: info.name,
+            name: None,
+            display_name: info.name,
             description: info.description.unwrap_or_default(),
             source_operator: "GdalSource".to_owned(),
             symbology: None,  // TODO add symbology?

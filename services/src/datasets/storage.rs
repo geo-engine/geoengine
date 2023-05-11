@@ -34,9 +34,9 @@ pub const DATASET_DB_ROOT_COLLECTION_ID: Uuid =
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct Dataset {
-    pub internal_id: DatasetId,
-    pub id: DatasetName,
-    pub name: String,
+    pub id: DatasetId,
+    pub name: DatasetName,
+    pub display_name: String,
     pub description: String,
     pub result_descriptor: TypedResultDescriptor,
     pub source_operator: String,
@@ -47,8 +47,9 @@ pub struct Dataset {
 impl Dataset {
     pub fn listing(&self) -> DatasetListing {
         DatasetListing {
-            id: self.id.clone(),
+            id: self.id,
             name: self.name.clone(),
+            display_name: self.display_name.clone(),
             description: self.description.clone(),
             tags: vec![], // TODO
             source_operator: self.source_operator.clone(),

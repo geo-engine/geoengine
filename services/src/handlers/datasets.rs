@@ -495,8 +495,8 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
 
     let properties = AddDataset {
-        id: None,
-        name: create.dataset_name,
+        name: None,
+        display_name: create.dataset_name,
         description: create.dataset_description,
         source_operator: meta_data.source_operator_type().to_owned(),
         symbology: None,
@@ -1043,7 +1043,7 @@ pub async fn delete_dataset_handler<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::{DatasetId, DatasetName};
+    use crate::api::model::datatypes::{DatasetId, DatasetName, NamedData};
     use crate::api::model::services::DatasetDefinition;
     use crate::contexts::{
         ApplicationContext, InMemoryContext, Session, SessionId, SimpleApplicationContext,
@@ -1095,8 +1095,8 @@ mod tests {
         };
 
         let ds = AddDataset {
-            id: Some(DatasetName::new("_", "My Dataset").unwrap()),
-            name: "OgrDataset".to_string(),
+            name: Some(DatasetName::new(None, "My Dataset")),
+            display_name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
@@ -1125,8 +1125,8 @@ mod tests {
         let _id = db.add_dataset(ds, Box::new(meta)).await?;
 
         let ds = AddDataset {
-            id: Some(DatasetName::new("_", "My_Dataset2").unwrap()),
-            name: "OgrDataset2".to_string(),
+            name: Some(DatasetName::new(None, "My_Dataset2")),
+            display_name: "OgrDataset2".to_string(),
             description: "My Ogr dataset2".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: Some(Symbology::Point(PointSymbology::default())),
@@ -1351,11 +1351,11 @@ mod tests {
 
     async fn make_ogr_source<C: ExecutionContext>(
         exe_ctx: &C,
-        dataset_id: DatasetId,
+        named_data: NamedData,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         OgrSource {
             params: OgrSourceParameters {
-                data: dataset_id.into(),
+                data: named_data.into(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -1393,7 +1393,15 @@ mod tests {
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
         let exe_ctx = ctx.execution_context()?;
 
-        let source = make_ogr_source(&exe_ctx, dataset_id).await?;
+        let source = make_ogr_source(
+            &exe_ctx,
+            NamedData {
+                namespace: None,
+                provider: None,
+                name: dataset_id.to_string(),
+            },
+        )
+        .await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
         let query_ctx = ctx.query_context()?;
@@ -1452,8 +1460,8 @@ mod tests {
             data_path: DataPath::Volume(volume.clone()),
             definition: DatasetDefinition {
                 properties: AddDataset {
-                    id: None,
-                    name: "ndvi".to_string(),
+                    name: None,
+                    display_name: "ndvi".to_string(),
                     description: "ndvi".to_string(),
                     source_operator: "GdalSource".to_string(),
                     symbology: None,
@@ -1970,8 +1978,8 @@ mod tests {
         };
 
         let ds = AddDataset {
-            id: None,
-            name: "OgrDataset".to_string(),
+            name: None,
+            display_name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
@@ -2221,8 +2229,8 @@ mod tests {
             data_path: DataPath::Volume(volume.clone()),
             definition: DatasetDefinition {
                 properties: AddDataset {
-                    id: None,
-                    name: "ndvi".to_string(),
+                    name: None,
+                    display_name: "ndvi".to_string(),
                     description: "ndvi".to_string(),
                     source_operator: "GdalSource".to_string(),
                     symbology: None,

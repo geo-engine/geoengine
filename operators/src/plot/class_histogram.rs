@@ -720,6 +720,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn text_attribute() {
         let dataset_id = DatasetId::new();
+        let dataset_name = NamedData::with_global_name("ne_10m_ports");
 
         let workflow = serde_json::json!({
             "type": "Histogram",
@@ -730,10 +731,7 @@ mod tests {
                 "source": {
                     "type": "OgrSource",
                     "params": {
-                        "data": {
-                            "type": "internal",
-                            "datasetId": dataset_id
-                        },
+                        "data": dataset_name.clone(),
                         "attributeProjection": null
                     },
                 }
@@ -744,7 +742,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
             DataId::Internal { dataset_id },
-            NamedData::with_global_name("ne_10m_ports"),
+            dataset_name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),

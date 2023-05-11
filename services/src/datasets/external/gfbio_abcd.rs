@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::error::{self, Error};
@@ -291,11 +291,10 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
                 operator: TypedOperator::Vector(
                     OgrSource {
                         params: OgrSourceParameters {
-                            data: DataId::External(ExternalDataId {
-                                provider_id: GFBIO_PROVIDER_ID,
-                                layer_id: id.clone(),
-                            })
-                            .into(),
+                            data: geoengine_datatypes::dataset::NamedData::with_global_provider(
+                                GFBIO_PROVIDER_ID.to_string(),
+                                id.to_string(),
+                            ),
                             attribute_projection: None,
                             attribute_filters: None,
                         },

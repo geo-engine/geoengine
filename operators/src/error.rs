@@ -138,6 +138,11 @@ pub enum Error {
         name: NamedData,
     },
 
+    CannotResolveDatasetName {
+        name: NamedData,
+        source: Box<dyn ErrorSource>,
+    },
+
     InvalidDatasetSpec {
         name: String,
         source: serde_json::Error,

@@ -106,6 +106,35 @@ impl NamedData {
             name: name.into(),
         }
     }
+
+    pub fn with_global_provider<S1: Into<String> + PartialEq<&'static str>, S2: Into<String>>(
+        provider: S1,
+        name: S2,
+    ) -> Self {
+        Self {
+            namespace: None,
+            provider: Self::canonicalize(provider, SYSTEM_PROVIDER),
+            name: name.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for NamedData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let d = NAME_DELIMITER;
+        match (&self.namespace, &self.provider, &self.name) {
+            (None, None, name) => write!(f, "{name}"),
+            (None, Some(provider), name) => {
+                write!(f, "{SYSTEM_NAMESPACE}{d}{provider}{d}{name}")
+            }
+            (Some(namespace), None, name) => {
+                write!(f, "{namespace}{d}{name}")
+            }
+            (Some(namespace), Some(provider), name) => {
+                write!(f, "{namespace}{d}{provider}{d}{name}")
+            }
+        }
+    }
 }
 
 // TODO: move this to services at some point

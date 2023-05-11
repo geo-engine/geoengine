@@ -1,5 +1,8 @@
 use crate::{
-    api::model::{datatypes::DatasetId, services::AddDataset},
+    api::model::{
+        datatypes::{DatasetName, NamedData},
+        services::AddDataset,
+    },
     contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
@@ -337,14 +340,19 @@ where
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn add_ndvi_to_datasets<C: ProApplicationContext>(app_ctx: &C) -> DatasetId
+pub async fn add_ndvi_to_datasets<C: ProApplicationContext>(app_ctx: &C) -> NamedData
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
+    let dataset_name = DatasetName {
+        namespace: None,
+        name: "NDVI".to_string(),
+    };
+
     let ndvi = DatasetDefinition {
         properties: AddDataset {
-            id: None,
-            name: "NDVI".to_string(),
+            name: Some(dataset_name.clone()),
+            display_name: "NDVI".to_string(),
             description: "NDVI data from MODIS".to_string(),
             source_operator: "GdalSource".to_string(),
             symbology: None,
@@ -378,7 +386,11 @@ where
         .await
         .unwrap();
 
-    dataset_id
+    NamedData {
+        namespace: dataset_name.namespace,
+        provider: None,
+        name: dataset_name.name,
+    }
 }
 
 #[allow(clippy::missing_panics_doc)]

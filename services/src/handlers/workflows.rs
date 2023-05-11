@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use std::sync::Arc;
 
-use crate::api::model::datatypes::{DataId, InternalDataId, TimeInterval};
+use crate::api::model::datatypes::{DataId, TimeInterval};
 use crate::contexts::ApplicationContext;
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
 use crate::error::Result;
@@ -23,7 +23,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
-    OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
+    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -282,14 +282,15 @@ async fn workflow_provenance<C: SessionContext>(
     workflow: &Workflow,
     ctx: &C,
 ) -> Result<Vec<ProvenanceEntry>> {
-    let datasets: Vec<DataId> = workflow
-        .operator
-        .data_ids()
-        .into_iter()
-        .map(Into::into)
-        .collect();
-
     let db = ctx.db();
+    let execution_ctx = ctx.execution_context()?;
+
+    let data_names = workflow.operator.data_names();
+    let mut datasets = Vec::<DataId>::with_capacity(data_names.len());
+    for data_name in data_names {
+        let data_id = execution_ctx.resolve_named_data(&data_name).await?;
+        datasets.push(data_id.into());
+    }
 
     let provenance: Vec<_> = datasets
         .iter()
@@ -419,10 +420,7 @@ async fn resolve_provenance<C: SessionContext>(
     id: &DataId,
 ) -> Result<ProvenanceOutput> {
     match id {
-        DataId::Internal(InternalDataId { dataset }) => {
-            db.load_provenance(&db.resolve_dataset(&dataset.clone().into()).await?.into())
-                .await
-        }
+        DataId::Internal { dataset_id } => db.load_provenance(dataset_id).await,
         DataId::External(e) => {
             db.load_layer_provider(e.provider_id)
                 .await?
@@ -680,6 +678,7 @@ mod tests {
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, FeatureData, Measurement, MultiPoint, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, TimeInterval,
@@ -1125,7 +1124,7 @@ mod tests {
 
         let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
-        let dataset = add_ndvi_to_datasets(&app_ctx).await;
+        let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
@@ -1161,7 +1160,7 @@ mod tests {
                     "data": [
                         {
                             "type": "internal",
-                            "datasetId": dataset.to_string()
+                            "datasetId": dataset_id.to_string()
                         }
                     ]
                 }
@@ -1237,13 +1236,13 @@ mod tests {
         let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
-        let dataset = add_ndvi_to_datasets(&app_ctx).await;
+        let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        data: dataset.into(),
+                        data: dataset.clone().into(),
                     },
                 }
                 .boxed(),
@@ -1356,7 +1355,7 @@ mod tests {
         let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
-        let dataset = add_ndvi_to_datasets(&app_ctx).await;
+        let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
@@ -1434,7 +1433,7 @@ mod tests {
         // query the newly created dataset
         let op = GdalSource {
             params: GdalSourceParameters {
-                data: dataset_id.into(),
+                data: NamedData::with_global_name(dataset_id.to_string()),
             },
         }
         .boxed();
