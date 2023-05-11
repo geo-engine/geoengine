@@ -63,6 +63,7 @@ ndarray = "0.15"
 [[bench]]
 name = "cache"
 harness = false
+required-features = ["pro"]
 
 [[bench]]
 name = "expression"
