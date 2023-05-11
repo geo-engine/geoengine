@@ -2,7 +2,8 @@ use crate::error::Error;
 use crate::util::Result;
 
 use num_traits::FromPrimitive;
-use serde::{Deserialize, Serialize};
+use serde::de::Visitor;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
@@ -107,14 +108,73 @@ impl RasterProperties {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct RasterPropertiesKey {
     pub domain: Option<String>,
     pub key: String,
 }
 
+/// Custom serializer that serializes the key as a string [domain:]key.
+/// This is needed because the `RasterPropertiesKey` is used as a key in a `HashMap`.
+/// It is currently only used for the `CanonicOperatorName` derivation.
+impl Serialize for RasterPropertiesKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if let Some(ref domain) = self.domain {
+            serializer.serialize_str(format!("{}:{}", domain, self.key).as_str())
+        } else {
+            serializer.serialize_str(&self.key)
+        }
+    }
+}
+
+/// Custom deserializer that deserializes the key as a string [domain:]key
+impl<'de> Deserialize<'de> for RasterPropertiesKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(RasterPropertiesKeyDeserializeVisitor)
+    }
+}
+
+struct RasterPropertiesKeyDeserializeVisitor;
+
+impl<'de> Visitor<'de> for RasterPropertiesKeyDeserializeVisitor {
+    type Value = RasterPropertiesKey;
+
+    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        formatter.write_str("a raster properties key as [domain:]key")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let s: String = v.parse().map_err(serde::de::Error::custom)?;
+
+        let split = s.split(':').collect::<Vec<_>>();
+
+        match *split.as_slice() {
+            [key] => Ok(RasterPropertiesKey {
+                domain: None,
+                key: key.to_string(),
+            }),
+            [domain, key] => Ok(RasterPropertiesKey {
+                domain: Some(domain.to_string()),
+                key: key.to_string(),
+            }),
+            _ => Err(serde::de::Error::custom(
+                "expected a raster properties key as [domain:]key",
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type")]
+#[serde(tag = "type", content = "value")]
 pub enum RasterPropertiesEntry {
     Number(f64),
     String(String),
