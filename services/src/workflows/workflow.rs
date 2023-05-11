@@ -3,10 +3,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::identifier;
-use geoengine_operators::{
-    engine::{SingleRasterOrVectorSource, TypedOperator},
-    util::input::RasterOrVectorOperator,
-};
+use geoengine_operators::engine::TypedOperator;
 
 identifier!(WorkflowId);
 

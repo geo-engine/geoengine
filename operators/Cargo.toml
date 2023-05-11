@@ -60,6 +60,9 @@ geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 rand = "0.8"
 ndarray = "0.15"
 
+[[bench]]
+name = "cache"
+harness = false
 
 [[bench]]
 name = "expression"
