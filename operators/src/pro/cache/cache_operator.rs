@@ -9,7 +9,7 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use futures::{ready, Stream, StreamExt, TryStreamExt};
+use futures::{ready, Stream};
 use geoengine_datatypes::primitives::{QueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::{pin_project, pinned_drop};
@@ -132,10 +132,12 @@ where
 
         if let Some(cache_result) = cache_result {
             // cache hit
+            log::debug!("cache hit for operator {:?}", self.cache_key);
             return Ok(Box::pin(cache_result));
         }
 
         // cache miss
+        log::debug!("cache miss for operator {:?}", self.cache_key);
         let source_stream = self.processor.query(query, ctx).await?;
 
         let query_id = tile_cache
@@ -151,15 +153,31 @@ where
             while let Some(event) = stream_event_receiver.recv().await {
                 match event {
                     SourceStreamEvent::Tile(tile) => {
-                        tile_cache
+                        let result = tile_cache
                             .insert_tile(cache_key.clone(), query_id, tile)
-                            .await; // TODO: handle error
+                            .await;
+                        log::debug!(
+                            "inserted tile into cache for cache key {:?} and query id {}. result: {:?}",
+                            cache_key,
+                            query_id,
+                            result
+                        );
                     }
                     SourceStreamEvent::Abort => {
                         tile_cache.abort_query(cache_key.clone(), query_id).await;
+                        log::debug!(
+                            "aborted cache insertion for cache key {:?} and query id {}",
+                            cache_key,
+                            query_id
+                        );
                     }
                     SourceStreamEvent::Finished => {
-                        tile_cache.finish_query(cache_key.clone(), query_id).await;
+                        let result = tile_cache.finish_query(cache_key.clone(), query_id).await;
+                        log::debug!(
+                            "finished cache insertion for cache key {:?} and query id {}, result: {:?}",
+                            cache_key,query_id,
+                            result
+                        );
                     }
                 }
             }
@@ -190,8 +208,6 @@ where
 {
     #[pin]
     source: S,
-    // cache: Arc<TileCache>,
-    // cache_key: CanonicOperatorName,
     stream_event_sender: UnboundedSender<SourceStreamEvent<T>>,
     finished: bool,
 }
@@ -210,13 +226,16 @@ where
 
         if let Some(tile) = &next {
             if let Ok(tile) = tile {
+                // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let _ = this
                     .stream_event_sender
                     .send(SourceStreamEvent::Tile(tile.clone()));
             } else {
+                // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let _ = this.stream_event_sender.send(SourceStreamEvent::Abort);
             }
         } else {
+            // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
             let _ = this.stream_event_sender.send(SourceStreamEvent::Finished);
             *this.finished = true;
         }
@@ -225,6 +244,7 @@ where
     }
 }
 
+/// On drop, trigger the removal of the cache entry if it hasn't been finished yet
 #[pinned_drop]
 impl<S, T> PinnedDrop for CacheOutputStream<S, T>
 where
@@ -232,6 +252,7 @@ where
 {
     fn drop(self: Pin<&mut Self>) {
         if !self.finished {
+            // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
             let _ = self.stream_event_sender.send(SourceStreamEvent::Abort);
         }
     }

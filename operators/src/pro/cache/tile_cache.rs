@@ -1,28 +1,19 @@
-use std::{
-    collections::HashMap,
-    hash::{Hash, Hasher},
-    pin::Pin,
-    sync::Arc,
-};
+use std::{collections::HashMap, pin::Pin, sync::Arc};
 
-use futures::{
-    stream::{self, BoxStream},
-    Stream, StreamExt,
-};
+use futures::Stream;
 use geoengine_datatypes::{
-    primitives::RasterQueryRectangle,
+    primitives::{RasterQueryRectangle, SpatialPartitioned},
     raster::{Pixel, RasterTile2D},
 };
 use pin_project::pin_project;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::engine::{CanonicOperatorName, InitializedRasterOperator};
+use crate::engine::CanonicOperatorName;
 use crate::util::Result;
-use geoengine_datatypes::raster::TypedRasterTile2D;
 
 /// The tile cache caches all tiles of a query and is able to answer queries that are fully contained in the cache.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct TileCache {
     // TODO: more fine granular locking?
     // for each operator graph, we have a cache, that can efficiently be accessed
@@ -30,7 +21,7 @@ pub struct TileCache {
 }
 
 /// Holds all the cached results for an operator graph (workflow)
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct OperatorTileCache {
     // for a given operator and query we need to look through all entries to find one that matches
     // TODO: use a multi-dimensional index to speed up the lookup
@@ -50,6 +41,7 @@ impl OperatorTileCache {
 }
 
 /// Holds all the tiles for a given query and is able to answer queries that are fully contained
+#[derive(Debug)]
 pub struct CachedQueryResult {
     query: RasterQueryRectangle,
     tiles: CachedTiles,
@@ -59,8 +51,10 @@ impl CachedQueryResult {
     /// Return true if the query can be answered in full by this cache entry
     /// For this, the bbox and time has to be fully contained, and the spatial resolution has to match
     pub fn matches(&self, query: &RasterQueryRectangle) -> bool {
-        // TODO: implement
-        todo!()
+        (self.query.spatial_bounds == query.spatial_bounds
+            || self.query.spatial_bounds.contains(&query.spatial_bounds))
+            && self.query.time_interval.contains(&query.time_interval)
+            && self.query.spatial_resolution == query.spatial_resolution
     }
 
     /// Produces a tile stream from the cache
@@ -69,6 +63,7 @@ impl CachedQueryResult {
     }
 }
 
+#[derive(Debug)]
 pub enum CachedTiles {
     U8(Arc<Vec<RasterTile2D<u8>>>),
     U16(Arc<Vec<RasterTile2D<u16>>>),
@@ -82,11 +77,13 @@ pub enum CachedTiles {
     F64(Arc<Vec<RasterTile2D<f64>>>),
 }
 
+#[derive(Debug)]
 struct ActiveQueryResult {
     query: RasterQueryRectangle,
     tiles: ActiveQueryTiles,
 }
 
+#[derive(Debug)]
 pub enum ActiveQueryTiles {
     U8(Vec<RasterTile2D<u8>>),
     U16(Vec<RasterTile2D<u16>>),
@@ -186,12 +183,13 @@ impl<T: Pixel> Stream for CacheTileStream<T> {
     ) -> std::task::Poll<Option<Self::Item>> {
         let CacheTileStreamProjection { data, query, idx } = self.as_mut().project();
 
-        // return the next tile that is contained in the query
+        // return the next tile that is contained in the query, skip all tiles that are not contained
         for i in *idx..data.len() {
             let tile = &data[i];
+            let tile_bbox = tile.tile_information().spatial_partition();
 
-            if true
-            /* TODO: check query contains tile */
+            if tile_bbox.intersects(&query.spatial_bounds)
+                && tile.time.intersects(&query.time_interval)
             {
                 *idx = i + 1;
                 return std::task::Poll::Ready(Some(Ok(tile.clone())));
@@ -215,7 +213,7 @@ pub enum TypedCacheTileStream {
     F64(CacheTileStream<f64>),
 }
 
-/// A helper trait that allows getting the concrete stream from a typed stream
+/// A helper trait that allows converting between enums variants and generic structs
 pub trait Cachable: Sized {
     fn stream(b: TypedCacheTileStream) -> Option<CacheTileStream<Self>>;
 
