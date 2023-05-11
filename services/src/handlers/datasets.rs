@@ -1122,7 +1122,7 @@ mod tests {
         };
 
         let db = ctx.db();
-        let _id = db.add_dataset(ds, Box::new(meta)).await?;
+        let id1 = db.add_dataset(ds, Box::new(meta)).await?;
 
         let ds = AddDataset {
             name: Some(DatasetName::new(None, "My_Dataset2")),
@@ -1151,7 +1151,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let _id2 = db.add_dataset(ds, Box::new(meta)).await?;
+        let id2 = db.add_dataset(ds, Box::new(meta)).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
@@ -1172,8 +1172,9 @@ mod tests {
         assert_eq!(
             read_body_json(res).await,
             json!([{
-                "id": "_:My_Dataset2",
-                "name": "OgrDataset2",
+                "id": id2,
+                "name": "My_Dataset2",
+                "displayName": "OgrDataset2",
                 "description": "My Ogr dataset2",
                 "tags": [],
                 "sourceOperator": "OgrSource",
@@ -1208,8 +1209,9 @@ mod tests {
                     "text": null
                 }
             }, {
-                "id": "370e99ec-9fd8-401d-828d-d67b431a8742",
-                "name": "OgrDataset",
+                "id": id1,
+                "name": "My Dataset",
+                "displayName": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
                 "sourceOperator": "OgrSource",
@@ -1269,8 +1271,8 @@ mod tests {
             },
             "definition": {
                 "properties": {
-                    "id": null,
-                    "name": "Uploaded Natural Earth 10m Ports",
+                    "name": "uploaded_ne_10m_ports",
+                    "displayName": "Uploaded Natural Earth 10m Ports",
                     "description": "Ports from Natural Earth",
                     "sourceOperator": "OgrSource"
                 },
@@ -1343,7 +1345,7 @@ mod tests {
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_json(s);
         let res = send_test_request(req, app_ctx).await;
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "{res:?}");
 
         let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
         dataset.id
@@ -1389,7 +1391,7 @@ mod tests {
         let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
 
-        let dataset_id =
+        let _dataset_id =
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
         let exe_ctx = ctx.execution_context()?;
 
@@ -1398,7 +1400,7 @@ mod tests {
             NamedData {
                 namespace: None,
                 provider: None,
-                name: dataset_id.to_string(),
+                name: "uploaded_ne_10m_ports".to_string(),
             },
         )
         .await?;
@@ -2020,8 +2022,9 @@ mod tests {
         assert_eq!(
             res_body,
             json!({
+                "name": id.to_string(),
                 "id": id,
-                "name": "OgrDataset",
+                "displayName": "OgrDataset",
                 "description": "My Ogr dataset",
                 "resultDescriptor": {
                     "type": "vector",

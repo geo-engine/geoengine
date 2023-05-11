@@ -1,7 +1,7 @@
 {
   "properties": {
-    "id": "_:points_with_time",
-    "name": "Points with Time",
+    "name": "points_with_time",
+    "displayName": "Points with Time",
     "description": "Some points in Europe in 2014",
     "sourceOperator": "OgrSource"
   },

@@ -1186,10 +1186,7 @@ mod tests {
               "source": {
                 "type": "GdalSource",
                 "params": {
-                  "data": {
-                    "type": "internal",
-                    "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
-                  }
+                  "data": "test"
                 }
               }
             }
@@ -1236,13 +1233,13 @@ mod tests {
         let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
-        let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
+        let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        data: dataset.clone().into(),
+                        data: dataset_name.clone().into(),
                     },
                 }
                 .boxed(),
@@ -1277,10 +1274,7 @@ mod tests {
                 "operator": {
                     "type": "GdalSource",
                     "params": {
-                        "data": {
-                            "type": "internal",
-                            "datasetId": dataset
-                        }
+                        "data": dataset_name
                     }
                 }
             })
@@ -1328,7 +1322,7 @@ mod tests {
                     "data": [
                         {
                             "type": "internal",
-                            "datasetId": dataset
+                            "datasetId": dataset_id
                         }
                     ]
                 }
