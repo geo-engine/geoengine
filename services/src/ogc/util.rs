@@ -287,18 +287,15 @@ pub enum OgcProtocol {
 impl OgcProtocol {
     fn url_path(self) -> &'static str {
         match self {
-            OgcProtocol::Wcs => "/wcs",
-            OgcProtocol::Wms => "/wms",
-            OgcProtocol::Wfs => "/wfs",
+            OgcProtocol::Wcs => "wcs/",
+            OgcProtocol::Wms => "wms/",
+            OgcProtocol::Wfs => "wfs/",
         }
     }
 }
 
 pub fn ogc_endpoint_url(base: &Url, protocol: OgcProtocol, workflow: WorkflowId) -> Result<Url> {
-    ensure!(
-        !base.path().ends_with('/'),
-        error::BaseUrlMustNotEndWithSlash
-    );
+    ensure!(base.path().ends_with('/'), error::BaseUrlMustEndWithSlash);
 
     base.join(protocol.url_path())?
         .join(&workflow.to_string())
@@ -523,7 +520,7 @@ mod tests {
     fn it_builds_correct_endpoint_urls() {
         assert_eq!(
             ogc_endpoint_url(
-                &Url::parse("http://example.com").unwrap(),
+                &Url::parse("http://example.com/").unwrap(),
                 OgcProtocol::Wms,
                 WorkflowId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
             )
@@ -533,7 +530,7 @@ mod tests {
 
         assert_eq!(
             ogc_endpoint_url(
-                &Url::parse("http://example.com/a").unwrap(),
+                &Url::parse("http://example.com/a/").unwrap(),
                 OgcProtocol::Wms,
                 WorkflowId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
             )
@@ -543,7 +540,7 @@ mod tests {
 
         assert_eq!(
             ogc_endpoint_url(
-                &Url::parse("http://example.com/a/sub/folder").unwrap(),
+                &Url::parse("http://example.com/a/sub/folder/").unwrap(),
                 OgcProtocol::Wms,
                 WorkflowId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
             )

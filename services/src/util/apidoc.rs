@@ -7,10 +7,11 @@ impl Modify for OpenApiServerInfo {
         let web_config: crate::util::config::Web =
             crate::util::config::get_config_element().expect("web config");
 
-        let api_url = web_config.api_url().expect("external address");
+        let mut api_url = web_config.api_url().expect("external address").to_string();
+        api_url.pop(); //remove trailing slash because codegen requires it
 
         openapi.servers = Some(vec![utoipa::openapi::ServerBuilder::new()
-            .url(api_url.to_string())
+            .url(api_url)
             .build()]);
     }
 }

@@ -332,7 +332,7 @@ pub enum Error {
 
     AbcdUnitIdColumnMissingInDatabase,
 
-    BaseUrlMustNotEndWithSlash,
+    BaseUrlMustEndWithSlash,
 
     #[snafu(context(false))]
     LayerDb {
