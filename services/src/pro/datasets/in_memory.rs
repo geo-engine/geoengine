@@ -681,7 +681,7 @@ mod tests {
             ds[0],
             DatasetListing {
                 id,
-                name: DatasetName::new(None, id.to_string()),
+                name: DatasetName::new(Some(session.user.id.to_string()), id.to_string()),
                 display_name: "OgrDataset".to_string(),
                 description: "My Ogr dataset".to_string(),
                 tags: vec![],

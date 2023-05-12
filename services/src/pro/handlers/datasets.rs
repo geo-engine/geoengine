@@ -193,7 +193,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart_files(&files);
         let res = send_pro_test_request(req, app_ctx).await;
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "{res:?}");
 
         let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
         let root = upload.id.root_path()?;
@@ -220,8 +220,8 @@ mod tests {
             },
             "definition": {
                 "properties": {
-                    "id": null,
-                    "name": "Uploaded Natural Earth 10m Ports",
+                    "name": null,
+                    "displayName": "Uploaded Natural Earth 10m Ports",
                     "description": "Ports from Natural Earth",
                     "sourceOperator": "OgrSource"
                 },
@@ -293,7 +293,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(s);
         let res = send_pro_test_request(req, app_ctx).await;
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "response: {res:?}");
 
         let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
         dataset.id
@@ -346,7 +346,7 @@ mod tests {
         let source = make_ogr_source(
             &exe_ctx,
             NamedData {
-                namespace: None,
+                namespace: Some(session.user.id.to_string()),
                 provider: None,
                 name: dataset_id.to_string(),
             },
@@ -474,7 +474,7 @@ mod tests {
 
         let res = send_pro_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "response: {res:?}");
 
         assert!(db.load_dataset(&dataset_id).await.is_err());
 

@@ -573,7 +573,8 @@ mod tests {
         // test if the data can be loaded
         let op = GdalSource {
             params: GdalSourceParameters {
-                data: geoengine_datatypes::dataset::NamedData::with_global_name(
+                data: geoengine_datatypes::dataset::NamedData::with_namespaced_name(
+                    session.user.id.to_string(),
                     dataset_id.to_string(),
                 ),
             },

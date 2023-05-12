@@ -347,14 +347,14 @@ where
                         -- TODO: add constraint not null
                         -- TODO: add length constraints
                         CREATE TYPE "DatasetName" AS (
-                            namepsace text,
+                            namespace text,
                             name text
                         );
 
                         CREATE TABLE datasets (
-                            internal_id UUID PRIMARY KEY,
-                            id "DatasetName" UNIQUE NOT NULL,
-                            name text NOT NULL,
+                            id UUID PRIMARY KEY,
+                            name "DatasetName" UNIQUE NOT NULL,
+                            display_name text NOT NULL,
                             description text NOT NULL, 
                             tags text[], 
                             source_operator text NOT NULL,
@@ -477,7 +477,7 @@ where
                             -- resource_type "ResourceType" NOT NULL,
                             role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
                             permission "Permission" NOT NULL,
-                            dataset_id UUID REFERENCES datasets(internal_id) ON DELETE CASCADE,
+                            dataset_id UUID REFERENCES datasets(id) ON DELETE CASCADE,
                             layer_id UUID REFERENCES layers(id) ON DELETE CASCADE,
                             layer_collection_id UUID REFERENCES layer_collections(id) ON DELETE CASCADE,
                             project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
@@ -1326,8 +1326,6 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_datasets() {
         with_temp_context(|app_ctx, _| async move {
-            let dataset_name = DatasetName::new(None, "my_dataset");
-
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
                 layer_name: "test.csv".to_owned(),
@@ -1383,6 +1381,8 @@ let ctx = app_ctx.session_context(session);
             });
 
             let session = app_ctx.create_anonymous_session().await.unwrap();
+
+            let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
 
             let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
@@ -2885,8 +2885,6 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     async fn it_deletes_dataset() {
         with_temp_context(|app_ctx, _| async move {
-            let dataset_name = DatasetName::new(None, "my_dataset");
-
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
                 layer_name: "test.csv".to_owned(),
@@ -2942,6 +2940,8 @@ let ctx = app_ctx.session_context(session);
             });
 
             let session = app_ctx.create_anonymous_session().await.unwrap();
+
+            let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
 
             let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
@@ -3037,7 +3037,7 @@ let ctx = app_ctx.session_context(session);
 
             let db = app_ctx.session_context(session).db();
             let wrap = db.wrap_meta_data(meta_data);
-            let internal_dataset_id = db
+            let dataset_id = db
                 .add_dataset(
                     AddDataset {
                         name: Some(dataset_name),
@@ -3056,11 +3056,11 @@ let ctx = app_ctx.session_context(session);
                 .await
                 .unwrap();
 
-            assert!(db.load_dataset(&internal_dataset_id).await.is_ok());
+            assert!(db.load_dataset(&dataset_id).await.is_ok());
 
-            db.delete_dataset(internal_dataset_id).await.unwrap();
+            db.delete_dataset(dataset_id).await.unwrap();
 
-            assert!(db.load_dataset(&internal_dataset_id).await.is_err());
+            assert!(db.load_dataset(&dataset_id).await.is_err());
         })
         .await;
     }

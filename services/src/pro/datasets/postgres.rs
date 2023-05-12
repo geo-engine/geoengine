@@ -85,7 +85,7 @@ where
                 d.symbology
             FROM 
                 user_permitted_datasets p JOIN datasets d 
-                    ON (p.dataset_id = d.internal_id)
+                    ON (p.dataset_id = d.id)
             WHERE 
                 p.user_id = $1",
             )
@@ -127,9 +127,9 @@ where
                 d.provenance
             FROM 
                 user_permitted_datasets p JOIN datasets d 
-                    ON (p.dataset_id = d.internal_id)
+                    ON (p.dataset_id = d.id)
             WHERE 
-                p.user_id = $1 AND d.internal_id = $2
+                p.user_id = $1 AND d.id = $2
             LIMIT 
                 1",
             )
@@ -162,9 +162,9 @@ where
                 d.provenance 
             FROM 
                 user_permitted_datasets p JOIN datasets d
-                    ON(p.dataset_id = d.internal_id)
+                    ON(p.dataset_id = d.id)
             WHERE 
-                p.user_id = $1 AND d.internal_id = $2",
+                p.user_id = $1 AND d.id = $2",
             )
             .await?;
 
@@ -262,9 +262,9 @@ where
             d.meta_data
         FROM
             user_permitted_datasets p JOIN datasets d
-                ON (p.dataset_id = d.internal_id)
+                ON (p.dataset_id = d.id)
         WHERE
-            d.internal_id = $1 AND p.user_id = $2",
+            d.id = $1 AND p.user_id = $2",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
@@ -329,9 +329,9 @@ where
                 d.meta_data
             FROM
                 user_permitted_datasets p JOIN datasets d
-                    ON (p.dataset_id = d.internal_id)
+                    ON (p.dataset_id = d.id)
             WHERE
-                d.internal_id = $1 AND p.user_id = $2",
+                d.id = $1 AND p.user_id = $2",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
@@ -475,7 +475,7 @@ where
                     symbology,
                     provenance
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             )
             .await?;
 
@@ -509,11 +509,7 @@ where
 
         tx.execute(
             &stmt,
-            &[
-                &RoleId::from(self.session.user.id),
-                &name,
-                &Permission::Owner,
-            ],
+            &[&RoleId::from(self.session.user.id), &id, &Permission::Owner],
         )
         .await?;
 
@@ -539,9 +535,9 @@ where
             TRUE
         FROM 
             user_permitted_datasets p JOIN datasets d 
-                ON (p.dataset_id = d.internal_id)
+                ON (p.dataset_id = d.id)
         WHERE 
-            d.internal_id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
+            d.id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
             )
             .await?;
 
@@ -654,12 +650,12 @@ where
             .prepare(
                 "
                 SELECT 
-                    concat(d.internal_id, ''), 
+                    concat(d.id, ''), 
                     d.name, 
                     d.description
                 FROM 
                     user_permitted_datasets p JOIN datasets d 
-                        ON (p.dataset_id = d.internal_id)
+                        ON (p.dataset_id = d.id)
                 WHERE 
                     p.user_id = $1
                 ORDER BY d.name ASC

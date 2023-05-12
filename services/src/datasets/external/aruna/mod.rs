@@ -1549,11 +1549,7 @@ mod tests {
                 "operator": {
                     "type": "OgrSource",
                     "params": {
-                        "data": {
-                            "type": "external",
-                            "providerId": "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0",
-                            "layerId": "COLLECTION_ID"
-                        },
+                        "data": "_:86a7f7ce-1bab-4ce9-a32b-172c0f958ee0:COLLECTION_ID",
                         "attributeProjection": null,
                         "attributeFilters": null
                     }
@@ -1587,11 +1583,7 @@ mod tests {
                 "operator": {
                     "type": "GdalSource",
                     "params": {
-                        "data": {
-                            "type": "external",
-                            "providerId": "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0",
-                            "layerId": "COLLECTION_ID"
-                        }
+                        "data": "_:86a7f7ce-1bab-4ce9-a32b-172c0f958ee0:COLLECTION_ID"
                     }
                 }
             }),
