@@ -1,7 +1,7 @@
 {
   "properties": {
-    "name": "Germany",
-    "display_name": "Germany",
+    "name": "germany_outline",
+    "displayName": "Germany",
     "description": "Boundaries of Germany",
     "sourceOperator": "OgrSource"
   },

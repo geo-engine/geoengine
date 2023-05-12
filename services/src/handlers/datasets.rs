@@ -207,7 +207,8 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
             },
             "definition": {
                 "properties": {
-                    "name": "Germany Border",
+                    "name": "germany_border",
+                    "displayName": "Germany Border",
                     "description": "The Outline of Germany",
                     "sourceOperator": "OgrSource"
                 },
@@ -246,7 +247,8 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
             },
             "definition": {
                 "properties": {
-                    "name": "Plain Data",
+                    "name": "plain_data",
+                    "displayName": "Plain Data",
                     "description": "Demo Dataset",
                     "sourceOperator": "OgrSource"
                 },

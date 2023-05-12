@@ -101,10 +101,7 @@ where
                     "source": {
                         "type": "OgrSource",
                         "params": {
-                            "data": {
-                                "type": "internal",
-                                "datasetId": "c36f5ce7-d0df-4982-babb-cc9e67d2a196"
-                            },
+                            "data": "ne_10m_ports",
                             "attributeProjection": null,
                             "attributeFilters": null
                         }
