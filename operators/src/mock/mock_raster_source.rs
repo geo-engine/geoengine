@@ -358,7 +358,7 @@ mod tests {
                         "scale":null,
                         "offset":null,
                         "description":null,
-                        "properties_map":{}
+                        "propertiesMap": []
                     }
                 }],
                 "resultDescriptor": {
