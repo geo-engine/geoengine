@@ -1,3 +1,8 @@
+use std::path::Path;
+
+use gdal::vector::LayerAccess;
+use geoengine_operators::util::gdal::gdal_open_dataset;
+use serde::{Deserialize, Serialize};
 use tokio::{fs, io::AsyncWriteExt};
 
 use actix_multipart::Multipart;
@@ -7,19 +12,27 @@ use geoengine_datatypes::util::Identifier;
 
 use crate::contexts::ApplicationContext;
 use crate::datasets::upload::{FileId, FileUpload, Upload, UploadDb, UploadId, UploadRootPath};
-use crate::error;
 use crate::error::Result;
+use crate::error::{self, Error};
 use crate::handlers::SessionContext;
-use crate::util::IdResponse;
+use crate::util::{path_with_base_path, IdResponse};
 use snafu::ResultExt;
-use utoipa::ToSchema;
+use utoipa::{ToResponse, ToSchema};
 
 pub(crate) fn init_upload_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    cfg.service(web::resource("/upload").route(web::post().to(upload_handler::<C>)));
+    cfg.service(web::resource("/upload").route(web::post().to(upload_handler::<C>)))
+        .service(
+            web::resource("/uploads/{upload_id}/files")
+                .route(web::get().to(list_upload_files_handler::<C>)),
+        )
+        .service(
+            web::resource("/uploads/{upload_id}/files/{file_name}/layers")
+                .route(web::get().to(list_upload_file_layers_handler::<C>)),
+        );
 }
 
 struct FileUploadRequest;
@@ -109,6 +122,81 @@ async fn upload_handler<C: ApplicationContext>(
     Ok(web::Json(IdResponse::from(upload_id)))
 }
 
+#[derive(Deserialize, Serialize, ToSchema, ToResponse)]
+struct UploadFilesResponse {
+    files: Vec<String>,
+}
+
+/// List the files of on upload.
+#[utoipa::path(
+    tag = "Uploads",
+    get,
+    path = "/uploads/{upload_id}/files",
+    responses(
+        (status = 200, response = UploadFilesResponse)
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn list_upload_files_handler<C: ApplicationContext>(
+    upload_id: web::Path<UploadId>,
+) -> Result<impl Responder> {
+    let root = upload_id.root_path()?;
+
+    let mut entries = fs::read_dir(root).await?;
+
+    let mut files = Vec::new();
+
+    while let Some(entry) = entries.next_entry().await? {
+        if entry.path().is_file() {
+            files.push(entry.file_name().to_string_lossy().to_string());
+        }
+    }
+
+    Ok(web::Json(UploadFilesResponse { files }))
+}
+
+#[derive(Deserialize, Serialize, ToSchema, ToResponse)]
+struct UploadFileLayersResponse {
+    layers: Vec<String>,
+}
+
+/// List the layers of on uploaded file.
+#[utoipa::path(
+    tag = "Uploads",
+    get,
+    path = "/uploads/{upload_id}/files/{file_name}/layers",
+    responses(
+        (status = 200, response = UploadFilesResponse)
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn list_upload_file_layers_handler<C: ApplicationContext>(
+    path: web::Path<(UploadId, String)>,
+) -> Result<impl Responder> {
+    let (upload_id, file_name) = path.into_inner();
+    let file_path = path_with_base_path(&upload_id.root_path()?, Path::new(&file_name))?;
+
+    let layers = crate::util::spawn_blocking(move || {
+        let dataset = gdal_open_dataset(&file_path)?;
+
+        // TODO: hide system/internal layer like "layer_styles"
+        Result::<_, Error>::Ok(
+            dataset
+                .layers()
+                .into_iter()
+                .map(|l| l.name())
+                .collect::<Vec<_>>(),
+        )
+    })
+    .await??;
+
+    Ok(web::Json(UploadFileLayersResponse { layers }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,7 +222,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart(body);
 
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -143,5 +231,67 @@ mod tests {
 
         let root = upload.id.root_path().unwrap();
         assert!(root.join("foo.txt").exists() && root.join("bar.txt").exists());
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/uploads/{}/files", upload.id))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+
+        let files: UploadFilesResponse = test::read_body_json(res).await;
+
+        assert_eq!(
+            files.files,
+            vec!["bar.txt".to_string(), "foo.txt".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_lists_layers() {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let files =
+            vec![geoengine_datatypes::test_data!("vector/data/two_layers.gpkg").to_path_buf()];
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_multipart_files(&files);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let upload: IdResponse<UploadId> = test::read_body_json(res).await;
+        test_data.uploads.push(upload.id);
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/uploads/{}/files/two_layers.gpkg/layers",
+                upload.id
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+
+        let layers: UploadFileLayersResponse = test::read_body_json(res).await;
+
+        assert_eq!(
+            layers.layers,
+            vec![
+                "points_with_time".to_string(),
+                "points_with_time copy".to_string(),
+                "layer_styles".to_string() // TOOO: remove once internal/system layers are hidden
+            ]
+        );
     }
 }

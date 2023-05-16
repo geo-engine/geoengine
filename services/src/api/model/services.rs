@@ -64,6 +64,7 @@ impl From<MetaDataDefinition> for crate::datasets::storage::MetaDataDefinition {
 #[serde(rename_all = "camelCase")]
 pub struct MetaDataSuggestion {
     pub main_file: String,
+    pub layer_name: String,
     pub meta_data: MetaDataDefinition,
 }
 
