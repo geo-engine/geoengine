@@ -322,6 +322,9 @@ mod tests {
         let tiles = stream.collect::<Vec<_>>().await;
         let tiles = tiles.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
+        // wait for the cache to be filled, which happens asynchronously
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+
         let stream_from_cache = processor
             .query(
                 QueryRectangle {
