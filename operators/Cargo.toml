@@ -59,6 +59,10 @@ async-stream = "0.3"
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 rand = "0.8"
 ndarray = "0.15"
+ciborium = "0.2.1"
+rmp = "0.8.11"
+rmp-serde = "1.1.1"
+bincode = "1.3.3"
 
 [[bench]]
 name = "cache"
@@ -75,6 +79,10 @@ harness = false
 
 [[bench]]
 name = "thread_pool"
+harness = false
+
+[[bench]]
+name = "operator_names"
 harness = false
 
 [[bench]]
