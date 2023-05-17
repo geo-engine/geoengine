@@ -2152,6 +2152,7 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             json!({
               "mainFile": "test.json",
+              "layerName": "test",
               "metaData": {
                 "type": "OgrMetaData",
                 "loadingInfo": {

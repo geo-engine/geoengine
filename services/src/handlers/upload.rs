@@ -123,7 +123,7 @@ async fn upload_handler<C: ApplicationContext>(
 }
 
 #[derive(Deserialize, Serialize, ToSchema, ToResponse)]
-struct UploadFilesResponse {
+pub struct UploadFilesResponse {
     files: Vec<String>,
 }
 
@@ -133,7 +133,11 @@ struct UploadFilesResponse {
     get,
     path = "/uploads/{upload_id}/files",
     responses(
-        (status = 200, response = UploadFilesResponse)
+        (status = 200, body = UploadFilesResponse,
+            example = json!({"files": ["file1", "file2"]}))
+    ),
+    params(
+        ("upload_id" = UploadId, description = "Upload id"),
     ),
     security(
         ("session_token" = [])
@@ -158,7 +162,7 @@ async fn list_upload_files_handler<C: ApplicationContext>(
 }
 
 #[derive(Deserialize, Serialize, ToSchema, ToResponse)]
-struct UploadFileLayersResponse {
+pub struct UploadFileLayersResponse {
     layers: Vec<String>,
 }
 
@@ -168,7 +172,12 @@ struct UploadFileLayersResponse {
     get,
     path = "/uploads/{upload_id}/files/{file_name}/layers",
     responses(
-        (status = 200, response = UploadFilesResponse)
+        (status = 200, body = UploadFilesResponse,
+             example = json!({"layers": ["layer1", "layer2"]}))
+    ),
+    params(
+        ("upload_id" = UploadId, description = "Upload id"),
+        ("file_name" = String, description = "File name")
     ),
     security(
         ("session_token" = [])
@@ -289,7 +298,7 @@ mod tests {
             layers.layers,
             vec![
                 "points_with_time".to_string(),
-                "points_with_time copy".to_string(),
+                "points_with_time_and_more".to_string(),
                 "layer_styles".to_string() // TOOO: remove once internal/system layers are hidden
             ]
         );
