@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, MetaData, OperatorData, OperatorName,
-    QueryContext, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedVectorOperator, MetaData, OperatorData,
+    OperatorName, QueryContext, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -126,6 +126,7 @@ impl VectorOperator for MockDatasetDataSource {
         let loading_info = context.meta_data(&self.params.data).await?;
 
         Ok(InitializedMockDatasetDataSource {
+            name: CanonicOperatorName::from(&self),
             result_descriptor: loading_info.result_descriptor().await?,
             loading_info,
         }
@@ -142,6 +143,7 @@ impl OperatorData for MockDatasetDataSource {
 }
 
 struct InitializedMockDatasetDataSource<R: ResultDescriptor, Q> {
+    name: CanonicOperatorName,
     result_descriptor: R,
     loading_info: Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, R, Q>>,
 }
@@ -160,6 +162,10 @@ impl InitializedVectorOperator
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

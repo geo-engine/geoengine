@@ -3,6 +3,7 @@ use crate::util::Result;
 
 use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
@@ -10,11 +11,15 @@ use std::fmt::{Display, Formatter};
 
 /// This struct stores properties of a raster tile.
 /// This includes the scale and offset of the raster as well as a a description and a map of additional properties.
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct RasterProperties {
     scale: Option<f64>,
     offset: Option<f64>,
     description: Option<String>,
+    // serialize as a list of tuples because `RasterPropertiesKey` cannot be used as a key in a JSON dict
+    #[serde_as(as = "Vec<(_, _)>")]
     properties_map: HashMap<RasterPropertiesKey, RasterPropertiesEntry>,
 }
 
@@ -114,7 +119,7 @@ pub struct RasterPropertiesKey {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type")]
+#[serde(tag = "type", content = "value")]
 pub enum RasterPropertiesEntry {
     Number(f64),
     String(String),

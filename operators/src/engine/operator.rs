@@ -146,6 +146,9 @@ pub trait InitializedRasterOperator: Send + Sync {
     {
         Box::new(self)
     }
+
+    /// Get a canonic representation of the operator and its sources
+    fn canonic_name(&self) -> CanonicOperatorName;
 }
 
 pub trait InitializedVectorOperator: Send + Sync {
@@ -161,6 +164,31 @@ pub trait InitializedVectorOperator: Send + Sync {
         Self: Sized + 'static,
     {
         Box::new(self)
+    }
+
+    /// Get a canonic representation of the operator and its sources.
+    /// This only includes *logical* operators, not wrappers
+    fn canonic_name(&self) -> CanonicOperatorName;
+}
+
+/// A canonic name for an operator and its sources
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CanonicOperatorName(serde_json::Value);
+
+#[allow(clippy::derive_hash_xor_eq)] // since the hash is basically also derived (from String), this should be fine
+impl std::hash::Hash for CanonicOperatorName {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // TODO: serializing to string is potentially too expensive to perform each time.
+        self.0.to_string().hash(state);
+    }
+}
+
+impl<T> From<&T> for CanonicOperatorName
+where
+    T: Serialize,
+{
+    fn from(value: &T) -> Self {
+        CanonicOperatorName(serde_json::to_value(value).unwrap())
     }
 }
 
@@ -178,6 +206,9 @@ pub trait InitializedPlotOperator: Send + Sync {
     {
         Box::new(self)
     }
+
+    /// Get a canonic representation of the operator and its sources
+    fn canonic_name(&self) -> CanonicOperatorName;
 }
 
 impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
@@ -187,6 +218,10 @@ impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         self.as_ref().query_processor()
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.as_ref().canonic_name()
     }
 }
 
@@ -198,6 +233,10 @@ impl InitializedVectorOperator for Box<dyn InitializedVectorOperator> {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         self.as_ref().query_processor()
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.as_ref().canonic_name()
+    }
 }
 
 impl InitializedPlotOperator for Box<dyn InitializedPlotOperator> {
@@ -207,6 +246,10 @@ impl InitializedPlotOperator for Box<dyn InitializedPlotOperator> {
 
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         self.as_ref().query_processor()
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.as_ref().canonic_name()
     }
 }
 

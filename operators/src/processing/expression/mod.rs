@@ -1,9 +1,9 @@
 use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser};
 use crate::{
     engine::{
-        ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorData,
-        OperatorName, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-        TypedRasterQueryProcessor, WorkflowOperatorPath,
+        CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
+        Operator, OperatorData, OperatorName, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
     },
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::Result,
@@ -233,6 +233,8 @@ impl RasterOperator for Expression {
             }
         );
 
+        let name = CanonicOperatorName::from(&self);
+
         // we refer to rasters by A, B, C, …
         let parameters = (0..self.sources.number_of_sources())
             .map(|i| {
@@ -294,6 +296,7 @@ impl RasterOperator for Expression {
         };
 
         let initialized_operator = InitializedExpression {
+            name,
             result_descriptor,
             sources,
             expression,
@@ -311,6 +314,7 @@ impl OperatorName for Expression {
 }
 
 pub struct InitializedExpression {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     sources: ExpressionInitializedSources,
     expression: ExpressionAst,
@@ -516,6 +520,10 @@ impl InitializedRasterOperator for InitializedExpression {
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

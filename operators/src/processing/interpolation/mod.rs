@@ -5,9 +5,9 @@ use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
+    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -70,6 +70,8 @@ impl RasterOperator for Interpolation {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let raster_source = initialized_sources.raster;
         let in_descriptor = raster_source.result_descriptor();
@@ -96,6 +98,7 @@ impl RasterOperator for Interpolation {
         };
 
         let initialized_operator = InitializedInterpolation {
+            name,
             result_descriptor: out_descriptor,
             raster_source,
             interpolation_method: self.params.interpolation,
@@ -110,6 +113,7 @@ impl RasterOperator for Interpolation {
 }
 
 pub struct InitializedInterpolation {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     raster_source: Box<dyn InitializedRasterOperator>,
     interpolation_method: InterpolationMethod,
@@ -143,6 +147,10 @@ impl InitializedRasterOperator for InitializedInterpolation {
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

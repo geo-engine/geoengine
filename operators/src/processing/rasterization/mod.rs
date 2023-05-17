@@ -1,9 +1,9 @@
 use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
-    Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleVectorSource, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
+    InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleVectorSource,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
 
@@ -90,6 +90,8 @@ impl RasterOperator for Rasterization {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> util::Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_source = self.sources.initialize_sources(path, context).await?;
         let vector_source = initialized_source.vector;
         let in_desc = vector_source.result_descriptor();
@@ -107,6 +109,7 @@ impl RasterOperator for Rasterization {
 
         match self.params {
             Grid(params) => Ok(InitializedGridRasterization {
+                name,
                 source: vector_source,
                 result_descriptor: out_desc,
                 spatial_resolution: params.spatial_resolution,
@@ -116,6 +119,7 @@ impl RasterOperator for Rasterization {
             }
             .boxed()),
             GridOrDensity::Density(params) => InitializedDensityRasterization::new(
+                name,
                 vector_source,
                 out_desc,
                 tiling_specification,
@@ -130,6 +134,7 @@ impl RasterOperator for Rasterization {
 }
 
 pub struct InitializedGridRasterization {
+    name: CanonicOperatorName,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: RasterResultDescriptor,
     spatial_resolution: SpatialResolution,
@@ -155,9 +160,14 @@ impl InitializedRasterOperator for InitializedGridRasterization {
             .boxed(),
         ))
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 pub struct InitializedDensityRasterization {
+    name: CanonicOperatorName,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
@@ -167,6 +177,7 @@ pub struct InitializedDensityRasterization {
 
 impl InitializedDensityRasterization {
     fn new(
+        name: CanonicOperatorName,
         source: Box<dyn InitializedVectorOperator>,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
@@ -191,6 +202,7 @@ impl InitializedDensityRasterization {
         let radius = gaussian_inverse(cutoff * gaussian(0., stddev), stddev);
 
         Ok(InitializedDensityRasterization {
+            name,
             source,
             result_descriptor,
             tiling_specification,
@@ -215,6 +227,10 @@ impl InitializedRasterOperator for InitializedDensityRasterization {
             }
             .boxed(),
         ))
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

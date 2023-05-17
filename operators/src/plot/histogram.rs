@@ -1,5 +1,5 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
     PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor,
@@ -91,6 +91,8 @@ impl PlotOperator for Histogram {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         Ok(match self.sources.source {
             RasterOrVectorOperator::Raster(raster_source) => {
                 ensure!(
@@ -107,6 +109,7 @@ impl PlotOperator for Histogram {
 
                 let in_desc = raster_source.result_descriptor();
                 InitializedHistogram::new(
+                    name,
                     PlotResultDescriptor {
                         spatial_reference: in_desc.spatial_reference,
                         time: in_desc.time,
@@ -161,7 +164,7 @@ impl PlotOperator for Histogram {
 
                 let in_desc = vector_source.result_descriptor().clone();
 
-                InitializedHistogram::new(in_desc.into(), self.params, vector_source).boxed()
+                InitializedHistogram::new(name, in_desc.into(), self.params, vector_source).boxed()
             }
         })
     }
@@ -171,6 +174,7 @@ impl PlotOperator for Histogram {
 
 /// The initialization of `Histogram`
 pub struct InitializedHistogram<Op> {
+    name: CanonicOperatorName,
     result_descriptor: PlotResultDescriptor,
     metadata: HistogramMetadataOptions,
     source: Op,
@@ -180,6 +184,7 @@ pub struct InitializedHistogram<Op> {
 
 impl<Op> InitializedHistogram<Op> {
     pub fn new(
+        name: CanonicOperatorName,
         result_descriptor: PlotResultDescriptor,
         params: HistogramParams,
         source: Op,
@@ -200,6 +205,7 @@ impl<Op> InitializedHistogram<Op> {
         };
 
         Self {
+            name,
             result_descriptor,
             metadata: HistogramMetadataOptions {
                 number_of_buckets,
@@ -229,6 +235,10 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterO
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorOperator>> {
@@ -251,6 +261,10 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
 
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

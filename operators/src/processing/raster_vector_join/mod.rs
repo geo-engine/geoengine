@@ -4,9 +4,10 @@ mod non_aggregated;
 mod util;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
-    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
+    Operator, OperatorName, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor,
+    VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
 use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
@@ -93,6 +94,8 @@ impl VectorOperator for RasterVectorJoin {
             }
         );
 
+        let name = CanonicOperatorName::from(&self);
+
         let vector_source = self
             .sources
             .vector
@@ -171,6 +174,7 @@ impl VectorOperator for RasterVectorJoin {
         });
 
         Ok(InitializedRasterVectorJoin {
+            name,
             result_descriptor,
             vector_source,
             raster_sources,
@@ -183,6 +187,7 @@ impl VectorOperator for RasterVectorJoin {
 }
 
 pub struct InitializedRasterVectorJoin {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
@@ -247,6 +252,10 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
             }
             TypedVectorQueryProcessor::MultiLineString(_) => return Err(Error::NotYetImplemented),
         })
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
