@@ -29,7 +29,7 @@ async fn bench() {
     let session = app_ctx.create_anonymous_session().await.unwrap();
     let ctx = app_ctx.session_context(session.clone());
 
-    let dataset = add_ndvi_to_datasets(&app_ctx).await;
+    let dataset = add_ndvi_to_datasets(&app_ctx, true, true).await;
 
     let workflow = Workflow {
         operator: TypedOperator::Raster(

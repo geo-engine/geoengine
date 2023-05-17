@@ -30,7 +30,7 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     engine::{RasterOperator, TypedOperator},
     source::{GdalSource, GdalSourceParameters},
-    util::gdal::create_ndvi_meta_data,
+    util::gdal::{create_ndvi_meta_data, create_ports_meta_data},
 };
 
 #[allow(clippy::missing_panics_doc)]
@@ -314,7 +314,7 @@ pub async fn register_ndvi_workflow_helper<C: ProApplicationContext>(
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    let dataset = add_ndvi_to_datasets(app_ctx).await;
+    let dataset = add_ndvi_to_datasets(app_ctx, true, true).await;
 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
@@ -340,7 +340,11 @@ where
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn add_ndvi_to_datasets<C: ProApplicationContext>(app_ctx: &C) -> NamedData
+pub async fn add_ndvi_to_datasets<C: ProApplicationContext>(
+    app_ctx: &C,
+    share_with_users: bool,
+    share_with_anonymous: bool,
+) -> NamedData
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -374,23 +378,81 @@ where
         .await
         .expect("dataset db access");
 
-    db.add_permission(
-        Role::registered_user_role_id(),
-        dataset_id,
-        Permission::Read,
-    )
-    .await
-    .unwrap();
-
-    db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+    if share_with_users {
+        db.add_permission(
+            Role::registered_user_role_id(),
+            dataset_id,
+            Permission::Read,
+        )
         .await
         .unwrap();
-
-    NamedData {
-        namespace: dataset_name.namespace,
-        provider: None,
-        name: dataset_name.name,
     }
+
+    if share_with_anonymous {
+        db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+            .await
+            .unwrap();
+    }
+
+    dataset_name.into()
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_ports_to_datasets<C: ProApplicationContext>(
+    app_ctx: &C,
+    share_with_users: bool,
+    share_with_anonymous: bool,
+) -> NamedData
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let dataset_name = DatasetName {
+        namespace: None,
+        name: "ne_10m_ports".to_string(),
+    };
+
+    let ndvi = DatasetDefinition {
+        properties: AddDataset {
+            name: Some(dataset_name.clone()),
+            display_name: "Natural Earth 10m Ports".to_string(),
+            description: "Ports from Natural Earth".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: Some(vec![Provenance {
+                citation: "Sample Citation".to_owned(),
+                license: "Sample License".to_owned(),
+                uri: "http://example.org/".to_owned(),
+            }]),
+        },
+        meta_data: MetaDataDefinition::OgrMetaData(create_ports_meta_data()),
+    };
+
+    let system_session = UserSession::admin_session();
+
+    let db = app_ctx.session_context(system_session).db();
+
+    let dataset_id = db
+        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
+        .await
+        .expect("dataset db access");
+
+    if share_with_users {
+        db.add_permission(
+            Role::registered_user_role_id(),
+            dataset_id,
+            Permission::Read,
+        )
+        .await
+        .unwrap();
+    }
+
+    if share_with_anonymous {
+        db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+            .await
+            .unwrap();
+    }
+
+    dataset_name.into()
 }
 
 #[allow(clippy::missing_panics_doc)]
