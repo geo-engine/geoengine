@@ -105,39 +105,42 @@ fn main() {
     let os = [&o1, &o2, &o3];
     let on = ["gdal", "agg", "mock"];
 
-    let ss: Vec<fn(&Box<dyn RasterOperator>)> = vec![json, cbor, rmp, bincode];
+    #[allow(clippy::type_complexity)]
+    let ss: Vec<fn(&Box<dyn RasterOperator>) -> usize> = vec![json, cbor, rmp, bincode];
     let sn = vec!["json", "cbor", "rmp", "bincode"];
 
-    println!("format, operator, time");
+    println!("format, operator, time, size");
     for (op, op_name) in os.iter().zip(on) {
         for (ser, ser_name) in ss.iter().zip(sn.iter()) {
             let start = std::time::Instant::now();
+            let mut size = 0;
             for _ in 0..N {
-                ser(op);
+                size = ser(op);
             }
-            println!("{}, {}: {:?}", ser_name, op_name, start.elapsed());
+            println!("{}, {}, {:?}, {}", ser_name, op_name, start.elapsed(), size);
         }
     }
 }
 
 #[allow(clippy::borrowed_box)]
-fn json(o: &Box<dyn RasterOperator>) {
-    let _ = serde_json::to_string(o);
+fn json(o: &Box<dyn RasterOperator>) -> usize {
+    serde_json::to_string(o).unwrap().len()
 }
 
 #[allow(clippy::borrowed_box)]
-fn cbor(o: &Box<dyn RasterOperator>) {
-    let vec = Vec::new();
+fn cbor(o: &Box<dyn RasterOperator>) -> usize {
+    let mut vec = Vec::new();
 
-    let _ = ciborium::into_writer(o, vec);
+    let _ = ciborium::into_writer(o, &mut vec);
+    vec.len()
 }
 
 #[allow(clippy::borrowed_box)]
-fn rmp(o: &Box<dyn RasterOperator>) {
-    let _ = rmp_serde::to_vec(o).unwrap();
+fn rmp(o: &Box<dyn RasterOperator>) -> usize {
+    rmp_serde::to_vec(o).unwrap().len()
 }
 
 #[allow(clippy::borrowed_box)]
-fn bincode(o: &Box<dyn RasterOperator>) {
-    let _: Vec<u8> = bincode::serialize(o).unwrap();
+fn bincode(o: &Box<dyn RasterOperator>) -> usize {
+    bincode::serialize(o).unwrap().len()
 }
