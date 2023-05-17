@@ -1,6 +1,6 @@
 use crate::{
     api::model::{
-        datatypes::{DatasetName, NamedData},
+        datatypes::{DatasetId, DatasetName, NamedData},
         services::AddDataset,
     },
     contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
@@ -314,7 +314,7 @@ pub async fn register_ndvi_workflow_helper<C: ProApplicationContext>(
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    let dataset = add_ndvi_to_datasets(app_ctx, true, true).await;
+    let (_, dataset) = add_ndvi_to_datasets(app_ctx, true, true).await;
 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
@@ -344,7 +344,7 @@ pub async fn add_ndvi_to_datasets<C: ProApplicationContext>(
     app_ctx: &C,
     share_with_users: bool,
     share_with_anonymous: bool,
-) -> NamedData
+) -> (DatasetId, NamedData)
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -394,7 +394,7 @@ where
             .unwrap();
     }
 
-    dataset_name.into()
+    (dataset_id, dataset_name.into())
 }
 
 #[allow(clippy::missing_panics_doc)]
@@ -402,7 +402,7 @@ pub async fn add_ports_to_datasets<C: ProApplicationContext>(
     app_ctx: &C,
     share_with_users: bool,
     share_with_anonymous: bool,
-) -> NamedData
+) -> (DatasetId, NamedData)
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -452,7 +452,7 @@ where
             .unwrap();
     }
 
-    dataset_name.into()
+    (dataset_id, dataset_name.into())
 }
 
 #[allow(clippy::missing_panics_doc)]
