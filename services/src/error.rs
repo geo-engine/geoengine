@@ -224,6 +224,7 @@ pub enum Error {
     },
     StacInvalidGeoTransform,
     StacInvalidBbox,
+    StacInvalidTime,
     StacJsonResponse {
         url: String,
         response: String,
