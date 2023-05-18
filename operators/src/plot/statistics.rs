@@ -538,7 +538,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "Raster-1": {
                     "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
@@ -549,7 +549,6 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                 }
             })
-            .to_string()
         );
     }
 
@@ -644,7 +643,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "Raster-1": {
                     "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
@@ -663,7 +662,6 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
             })
-            .to_string()
         );
     }
 
@@ -758,7 +756,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "A": {
                     "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
@@ -777,7 +775,6 @@ mod tests {
                     "stddev": 1.707_825_127_659_933
                 },
             })
-            .to_string()
         );
     }
 
@@ -932,7 +929,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "foo": {
                     "valueCount": 7,
@@ -951,7 +948,6 @@ mod tests {
                     "stddev": 1.699_673_171_197_595
                 },
             })
-            .to_string()
         );
     }
 
@@ -1028,7 +1024,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "foo": {
                     "valueCount": 7,
@@ -1039,7 +1035,6 @@ mod tests {
                     "stddev": 2.054_804_667_656_325_6
                 },
             })
-            .to_string()
         );
     }
 
@@ -1116,7 +1111,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "foo": {
                     "valueCount": 7,
@@ -1135,7 +1130,6 @@ mod tests {
                     "stddev": 1.699_673_171_197_595
                 },
             })
-            .to_string()
         );
     }
 }

@@ -1,6 +1,7 @@
 // This is an inclusion point of Geo Engine Pro
 
 pub mod apidoc;
+pub mod authorization;
 pub mod contexts;
 pub mod datasets;
 pub mod handlers;
