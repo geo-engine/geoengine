@@ -997,6 +997,80 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_secures_meta_data_but_name_is_not_none() -> Result<()> {
+        let app_ctx = ProInMemoryContext::test_default();
+
+        let session1 = UserSession::mock();
+        let session2 = UserSession::mock();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
+        let ds = AddDataset {
+            name: Some(DatasetName::new(
+                Some(session1.user.id.to_string()),
+                "my_ogr_dataset",
+            )),
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
+
+        let id = db1.add_dataset(ds, Box::new(meta)).await?;
+
+        let meta: geoengine_operators::util::Result<
+            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        > = db1.meta_data(&id.into()).await;
+
+        assert!(meta.is_ok());
+
+        let meta: geoengine_operators::util::Result<
+            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        > = db2.meta_data(&id.into()).await;
+
+        assert!(meta.is_err());
+
+        db1.add_permission(Role::registered_user_role_id(), id, Permission::Read)
+            .await?;
+
+        let meta: geoengine_operators::util::Result<
+            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        > = db2.meta_data(&id.into()).await;
+
+        assert!(meta.is_ok());
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn it_secures_uploads() -> Result<()> {
         let app_ctx = ProInMemoryContext::test_default();
 
