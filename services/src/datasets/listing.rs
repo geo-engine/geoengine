@@ -80,7 +80,7 @@ pub trait DatasetProvider: Send
 
     async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
 
-    async fn resolve_dataset(&self, name: &DatasetName) -> Result<DatasetId>;
+    async fn resolve_dataset_name_to_id(&self, name: &DatasetName) -> Result<DatasetId>;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]

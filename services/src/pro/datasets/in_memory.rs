@@ -355,7 +355,7 @@ impl DatasetProvider for ProInMemoryDb {
             .ok_or(error::Error::UnknownDatasetId)
     }
 
-    async fn resolve_dataset(&self, dataset_name: &DatasetName) -> Result<DatasetId> {
+    async fn resolve_dataset_name_to_id(&self, dataset_name: &DatasetName) -> Result<DatasetId> {
         let dataset_db = self.backend.dataset_db.read().await;
 
         let dataset = dataset_db

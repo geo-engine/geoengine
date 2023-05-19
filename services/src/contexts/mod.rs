@@ -292,7 +292,7 @@ where
 
         let dataset_id = self
             .db
-            .resolve_dataset(&data.into())
+            .resolve_dataset_name_to_id(&data.into())
             .await
             .map_err(
                 |source| geoengine_operators::error::Error::CannotResolveDatasetName {
