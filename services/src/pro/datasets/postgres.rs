@@ -451,7 +451,7 @@ where
             name: id.to_string(),
         });
 
-        self.check_namespace(&name).await?;
+        self.check_namespace(&name)?;
 
         let meta_data_json = meta_data.to_json()?;
 
@@ -560,19 +560,6 @@ where
 
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
         Box::new(meta)
-    }
-
-    async fn check_namespace(&self, id: &DatasetName) -> Result<()> {
-        let is_ok = match &id.namespace {
-            Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
-            None => self.session.is_admin(),
-        };
-
-        if is_ok {
-            Ok(())
-        } else {
-            Err(Error::InvalidDatasetIdNamespace)
-        }
     }
 }
 

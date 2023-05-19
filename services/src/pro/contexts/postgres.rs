@@ -1,8 +1,9 @@
+use crate::api::model::datatypes::DatasetName;
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId};
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::datasets::upload::{Volume, Volumes};
-use crate::error::{self, Result};
+use crate::error::{self, Error, Result};
 use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::add_datasets_from_directory;
@@ -701,6 +702,20 @@ where
 {
     pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>, session: UserSession) -> Self {
         Self { conn_pool, session }
+    }
+
+    /// Check whether the namepsace of the given dataset is allowed for insertion
+    pub(crate) fn check_namespace(&self, id: &DatasetName) -> Result<()> {
+        let is_ok = match &id.namespace {
+            Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
+            None => self.session.is_admin(),
+        };
+
+        if is_ok {
+            Ok(())
+        } else {
+            Err(Error::InvalidDatasetIdNamespace)
+        }
     }
 }
 

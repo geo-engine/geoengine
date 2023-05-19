@@ -185,7 +185,7 @@ impl DatasetStore for InMemoryDb {
             name: id.to_string(),
         });
 
-        self.check_namespace(&name).await?;
+        Self::check_namespace(&name)?;
 
         // check if dataset with same id exists
 
@@ -253,15 +253,6 @@ impl DatasetStore for InMemoryDb {
 
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
         Box::new(meta)
-    }
-
-    async fn check_namespace(&self, id: &DatasetName) -> Result<()> {
-        // due to a lack of users, etc., we only allow one namespace for now
-        if id.namespace.is_none() {
-            Ok(())
-        } else {
-            Err(Error::InvalidDatasetIdNamespace)
-        }
     }
 }
 

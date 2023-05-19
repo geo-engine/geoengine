@@ -194,9 +194,6 @@ pub trait DatasetStore: DatasetStorer {
 
     async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
 
-    /// Check whether the namepsace of the given dataset is allowed for insertion
-    async fn check_namespace(&self, id: &DatasetName) -> Result<()>;
-
     /// turn given `meta` data definition into the corresponding `StorageType` for the `DatasetStore`
     /// for use in the `add_dataset` method
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType;
