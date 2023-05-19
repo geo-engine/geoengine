@@ -2,13 +2,14 @@ use std::{collections::HashMap, pin::Pin, sync::Arc};
 
 use futures::Stream;
 use geoengine_datatypes::{
+    identifier,
     primitives::{RasterQueryRectangle, SpatialPartitioned},
     raster::{Pixel, RasterTile2D},
+    util::Identifier,
 };
 use lru::LruCache;
 use pin_project::pin_project;
 use tokio::sync::RwLock;
-use uuid::Uuid;
 
 use crate::engine::CanonicOperatorName;
 use crate::util::Result;
@@ -32,7 +33,7 @@ pub struct TileCacheBackend {
     landing_zone_byte_size_used: usize,
 
     // we only use the LruCache for determining the least recently used elements and evict as many entries as needed to fit the new one
-    lru: LruCache<CacheEntryId, ()>,
+    lru: LruCache<CacheEntryId, CanonicOperatorName>,
 }
 
 #[derive(Debug, Default)]
@@ -42,6 +43,7 @@ pub struct TileCache {
 
 impl Default for TileCacheBackend {
     fn default() -> Self {
+        // TODO: ensure cache > landing zone
         Self {
             operator_caches: Default::default(),
             lru: LruCache::unbounded(), // we need no cap because we evict manually
@@ -58,30 +60,32 @@ impl Default for TileCacheBackend {
 pub struct OperatorTileCache {
     // for a given operator and query we need to look through all entries to find one that matches
     // TODO: use a multi-dimensional index to speed up the lookup
-    entries: Vec<CachedQueryResult>,
+    entries: HashMap<CacheEntryId, CachedQueryResult>,
 
     // running queries insert their tiles as they are produced. The entry will be created once the query is done.
     // The query is identified by a Uuid instead of the query rectangle to avoid confusions with other queries
     active_queries: HashMap<QueryId, ActiveQueryResult>,
 }
 
-pub type QueryId = Uuid;
+identifier!(QueryId);
 
 impl OperatorTileCache {
-    pub fn find_match(&self, query: &RasterQueryRectangle) -> Option<&CachedQueryResult> {
-        self.entries.iter().find(|r| r.matches(query))
+    pub fn find_match(
+        &self,
+        query: &RasterQueryRectangle,
+    ) -> Option<(&CacheEntryId, &CachedQueryResult)> {
+        self.entries.iter().find(|(id, r)| r.matches(query))
     }
 }
 
 /// Holds all the tiles for a given query and is able to answer queries that are fully contained
 #[derive(Debug)]
 pub struct CachedQueryResult {
-    id: CacheEntryId,
     query: RasterQueryRectangle,
     tiles: CachedTiles,
 }
 
-type CacheEntryId = Uuid;
+identifier!(CacheEntryId);
 
 impl CachedQueryResult {
     /// Return true if the query can be answered in full by this cache entry
@@ -97,6 +101,10 @@ impl CachedQueryResult {
     pub fn tile_stream(&self, query: &RasterQueryRectangle) -> TypedCacheTileStream {
         self.tiles.tile_stream(query)
     }
+
+    fn byte_size(&self) -> usize {
+        self.tiles.byte_size() + std::mem::size_of::<RasterQueryRectangle>()
+    }
 }
 
 #[derive(Debug)]
@@ -111,6 +119,24 @@ pub enum CachedTiles {
     I64(Arc<Vec<RasterTile2D<i64>>>),
     F32(Arc<Vec<RasterTile2D<f32>>>),
     F64(Arc<Vec<RasterTile2D<f64>>>),
+}
+
+impl CachedTiles {
+    fn byte_size(&self) -> usize {
+        // TODO: include size of the Vec itself and the Arc
+        match self {
+            CachedTiles::U8(v) => v.len() * std::mem::size_of::<RasterTile2D<u8>>(),
+            CachedTiles::U16(v) => v.len() * std::mem::size_of::<RasterTile2D<u16>>(),
+            CachedTiles::U32(v) => v.len() * std::mem::size_of::<RasterTile2D<u32>>(),
+            CachedTiles::U64(v) => v.len() * std::mem::size_of::<RasterTile2D<u64>>(),
+            CachedTiles::I8(v) => v.len() * std::mem::size_of::<RasterTile2D<i8>>(),
+            CachedTiles::I16(v) => v.len() * std::mem::size_of::<RasterTile2D<i16>>(),
+            CachedTiles::I32(v) => v.len() * std::mem::size_of::<RasterTile2D<i32>>(),
+            CachedTiles::I64(v) => v.len() * std::mem::size_of::<RasterTile2D<i64>>(),
+            CachedTiles::F32(v) => v.len() * std::mem::size_of::<RasterTile2D<f32>>(),
+            CachedTiles::F64(v) => v.len() * std::mem::size_of::<RasterTile2D<f64>>(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -141,6 +167,7 @@ pub enum ActiveQueryTiles {
 
 impl ActiveQueryTiles {
     fn byte_size(&self) -> usize {
+        // TODO: include size of the Vec itself
         match self {
             ActiveQueryTiles::U8(v) => v.len() * std::mem::size_of::<RasterTile2D<u8>>(),
             ActiveQueryTiles::U16(v) => v.len() * std::mem::size_of::<RasterTile2D<u16>>(),
@@ -176,7 +203,7 @@ impl From<ActiveQueryTiles> for CachedTiles {
 impl From<ActiveQueryResult> for CachedQueryResult {
     fn from(value: ActiveQueryResult) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            // id: Uuid::new_v4(),
             query: value.query,
             tiles: value.tiles.into(),
         }
@@ -332,11 +359,11 @@ impl TileCache {
         let (entry_id, typed_stream) = {
             let cache = backend.operator_caches.get(&key)?;
 
-            let entry = cache.find_match(query)?;
+            let (id, entry) = cache.find_match(query)?;
 
             let typed_stream = entry.tile_stream(query);
 
-            (entry.id, typed_stream)
+            (*id, typed_stream)
         };
 
         // set as most recently used
@@ -352,13 +379,14 @@ impl TileCache {
         key: CanonicOperatorName,
         query: &RasterQueryRectangle,
     ) -> QueryId {
+        // TODO: return Result
         // TODO: check if landing zone has enough space, otherwise abort query(?)
 
         let mut backend = self.backend.write().await;
 
         let cache = backend.operator_caches.entry(key).or_default();
 
-        let query_id = Uuid::new_v4();
+        let query_id = QueryId::new();
         cache.active_queries.insert(
             query_id,
             ActiveQueryResult {
@@ -425,13 +453,18 @@ impl TileCache {
         }
     }
 
-    /// Finish the query and make the tiles available in the cach
+    /// Finish the query and make the tiles available in the cache
     pub async fn finish_query(&self, key: CanonicOperatorName, query_id: QueryId) -> Result<()> {
-        // TODO: evict cache entries until enough space for the new entry is available
-        // TODO: update landing zone space
+        // TODO: maybe check if this cache result is already in the cache or could displace another one
+
         let mut backend = self.backend.write().await;
 
-        let cache = backend.operator_caches.entry(key).or_default();
+        // this should always work, because the query was inserted at some point and then the cache entry was created
+        let cache = backend
+            .operator_caches
+            .get_mut(&key)
+            .ok_or(crate::error::Error::QueryProcessor)?;
+
         let active_query = cache
             .active_queries
             .remove(&query_id)
@@ -441,21 +474,35 @@ impl TileCache {
 
         // move entry from landing zone into cache
         let entry: CachedQueryResult = active_query.into();
-        let entry_id = entry.id;
-        cache.entries.push(entry);
+        let entry_id = CacheEntryId::new();
+        cache.entries.insert(entry_id, entry);
 
-        backend.lru.push(entry_id, ());
+        backend.lru.push(entry_id, key);
 
         backend.landing_zone_byte_size_used -= entry_size;
+        // TODO: include the size of the entry in the lru and the operator_caches as well(?)
+        backend.cache_byte_size_used += entry_size;
 
-        if backend.cache_byte_size_used + entry_size > backend.cache_byte_size_total {
-            // TODO: evict elements until bound is satisfied
-            // TODO: pop from lru
-            // TODO: find query cache based on entry id
+        // cache bound can be temporarily exceeded as the entry is moved form the landing zone into the cache
+        // but the total of cache + landing zone is still below the bound
+        // We now evict elements from the cache until bound is satisfied again
+        while backend.cache_byte_size_used + entry_size > backend.cache_byte_size_total {
+            // this should always work, because otherwise it would mean the cache is not empty but the lru is.
+            // the landing zone is smaller than the cache size and the entry must fit into the landing zone.
+            let (id, op) = backend
+                .lru
+                .pop_lru()
+                .expect("there should be an lru entry because the cache is not empty");
+
+            let evict_cache = backend
+                .operator_caches
+                .get_mut(&op)
+                .ok_or(crate::error::Error::QueryProcessor)?; // TODO: better error
+
+            if let Some(entry) = evict_cache.entries.remove(&id) {
+                backend.cache_byte_size_used -= entry.byte_size();
+            }
         }
-
-        // TODO: maybe check if this cache result is already in the cache or could displace another one
-
         Ok(())
     }
 }
