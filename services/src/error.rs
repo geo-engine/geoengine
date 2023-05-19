@@ -201,6 +201,9 @@ pub enum Error {
     },
     InvalidUploadFileName,
     InvalidDatasetName,
+    DatasetInvalidLayerName {
+        layer_name: String,
+    },
     DatasetHasNoAutoImportableLayer,
     #[snafu(display("GdalError: {}", source))]
     Gdal {

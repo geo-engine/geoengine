@@ -34,6 +34,7 @@ use crate::handlers;
 use crate::handlers::plots::WrappedPlotOutput;
 use crate::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
+use crate::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
@@ -127,6 +128,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::projects::update_project_handler,
         handlers::projects::delete_project_handler,
         pro::handlers::projects::load_project_version_handler,
+        handlers::upload::list_upload_files_handler,
+        handlers::upload::list_upload_file_layers_handler,
         handlers::upload::upload_handler,
         pro::handlers::permissions::add_permission_handler,
         pro::handlers::permissions::remove_permission_handler
@@ -275,6 +278,9 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             Feature,
             FeatureType,
             Coordinates,
+
+            UploadFilesResponse,
+            UploadFileLayersResponse,
 
             CreateDataset,
             AutoCreateDataset,
