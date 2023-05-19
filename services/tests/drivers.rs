@@ -1,4 +1,4 @@
-//! We needto run this in a separate process since it changes the global state of the GDAL driver
+//! We need to run this in a separate process since it changes the global state of the GDAL driver
 
 use gdal::{Dataset, DriverManager};
 use geoengine_datatypes::test_data;
