@@ -12,7 +12,7 @@ use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
 use geoengine_datatypes::raster::GridOrEmpty;
 
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
     PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
@@ -53,6 +53,8 @@ impl PlotOperator for BoxPlot {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         match self.sources.source {
             MultiRasterOrVectorOperator::Raster(raster_sources) => {
                 ensure!(
@@ -103,6 +105,7 @@ impl PlotOperator for BoxPlot {
                 let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
 
                 Ok(InitializedBoxPlot::new(
+                    name,
                     PlotResultDescriptor {
                         spatial_reference: in_descriptors[0].spatial_reference,
                         time,
@@ -151,6 +154,7 @@ impl PlotOperator for BoxPlot {
                 let in_desc = vector_source.result_descriptor();
 
                 Ok(InitializedBoxPlot::new(
+                    name,
                     PlotResultDescriptor {
                         spatial_reference: in_desc.spatial_reference,
                         time: in_desc.time,
@@ -169,6 +173,7 @@ impl PlotOperator for BoxPlot {
 
 /// The initialization of `BoxPlot`
 pub struct InitializedBoxPlot<Op> {
+    name: CanonicOperatorName,
     result_descriptor: PlotResultDescriptor,
     names: Vec<String>,
 
@@ -176,8 +181,14 @@ pub struct InitializedBoxPlot<Op> {
 }
 
 impl<Op> InitializedBoxPlot<Op> {
-    pub fn new(result_descriptor: PlotResultDescriptor, names: Vec<String>, source: Op) -> Self {
+    pub fn new(
+        name: CanonicOperatorName,
+        result_descriptor: PlotResultDescriptor,
+        names: Vec<String>,
+        source: Op,
+    ) -> Self {
         Self {
+            name,
             result_descriptor,
             names,
             source,
@@ -196,6 +207,10 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOpe
         };
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -216,6 +231,10 @@ impl InitializedPlotOperator for InitializedBoxPlot<Vec<Box<dyn InitializedRaste
             names: self.names.clone(),
         };
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

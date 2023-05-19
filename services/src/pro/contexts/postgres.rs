@@ -28,6 +28,7 @@ use bb8_postgres::{
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
+use geoengine_operators::pro::cache::tile_cache::TileCache;
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, info};
@@ -59,6 +60,7 @@ where
     quota: QuotaTrackingFactory,
     pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
+    tile_cache: Arc<TileCache>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -91,6 +93,7 @@ where
             quota,
             pool,
             volumes: Default::default(),
+            tile_cache: Default::default(),
         })
     }
 
@@ -126,6 +129,7 @@ where
             quota,
             pool,
             volumes: Default::default(),
+            tile_cache: Default::default(),
         };
 
         if uninitialized {
@@ -655,6 +659,7 @@ where
                 .create_quota_tracking(&self.session, ComputationContext::new()),
         );
         extensions.insert(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker);
+        extensions.insert(self.context.tile_cache.clone());
 
         Ok(QueryContextImpl::new_with_extensions(
             self.context.query_ctx_chunk_size,

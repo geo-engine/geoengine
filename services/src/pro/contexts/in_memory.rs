@@ -24,6 +24,7 @@ use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
+use geoengine_operators::pro::cache::tile_cache::TileCache;
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
@@ -45,6 +46,7 @@ pub struct ProInMemoryContext {
     task_manager: Arc<ProTaskManagerBackend>,
     quota: QuotaTrackingFactory,
     volumes: Volumes,
+    tile_cache: Arc<TileCache>,
 }
 
 impl TestDefault for ProInMemoryContext {
@@ -59,6 +61,7 @@ impl TestDefault for ProInMemoryContext {
             oidc_request_db: Arc::new(None),
             quota: TestDefault::test_default(),
             volumes: Default::default(),
+            tile_cache: Default::default(),
         }
     }
 }
@@ -88,6 +91,7 @@ impl ProInMemoryContext {
             oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
             quota,
             volumes: Default::default(),
+            tile_cache: Default::default(),
         };
 
         let mut db = app_ctx.session_context(session).db();
@@ -125,6 +129,7 @@ impl ProInMemoryContext {
             oidc_request_db: Arc::new(None),
             quota,
             volumes: Default::default(),
+            tile_cache: Default::default(),
         }
     }
 
@@ -143,6 +148,7 @@ impl ProInMemoryContext {
             oidc_request_db: Arc::new(Some(oidc_db)),
             quota,
             volumes: Default::default(),
+            tile_cache: Default::default(),
         }
     }
 }
@@ -207,6 +213,7 @@ impl SessionContext for ProInMemorySessionContext {
                 .create_quota_tracking(&self.session, ComputationContext::new()),
         );
         extensions.insert(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker);
+        extensions.insert(self.context.tile_cache.clone());
 
         Ok(QueryContextImpl::new_with_extensions(
             self.context.query_ctx_chunk_size,

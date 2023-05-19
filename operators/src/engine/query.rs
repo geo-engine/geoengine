@@ -170,6 +170,20 @@ impl MockQueryContext {
         }
     }
 
+    pub fn new_with_query_extensions(
+        chunk_byte_size: ChunkByteSize,
+        extensions: QueryContextExtensions,
+    ) -> Self {
+        let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
+        Self {
+            chunk_byte_size,
+            thread_pool: create_rayon_thread_pool(0),
+            extensions,
+            abort_registration,
+            abort_trigger: Some(abort_trigger),
+        }
+    }
+
     pub fn with_chunk_size_and_thread_count(
         chunk_byte_size: ChunkByteSize,
         num_threads: usize,

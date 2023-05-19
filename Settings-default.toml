@@ -175,3 +175,6 @@ endpoint = "127.0.0.1:6831"
 
 [data]
 volumes = { test_data = "test_data/"}
+
+[cache]
+enabled = false

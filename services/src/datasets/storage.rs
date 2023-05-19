@@ -81,6 +81,7 @@ pub struct AutoCreateDataset {
     pub dataset_description: String,
     #[validate(custom = "validate_main_file")]
     pub main_file: String,
+    pub layer_name: Option<String>,
 }
 
 fn validate_main_file(main_file: &String) -> Result<(), ValidationError> {
@@ -98,6 +99,8 @@ pub struct SuggestMetaData {
     pub upload: UploadId,
     #[param(example = "germany_polygon.gpkg")]
     pub main_file: Option<String>,
+    #[param(example = "test_polygon")]
+    pub layer_name: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]

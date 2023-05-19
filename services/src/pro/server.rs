@@ -149,6 +149,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let session_config: crate::util::config::Session = get_config_element()?;
     let web_config: crate::util::config::Web = get_config_element()?;
     let open_telemetry: crate::pro::util::config::OpenTelemetry = get_config_element()?;
+    let cache_config: crate::pro::util::config::Cache = get_config_element()?;
 
     if user_config.user_registration {
         info!("User Registration: enabled");
@@ -174,6 +175,12 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     if session_config.fixed_session_token.is_some() {
         warn!("Fixed session token is set, but it will be ignored in Geo Engine Pro");
+    }
+
+    if cache_config.enabled {
+        info!("Cache: enabled");
+    } else {
+        info!("Cache: disabled");
     }
 
     let data_path_config: config::DataProvider = get_config_element()?;

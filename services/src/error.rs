@@ -203,6 +203,9 @@ pub enum Error {
     InvalidDatasetIdNamespace,
     DuplicateDatasetId,
     InvalidDatasetName,
+    DatasetInvalidLayerName {
+        layer_name: String,
+    },
     DatasetHasNoAutoImportableLayer,
     #[snafu(display("GdalError: {}", source))]
     Gdal {
@@ -427,6 +430,8 @@ pub enum Error {
     ProviderDoesNotSupportBrowsing,
 
     InvalidPath,
+
+    InvalidWorkflowOutputType,
 }
 
 impl actix_web::error::ResponseError for Error {

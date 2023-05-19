@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
+    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -48,6 +48,7 @@ impl OperatorName for Temperature {
 }
 
 pub struct InitializedTemperature {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     params: TemperatureParams,
@@ -61,6 +62,8 @@ impl RasterOperator for Temperature {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let input = initialized_sources.raster;
 
@@ -111,6 +114,7 @@ impl RasterOperator for Temperature {
         };
 
         let initialized_operator = InitializedTemperature {
+            name,
             result_descriptor: out_desc,
             source: input,
             params: self.params,
@@ -162,6 +166,10 @@ impl InitializedRasterOperator for InitializedTemperature {
                 QueryProcessorOut(Box::new(TemperatureProcessor::new(p, self.params.clone())))
             }
         })
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

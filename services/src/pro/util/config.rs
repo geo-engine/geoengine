@@ -52,3 +52,12 @@ pub struct OpenTelemetry {
 impl ConfigElement for OpenTelemetry {
     const KEY: &'static str = "open_telemetry";
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Cache {
+    pub enabled: bool,
+}
+
+impl ConfigElement for Cache {
+    const KEY: &'static str = "cache";
+}

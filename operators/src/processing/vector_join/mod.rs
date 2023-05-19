@@ -5,8 +5,8 @@ use snafu::ensure;
 use geoengine_datatypes::collections::VectorDataType;
 
 use crate::engine::{
-    ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorData,
-    OperatorName, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
+    OperatorData, OperatorName, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error;
@@ -96,6 +96,8 @@ impl VectorOperator for VectorJoin {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
 
         match &self.params.join_type {
@@ -179,6 +181,7 @@ impl VectorOperator for VectorJoin {
                 });
 
         let initialized_operator = InitializedVectorJoin {
+            name,
             result_descriptor,
             left: initialized_sources.left,
             right: initialized_sources.right,
@@ -202,6 +205,7 @@ pub struct InitializedVectorJoinParams {
 }
 
 pub struct InitializedVectorJoin {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     left: Box<dyn InitializedVectorOperator>,
     right: Box<dyn InitializedVectorOperator>,
@@ -269,6 +273,10 @@ impl InitializedVectorOperator for InitializedVectorJoin {
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

@@ -14,8 +14,8 @@ use snafu::ensure;
 
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
-    ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorName,
-    QueryContext, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
+    OperatorName, QueryContext, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::engine::{OperatorData, QueryProcessor};
@@ -86,6 +86,8 @@ impl VectorOperator for PointInPolygonFilter {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_source = self.sources.initialize_sources(path, context).await?;
 
         let points_rd = initialized_source.points.result_descriptor();
@@ -120,6 +122,7 @@ impl VectorOperator for PointInPolygonFilter {
         let out_desc = initialized_source.points.result_descriptor().clone();
 
         let initialized_operator = InitializedPointInPolygonFilter {
+            name,
             result_descriptor: out_desc,
             points: initialized_source.points,
             polygons: initialized_source.polygons,
@@ -132,6 +135,7 @@ impl VectorOperator for PointInPolygonFilter {
 }
 
 pub struct InitializedPointInPolygonFilter {
+    name: CanonicOperatorName,
     points: Box<dyn InitializedVectorOperator>,
     polygons: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
@@ -158,6 +162,10 @@ impl InitializedVectorOperator for InitializedPointInPolygonFilter {
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
