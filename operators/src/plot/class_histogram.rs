@@ -720,7 +720,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn text_attribute() {
         let dataset_id = DatasetId::new();
-        let dataset_name = NamedData::with_global_name("ne_10m_ports");
+        let dataset_name = NamedData::with_system_name("ne_10m_ports");
 
         let workflow = serde_json::json!({
             "type": "Histogram",

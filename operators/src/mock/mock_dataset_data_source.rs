@@ -183,7 +183,7 @@ mod tests {
         let id: DataId = DatasetId::new().into();
         execution_context.add_meta_data(
             id.clone(),
-            NamedData::with_global_name("points"),
+            NamedData::with_system_name("points"),
             Box::new(MockDatasetDataSourceLoadingInfo {
                 points: vec![Coordinate2D::new(1., 2.); 3],
             }),
@@ -191,7 +191,7 @@ mod tests {
 
         let mps = MockDatasetDataSource {
             params: MockDatasetDataSourceParams {
-                data: NamedData::with_global_name("points"),
+                data: NamedData::with_system_name("points"),
             },
         }
         .boxed();

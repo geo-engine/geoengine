@@ -362,7 +362,7 @@ impl LayerCollectionProvider for GbifDataProvider {
                 operator: TypedOperator::Vector(
                     OgrSource {
                         params: OgrSourceParameters {
-                            data: geoengine_datatypes::dataset::NamedData::with_global_provider(
+                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
                                 GBIF_PROVIDER_ID.to_string(),
                                 id.to_string(),
                             ),
@@ -2164,7 +2164,7 @@ mod tests {
                         operator: TypedOperator::Vector(
                             OgrSource {
                                 params: OgrSourceParameters {
-                                    data: geoengine_datatypes::dataset::NamedData::with_global_provider(
+                                    data: geoengine_datatypes::dataset::NamedData::with_system_provider(
                                         GBIF_PROVIDER_ID.to_string(),
                                         layer_id.to_string(),
                                     ),

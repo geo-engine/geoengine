@@ -1094,7 +1094,7 @@ mod tests {
         };
 
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("ndvi");
+        let name = NamedData::with_system_name("ndvi");
         exe_ctx.add_meta_data(id.clone(), name.clone(), Box::new(m));
 
         exe_ctx.tiling_specification = TilingSpecification::new((0.0, 0.0).into(), [60, 60].into());
@@ -1226,7 +1226,7 @@ mod tests {
         };
 
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("ndvi");
+        let name = NamedData::with_system_name("ndvi");
         exe_ctx.add_meta_data(id.clone(), name.clone(), Box::new(m));
 
         exe_ctx.tiling_specification =

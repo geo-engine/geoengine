@@ -709,7 +709,7 @@ impl LayerCollectionProvider for ArunaDataProvider {
             DataType::SingleVectorFile(_) => TypedOperator::Vector(
                 OgrSource {
                     params: OgrSourceParameters {
-                        data: geoengine_datatypes::dataset::NamedData::with_global_provider(
+                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
                             self.id.to_string(),
                             id.to_string(),
                         ),
@@ -722,7 +722,7 @@ impl LayerCollectionProvider for ArunaDataProvider {
             DataType::SingleRasterFile(_) => TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        data: geoengine_datatypes::dataset::NamedData::with_global_provider(
+                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
                             self.id.to_string(),
                             id.to_string(),
                         ),
@@ -1762,7 +1762,7 @@ mod tests {
             provider_id: DataProviderId::from_str(PROVIDER_ID).unwrap(),
             layer_id: LayerId(COLLECTION_ID.to_string()),
         });
-        let name = geoengine_datatypes::dataset::NamedData::with_global_provider(
+        let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
             PROVIDER_ID.to_string(),
             COLLECTION_ID.to_string(),
         );

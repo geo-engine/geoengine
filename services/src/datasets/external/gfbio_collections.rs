@@ -632,7 +632,7 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
                         operator: TypedOperator::Vector(
                             OgrSource {
                                 params: OgrSourceParameters {
-                                    data: geoengine_datatypes::dataset::NamedData::with_global_provider(
+                                    data: geoengine_datatypes::dataset::NamedData::with_system_provider(
                                         GFBIO_COLLECTIONS_PROVIDER_ID.to_string(),
                                         id.to_string(),
                                     ),

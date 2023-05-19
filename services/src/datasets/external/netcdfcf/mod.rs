@@ -1206,7 +1206,7 @@ pub fn layer_from_netcdf_overview(
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        data: geoengine_datatypes::dataset::NamedData::with_global_provider(
+                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
                             provider_id.to_string(),
                             json!({
                                 "fileName": overview.file_name,
@@ -2244,7 +2244,7 @@ mod tests {
                 sources: ExpressionSources::new_a_b(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: geoengine_datatypes::dataset::NamedData::with_global_provider(
+                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
                                 EBV_PROVIDER_ID.to_string(),
                                 serde_json::json!({
                                     "fileName": "dataset_irr_ts.nc",
@@ -2258,7 +2258,7 @@ mod tests {
                     .boxed(),
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: geoengine_datatypes::dataset::NamedData::with_global_name(
+                            data: geoengine_datatypes::dataset::NamedData::with_system_name(
                                 land_cover_dataset_id.to_string(),
                             ),
                         },

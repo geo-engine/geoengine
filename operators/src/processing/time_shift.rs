@@ -497,7 +497,7 @@ mod tests {
                 source: RasterOrVectorOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: NamedData::with_global_name("test-raster"),
+                            data: NamedData::with_system_name("test-raster"),
                         },
                     }
                     .boxed(),
@@ -546,7 +546,7 @@ mod tests {
                 source: RasterOrVectorOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: NamedData::with_global_name("test-raster"),
+                            data: NamedData::with_system_name("test-raster"),
                         },
                     }
                     .boxed(),

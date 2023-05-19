@@ -202,7 +202,7 @@ mod test_util {
 
     pub(crate) fn _create_gdal_src(ctx: &mut MockExecutionContext) -> GdalSource {
         let dataset_id: DataId = DatasetId::new().into();
-        let dataset_name = NamedData::with_global_name("gdal-ds");
+        let dataset_name = NamedData::with_system_name("gdal-ds");
 
         let no_data_value = Some(0.);
         let meta = GdalMetaDataRegular {

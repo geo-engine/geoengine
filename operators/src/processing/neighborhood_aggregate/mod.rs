@@ -295,7 +295,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: GdalSource {
                     params: GdalSourceParameters {
-                        data: NamedData::with_global_name("matrix-input"),
+                        data: NamedData::with_system_name("matrix-input"),
                     },
                 }
                 .boxed(),
@@ -344,7 +344,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: GdalSource {
                     params: GdalSourceParameters {
-                        data: NamedData::with_global_name("matrix-input"),
+                        data: NamedData::with_system_name("matrix-input"),
                     },
                 }
                 .boxed(),

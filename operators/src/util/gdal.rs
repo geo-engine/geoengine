@@ -97,7 +97,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
 // TODO: move test helper somewhere else?
 pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> NamedData {
     let id: DataId = DatasetId::new().into();
-    let name = NamedData::with_global_name("ndvi");
+    let name = NamedData::with_system_name("ndvi");
     ctx.add_meta_data(id, name.clone(), Box::new(create_ndvi_meta_data()));
     name
 }
@@ -189,7 +189,7 @@ pub fn add_ports_dataset(ctx: &mut MockExecutionContext) -> DataId {
     let id: DataId = DatasetId::new().into();
     ctx.add_meta_data(
         id.clone(),
-        NamedData::with_global_name("ne_10m_ports"),
+        NamedData::with_system_name("ne_10m_ports"),
         Box::new(create_ports_meta_data()),
     );
     id

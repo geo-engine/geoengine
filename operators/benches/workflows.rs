@@ -598,7 +598,7 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
     ];
 
     let id: DataId = DatasetId::new().into();
-    let name = NamedData::with_global_name("world");
+    let name = NamedData::with_system_name("world");
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
@@ -649,7 +649,7 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
     ];
 
     let id: DataId = DatasetId::new().into();
-    let name = NamedData::with_global_name("world");
+    let name = NamedData::with_system_name("world");
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
@@ -710,7 +710,7 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
     ];
 
     let id: DataId = DatasetId::new().into();
-    let name = NamedData::with_global_name("world");
+    let name = NamedData::with_system_name("world");
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
@@ -773,7 +773,7 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
     ];
 
     let id: DataId = DatasetId::new().into();
-    let name = NamedData::with_global_name("world");
+    let name = NamedData::with_system_name("world");
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {

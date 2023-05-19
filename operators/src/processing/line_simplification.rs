@@ -523,7 +523,7 @@ mod tests {
     #[tokio::test]
     async fn test_polygon_simplification() {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("polygons");
+        let name = NamedData::with_system_name("polygons");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),

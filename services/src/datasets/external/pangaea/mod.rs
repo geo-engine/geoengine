@@ -426,7 +426,7 @@ mod tests {
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = provider.meta_data(&id.clone().into()).await.unwrap();
 
-        let name = geoengine_datatypes::dataset::NamedData::with_global_provider(
+        let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
             PANGAEA_PROVIDER_ID.to_string(),
             doi.to_string(),
         );
@@ -489,7 +489,7 @@ mod tests {
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = provider.meta_data(&id.clone().into()).await.unwrap();
 
-        let name = geoengine_datatypes::dataset::NamedData::with_global_provider(
+        let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
             PANGAEA_PROVIDER_ID.to_string(),
             doi.to_string(),
         );
@@ -564,7 +564,7 @@ mod tests {
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = provider.meta_data(&id.clone().into()).await.unwrap();
 
-        let name = geoengine_datatypes::dataset::NamedData::with_global_provider(
+        let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
             PANGAEA_PROVIDER_ID.to_string(),
             doi.to_string(),
         );
@@ -635,7 +635,7 @@ mod tests {
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = provider.meta_data(&id.clone().into()).await.unwrap();
 
-        let name = geoengine_datatypes::dataset::NamedData::with_global_provider(
+        let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
             PANGAEA_PROVIDER_ID.to_string(),
             doi.to_string(),
         );

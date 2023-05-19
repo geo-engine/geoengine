@@ -1424,7 +1424,7 @@ mod tests {
         // query the newly created dataset
         let op = GdalSource {
             params: GdalSourceParameters {
-                data: NamedData::with_global_name(dataset_id.to_string()),
+                data: NamedData::with_system_name(dataset_id.to_string()),
             },
         }
         .boxed();

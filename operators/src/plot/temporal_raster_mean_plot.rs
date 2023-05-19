@@ -266,7 +266,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: GdalSource {
                     params: GdalSourceParameters {
-                        data: NamedData::with_global_name("test"),
+                        data: NamedData::with_system_name("test"),
                     },
                 }
                 .boxed(),

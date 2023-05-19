@@ -68,6 +68,16 @@ pub const SYSTEM_PROVIDER: &str = "_";
 
 /// The user-facing identifier for loadable data.
 /// It can be resolved into a [`DataId`].
+///
+/// It is a triple of namespace, provider and name.
+/// The namespace and provider are optional and default to the system namespace and provider.
+///
+/// # Examples
+///
+/// * `dataset` -> `NamedData { namespace: None, provider: None, name: "dataset" }`
+/// * `namespace:dataset` -> `NamedData { namespace: Some("namespace"), provider: None, name: "dataset" }`
+/// * `namespace:provider:dataset` -> `NamedData { namespace: Some("namespace"), provider: Some("provider"), name: "dataset" }`
+///
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct NamedData {
     pub namespace: Option<String>,
@@ -88,7 +98,8 @@ impl NamedData {
         }
     }
 
-    pub fn with_global_name<S: Into<String>>(name: S) -> Self {
+    /// Creates a `NamedData` with the system's namepsace and a name.
+    pub fn with_system_name<S: Into<String>>(name: S) -> Self {
         Self {
             namespace: None,
             provider: None,
@@ -107,7 +118,8 @@ impl NamedData {
         }
     }
 
-    pub fn with_global_provider<S1: Into<String> + PartialEq<&'static str>, S2: Into<String>>(
+    /// Creates a `NamedData` with the system's namepsace, a provider and a name.
+    pub fn with_system_provider<S1: Into<String> + PartialEq<&'static str>, S2: Into<String>>(
         provider: S1,
         name: S2,
     ) -> Self {

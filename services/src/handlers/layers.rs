@@ -1554,7 +1554,7 @@ mod tests {
         let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
         let dataset_operator = GdalSource {
             params: GdalSourceParameters {
-                data: geoengine_datatypes::dataset::NamedData::with_global_name(
+                data: geoengine_datatypes::dataset::NamedData::with_system_name(
                     dataset_id.to_string(),
                 ),
             },

@@ -1806,7 +1806,7 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_bbox_filter() -> Result<()> {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("ne_10m_ports");
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -1904,7 +1904,7 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_force_spatial_filter() -> Result<()> {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("ne_10m_ports");
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -2002,7 +2002,7 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_fast_spatial_filter() -> Result<()> {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("ne_10m_ports");
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -2104,7 +2104,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports_columns() -> Result<()> {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("ne_10m_ports");
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -2330,7 +2330,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports() -> Result<()> {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("ne_10m_ports");
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -3737,7 +3737,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn chunked() -> Result<()> {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("ne_10m_ports");
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -3987,7 +3987,7 @@ mod tests {
     #[tokio::test]
     async fn empty() {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("ne_10m_ports");
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -4066,7 +4066,7 @@ mod tests {
     #[tokio::test]
     async fn polygon_gpkg() {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("german-polygons");
+        let name = NamedData::with_system_name("german-polygons");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -4165,7 +4165,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_csv() {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("points");
+        let name = NamedData::with_system_name("points");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -4290,7 +4290,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_date_csv() {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("lon-lat-date");
+        let name = NamedData::with_system_name("lon-lat-date");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -4411,7 +4411,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_date_time_csv() {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("lon-lat-datetime");
+        let name = NamedData::with_system_name("lon-lat-datetime");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -4534,7 +4534,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_date_time_tz_csv() {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("lon-lat-time-tz");
+        let name = NamedData::with_system_name("lon-lat-time-tz");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -4657,7 +4657,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_unix_date() {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("lon-lat-unix-date");
+        let name = NamedData::with_system_name("lon-lat-unix-date");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -4776,7 +4776,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn vector_date_time_csv() {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("lon-lat-datetime");
+        let name = NamedData::with_system_name("lon-lat-datetime");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
@@ -4914,7 +4914,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_bool_csv() {
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_global_name("points-with-bool");
+        let name = NamedData::with_system_name("points-with-bool");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),

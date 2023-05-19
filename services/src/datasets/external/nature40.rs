@@ -270,7 +270,7 @@ impl LayerCollectionProvider for Nature40DataProvider {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: geoengine_datatypes::dataset::NamedData::with_global_provider(
+                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
                                 self.id.to_string(),
                                 id.to_string(),
                             ),
