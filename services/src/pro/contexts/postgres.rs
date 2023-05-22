@@ -13,7 +13,7 @@ use crate::pro::permissions::Role;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::{OidcRequestDb, UserAuth, UserSession};
-use crate::pro::util::config::Oidc;
+use crate::pro::util::config::{Cache, Oidc};
 
 use crate::tasks::SimpleTaskManagerContext;
 use crate::util::config::get_config_element;
@@ -25,6 +25,7 @@ use bb8_postgres::{
     PostgresConnectionManager,
 };
 use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
 use geoengine_operators::pro::cache::tile_cache::TileCache;
@@ -92,7 +93,7 @@ where
             quota,
             pool,
             volumes: Default::default(),
-            tile_cache: Default::default(),
+            tile_cache: Arc::new(TileCache::test_default()),
         })
     }
 
@@ -108,6 +109,7 @@ where
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
         oidc_config: Oidc,
+        cache_config: Cache,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -128,7 +130,13 @@ where
             quota,
             pool,
             volumes: Default::default(),
-            tile_cache: Default::default(),
+            tile_cache: Arc::new(
+                TileCache::new(
+                    cache_config.cache_byte_size,
+                    cache_config.landing_zone_byte_size,
+                )
+                .expect("tile cache creation should work because the config is valid"),
+            ),
         };
 
         if uninitialized {

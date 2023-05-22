@@ -5,14 +5,17 @@ use geoengine_datatypes::{
     identifier,
     primitives::{RasterQueryRectangle, SpatialPartitioned},
     raster::{Pixel, RasterTile2D},
-    util::Identifier,
+    util::{test::TestDefault, Identifier},
 };
 use lru::LruCache;
 use pin_project::pin_project;
+use snafu::ensure;
 use tokio::sync::RwLock;
 
-use crate::engine::CanonicOperatorName;
 use crate::util::Result;
+use crate::{
+    engine::CanonicOperatorName, pro::cache::error::CacheMustBeLargerOrEqualThanLandingZone,
+};
 
 /// The tile cache caches all tiles of a query and is able to answer queries that are fully contained in the cache.
 /// New tiles are inserted into the cache on-the-fly as they are produced by query processors.
@@ -36,21 +39,43 @@ pub struct TileCacheBackend {
     lru: LruCache<CacheEntryId, CanonicOperatorName>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct TileCache {
     backend: RwLock<TileCacheBackend>,
 }
 
-impl Default for TileCacheBackend {
-    fn default() -> Self {
+impl TileCache {
+    pub fn new(cache_byte_size_total: usize, landing_zone_byte_size_total: usize) -> Result<Self> {
         // TODO: ensure cache > landing zone
+        ensure!(
+            cache_byte_size_total >= landing_zone_byte_size_total,
+            CacheMustBeLargerOrEqualThanLandingZone
+        );
+
+        Ok(Self {
+            backend: RwLock::new(TileCacheBackend {
+                operator_caches: Default::default(),
+                lru: LruCache::unbounded(), // we need no cap because we evict manually
+                cache_byte_size_total,
+                cache_byte_size_used: 0, // TODO: include overhead of HashMap?
+                landing_zone_byte_size_total,
+                landing_zone_byte_size_used: 0, // TODO: include overhead of LruCache?
+            }),
+        })
+    }
+}
+
+impl TestDefault for TileCache {
+    fn test_default() -> Self {
         Self {
-            operator_caches: Default::default(),
-            lru: LruCache::unbounded(), // we need no cap because we evict manually
-            cache_byte_size_total: usize::MAX,
-            cache_byte_size_used: 0,
-            landing_zone_byte_size_total: usize::MAX,
-            landing_zone_byte_size_used: 0,
+            backend: RwLock::new(TileCacheBackend {
+                operator_caches: Default::default(),
+                lru: LruCache::unbounded(), // we need no cap because we evict manually
+                cache_byte_size_total: usize::MAX,
+                cache_byte_size_used: 0, // TODO: include overhead of HashMap?
+                landing_zone_byte_size_total: usize::MAX,
+                landing_zone_byte_size_used: 0, // TODO: include overhead of LruCache?
+            }),
         }
     }
 }
@@ -60,34 +85,31 @@ impl Default for TileCacheBackend {
 pub struct OperatorTileCache {
     // for a given operator and query we need to look through all entries to find one that matches
     // TODO: use a multi-dimensional index to speed up the lookup
-    entries: HashMap<CacheEntryId, CachedQueryResult>,
+    entries: HashMap<CacheEntryId, CacheEntry>,
 
     // running queries insert their tiles as they are produced. The entry will be created once the query is done.
     // The query is identified by a Uuid instead of the query rectangle to avoid confusions with other queries
-    active_queries: HashMap<QueryId, ActiveQueryResult>,
+    landing_zone: HashMap<QueryId, LandingZoneEntry>,
 }
 
 identifier!(QueryId);
 
 impl OperatorTileCache {
-    pub fn find_match(
-        &self,
-        query: &RasterQueryRectangle,
-    ) -> Option<(&CacheEntryId, &CachedQueryResult)> {
-        self.entries.iter().find(|(id, r)| r.matches(query))
+    pub fn find_match(&self, query: &RasterQueryRectangle) -> Option<(&CacheEntryId, &CacheEntry)> {
+        self.entries.iter().find(|(_id, r)| r.matches(query))
     }
 }
 
 /// Holds all the tiles for a given query and is able to answer queries that are fully contained
 #[derive(Debug)]
-pub struct CachedQueryResult {
+pub struct CacheEntry {
     query: RasterQueryRectangle,
     tiles: CachedTiles,
 }
 
 identifier!(CacheEntryId);
 
-impl CachedQueryResult {
+impl CacheEntry {
     /// Return true if the query can be answered in full by this cache entry
     /// For this, the bbox and time has to be fully contained, and the spatial resolution has to match
     pub fn matches(&self, query: &RasterQueryRectangle) -> bool {
@@ -140,19 +162,19 @@ impl CachedTiles {
 }
 
 #[derive(Debug)]
-struct ActiveQueryResult {
+struct LandingZoneEntry {
     query: RasterQueryRectangle,
-    tiles: ActiveQueryTiles,
+    tiles: LandingZoneQueryTiles,
 }
 
-impl ActiveQueryResult {
+impl LandingZoneEntry {
     fn byte_size(&self) -> usize {
         self.tiles.byte_size() + std::mem::size_of::<RasterQueryRectangle>()
     }
 }
 
 #[derive(Debug)]
-pub enum ActiveQueryTiles {
+pub enum LandingZoneQueryTiles {
     U8(Vec<RasterTile2D<u8>>),
     U16(Vec<RasterTile2D<u16>>),
     U32(Vec<RasterTile2D<u32>>),
@@ -165,45 +187,44 @@ pub enum ActiveQueryTiles {
     F64(Vec<RasterTile2D<f64>>),
 }
 
-impl ActiveQueryTiles {
+impl LandingZoneQueryTiles {
     fn byte_size(&self) -> usize {
         // TODO: include size of the Vec itself
         match self {
-            ActiveQueryTiles::U8(v) => v.len() * std::mem::size_of::<RasterTile2D<u8>>(),
-            ActiveQueryTiles::U16(v) => v.len() * std::mem::size_of::<RasterTile2D<u16>>(),
-            ActiveQueryTiles::U32(v) => v.len() * std::mem::size_of::<RasterTile2D<u32>>(),
-            ActiveQueryTiles::U64(v) => v.len() * std::mem::size_of::<RasterTile2D<u64>>(),
-            ActiveQueryTiles::I8(v) => v.len() * std::mem::size_of::<RasterTile2D<i8>>(),
-            ActiveQueryTiles::I16(v) => v.len() * std::mem::size_of::<RasterTile2D<i16>>(),
-            ActiveQueryTiles::I32(v) => v.len() * std::mem::size_of::<RasterTile2D<i32>>(),
-            ActiveQueryTiles::I64(v) => v.len() * std::mem::size_of::<RasterTile2D<i64>>(),
-            ActiveQueryTiles::F32(v) => v.len() * std::mem::size_of::<RasterTile2D<f32>>(),
-            ActiveQueryTiles::F64(v) => v.len() * std::mem::size_of::<RasterTile2D<f64>>(),
+            LandingZoneQueryTiles::U8(v) => v.len() * std::mem::size_of::<RasterTile2D<u8>>(),
+            LandingZoneQueryTiles::U16(v) => v.len() * std::mem::size_of::<RasterTile2D<u16>>(),
+            LandingZoneQueryTiles::U32(v) => v.len() * std::mem::size_of::<RasterTile2D<u32>>(),
+            LandingZoneQueryTiles::U64(v) => v.len() * std::mem::size_of::<RasterTile2D<u64>>(),
+            LandingZoneQueryTiles::I8(v) => v.len() * std::mem::size_of::<RasterTile2D<i8>>(),
+            LandingZoneQueryTiles::I16(v) => v.len() * std::mem::size_of::<RasterTile2D<i16>>(),
+            LandingZoneQueryTiles::I32(v) => v.len() * std::mem::size_of::<RasterTile2D<i32>>(),
+            LandingZoneQueryTiles::I64(v) => v.len() * std::mem::size_of::<RasterTile2D<i64>>(),
+            LandingZoneQueryTiles::F32(v) => v.len() * std::mem::size_of::<RasterTile2D<f32>>(),
+            LandingZoneQueryTiles::F64(v) => v.len() * std::mem::size_of::<RasterTile2D<f64>>(),
         }
     }
 }
 
-impl From<ActiveQueryTiles> for CachedTiles {
-    fn from(value: ActiveQueryTiles) -> Self {
+impl From<LandingZoneQueryTiles> for CachedTiles {
+    fn from(value: LandingZoneQueryTiles) -> Self {
         match value {
-            ActiveQueryTiles::U8(t) => CachedTiles::U8(Arc::new(t)),
-            ActiveQueryTiles::U16(t) => CachedTiles::U16(Arc::new(t)),
-            ActiveQueryTiles::U32(t) => CachedTiles::U32(Arc::new(t)),
-            ActiveQueryTiles::U64(t) => CachedTiles::U64(Arc::new(t)),
-            ActiveQueryTiles::I8(t) => CachedTiles::I8(Arc::new(t)),
-            ActiveQueryTiles::I16(t) => CachedTiles::I16(Arc::new(t)),
-            ActiveQueryTiles::I32(t) => CachedTiles::I32(Arc::new(t)),
-            ActiveQueryTiles::I64(t) => CachedTiles::I64(Arc::new(t)),
-            ActiveQueryTiles::F32(t) => CachedTiles::F32(Arc::new(t)),
-            ActiveQueryTiles::F64(t) => CachedTiles::F64(Arc::new(t)),
+            LandingZoneQueryTiles::U8(t) => CachedTiles::U8(Arc::new(t)),
+            LandingZoneQueryTiles::U16(t) => CachedTiles::U16(Arc::new(t)),
+            LandingZoneQueryTiles::U32(t) => CachedTiles::U32(Arc::new(t)),
+            LandingZoneQueryTiles::U64(t) => CachedTiles::U64(Arc::new(t)),
+            LandingZoneQueryTiles::I8(t) => CachedTiles::I8(Arc::new(t)),
+            LandingZoneQueryTiles::I16(t) => CachedTiles::I16(Arc::new(t)),
+            LandingZoneQueryTiles::I32(t) => CachedTiles::I32(Arc::new(t)),
+            LandingZoneQueryTiles::I64(t) => CachedTiles::I64(Arc::new(t)),
+            LandingZoneQueryTiles::F32(t) => CachedTiles::F32(Arc::new(t)),
+            LandingZoneQueryTiles::F64(t) => CachedTiles::F64(Arc::new(t)),
         }
     }
 }
 
-impl From<ActiveQueryResult> for CachedQueryResult {
-    fn from(value: ActiveQueryResult) -> Self {
+impl From<LandingZoneEntry> for CacheEntry {
+    fn from(value: LandingZoneEntry) -> Self {
         Self {
-            // id: Uuid::new_v4(),
             query: value.query,
             tiles: value.tiles.into(),
         }
@@ -304,9 +325,9 @@ pub enum TypedCacheTileStream {
 pub trait Cachable: Sized {
     fn stream(b: TypedCacheTileStream) -> Option<CacheTileStream<Self>>;
 
-    fn insert_tile(tiles: &mut ActiveQueryTiles, tile: RasterTile2D<Self>) -> Result<()>;
+    fn insert_tile(tiles: &mut LandingZoneQueryTiles, tile: RasterTile2D<Self>) -> Result<()>;
 
-    fn create_active_query_tiles() -> ActiveQueryTiles;
+    fn create_active_query_tiles() -> LandingZoneQueryTiles;
 }
 
 macro_rules! impl_tile_streamer {
@@ -319,16 +340,19 @@ macro_rules! impl_tile_streamer {
                 None
             }
 
-            fn insert_tile(tiles: &mut ActiveQueryTiles, tile: RasterTile2D<Self>) -> Result<()> {
-                if let ActiveQueryTiles::$variant(ref mut tiles) = tiles {
+            fn insert_tile(
+                tiles: &mut LandingZoneQueryTiles,
+                tile: RasterTile2D<Self>,
+            ) -> Result<()> {
+                if let LandingZoneQueryTiles::$variant(ref mut tiles) = tiles {
                     tiles.push(tile);
                     return Ok(());
                 }
-                Err(crate::error::Error::QueryProcessor)
+                Err(super::error::CacheError::InvalidRasterDataTypeForInsertion.into())
             }
 
-            fn create_active_query_tiles() -> ActiveQueryTiles {
-                ActiveQueryTiles::$variant(Vec::new())
+            fn create_active_query_tiles() -> LandingZoneQueryTiles {
+                LandingZoneQueryTiles::$variant(Vec::new())
             }
         }
     };
@@ -378,24 +402,34 @@ impl TileCache {
         &self,
         key: CanonicOperatorName,
         query: &RasterQueryRectangle,
-    ) -> QueryId {
-        // TODO: return Result
-        // TODO: check if landing zone has enough space, otherwise abort query(?)
-
+    ) -> Result<QueryId> {
         let mut backend = self.backend.write().await;
+
+        let mut entry_size =
+            std::mem::size_of::<QueryId>() + std::mem::size_of::<RasterQueryRectangle>(); // TODO: incorporate overhead for empty tiles vec(?)
+
+        if !backend.operator_caches.contains_key(&key) {
+            entry_size += key.byte_size();
+        }
+
+        ensure!(
+            backend.landing_zone_byte_size_used + entry_size
+                <= backend.landing_zone_byte_size_total,
+            crate::pro::cache::error::NotEnoughSpaceInLandingZone
+        );
 
         let cache = backend.operator_caches.entry(key).or_default();
 
         let query_id = QueryId::new();
-        cache.active_queries.insert(
+        cache.landing_zone.insert(
             query_id,
-            ActiveQueryResult {
+            LandingZoneEntry {
                 query: *query,
                 tiles: T::create_active_query_tiles(),
             },
         );
 
-        query_id
+        Ok(query_id)
     }
 
     /// Insert a tile for a given query. The query has to be inserted first.
@@ -418,24 +452,25 @@ impl TileCache {
         {
             let cache = backend.operator_caches.entry(key).or_default();
 
-            let entry = cache.active_queries.remove(&query_id);
+            let entry = cache.landing_zone.remove(&query_id);
 
             if let Some(entry) = entry {
                 backend.landing_zone_byte_size_used -= entry.byte_size();
             }
 
-            // TODO: better error
-            return Err(crate::error::Error::QueryProcessor);
+            return Err(super::error::CacheError::NotEnoughSpaceInLandingZone.into());
         }
 
         let cache = backend.operator_caches.entry(key).or_default();
 
         let entry = cache
-            .active_queries
+            .landing_zone
             .get_mut(&query_id)
-            .ok_or(crate::error::Error::QueryProcessor)?; // TODO: better error
+            .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?;
 
         T::insert_tile(&mut entry.tiles, tile)?;
+
+        backend.landing_zone_byte_size_used += entry.byte_size();
 
         Ok(())
     }
@@ -445,7 +480,7 @@ impl TileCache {
         let mut backend = self.backend.write().await;
 
         let cache = backend.operator_caches.entry(key).or_default();
-        let entry = cache.active_queries.remove(&query_id);
+        let entry = cache.landing_zone.remove(&query_id);
 
         // update landing zone
         if let Some(entry) = entry {
@@ -463,17 +498,17 @@ impl TileCache {
         let cache = backend
             .operator_caches
             .get_mut(&key)
-            .ok_or(crate::error::Error::QueryProcessor)?;
+            .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?;
 
         let active_query = cache
-            .active_queries
+            .landing_zone
             .remove(&query_id)
-            .ok_or(crate::error::Error::QueryProcessor)?; // TODO: better error
+            .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?;
 
         let entry_size = active_query.byte_size(); // TODO is active query and cache entry the same size?
 
         // move entry from landing zone into cache
-        let entry: CachedQueryResult = active_query.into();
+        let entry: CacheEntry = active_query.into();
         let entry_id = CacheEntryId::new();
         cache.entries.insert(entry_id, entry);
 
@@ -489,20 +524,109 @@ impl TileCache {
         while backend.cache_byte_size_used + entry_size > backend.cache_byte_size_total {
             // this should always work, because otherwise it would mean the cache is not empty but the lru is.
             // the landing zone is smaller than the cache size and the entry must fit into the landing zone.
-            let (id, op) = backend
-                .lru
-                .pop_lru()
-                .expect("there should be an lru entry because the cache is not empty");
-
-            let evict_cache = backend
-                .operator_caches
-                .get_mut(&op)
-                .ok_or(crate::error::Error::QueryProcessor)?; // TODO: better error
-
-            if let Some(entry) = evict_cache.entries.remove(&id) {
-                backend.cache_byte_size_used -= entry.byte_size();
+            if let Some((id, op)) = backend.lru.pop_lru() {
+                if let Some(evict_cache) = backend.operator_caches.get_mut(&op) {
+                    if let Some(entry) = evict_cache.entries.remove(&id) {
+                        backend.cache_byte_size_used -= entry.byte_size();
+                    }
+                }
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use geoengine_datatypes::{
+        primitives::{DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
+        raster::{Grid, RasterProperties},
+    };
+    use serde_json::json;
+
+    use super::*;
+
+    async fn process_query(tile_cache: &mut TileCache, op_name: CanonicOperatorName) {
+        let query_id = tile_cache
+            .insert_query::<u8>(op_name.clone(), &query_rect())
+            .await
+            .unwrap();
+
+        tile_cache
+            .insert_tile(
+                op_name.clone(),
+                query_id,
+                RasterTile2D::<u8> {
+                    time: TimeInterval::new_unchecked(1, 1),
+                    tile_position: [-1, 0].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
+                        .unwrap()
+                        .into(),
+                    properties: RasterProperties::default(),
+                },
+            )
+            .await
+            .unwrap();
+
+        tile_cache
+            .finish_query(op_name.clone(), query_id)
+            .await
+            .unwrap();
+    }
+
+    fn query_rect() -> RasterQueryRectangle {
+        RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180., -90.).into(),
+            ),
+            time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
+                .unwrap(),
+            spatial_resolution: SpatialResolution::one(),
+        }
+    }
+
+    fn op(idx: usize) -> CanonicOperatorName {
+        CanonicOperatorName::new(json!({
+            "type": "GdalSource",
+            "params": {
+                "data": idx
+            }
+        }))
+    }
+
+    #[tokio::test]
+    async fn it_evicts_lru() {
+        // set limits s.t. three tiles fit
+        let mut tile_cache = TileCache::new(1248, 1248).unwrap();
+
+        // process three different queries
+        process_query(&mut tile_cache, op(1)).await;
+        process_query(&mut tile_cache, op(2)).await;
+        process_query(&mut tile_cache, op(3)).await;
+
+        // query the first one s.t. it is the most recently used
+        tile_cache
+            .query_cache::<u8>(op(1), &query_rect())
+            .await
+            .unwrap();
+
+        // process a fourth query
+        process_query(&mut tile_cache, op(4)).await;
+
+        // assure the seconds query is evicted because it is the least recently used
+        assert!(tile_cache
+            .query_cache::<u8>(op(2), &query_rect())
+            .await
+            .is_none());
+
+        // assure that the other queries are still in the cache
+        for i in [1, 3, 4] {
+            assert!(tile_cache
+                .query_cache::<u8>(op(i), &query_rect())
+                .await
+                .is_some());
+        }
     }
 }
