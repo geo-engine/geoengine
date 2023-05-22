@@ -27,7 +27,7 @@ geo = "0.25"
 geoengine-datatypes = { path = "../datatypes" }
 itertools = "0.10"
 lazy_static = "1.4"
-libloading = "0.7"
+libloading = "0.8"
 log = "0.4"
 num-traits = "0.2"
 num = "0.4"
