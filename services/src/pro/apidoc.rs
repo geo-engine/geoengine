@@ -1,9 +1,9 @@
 use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, DateTimeParseFormat, DefaultColors,
-    ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
-    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, OverUnderColors, Palette,
-    PlotOutputFormat, PlotQueryRectangle, RasterDataType, RasterPropertiesEntryType,
+    Coordinate2D, DataId, DataProviderId, DatasetId, DatasetName, DateTime, DateTimeParseFormat,
+    DefaultColors, ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient,
+    Measurement, MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, OverUnderColors,
+    Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType, RasterPropertiesEntryType,
     RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
     SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
     TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
