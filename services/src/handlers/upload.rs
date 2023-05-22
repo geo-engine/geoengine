@@ -243,7 +243,8 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        let files: UploadFilesResponse = test::read_body_json(res).await;
+        let mut files: UploadFilesResponse = test::read_body_json(res).await;
+        files.files.sort();
 
         assert_eq!(
             files.files,

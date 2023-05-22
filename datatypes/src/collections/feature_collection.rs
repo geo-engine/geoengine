@@ -1,12 +1,9 @@
+use arrow::datatypes::{DataType, Date64Type, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
 use arrow::{
-    array::FixedSizeListArray,
-    datatypes::{DataType, Date64Type, Field, Float64Type, Int64Type},
-};
-use arrow::{
     array::{
-        as_boolean_array, as_primitive_array, as_string_array, Array, ArrayData, ArrayRef,
-        BooleanArray, ListArray, StructArray,
+        as_boolean_array, as_primitive_array, as_string_array, Array, ArrayRef, BooleanArray,
+        ListArray, StructArray,
     },
     buffer::Buffer,
 };
@@ -194,32 +191,27 @@ where
 
         // TODO: use filter directly on struct array when it is implemented
 
-        let table_data = self.table.data();
-        let arrow::datatypes::DataType::Struct(columns) = table_data.data_type() else {
+        let arrow::datatypes::DataType::Struct(columns) = self.table.data_type() else {
             unreachable!("`table` field must be a struct")
         };
 
-        let mut filtered_data =
-            Vec::<(arrow::datatypes::Field, arrow::array::ArrayRef)>::with_capacity(columns.len());
+        let mut filtered_data = Vec::<ArrayRef>::with_capacity(columns.len());
 
         for (column, array) in columns.iter().zip(self.table.columns()) {
-            filtered_data.push((
-                column.clone(),
-                match column.name().as_str() {
-                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::filter(
-                        downcast_array(array),
-                        &filter_array,
-                    )?),
-                    Self::TIME_COLUMN_NAME => {
-                        Arc::new(TimeInterval::filter(downcast_array(array), &filter_array)?)
-                    }
-                    _ => arrow::compute::filter(array.as_ref(), &filter_array)?,
-                },
-            ));
+            filtered_data.push(match column.name().as_str() {
+                Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::filter(
+                    downcast_array(array),
+                    &filter_array,
+                )?),
+                Self::TIME_COLUMN_NAME => {
+                    Arc::new(TimeInterval::filter(downcast_array(array), &filter_array)?)
+                }
+                _ => arrow::compute::filter(array.as_ref(), &filter_array)?,
+            });
         }
 
         Ok(Self::new_from_internals(
-            filtered_data.into(),
+            StructArray::try_new(columns.clone(), filtered_data, None)?,
             self.types.clone(),
         ))
     }
@@ -315,7 +307,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len())?,
+            StructArray::try_new(columns.into(), column_values, None)?,
             types,
         ))
     }
@@ -400,7 +392,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len())?,
+            StructArray::try_new(columns.into(), column_values, None)?,
             types,
         ))
     }
@@ -511,12 +503,11 @@ where
             }
         );
 
-        let table_data = self.table.data();
-        let DataType::Struct(columns) = table_data.data_type() else {
+        let DataType::Struct(columns) = self.table.data_type() else {
             unreachable!("`tables` field must be a struct")
         };
 
-        let mut new_data = Vec::<(Field, ArrayRef)>::with_capacity(columns.len());
+        let mut new_data = Vec::<ArrayRef>::with_capacity(columns.len());
 
         // concat data column by column
         for (column, array_a) in columns.iter().zip(self.table.columns()) {
@@ -525,24 +516,21 @@ where
                 .column_by_name(column.name())
                 .expect("column must occur in both collections");
 
-            new_data.push((
-                column.clone(),
-                match column.name().as_str() {
-                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::concat(
-                        downcast_array(array_a),
-                        downcast_array(array_b),
-                    )?),
-                    Self::TIME_COLUMN_NAME => Arc::new(TimeInterval::concat(
-                        downcast_array(array_a),
-                        downcast_array(array_b),
-                    )?),
-                    _ => arrow::compute::concat(&[array_a.as_ref(), array_b.as_ref()])?,
-                },
-            ));
+            new_data.push(match column.name().as_str() {
+                Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::concat(
+                    downcast_array(array_a),
+                    downcast_array(array_b),
+                )?),
+                Self::TIME_COLUMN_NAME => Arc::new(TimeInterval::concat(
+                    downcast_array(array_a),
+                    downcast_array(array_b),
+                )?),
+                _ => arrow::compute::concat(&[array_a.as_ref(), array_b.as_ref()])?,
+            });
         }
 
         Ok(Self::new_from_internals(
-            new_data.into(),
+            StructArray::try_new(columns.clone(), new_data, None)?,
             self.types.clone(),
         ))
     }
@@ -648,7 +636,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len())?,
+            StructArray::try_new(columns.into(), column_values, None)?,
             types,
         ))
     }
@@ -669,7 +657,7 @@ where
 
         let table_ref = arrow::compute::take(&self.table, &sort_indices, None)?;
 
-        let table = StructArray::from(table_ref.data().clone());
+        let table = StructArray::from(table_ref.into_data());
 
         Ok(Self::new_from_internals(table, self.types.clone()))
     }
@@ -711,9 +699,7 @@ where
             TimeInterval::arrow_data_type(),
             false,
         ));
-        column_values.push(Arc::new(FixedSizeListArray::from(
-            time_intervals.data().clone(),
-        )));
+        column_values.push(Arc::new(time_intervals));
 
         // copy remaining attribute data
         for (column_name, column_type) in &self.types {
@@ -731,7 +717,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len())?,
+            StructArray::try_new(columns.into(), column_values, None)?,
             self.types.clone(),
         ))
     }
@@ -1005,12 +991,12 @@ where
             match self.types.get(column_name).expect("previously checked") {
                 FeatureDataType::Float => {
                     let array: &arrow::array::Float64Array = downcast_array(column);
-                    FloatDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    FloatDataRef::new(array.values(), array.nulls()).into()
                 }
                 FeatureDataType::Text => {
                     let array: &arrow::array::StringArray = downcast_array(column);
                     let fixed_nulls = if column.null_count() > 0 {
-                        array.data_ref().null_bitmap()
+                        array.nulls()
                     } else {
                         None // StringBuilder assigns some null_bitmap even if there are no nulls
                     };
@@ -1018,17 +1004,17 @@ where
                 }
                 FeatureDataType::Int => {
                     let array: &arrow::array::Int64Array = downcast_array(column);
-                    IntDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    IntDataRef::new(array.values(), array.nulls()).into()
                 }
                 FeatureDataType::Category => {
                     let array: &arrow::array::UInt8Array = downcast_array(column);
-                    CategoryDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    CategoryDataRef::new(array.values(), array.nulls()).into()
                 }
                 FeatureDataType::Bool => {
                     let array: &arrow::array::BooleanArray = downcast_array(column);
                     // TODO: This operation is quite expensive for getting a reference
                     let transformed: Vec<_> = array.iter().map(|x| x.unwrap_or(false)).collect();
-                    BoolDataRef::new(transformed, array.data_ref().null_bitmap()).into()
+                    BoolDataRef::new(transformed, array.nulls()).into()
                 }
                 FeatureDataType::DateTime => {
                     let array: &arrow::array::Date64Array = downcast_array(column);
@@ -1038,7 +1024,7 @@ where
                             array.len(),
                         )
                     };
-                    DateTimeDataRef::new(timestamps, array.data_ref().null_bitmap()).into()
+                    DateTimeDataRef::new(timestamps, array.nulls()).into()
                 }
             },
         )
@@ -1224,7 +1210,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, arrays, number_of_rows)?,
+            StructArray::try_new(columns.into(), arrays, None)?,
             types,
         ))
     }
@@ -1259,7 +1245,7 @@ where
 impl<CollectionType> Clone for FeatureCollection<CollectionType> {
     fn clone(&self) -> Self {
         Self {
-            table: StructArray::from(self.table.data().clone()),
+            table: self.table.clone(),
             types: self.types.clone(),
             collection_type: Default::default(),
         }
@@ -1322,25 +1308,6 @@ where
     fn geometry_options(&'i self) -> Self::GeometryOptionIterator {
         SomeIter::new(self.geometries())
     }
-}
-
-/// Create an `arrow` struct from column meta data and data
-pub fn struct_array_from_data(
-    columns: Vec<Field>,
-    column_values: Vec<ArrayRef>,
-    number_of_features: usize,
-) -> Result<StructArray> {
-    Ok(StructArray::from(
-        ArrayData::builder(arrow::datatypes::DataType::Struct(columns))
-            .child_data(
-                column_values
-                    .into_iter()
-                    .map(|a| a.data().clone())
-                    .collect(),
-            )
-            .len(number_of_features)
-            .build()?,
-    ))
 }
 
 /// Types that are suitable to act as filters
@@ -1598,7 +1565,7 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len())?,
+            StructArray::try_new(columns.into(), column_values, None)?,
             self.types.clone(),
         ))
     }
@@ -1631,7 +1598,9 @@ mod tests {
         }
 
         fn time_interval_size(length: usize) -> usize {
-            let base = 64;
+            assert_eq!(mem::size_of::<arrow::array::FixedSizeListArray>(), 104);
+
+            let base = 104;
 
             if length == 0 {
                 return base;
@@ -1647,10 +1616,10 @@ mod tests {
             empty_hash_map_size
         );
 
-        let struct_stack_size = 176;
+        let struct_stack_size = 104;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
-        let arrow_overhead_bytes = 264;
+        let arrow_overhead_bytes = 96;
 
         for i in 0..10 {
             assert_eq!(

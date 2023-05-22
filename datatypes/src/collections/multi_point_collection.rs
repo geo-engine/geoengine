@@ -269,7 +269,7 @@ impl GeometryCollection for MultiPointCollection {
         let coordinates_ref = geometries.values();
         let coordinates: &FixedSizeListArray = downcast_array(coordinates_ref);
 
-        let number_of_coordinates = coordinates.data().len();
+        let number_of_coordinates = coordinates.len();
 
         let floats_ref = coordinates.values();
         let floats: &Float64Array = downcast_array(floats_ref);
@@ -282,7 +282,6 @@ impl GeometryCollection for MultiPointCollection {
         }
     }
 
-    #[allow(clippy::cast_ptr_alignment)]
     fn feature_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table
@@ -290,26 +289,22 @@ impl GeometryCollection for MultiPointCollection {
             .expect("There should exist a geometry column because it is added during creation of the collection");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
-        let data = geometries.data();
-        let buffer = &data.buffers()[0];
-
-        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), geometries.len() + 1) }
+        geometries.offsets()
     }
 }
 
 impl ReplaceRawArrayCoords for MultiPointCollection {
     fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Result<ArrayData> {
         let geometries: &ListArray = downcast_array(array_ref);
-        let offset_array = geometries.data();
-        let offsets_buffer = &offset_array.buffers()[0];
-        let num_features = offset_array.len();
+        let offsets_buffer = geometries.offsets();
+        let num_features = geometries.len();
 
         let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
         let num_floats = num_coords * 2;
 
         Ok(ArrayData::builder(MultiPoint::arrow_data_type())
             .len(num_features)
-            .add_buffer(offsets_buffer.clone())
+            .add_buffer(offsets_buffer.inner().inner().clone())
             .add_child_data(
                 ArrayData::builder(Coordinate2D::arrow_data_type())
                     .len(num_coords)
