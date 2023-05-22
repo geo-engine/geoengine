@@ -1855,12 +1855,9 @@ dependencies = [
 
 [[package]]
 name = "float_next_after"
-version = "0.1.5"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fc612c5837986b7104a87a0df74a5460931f1c5274be12f8d0f40aa2f30d632"
-dependencies = [
- "num-traits",
-]
+checksum = "8bf7cc16383c4b8d58b9905a8509f02926ce3058053c056376248d958c9df1e8"
 
 [[package]]
 name = "flume"
@@ -2073,9 +2070,9 @@ dependencies = [
 
 [[package]]
 name = "geo"
-version = "0.23.1"
+version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b39f57e9624b1a17ce621375464e9878c705d0aaadaf25cb44e4e0005a16de2f"
+checksum = "c07ac450e9e7d8c08e58d2723d46bd0328bb6cc1d7b18f4f37a1e15a311098b0"
 dependencies = [
  "float_next_after",
  "geo-types",
@@ -2083,7 +2080,7 @@ dependencies = [
  "log",
  "num-traits",
  "robust",
- "rstar 0.9.3",
+ "rstar 0.10.0",
 ]
 
 [[package]]
@@ -2104,8 +2101,8 @@ checksum = "a5f0b3068e1537a4b861ec3734f4aa9c317d537cf0845bf6fb6221973499d26c"
 dependencies = [
  "approx",
  "num-traits",
+ "rstar 0.10.0",
  "rstar 0.8.4",
- "rstar 0.9.3",
  "serde",
 ]
 
@@ -2119,7 +2116,7 @@ dependencies = [
  "criterion",
  "float-cmp",
  "gdal",
- "geo 0.23.1",
+ "geo 0.25.0",
  "geo-types",
  "geojson",
  "image",
@@ -2156,7 +2153,7 @@ dependencies = [
  "futures",
  "gdal",
  "gdal-sys",
- "geo 0.23.1",
+ "geo 0.25.0",
  "geo-rand",
  "geoengine-datatypes",
  "httptest",
@@ -2220,7 +2217,7 @@ dependencies = [
  "futures-util",
  "gdal",
  "gdal-sys",
- "geo 0.23.1",
+ "geo 0.25.0",
  "geoengine-datatypes",
  "geoengine-operators",
  "geojson",
@@ -4426,9 +4423,9 @@ dependencies = [
 
 [[package]]
 name = "rstar"
-version = "0.9.3"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b40f1bfe5acdab44bc63e6699c28b74f75ec43afb59f3eda01e145aff86a25fa"
+checksum = "1f39465655a1e3d8ae79c6d9e007f4953bfc5d55297602df9dc38f9ae9f1359a"
 dependencies = [
  "heapless 0.7.16",
  "num-traits",
