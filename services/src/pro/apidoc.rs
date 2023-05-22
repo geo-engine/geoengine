@@ -156,6 +156,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             DataId,
             DataProviderId,
             DatasetId,
+            DatasetName,
+            NamedData,
             ExternalDataId,
             LayerId,
             ProjectId,
