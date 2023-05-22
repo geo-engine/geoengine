@@ -175,7 +175,7 @@ pub trait InitializedVectorOperator: Send + Sync {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CanonicOperatorName(serde_json::Value);
 
-#[allow(clippy::derive_hash_xor_eq)] // since the hash is basically also derived (from String), this should be fine
+#[allow(clippy::derived_hash_with_manual_eq)] // since the hash is basically also derived (from String), this should be fine
 impl std::hash::Hash for CanonicOperatorName {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         // TODO: serializing to string is potentially too expensive to perform each time.

@@ -998,7 +998,6 @@ mod tests {
         // Assert geometrys are approx equal
         proj_collection
             .geometries()
-            .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(&MultiPolygon, &a.into(), e, epsilon = 0.00001));

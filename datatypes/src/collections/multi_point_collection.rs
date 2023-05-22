@@ -1319,7 +1319,6 @@ mod tests {
         // Assert geometrys are approx equal
         proj_pc
             .geometries()
-            .into_iter()
             .zip(expected_points.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(&MultiPoint, &a.into(), e, epsilon = 0.000_001));

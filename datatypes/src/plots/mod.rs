@@ -40,14 +40,13 @@ pub struct PlotData {
     pub metadata: PlotMetaData,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize, Default)]
 #[serde(untagged)]
 pub enum PlotMetaData {
+    #[default]
     None,
     #[serde(rename_all = "camelCase")]
-    Selection {
-        selection_name: String,
-    },
+    Selection { selection_name: String },
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
@@ -55,10 +54,4 @@ pub enum PlotOutputFormat {
     JsonPlain,
     JsonVega,
     ImagePng,
-}
-
-impl Default for PlotMetaData {
-    fn default() -> Self {
-        PlotMetaData::None
-    }
 }

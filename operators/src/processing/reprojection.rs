@@ -687,7 +687,6 @@ mod tests {
 
         result[0]
             .geometries()
-            .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(&MultiPoint, &a.into(), e, epsilon = 0.00001));
@@ -761,7 +760,6 @@ mod tests {
 
         result[0]
             .geometries()
-            .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(
@@ -842,7 +840,6 @@ mod tests {
 
         result[0]
             .geometries()
-            .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(&MultiPolygon, &a.into(), e, epsilon = 0.00001));
