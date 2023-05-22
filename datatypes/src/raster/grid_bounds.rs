@@ -328,6 +328,21 @@ where
     }
 }
 
+impl GridContains<GridBoundingBox2D> for GridBoundingBox2D {
+    fn contains(&self, other: &GridBoundingBox2D) -> bool {
+        let [self_y_min, self_x_min] = self.min;
+        let [other_y_min, other_x_min] = other.min;
+
+        let [self_y_max, self_x_max] = self.max;
+        let [other_y_max, other_x_max] = other.max;
+
+        self_y_min <= other_y_min
+            && self_x_min <= other_x_min
+            && self_y_max >= other_y_max
+            && self_x_max >= other_x_max
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -462,5 +477,13 @@ mod tests {
         let l2 = a.linear_space_index_unchecked([2, 2, 2]);
         assert_eq!(l2, 1 * 42 * 42 + 1 * 42 + 1);
         assert_eq!(a.grid_idx_unchecked(l2), [2, 2, 2].into());
+    }
+
+    #[test]
+    fn grid_bounding_box_2d_contains() {
+        let a = GridBoundingBox::new([1, 1], [42, 42]).unwrap();
+        let b = GridBoundingBox::new([2, 2], [41, 41]).unwrap();
+        assert!(a.contains(&b));
+        assert!(!b.contains(&a));
     }
 }

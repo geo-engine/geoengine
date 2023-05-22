@@ -3,7 +3,7 @@ use std::{collections::HashMap, pin::Pin, sync::Arc};
 use futures::Stream;
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartitioned},
-    raster::{Pixel, RasterTile2D},
+    raster::{GridContains, Pixel, RasterTile2D},
 };
 use pin_project::pin_project;
 use tokio::sync::RwLock;
@@ -52,9 +52,13 @@ impl CachedQueryResult {
     /// For this, the bbox and time has to be fully contained, and the spatial resolution has to match
     pub fn matches(&self, query: &RasterQueryRectangle) -> bool {
         (self.query.spatial_bounds == query.spatial_bounds
-            || self.query.spatial_bounds.contains(&query.spatial_bounds))
+            || self.query.spatial_bounds.geo_transform == query.spatial_bounds.geo_transform
+                && self
+                    .query
+                    .spatial_bounds
+                    .grid_bounds
+                    .contains(&query.spatial_bounds.grid_bounds))
             && self.query.time_interval.contains(&query.time_interval)
-            && self.query.spatial_resolution == query.spatial_resolution
     }
 
     /// Produces a tile stream from the cache
@@ -188,7 +192,7 @@ impl<T: Pixel> Stream for CacheTileStream<T> {
             let tile = &data[i];
             let tile_bbox = tile.tile_information().spatial_partition();
 
-            if tile_bbox.intersects(&query.spatial_bounds)
+            if tile_bbox.intersects(&query.spatial_bounds.spatial_partition()) // TODO: use the Grid Bounds directly
                 && tile.time.intersects(&query.time_interval)
             {
                 *idx = i + 1;

@@ -10,7 +10,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{ready, Stream};
-use geoengine_datatypes::primitives::{QueryRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{QueryRectangle, SpatialGridQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::{pin_project, pinned_drop};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
@@ -87,7 +87,7 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
 /// A cache operator that caches the results of its source operator
 struct CacheQueryProcessor<Q, T>
 where
-    Q: QueryProcessor<Output = RasterTile2D<T>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<Output = RasterTile2D<T>, SpatialQuery = SpatialGridQueryRectangle>,
     T: Pixel,
 {
     processor: Q,
@@ -96,7 +96,7 @@ where
 
 impl<Q, T> CacheQueryProcessor<Q, T>
 where
-    Q: QueryProcessor<Output = RasterTile2D<T>, SpatialBounds = SpatialPartition2D> + Sized,
+    Q: QueryProcessor<Output = RasterTile2D<T>, SpatialQuery = SpatialGridQueryRectangle> + Sized,
     T: Pixel,
 {
     pub fn new(processor: Q, cache_key: CanonicOperatorName) -> Self {
@@ -110,15 +110,15 @@ where
 #[async_trait]
 impl<Q, T> QueryProcessor for CacheQueryProcessor<Q, T>
 where
-    Q: QueryProcessor<Output = RasterTile2D<T>, SpatialBounds = SpatialPartition2D> + Sized,
+    Q: QueryProcessor<Output = RasterTile2D<T>, SpatialQuery = SpatialGridQueryRectangle> + Sized,
     T: Pixel + Cachable,
 {
     type Output = RasterTile2D<T>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = SpatialGridQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialBounds>,
+        query: QueryRectangle<Self::SpatialQuery>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let tile_cache = ctx
@@ -262,7 +262,7 @@ where
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{SpatialResolution, TimeInterval},
+        primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
         util::test::TestDefault,
     };
 
@@ -306,14 +306,12 @@ mod tests {
 
         let stream = processor
             .query(
-                QueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        [-180., -90.].into(),
-                        [180., 90.].into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
+                    SpatialResolution::zero_point_one(),
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    TimeInterval::default(),
+                ),
                 &query_ctx,
             )
             .await
@@ -327,14 +325,12 @@ mod tests {
 
         let stream_from_cache = processor
             .query(
-                QueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        [-180., -90.].into(),
-                        [180., 90.].into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
+                    SpatialResolution::zero_point_one(),
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    TimeInterval::default(),
+                ),
                 &query_ctx,
             )
             .await

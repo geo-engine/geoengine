@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use geoengine_datatypes::{
-    primitives::{QueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
+    primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
     util::test::TestDefault,
 };
 use geoengine_operators::{
@@ -65,14 +65,12 @@ async fn main() {
 
     let stream = processor
         .query(
-            QueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
-                    [-180., -90.].into(),
-                    [180., 90.].into(),
-                ),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
+                SpatialResolution::zero_point_one(),
+                exe_ctx.tiling_specification.origin_coordinate,
+                TimeInterval::default(),
+            ),
             &query_ctx,
         )
         .await
@@ -88,14 +86,12 @@ async fn main() {
 
     let stream_from_cache = processor
         .query(
-            QueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
-                    [-180., -90.].into(),
-                    [180., 90.].into(),
-                ),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
+                SpatialResolution::zero_point_one(),
+                exe_ctx.tiling_specification.origin_coordinate,
+                TimeInterval::default(),
+            ),
             &query_ctx,
         )
         .await
