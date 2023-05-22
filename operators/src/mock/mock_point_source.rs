@@ -1,4 +1,4 @@
-use crate::engine::{OperatorData, QueryContext};
+use crate::engine::{CanonicOperatorName, OperatorData, QueryContext};
 use crate::{
     engine::{
         ExecutionContext, InitializedVectorOperator, OperatorName, SourceOperator,
@@ -75,6 +75,7 @@ impl VectorOperator for MockPointSource {
         _context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         Ok(InitializedMockPointSource {
+            name: CanonicOperatorName::from(&self),
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReference::epsg_4326().into(),
@@ -91,6 +92,7 @@ impl VectorOperator for MockPointSource {
 }
 
 pub struct InitializedMockPointSource {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     points: Vec<Coordinate2D>,
 }
@@ -107,6 +109,10 @@ impl InitializedVectorOperator for InitializedMockPointSource {
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

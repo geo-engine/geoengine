@@ -1,7 +1,8 @@
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{
-    InitializedRasterOperator, OperatorData, OperatorName, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, InitializedRasterOperator, OperatorData, OperatorName, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -200,6 +201,8 @@ macro_rules! impl_mock_raster_source {
                 _path: WorkflowOperatorPath,
                 context: &dyn crate::engine::ExecutionContext,
             ) -> Result<Box<dyn InitializedRasterOperator>> {
+                let name = CanonicOperatorName::from(&self);
+
                 let data = self.params.data;
                 let tiling_specification = context.tiling_specification();
 
@@ -216,6 +219,7 @@ macro_rules! impl_mock_raster_source {
                 };
 
                 Ok(InitializedMockRasterSource {
+                    name,
                     result_descriptor: self.params.result_descriptor,
                     data,
                     tiling_specification,
@@ -244,6 +248,7 @@ impl_mock_raster_source!(f32);
 impl_mock_raster_source!(f64);
 
 pub struct InitializedMockRasterSource<T: Pixel> {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     data: Vec<RasterTile2D<T>>,
     tiling_specification: TilingSpecification,
@@ -264,6 +269,10 @@ where
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -348,7 +357,7 @@ mod tests {
                         "scale":null,
                         "offset":null,
                         "description":null,
-                        "properties_map":{}
+                        "propertiesMap": []
                     }
                 }],
                 "resultDescriptor": {

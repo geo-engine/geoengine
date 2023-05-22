@@ -34,6 +34,7 @@ use crate::handlers;
 use crate::handlers::plots::WrappedPlotOutput;
 use crate::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
+use crate::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
@@ -110,6 +111,8 @@ use utoipa::{Modify, OpenApi};
         handlers::projects::load_project_handler,
         handlers::projects::update_project_handler,
         handlers::projects::delete_project_handler,
+        handlers::upload::list_upload_files_handler,
+        handlers::upload::list_upload_file_layers_handler,
         handlers::upload::upload_handler
     ),
     components(
@@ -250,6 +253,8 @@ use utoipa::{Modify, OpenApi};
             FeatureType,
             Coordinates,
 
+            UploadFilesResponse,
+            UploadFileLayersResponse,
             CreateDataset,
             AutoCreateDataset,
             OrderBy,
@@ -359,7 +364,7 @@ impl Modify for ApiDocInfo {
             utoipa::openapi::LicenseBuilder::new()
                 .name("Apache 2.0 (pro features excluded)")
                 .url(Some(
-                    "https://github.com/geo-engine/geoengine/blob/master/LICENSE",
+                    "https://github.com/geo-engine/geoengine/blob/main/LICENSE",
                 ))
                 .build(),
         );

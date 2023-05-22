@@ -6,10 +6,10 @@ use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{Histogram2D, HistogramDimension, Plot, PlotData};
 
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedSources, InitializedVectorOperator,
-    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
-    QueryProcessor, SingleVectorSource, TypedPlotQueryProcessor, TypedVectorQueryProcessor,
-    WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedSources,
+    InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    PlotResultDescriptor, QueryContext, QueryProcessor, SingleVectorSource,
+    TypedPlotQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
 use crate::util::Result;
@@ -55,6 +55,8 @@ impl PlotOperator for ScatterPlot {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let source = initialized_sources.vector;
         for cn in [&self.params.column_x, &self.params.column_y] {
@@ -77,7 +79,7 @@ impl PlotOperator for ScatterPlot {
 
         let in_desc = source.result_descriptor().clone();
 
-        Ok(InitializedScatterPlot::new(in_desc.into(), self.params, source).boxed())
+        Ok(InitializedScatterPlot::new(name, in_desc.into(), self.params, source).boxed())
     }
 
     span_fn!(ScatterPlot);
@@ -85,6 +87,7 @@ impl PlotOperator for ScatterPlot {
 
 /// The initialization of `Histogram`
 pub struct InitializedScatterPlot<Op> {
+    name: CanonicOperatorName,
     result_descriptor: PlotResultDescriptor,
     column_x: String,
     column_y: String,
@@ -93,11 +96,13 @@ pub struct InitializedScatterPlot<Op> {
 
 impl<Op> InitializedScatterPlot<Op> {
     pub fn new(
+        name: CanonicOperatorName,
         result_descriptor: PlotResultDescriptor,
         params: ScatterPlotParams,
         source: Op,
     ) -> Self {
         Self {
+            name,
             result_descriptor,
             column_x: params.column_x,
             column_y: params.column_y,
@@ -118,6 +123,10 @@ impl InitializedPlotOperator for InitializedScatterPlot<Box<dyn InitializedVecto
         };
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

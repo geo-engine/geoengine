@@ -1,5 +1,7 @@
 use crate::adapters::SparseTilesFillAdapter;
-use crate::engine::{MetaData, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath};
+use crate::engine::{
+    CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
+};
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::util::retry::retry;
@@ -756,6 +758,7 @@ impl RasterOperator for GdalSource {
         debug!("GdalSource path: {:?}", path);
 
         let op = InitializedGdalSourceOperator {
+            name: CanonicOperatorName::from(&self),
             result_descriptor: meta_data.result_descriptor().await?,
             meta_data,
             tiling_specification: context.tiling_specification(),
@@ -768,6 +771,7 @@ impl RasterOperator for GdalSource {
 }
 
 pub struct InitializedGdalSourceOperator {
+    name: CanonicOperatorName,
     pub meta_data: GdalMetaData,
     pub result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
@@ -852,6 +856,10 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 .boxed(),
             ),
         })
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

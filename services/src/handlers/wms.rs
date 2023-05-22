@@ -1,4 +1,5 @@
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use geoengine_operators::util::input::RasterOrVectorOperator;
 use reqwest::Url;
 use serde_json::json;
 use snafu::{ensure, ResultExt};
@@ -23,8 +24,13 @@ use crate::util::server::{connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
-use geoengine_operators::engine::{ExecutionContext, ResultDescriptor, WorkflowOperatorPath};
-use geoengine_operators::processing::{InitializedRasterReprojection, ReprojectionParams};
+use geoengine_operators::engine::{
+    CanonicOperatorName, ExecutionContext, ResultDescriptor, SingleRasterOrVectorSource,
+    WorkflowOperatorPath,
+};
+use geoengine_operators::processing::{
+    InitializedRasterReprojection, Reprojection, ReprojectionParams,
+};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
@@ -311,10 +317,22 @@ async fn wms_map_handler<C: ApplicationContext>(
                 request_spatial_ref,
                 workflow_spatial_ref
             );
-            let irp = InitializedRasterReprojection::try_new_with_input(
-                ReprojectionParams {
-                    target_spatial_reference: request_spatial_ref.into(),
+
+            let reprojection_params = ReprojectionParams {
+                target_spatial_reference: request_spatial_ref.into(),
+            };
+
+            // create the reprojection operator in order to get the canonic operator name
+            let reprojected_workflow = Reprojection {
+                params: reprojection_params,
+                sources: SingleRasterOrVectorSource {
+                    source: RasterOrVectorOperator::Raster(operator),
                 },
+            };
+
+            let irp = InitializedRasterReprojection::try_new_with_input(
+                CanonicOperatorName::from(&reprojected_workflow),
+                reprojection_params,
                 initialized,
                 execution_context.tiling_specification(),
             )

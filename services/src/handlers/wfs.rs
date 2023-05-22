@@ -2,6 +2,7 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use futures::future::BoxFuture;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::util::abortable_query_execution;
+use geoengine_operators::util::input::RasterOrVectorOperator;
 use reqwest::Url;
 use serde::Deserialize;
 use snafu::{ensure, ResultExt};
@@ -31,10 +32,13 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use geoengine_operators::engine::{
-    QueryContext, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
+    CanonicOperatorName, QueryContext, ResultDescriptor, SingleRasterOrVectorSource,
+    TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 use geoengine_operators::engine::{QueryProcessor, WorkflowOperatorPath};
-use geoengine_operators::processing::{InitializedVectorReprojection, ReprojectionParams};
+use geoengine_operators::processing::{
+    InitializedVectorReprojection, Reprojection, ReprojectionParams,
+};
 use serde_json::json;
 use std::str::FromStr;
 use std::time::Duration;
@@ -488,10 +492,23 @@ async fn wfs_feature_handler<C: ApplicationContext>(
             request_spatial_ref,
             workflow_spatial_ref
         );
-        let ivp = InitializedVectorReprojection::try_new_with_input(
-            ReprojectionParams {
-                target_spatial_reference: request_spatial_ref,
+
+        let reprojection_params = ReprojectionParams {
+            target_spatial_reference: request_spatial_ref,
+        };
+
+        // create the reprojection operator in order to get the canonic operator name
+        let reprojected_workflow = Reprojection {
+            params: reprojection_params,
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Vector(operator),
             },
+        };
+
+        // create the inititalized operator directly, to avoid re-initializing everything
+        let ivp = InitializedVectorReprojection::try_new_with_input(
+            CanonicOperatorName::from(&reprojected_workflow),
+            reprojection_params,
             initialized,
         )
         .context(error::Operator)?;

@@ -1,8 +1,9 @@
 use crate::{
     engine::{
-        ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorName,
-        QueryContext, QueryProcessor, SingleVectorSource, TypedVectorQueryProcessor,
-        VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+        CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
+        Operator, OperatorName, QueryContext, QueryProcessor, SingleVectorSource,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        WorkflowOperatorPath,
     },
     util::Result,
 };
@@ -50,6 +51,8 @@ impl VectorOperator for LineSimplification {
             return Err(LineSimplificationError::InvalidEpsilon.into());
         }
 
+        let name = CanonicOperatorName::from(&self);
+
         let sources = self.sources.initialize_sources(path, context).await?;
         let source = sources.vector;
 
@@ -60,6 +63,7 @@ impl VectorOperator for LineSimplification {
         }
 
         let initialized_operator = InitializedLineSimplification {
+            name,
             result_descriptor: source.result_descriptor().clone(),
             source,
             algorithm: self.params.algorithm,
@@ -89,6 +93,7 @@ pub enum LineSimplificationAlgorithm {
 }
 
 pub struct InitializedLineSimplification {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedVectorOperator>,
     algorithm: LineSimplificationAlgorithm,
@@ -151,6 +156,10 @@ impl InitializedVectorOperator for InitializedLineSimplification {
                 .boxed(),
             )),
         }
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

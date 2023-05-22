@@ -1,7 +1,8 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedSources, InitializedVectorOperator,
-    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
-    TypedPlotQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedSources,
+    InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    PlotResultDescriptor, QueryContext, TypedPlotQueryProcessor, TypedVectorQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::engine::{QueryProcessor, SingleVectorSource};
 use crate::error::Error;
@@ -52,6 +53,8 @@ impl PlotOperator for PieChart {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let vector_source = initialized_sources.vector;
 
@@ -80,6 +83,7 @@ impl PlotOperator for PieChart {
                     };
 
                 Ok(InitializedCountPieChart::new(
+                    name,
                     vector_source,
                     in_desc.into(),
                     column_name.clone(),
@@ -97,6 +101,7 @@ impl PlotOperator for PieChart {
 
 /// The initialization of `Histogram`
 pub struct InitializedCountPieChart<Op> {
+    name: CanonicOperatorName,
     source: Op,
     result_descriptor: PlotResultDescriptor,
     column_name: String,
@@ -107,6 +112,7 @@ pub struct InitializedCountPieChart<Op> {
 
 impl<Op> InitializedCountPieChart<Op> {
     pub fn new(
+        name: CanonicOperatorName,
         source: Op,
         result_descriptor: PlotResultDescriptor,
         column_name: String,
@@ -115,6 +121,7 @@ impl<Op> InitializedCountPieChart<Op> {
         donut: bool,
     ) -> Self {
         Self {
+            name,
             source,
             result_descriptor,
             column_name,
@@ -140,6 +147,10 @@ impl InitializedPlotOperator for InitializedCountPieChart<Box<dyn InitializedVec
 
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

@@ -37,7 +37,9 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::{OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath};
+use crate::engine::{
+    CanonicOperatorName, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
+};
 use crate::error::Error;
 use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
@@ -342,6 +344,7 @@ pub struct OgrSourceState {
 }
 
 pub struct InitializedOgrSource {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     state: OgrSourceState,
 }
@@ -395,6 +398,7 @@ impl VectorOperator for OgrSource {
         }
 
         let initialized_source = InitializedOgrSource {
+            name: CanonicOperatorName::from(&self),
             result_descriptor,
             state: OgrSourceState {
                 dataset_information: info,
@@ -464,6 +468,10 @@ impl InitializedVectorOperator for InitializedOgrSource {
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

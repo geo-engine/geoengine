@@ -1,5 +1,5 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
     PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor,
@@ -50,6 +50,8 @@ impl PlotOperator for ClassHistogram {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         Ok(match self.sources.source {
             RasterOrVectorOperator::Raster(raster_source) => {
                 ensure!(
@@ -76,6 +78,7 @@ impl PlotOperator for ClassHistogram {
                 };
 
                 InitializedClassHistogram::new(
+                    name,
                     PlotResultDescriptor {
                         spatial_reference: in_desc.spatial_reference,
                         time: in_desc.time,
@@ -140,6 +143,7 @@ impl PlotOperator for ClassHistogram {
                 };
 
                 InitializedClassHistogram::new(
+                    name,
                     in_desc.into(),
                     self.params.column_name,
                     source_measurement,
@@ -155,6 +159,7 @@ impl PlotOperator for ClassHistogram {
 
 /// The initialization of `Histogram`
 pub struct InitializedClassHistogram<Op> {
+    name: CanonicOperatorName,
     result_descriptor: PlotResultDescriptor,
     source_measurement: ClassificationMeasurement,
     source: Op,
@@ -163,12 +168,14 @@ pub struct InitializedClassHistogram<Op> {
 
 impl<Op> InitializedClassHistogram<Op> {
     pub fn new(
+        name: CanonicOperatorName,
         result_descriptor: PlotResultDescriptor,
         column_name: Option<String>,
         source_measurement: ClassificationMeasurement,
         source: Op,
     ) -> Self {
         Self {
+            name,
             result_descriptor,
             source_measurement,
             source,
@@ -190,6 +197,10 @@ impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedRa
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedVectorOperator>> {
@@ -205,6 +216,10 @@ impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedVe
 
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

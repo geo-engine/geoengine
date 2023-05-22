@@ -7,11 +7,11 @@ use crate::{
         TileReprojectionSubQuery,
     },
     engine::{
-        ExecutionContext, InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
-        Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-        WorkflowOperatorPath,
+        CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
+        InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
+        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
+        TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        VectorResultDescriptor, WorkflowOperatorPath,
     },
     error::{self, Error},
     util::Result,
@@ -56,6 +56,7 @@ impl OperatorName for Reprojection {
 }
 
 pub struct InitializedVectorReprojection {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedVectorOperator>,
     source_srs: SpatialReference,
@@ -63,6 +64,7 @@ pub struct InitializedVectorReprojection {
 }
 
 pub struct InitializedRasterReprojection {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     state: Option<ReprojectionBounds>,
@@ -79,6 +81,7 @@ impl InitializedVectorReprojection {
     /// This function errors if the `source`'s `SpatialReference` is `None`.
     /// This function errors if the source's bounding box cannot be reprojected to the target's `SpatialReference`.
     pub fn try_new_with_input(
+        name: CanonicOperatorName,
         params: ReprojectionParams,
         source_vector_operator: Box<dyn InitializedVectorOperator>,
     ) -> Result<Self> {
@@ -105,6 +108,7 @@ impl InitializedVectorReprojection {
         };
 
         Ok(InitializedVectorReprojection {
+            name,
             result_descriptor: out_desc,
             source: source_vector_operator,
             source_srs: in_srs,
@@ -115,6 +119,7 @@ impl InitializedVectorReprojection {
 
 impl InitializedRasterReprojection {
     pub fn try_new_with_input(
+        name: CanonicOperatorName,
         params: ReprojectionParams,
         source_raster_operator: Box<dyn InitializedRasterOperator>,
         tiling_spec: TilingSpecification,
@@ -150,6 +155,7 @@ impl InitializedRasterReprojection {
         };
 
         Ok(InitializedRasterReprojection {
+            name,
             result_descriptor,
             source: source_raster_operator,
             state,
@@ -198,6 +204,8 @@ impl VectorOperator for Reprojection {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let vector_source =
             self.sources
                 .vector()
@@ -209,6 +217,7 @@ impl VectorOperator for Reprojection {
         let initilaized_source = vector_source.initialize_sources(path, context).await?;
 
         let initialized_operator = InitializedVectorReprojection::try_new_with_input(
+            name,
             self.params,
             initilaized_source.vector,
         )?;
@@ -258,6 +267,10 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
                 ))
             }
         }
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -327,6 +340,8 @@ impl RasterOperator for Reprojection {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let raster_source =
             self.sources
                 .raster()
@@ -338,6 +353,7 @@ impl RasterOperator for Reprojection {
         let initialized_source = raster_source.initialize_sources(path, context).await?;
 
         let initialized_operator = InitializedRasterReprojection::try_new_with_input(
+            name,
             self.params,
             initialized_source.raster,
             context.tiling_specification(),
@@ -462,6 +478,10 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
         })
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

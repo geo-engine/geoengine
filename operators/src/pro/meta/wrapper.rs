@@ -1,9 +1,9 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::engine::{
-    CreateSpan, InitializedRasterOperator, InitializedVectorOperator, QueryContext, QueryProcessor,
-    RasterResultDescriptor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
+    QueryContext, QueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::pro::adapters::stream_statistics_adapter::StreamStatisticsAdapter;
 use crate::pro::meta::quota::{QuotaChecker, QuotaTracking};
@@ -82,6 +82,10 @@ impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn Initialize
             }
         }
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.source.canonic_name()
+    }
 }
 
 impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn InitializedVectorOperator>> {
@@ -108,6 +112,10 @@ impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn Initialize
                 Err(err)
             }
         }
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.source.canonic_name()
     }
 }
 

@@ -1,9 +1,10 @@
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSingleRasterOrVectorOperator,
-    InitializedSources, InitializedVectorOperator, Operator, OperatorName, QueryContext,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
-    SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+    InitializedSingleRasterOrVectorOperator, InitializedSources, InitializedVectorOperator,
+    Operator, OperatorName, QueryContext, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -169,6 +170,8 @@ impl VectorOperator for TimeShift {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let init_sources = self.sources.initialize_sources(path, context).await?;
 
         match (init_sources.source, self.params) {
@@ -186,6 +189,7 @@ impl VectorOperator for TimeShift {
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedVectorTimeShift {
+                    name,
                     source,
                     result_descriptor,
                     shift,
@@ -205,6 +209,7 @@ impl VectorOperator for TimeShift {
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedVectorTimeShift {
+                    name,
                     source,
                     result_descriptor,
                     shift,
@@ -219,6 +224,7 @@ impl VectorOperator for TimeShift {
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedVectorTimeShift {
+                    name,
                     source,
                     result_descriptor,
                     shift,
@@ -241,6 +247,8 @@ impl RasterOperator for TimeShift {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let init_sources = self.sources.initialize_sources(path, context).await?;
 
         match (init_sources.source, self.params) {
@@ -258,6 +266,7 @@ impl RasterOperator for TimeShift {
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedRasterTimeShift {
+                    name,
                     source,
                     result_descriptor,
                     shift,
@@ -277,6 +286,7 @@ impl RasterOperator for TimeShift {
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedRasterTimeShift {
+                    name,
                     source,
                     result_descriptor,
                     shift,
@@ -291,6 +301,7 @@ impl RasterOperator for TimeShift {
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
                 Ok(Box::new(InitializedRasterTimeShift {
+                    name,
                     source,
                     result_descriptor,
                     shift,
@@ -319,12 +330,14 @@ fn shift_result_descriptor<R: ResultDescriptor, S: TimeShiftOperation>(
 }
 
 pub struct InitializedVectorTimeShift<Shift: TimeShiftOperation> {
+    name: CanonicOperatorName,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
     shift: Shift,
 }
 
 pub struct InitializedRasterTimeShift<Shift: TimeShiftOperation> {
+    name: CanonicOperatorName,
     source: Box<dyn InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
     shift: Shift,
@@ -347,6 +360,10 @@ impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
             }.boxed().into()),
         )
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
@@ -365,6 +382,10 @@ impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
                 shift: self.shift,
             }.boxed().into()),
         )
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

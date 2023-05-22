@@ -23,7 +23,8 @@ pub use line_simplification::{
     LineSimplification, LineSimplificationError, LineSimplificationParams,
 };
 pub use neighborhood_aggregate::{
-    NeighborhoodAggregate, NeighborhoodAggregateError, NeighborhoodAggregateParams,
+    AggregateFunctionParams, NeighborhoodAggregate, NeighborhoodAggregateError,
+    NeighborhoodAggregateParams, NeighborhoodParams,
 };
 pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
