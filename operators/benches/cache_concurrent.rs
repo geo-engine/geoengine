@@ -1,0 +1,239 @@
+use std::sync::Arc;
+
+use futures::future::join_all;
+use geoengine_datatypes::primitives::{DateTime, SpatialPartition2D, SpatialResolution};
+use geoengine_datatypes::raster::RasterProperties;
+use geoengine_datatypes::{
+    primitives::{RasterQueryRectangle, TimeInterval},
+    raster::{Grid, RasterTile2D},
+    util::test::TestDefault,
+};
+use geoengine_operators::util::number_statistics::NumberStatistics;
+use geoengine_operators::{engine::CanonicOperatorName, pro::cache::tile_cache::TileCache};
+use serde_json::json;
+
+enum Measurement {
+    Read(ReadMeasurement),
+    Write(WriteMeasurement),
+}
+
+struct ReadMeasurement {
+    read_query_ms: u128,
+}
+
+struct WriteMeasurement {
+    insert_query_ms: u128,
+    insert_tile_ms: u128,
+    finish_query_ms: u128,
+}
+
+async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> WriteMeasurement {
+    let tile = RasterTile2D::<u8> {
+        time: TimeInterval::new_unchecked(1, 1),
+        tile_position: [-1, 0].into(),
+        global_geo_transform: TestDefault::test_default(),
+        grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
+            .unwrap()
+            .into(),
+        properties: RasterProperties::default(),
+    };
+
+    let start = std::time::Instant::now();
+
+    let query_id = tile_cache
+        .insert_query::<u8>(op_name.clone(), &query_rect())
+        .await;
+
+    let insert_query_s = start.elapsed().as_millis();
+
+    let start = std::time::Instant::now();
+
+    tile_cache
+        .insert_tile(op_name.clone(), query_id, tile)
+        .await
+        .unwrap();
+
+    let insert_tile_s = start.elapsed().as_millis();
+
+    let start = std::time::Instant::now();
+
+    tile_cache
+        .finish_query(op_name.clone(), query_id)
+        .await
+        .unwrap();
+
+    let finish_query_s = start.elapsed().as_millis();
+
+    WriteMeasurement {
+        insert_query_ms: insert_query_s,
+        insert_tile_ms: insert_tile_s,
+        finish_query_ms: finish_query_s,
+    }
+}
+
+async fn read_cache(tile_cache: &TileCache) -> ReadMeasurement {
+    let op = op(0);
+    let query = query_rect();
+
+    let start = std::time::Instant::now();
+
+    tile_cache.query_cache::<u8>(op, &query).await;
+
+    let read_query_s = start.elapsed().as_millis();
+
+    ReadMeasurement {
+        read_query_ms: read_query_s,
+    }
+}
+
+fn query_rect() -> RasterQueryRectangle {
+    RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
+        time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+        spatial_resolution: SpatialResolution::one(),
+    }
+}
+
+fn op(idx: usize) -> CanonicOperatorName {
+    CanonicOperatorName::new(json!({
+        "type": "GdalSource",
+        "params": {
+            "data": idx
+        }
+    }))
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Operation {
+    Read,
+    Write,
+}
+
+async fn cache_access(
+    tile_cache: Arc<TileCache>,
+    op_no: usize,
+    operation: Operation,
+) -> Measurement {
+    match operation {
+        Operation::Read => Measurement::Read(read_cache(&tile_cache).await),
+        Operation::Write => Measurement::Write(write_cache(&tile_cache, op(op_no)).await),
+    }
+}
+
+// generate read/writes according to the writes_per_read
+// e.g. 0.5 -> read, write, read, write
+// e.g. 0.25 -> read, read, write, read, read, write
+fn generate_operations(simultaneous_queries: usize, writes_per_read: f64) -> Vec<Operation> {
+    let mut operations = vec![];
+
+    let mut counter = 0;
+
+    let (ratio, operation) = if writes_per_read <= 0.5 {
+        (writes_per_read, (Operation::Write, Operation::Read))
+    } else {
+        (1.0 - writes_per_read, (Operation::Read, Operation::Write))
+    };
+
+    let threshold = (1.0 / ratio) as usize;
+
+    for _ in 0..simultaneous_queries {
+        counter = (counter + 1) % threshold;
+        let operation = if counter == 0 {
+            operation.0
+        } else {
+            operation.1
+        };
+        operations.push(operation);
+    }
+
+    operations
+}
+
+async fn run_bench(simultaneous_queries: usize, writes_per_read: f64) {
+    // cache without limits, because we do not care about eviction here
+    let tile_cache = Arc::new(TileCache::default());
+
+    // pre-fill the query cache
+    write_cache(&tile_cache, op(0)).await;
+
+    let operations = generate_operations(simultaneous_queries, writes_per_read);
+
+    let futures = operations
+        .into_iter()
+        .enumerate()
+        .map(|(op_no, operation)| tokio::spawn(cache_access(tile_cache.clone(), op_no, operation)));
+
+    let res = join_all(futures).await;
+    let res = res.into_iter().collect::<Result<Vec<_>, _>>().unwrap();
+
+    let mut reads = vec![];
+    let mut writes = vec![];
+
+    for r in res {
+        match r {
+            Measurement::Read(r) => reads.push(r),
+            Measurement::Write(w) => writes.push(w),
+        }
+    }
+
+    let mut ns = NumberStatistics::default();
+
+    for read in reads {
+        ns.add(read.read_query_ms);
+    }
+
+    println!(
+        "{}, {}, query_cache, {}, {}, {}, {}",
+        simultaneous_queries,
+        writes_per_read,
+        ns.min(),
+        ns.max(),
+        ns.mean(),
+        ns.std_dev()
+    );
+
+    let mut insert_query_ns: NumberStatistics = NumberStatistics::default();
+    let mut insert_tile_ns: NumberStatistics = NumberStatistics::default();
+    let mut finish_query_ns: NumberStatistics = NumberStatistics::default();
+
+    for write in writes {
+        insert_query_ns.add(write.insert_query_ms);
+        insert_tile_ns.add(write.insert_tile_ms);
+        finish_query_ns.add(write.finish_query_ms);
+    }
+
+    for (name, ns) in [
+        ("insert_query", insert_query_ns),
+        ("insert_tile", insert_tile_ns),
+        ("finish_query", finish_query_ns),
+    ] {
+        println!(
+            "{}, {}, {}, {}, {}, {}, {}",
+            simultaneous_queries,
+            writes_per_read,
+            name,
+            ns.min(),
+            ns.max(),
+            ns.mean(),
+            ns.std_dev()
+        );
+    }
+}
+
+/// This benchmark investigates the performance of the query cache under concurrent read/write access.
+#[tokio::main]
+async fn main() {
+    let simultaneous_queries = [1000, 10000, 100000];
+    let writes_per_reads = [0., 0.25, 0.50, 0.75, 1.]; // 0.0 = only reads, 1.0 = only writes
+
+    let repititions = 1;
+
+    println!("queries, writes_per_read, operation, min duration (ms), max duration (ms), mean duration (ms), std_dev duration");
+    for simultaneous_queries in simultaneous_queries.iter() {
+        for writes_per_read in writes_per_reads.iter() {
+            for _ in 0..repititions {
+                run_bench(*simultaneous_queries, *writes_per_read).await;
+            }
+        }
+    }
+}

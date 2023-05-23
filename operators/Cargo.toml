@@ -70,6 +70,11 @@ harness = false
 required-features = ["pro"]
 
 [[bench]]
+name = "cache_concurrent"
+harness = false
+required-features = ["pro"]
+
+[[bench]]
 name = "expression"
 harness = false
 
