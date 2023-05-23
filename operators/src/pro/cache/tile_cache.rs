@@ -523,12 +523,13 @@ impl TileCache {
         while backend.cache_byte_size_used + entry_size > backend.cache_byte_size_total {
             // this should always work, because otherwise it would mean the cache is not empty but the lru is.
             // the landing zone is smaller than the cache size and the entry must fit into the landing zone.
-            if let Some((id, op)) = backend.lru.pop_lru() {
-                if let Some(evict_cache) = backend.operator_caches.get_mut(&op) {
-                    if let Some(entry) = evict_cache.entries.remove(&id) {
-                        backend.cache_byte_size_used -= entry.byte_size();
-                    }
-                }
+            if let Some(entry) = backend
+                .lru
+                .pop_lru()
+                .and_then(|(id, op)| backend.operator_caches.get_mut(&op).map(|c| (id, c)))
+                .and_then(|(id, evict_cache)| evict_cache.entries.remove(&id))
+            {
+                backend.cache_byte_size_used -= entry.byte_size();
             }
         }
         Ok(())
