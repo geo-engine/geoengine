@@ -1,6 +1,6 @@
 use geoengine_datatypes::{
     collections::{FeatureCollectionInfos, GeometryCollection, MultiPolygonCollection},
-    primitives::{Coordinate2D, TimeInterval},
+    primitives::{BoundingBox2D, Coordinate2D, TimeInterval},
 };
 
 /// Creates a context to check points against polygons
@@ -15,6 +15,7 @@ pub struct PointInPolygonTester<'a> {
     time_intervals: &'a [TimeInterval],
     constants: Vec<f64>,
     multiples: Vec<f64>,
+    polygon_bounds: Vec<Vec<BoundingBox2D>>,
 }
 
 impl<'a> PointInPolygonTester<'a> {
@@ -27,6 +28,13 @@ impl<'a> PointInPolygonTester<'a> {
 
         let (constants, multiples) = Self::precalculate_polygons(ring_offsets, coordinates);
 
+        let polygon_bounds = Self::precalculate_polygon_bounds(
+            feature_offsets,
+            polygon_offsets,
+            ring_offsets,
+            coordinates,
+        );
+
         Self {
             feature_offsets,
             polygon_offsets,
@@ -35,6 +43,7 @@ impl<'a> PointInPolygonTester<'a> {
             time_intervals,
             constants,
             multiples,
+            polygon_bounds,
         }
     }
 
@@ -90,6 +99,39 @@ impl<'a> PointInPolygonTester<'a> {
         }
     }
 
+    fn precalculate_polygon_bounds(
+        feature_offsets: &'a [i32],
+        polygon_offsets: &'a [i32],
+        ring_offsets: &'a [i32],
+        coordinates: &'a [Coordinate2D],
+    ) -> Vec<Vec<BoundingBox2D>> {
+        let mut multi_poly_bounds = Vec::with_capacity(feature_offsets.len() - 1);
+
+        for (feature_start_index, feature_end_index) in
+            two_tuple_windows(feature_offsets.iter().map(|&c| c as usize))
+        {
+            let multi_polygon_offsets = &polygon_offsets[feature_start_index..=feature_end_index];
+
+            let mut poly_bounds = Vec::with_capacity(multi_polygon_offsets.len() - 1);
+
+            for (polygon_start_index, polygon_end_index) in
+                two_tuple_windows(multi_polygon_offsets.iter().map(|&c| c as usize))
+            {
+                let rings_start = ring_offsets[polygon_start_index] as usize;
+                let rings_end = ring_offsets[polygon_end_index] as usize;
+
+                let poly_coordinates = &coordinates[rings_start..rings_end];
+                let poly_bounding_box = BoundingBox2D::from_coord_ref_iter(poly_coordinates)
+                    .expect("Polygons in a collection must be valid");
+
+                poly_bounds.push(poly_bounding_box);
+            }
+
+            multi_poly_bounds.push(poly_bounds);
+        }
+        multi_poly_bounds
+    }
+
     fn ring_contains_coordinate(
         &self,
         coordinate: &Coordinate2D,
@@ -129,6 +171,14 @@ impl<'a> PointInPolygonTester<'a> {
     ) -> bool {
         let polygon_offsets = self.polygon_offsets;
         let ring_offsets = self.ring_offsets;
+
+        let polygon_bounding_box = &self.polygon_bounds[feature_index];
+        if !polygon_bounding_box
+            .iter()
+            .any(|b| b.contains_coordinate(&coordinate))
+        {
+            return false;
+        }
 
         self.check_multipolygons_contain_coordinate(
             &coordinate,
@@ -192,13 +242,22 @@ impl<'a> PointInPolygonTester<'a> {
         let time_intervals = self.time_intervals;
 
         two_tuple_windows(self.feature_offsets.iter().map(|&c| c as usize))
+            .enumerate()
             .zip(time_intervals)
             .map(
                 move |(
-                    (multi_polygon_start_index, multi_polygon_end_index),
+                    (multi_polygon_idx, (multi_polygon_start_index, multi_polygon_end_index)),
                     multi_polygon_time_interval,
                 )| {
                     if !multi_polygon_time_interval.intersects(time_interval) {
+                        return false;
+                    }
+
+                    let multi_poly_bounds = &self.polygon_bounds[multi_polygon_idx];
+                    if !multi_poly_bounds
+                        .iter()
+                        .any(|b| b.contains_coordinate(coordinate))
+                    {
                         return false;
                     }
 
