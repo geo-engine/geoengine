@@ -172,24 +172,25 @@ pub trait InitializedVectorOperator: Send + Sync {
 }
 
 /// A canonic name for an operator and its sources
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CanonicOperatorName(serde_json::Value);
+/// We use a byte representation of the operator json
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CanonicOperatorName(Vec<u8>);
 
 impl CanonicOperatorName {
-    pub fn new(value: serde_json::Value) -> Self {
-        CanonicOperatorName(value)
+    pub fn new<T: Serialize>(value: &T) -> Result<Self> {
+        Ok(CanonicOperatorName(serde_json::to_vec(&value)?))
+    }
+
+    ///
+    /// # Panics
+    ///
+    /// if the value cannot be serialized as json
+    pub fn new_unchecked<T: Serialize>(value: &T) -> Self {
+        CanonicOperatorName(serde_json::to_vec(&value).unwrap())
     }
 
     pub fn byte_size(&self) -> usize {
-        std::mem::size_of_val(self)
-    }
-}
-
-#[allow(clippy::derive_hash_xor_eq)] // since the hash is basically also derived (from String), this should be fine
-impl std::hash::Hash for CanonicOperatorName {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        // TODO: serializing to string is potentially too expensive to perform each time.
-        self.0.to_string().hash(state);
+        std::mem::size_of::<CanonicOperatorName>() + self.0.len() * std::mem::size_of::<u8>()
     }
 }
 
@@ -198,7 +199,7 @@ where
     T: Serialize,
 {
     fn from(value: &T) -> Self {
-        CanonicOperatorName(serde_json::to_value(value).unwrap())
+        CanonicOperatorName::new_unchecked(value)
     }
 }
 
@@ -378,4 +379,20 @@ impl OperatorData for TypedOperator {
 
 pub trait OperatorName {
     const TYPE_NAME: &'static str;
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn op_name_byte_size() {
+        let op = CanonicOperatorName::new_unchecked(&json!({"foo": "bar"}));
+        assert_eq!(op.byte_size(), 37);
+
+        let op = CanonicOperatorName::new_unchecked(&json!({"foo": {"bar": [1,2,3]}}));
+        assert_eq!(op.byte_size(), 47);
+    }
 }

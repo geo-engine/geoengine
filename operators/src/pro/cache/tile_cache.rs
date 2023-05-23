@@ -588,7 +588,7 @@ mod tests {
     }
 
     fn op(idx: usize) -> CanonicOperatorName {
-        CanonicOperatorName::new(json!({
+        CanonicOperatorName::new_unchecked(&json!({
             "type": "GdalSource",
             "params": {
                 "data": idx
