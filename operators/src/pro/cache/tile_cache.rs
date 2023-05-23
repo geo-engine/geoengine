@@ -46,7 +46,6 @@ pub struct TileCache {
 
 impl TileCache {
     pub fn new(cache_byte_size_total: usize, landing_zone_byte_size_total: usize) -> Result<Self> {
-        // TODO: ensure cache > landing zone
         ensure!(
             cache_byte_size_total >= landing_zone_byte_size_total,
             CacheMustBeLargerOrEqualThanLandingZone
@@ -57,9 +56,9 @@ impl TileCache {
                 operator_caches: Default::default(),
                 lru: LruCache::unbounded(), // we need no cap because we evict manually
                 cache_byte_size_total,
-                cache_byte_size_used: 0, // TODO: include overhead of HashMap?
+                cache_byte_size_used: 0,
                 landing_zone_byte_size_total,
-                landing_zone_byte_size_used: 0, // TODO: include overhead of LruCache?
+                landing_zone_byte_size_used: 0,
             }),
         })
     }
@@ -72,9 +71,9 @@ impl TestDefault for TileCache {
                 operator_caches: Default::default(),
                 lru: LruCache::unbounded(), // we need no cap because we evict manually
                 cache_byte_size_total: usize::MAX,
-                cache_byte_size_used: 0, // TODO: include overhead of HashMap?
+                cache_byte_size_used: 0,
                 landing_zone_byte_size_total: usize::MAX,
-                landing_zone_byte_size_used: 0, // TODO: include overhead of LruCache?
+                landing_zone_byte_size_used: 0,
             }),
         }
     }
@@ -145,19 +144,19 @@ pub enum CachedTiles {
 
 impl CachedTiles {
     fn byte_size(&self) -> usize {
-        // TODO: include size of the Vec itself and the Arc
-        match self {
-            CachedTiles::U8(v) => v.len() * std::mem::size_of::<RasterTile2D<u8>>(),
-            CachedTiles::U16(v) => v.len() * std::mem::size_of::<RasterTile2D<u16>>(),
-            CachedTiles::U32(v) => v.len() * std::mem::size_of::<RasterTile2D<u32>>(),
-            CachedTiles::U64(v) => v.len() * std::mem::size_of::<RasterTile2D<u64>>(),
-            CachedTiles::I8(v) => v.len() * std::mem::size_of::<RasterTile2D<i8>>(),
-            CachedTiles::I16(v) => v.len() * std::mem::size_of::<RasterTile2D<i16>>(),
-            CachedTiles::I32(v) => v.len() * std::mem::size_of::<RasterTile2D<i32>>(),
-            CachedTiles::I64(v) => v.len() * std::mem::size_of::<RasterTile2D<i64>>(),
-            CachedTiles::F32(v) => v.len() * std::mem::size_of::<RasterTile2D<f32>>(),
-            CachedTiles::F64(v) => v.len() * std::mem::size_of::<RasterTile2D<f64>>(),
-        }
+        std::mem::size_of::<CachedTiles>()
+            + match self {
+                CachedTiles::U8(v) => v.len() * std::mem::size_of::<RasterTile2D<u8>>(),
+                CachedTiles::U16(v) => v.len() * std::mem::size_of::<RasterTile2D<u16>>(),
+                CachedTiles::U32(v) => v.len() * std::mem::size_of::<RasterTile2D<u32>>(),
+                CachedTiles::U64(v) => v.len() * std::mem::size_of::<RasterTile2D<u64>>(),
+                CachedTiles::I8(v) => v.len() * std::mem::size_of::<RasterTile2D<i8>>(),
+                CachedTiles::I16(v) => v.len() * std::mem::size_of::<RasterTile2D<i16>>(),
+                CachedTiles::I32(v) => v.len() * std::mem::size_of::<RasterTile2D<i32>>(),
+                CachedTiles::I64(v) => v.len() * std::mem::size_of::<RasterTile2D<i64>>(),
+                CachedTiles::F32(v) => v.len() * std::mem::size_of::<RasterTile2D<f32>>(),
+                CachedTiles::F64(v) => v.len() * std::mem::size_of::<RasterTile2D<f64>>(),
+            }
     }
 }
 
