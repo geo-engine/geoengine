@@ -343,7 +343,6 @@ impl BoundingBox2D {
         self.upper_right_coordinate = self.upper_right_coordinate.max_elements(coord);
     }
 
-    #[must_use]
     pub fn extend_self(&mut self, other: &Self) {
         self.lower_left_coordinate = self
             .lower_left_coordinate

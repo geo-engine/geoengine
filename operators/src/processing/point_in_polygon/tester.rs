@@ -54,7 +54,7 @@ impl<'a> PointInPolygonTester<'a> {
     pub fn covered_total_bounds(&self) -> Option<BoundingBox2D> {
         self.multi_polygon_bounds
             .iter()
-            .map(|mp_bound| *mp_bound)
+            .copied()
             .reduce(|acc, bound| acc.union(&bound))
     }
 
@@ -139,7 +139,7 @@ impl<'a> PointInPolygonTester<'a> {
             .map(|polygons| {
                 polygons
                     .iter()
-                    .map(|poly| *poly)
+                    .copied()
                     .reduce(|acc, poly| acc.union(&poly))
                     .expect("all polygones in a collection must be valid")
             })
@@ -274,7 +274,7 @@ impl<'a> PointInPolygonTester<'a> {
                     }
 
                     let multi_polygon_bounds = &self.multi_polygon_bounds[multi_polygon_idx];
-                    if !multi_polygon_bounds.contains_coordinate(&coordinate) {
+                    if !multi_polygon_bounds.contains_coordinate(coordinate) {
                         return false;
                     }
 
