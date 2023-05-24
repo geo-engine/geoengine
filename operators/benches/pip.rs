@@ -60,7 +60,6 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
 
 fn random_points<T: Rng>(rng: &mut T, num_points: usize) -> MultiPointCollection {
     let coordinates = (0..num_points)
-        .into_iter()
         .map(|_| (rng.gen_range(0.0..100.0), rng.gen_range(0.0..100.0)))
         .collect::<Vec<_>>();
 
@@ -89,7 +88,6 @@ fn random_multi_polygons<T: Rng>(
         max_y: 100.,
     };
     (0..multi_polygons)
-        .into_iter()
         .map(|_| geo::MultiPolygon::<f64>::rand(rng, &params))
         .collect()
 }

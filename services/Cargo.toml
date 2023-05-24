@@ -24,10 +24,10 @@ xgboost = ["pro", "geoengine-operators/xgboost"]
 [dependencies]
 actix = { version = "0.13", default-features = false }
 actix-files = "0.6"
-actix-http = { version = "3.2", features = ["ws"] }
-actix-multipart = "0.5"
-actix-rt = "2.6"
-actix-web = "4.2"
+actix-http = { version = "3.3", features = ["ws"] }
+actix-multipart = "0.6"
+actix-rt = "2.8"
+actix-web = "4.3"
 actix-web-actors = "4.2"
 actix-web-httpauth = "0.8"
 aruna-rust-api = { version = "1.0.0-rc.6", optional = true }
@@ -44,7 +44,7 @@ futures = "0.3"
 futures-util = "0.3"
 gdal =  "0.14.0"
 gdal-sys = "0.8"
-geo = "0.23"
+geo = "0.25"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
 geojson = {version = "0.24", features = ["geo-types"]}
@@ -54,6 +54,7 @@ log = "0.4"
 mime = "0.3"
 oauth2 = "4.2.3"
 openidconnect = "2.3.2"
+# `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-jaeger`
 opentelemetry = { version = "0.18", default-features = false, features = ["trace"] }
 opentelemetry-jaeger = "0.17"
 ordered-float = { version= "3.0", features = ["serde"] }
@@ -71,7 +72,7 @@ reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
-serde_with = "2.0"
+serde_with = "3.0"
 snafu = "0.7"
 stream-cancel = "0.8"
 strum = { version = "0.24", features = ["derive"] }
@@ -87,7 +88,7 @@ tracing-subscriber = { version = "0.3", features = ["local-time", "ansi", "traci
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
 utoipa = { version = "3.0", features = ["actix_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { version = "=3.0.2", features = ["actix-web"] }
+utoipa-swagger-ui = { version = "3.1", features = ["actix-web"] }
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
 validator = { version = "0.16", features = ["derive"] }
 walkdir = "2.3"

@@ -213,10 +213,10 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiPolygonRef<'c>, MultiPolygon> for 
 
 impl<'c> LineSimplificationAlgorithmImpl<MultiLineStringRef<'c>, MultiLineString> for Visvalingam {
     fn simplify(geometry: MultiLineStringRef<'c>, epsilon: f64) -> MultiLineString {
-        use geo::SimplifyVWPreserve;
+        use geo::SimplifyVwPreserve;
 
         let geo_geometry = geo::MultiLineString::<f64>::from(&geometry);
-        let geo_geometry = geo_geometry.simplifyvw_preserve(&epsilon);
+        let geo_geometry = geo_geometry.simplify_vw_preserve(&epsilon);
         geo_geometry.into()
     }
 
@@ -229,10 +229,10 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiLineStringRef<'c>, MultiLineString
 
 impl<'c> LineSimplificationAlgorithmImpl<MultiPolygonRef<'c>, MultiPolygon> for Visvalingam {
     fn simplify(geometry: MultiPolygonRef<'c>, epsilon: f64) -> MultiPolygon {
-        use geo::SimplifyVWPreserve;
+        use geo::SimplifyVwPreserve;
 
         let geo_geometry = geo::MultiPolygon::<f64>::from(&geometry);
-        let geo_geometry = geo_geometry.simplifyvw_preserve(&epsilon);
+        let geo_geometry = geo_geometry.simplify_vw_preserve(&epsilon);
         geo_geometry.into()
     }
 

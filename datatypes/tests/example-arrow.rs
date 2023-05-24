@@ -1,14 +1,15 @@
 use arrow::array::{
-    Array, ArrayData, BooleanArray, Date64Array, Date64Builder, FixedSizeBinaryBuilder,
-    FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder, Int32Array,
-    Int32Builder, ListArray, ListBuilder, StringArray, StringBuilder, StructBuilder, UInt64Array,
-    UInt64Builder,
+    downcast_array, Array, ArrayData, BooleanArray, Date64Array, Date64Builder,
+    FixedSizeBinaryBuilder, FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder,
+    Int32Array, Int32Builder, ListArray, ListBuilder, StringArray, StringBuilder, StructBuilder,
+    UInt64Array, UInt64Builder,
 };
 use arrow::buffer::Buffer;
 use arrow::compute::gt_eq_scalar;
 use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::{DataType, Field};
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
+use std::sync::Arc;
 use std::{mem, slice};
 
 #[test]
@@ -30,7 +31,7 @@ fn simple() {
     assert_eq!(filtered_array.len(), 3);
     assert_eq!(filtered_array.null_count(), 0);
 
-    assert!(primitive_array.data().null_bitmap().is_none());
+    assert!(primitive_array.nulls().is_none());
 }
 
 #[test]
@@ -67,11 +68,11 @@ fn null_bytes() {
     assert_eq!(primitive_array.len(), 5);
     assert_eq!(primitive_array.null_count(), 3);
 
-    if let Some(null_bitmap) = primitive_array.data().null_bitmap() {
-        assert_eq!(null_bitmap.bit_len(), 8); // bit_len returns number of bits
+    if let Some(null_bitmap) = primitive_array.nulls() {
+        assert_eq!(null_bitmap.buffer().len(), 1); // bit_len returns number of bits
 
         assert_eq!(
-            null_bitmap.clone().into_buffer().as_slice(), // must clone bitmap because there is no way to get a reference to the data
+            null_bitmap.buffer().as_slice(), // must clone bitmap because there is no way to get a reference to the data
             &[0b0000_1001] // right most bit is first element, 1 = valid value, 0 = null or unset
         );
     }
@@ -93,7 +94,7 @@ fn offset() {
     let typed_subarray: &Float64Array = subarray.as_any().downcast_ref().unwrap();
 
     assert_eq!(subarray.len(), 2);
-    assert_eq!(subarray.offset(), 2);
+    assert_eq!(subarray.offset(), 0);
     assert_eq!(typed_subarray.values().len(), 2);
 
     assert_eq!(typed_subarray.values(), &[20., 9.4]);
@@ -195,7 +196,7 @@ fn list() {
             .values(),
         &[0, 1, 2, 3, 4],
     );
-    assert_eq!(array.data().buffers()[0].typed_data::<i32>(), &[0, 2, 5]); // its in buffer 0... kind of unstable...
+    assert_eq!(array.offsets().as_ref(), &[0, 2, 5]); // its in buffer 0... kind of unstable...
 }
 
 #[test]
@@ -291,6 +292,8 @@ fn binary() {
 
 #[test]
 fn serialize() {
+    use arrow::json::JsonSerializable;
+
     let array = {
         let mut builder = Int32Builder::with_capacity(5);
         builder.append_slice(&(1..=5).collect::<Vec<i32>>());
@@ -301,7 +304,14 @@ fn serialize() {
     assert_eq!(array.len(), 5);
 
     // no serialization of arrays by now
-    let json = serde_json::to_string(array.values()).unwrap();
+    let json_values = array
+        .iter()
+        .map(|maybe_value| match maybe_value {
+            Some(v) => v.into_json_value().unwrap_or(serde_json::Value::Null),
+            None => serde_json::Value::Null,
+        })
+        .collect::<Vec<_>>();
+    let json = serde_json::to_string(&json_values).unwrap();
 
     assert_eq!(json, "[1,2,3,4,5]");
 }
@@ -406,27 +416,22 @@ fn nested_lists() {
         1
     );
 
-    assert_eq!(array.data().buffers().len(), 1);
+    assert_eq!(array.offsets().len(), 3);
     assert_eq!(
-        array.data().buffers()[0].typed_data::<i32>(),
+        array.offsets().as_ref(),
         &[0, 2, 3], // indices of first level arrays in second level structure
     );
 
-    assert_eq!(array.data().child_data().len(), 1);
-    assert_eq!(array.data().child_data()[0].buffers().len(), 1);
+    let list_array = downcast_array::<ListArray>(array.values());
+    assert_eq!(list_array.offsets().len(), 4);
     assert_eq!(
-        array.data().child_data()[0].buffers()[0].typed_data::<i32>(),
+        list_array.offsets().as_ref(),
         &[0, 3, 5, 6], // indices of second level arrays in actual data
     );
 
-    assert_eq!(array.data().child_data()[0].child_data().len(), 1);
     assert_eq!(
-        array.data().child_data()[0].child_data()[0].buffers().len(),
-        1,
-    );
-    assert_eq!(
-        array.data().child_data()[0].child_data()[0].buffers()[0].typed_data::<i32>(),
-        &[10, 11, 12, 20, 21, 30], // data
+        downcast_array::<Int32Array>(list_array.values()).values(),
+        &[10, 11, 12, 20, 21, 30]
     );
 }
 
@@ -435,16 +440,16 @@ fn multipoints() {
     use arrow::datatypes::ToByteSlice;
 
     let array = {
-        let data = ArrayData::builder(DataType::List(Box::new(Field::new(
+        let data = ArrayData::builder(DataType::List(Arc::new(Field::new(
             "",
-            DataType::FixedSizeList(Box::new(Field::new("", DataType::Float64, false)), 2),
+            DataType::FixedSizeList(Arc::new(Field::new("", DataType::Float64, false)), 2),
             false,
         ))))
         .len(2) // number of multipoints
         .add_buffer(Buffer::from(&[0_i32, 2, 5].to_byte_slice()))
         .add_child_data(
             ArrayData::builder(DataType::FixedSizeList(
-                Box::new(Field::new("", DataType::Float64, false)),
+                Arc::new(Field::new("", DataType::Float64, false)),
                 2,
             ))
             .len(5) // number of coordinates
