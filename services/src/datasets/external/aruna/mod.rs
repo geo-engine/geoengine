@@ -1,5 +1,5 @@
 pub use self::error::ArunaProviderError;
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -709,11 +709,10 @@ impl LayerCollectionProvider for ArunaDataProvider {
             DataType::SingleVectorFile(_) => TypedOperator::Vector(
                 OgrSource {
                     params: OgrSourceParameters {
-                        data: DataId::External(ExternalDataId {
-                            provider_id: self.id,
-                            layer_id: id.clone(),
-                        })
-                        .into(),
+                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                            self.id.to_string(),
+                            id.to_string(),
+                        ),
                         attribute_projection: None,
                         attribute_filters: None,
                     },
@@ -723,11 +722,10 @@ impl LayerCollectionProvider for ArunaDataProvider {
             DataType::SingleRasterFile(_) => TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        data: DataId::External(ExternalDataId {
-                            provider_id: self.id,
-                            layer_id: id.clone(),
-                        })
-                        .into(),
+                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                            self.id.to_string(),
+                            id.to_string(),
+                        ),
                     },
                 }
                 .boxed(),
@@ -1551,11 +1549,7 @@ mod tests {
                 "operator": {
                     "type": "OgrSource",
                     "params": {
-                        "data": {
-                            "type": "external",
-                            "providerId": "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0",
-                            "layerId": "COLLECTION_ID"
-                        },
+                        "data": "_:86a7f7ce-1bab-4ce9-a32b-172c0f958ee0:COLLECTION_ID",
                         "attributeProjection": null,
                         "attributeFilters": null
                     }
@@ -1589,11 +1583,7 @@ mod tests {
                 "operator": {
                     "type": "GdalSource",
                     "params": {
-                        "data": {
-                            "type": "external",
-                            "providerId": "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0",
-                            "layerId": "COLLECTION_ID"
-                        }
+                        "data": "_:86a7f7ce-1bab-4ce9-a32b-172c0f958ee0:COLLECTION_ID"
                     }
                 }
             }),
@@ -1772,6 +1762,10 @@ mod tests {
             provider_id: DataProviderId::from_str(PROVIDER_ID).unwrap(),
             layer_id: LayerId(COLLECTION_ID.to_string()),
         });
+        let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
+            PROVIDER_ID.to_string(),
+            COLLECTION_ID.to_string(),
+        );
 
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -1782,11 +1776,11 @@ mod tests {
             .unwrap();
 
         let mut context = MockExecutionContext::test_default();
-        context.add_meta_data(id.clone().into(), meta);
+        context.add_meta_data(id.clone().into(), name.clone(), meta);
 
         let src = OgrSource {
             params: OgrSourceParameters {
-                data: id.into(),
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },

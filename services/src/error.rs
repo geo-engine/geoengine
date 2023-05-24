@@ -202,6 +202,8 @@ pub enum Error {
         reason: String,
     },
     InvalidUploadFileName,
+    InvalidDatasetIdNamespace,
+    DuplicateDatasetId,
     InvalidDatasetName,
     DatasetInvalidLayerName {
         layer_name: String,
