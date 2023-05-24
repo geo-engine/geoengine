@@ -8,7 +8,6 @@ use geoengine_datatypes::{
     raster::{Grid, RasterTile2D},
     util::test::TestDefault,
 };
-use geoengine_operators::util::number_statistics::NumberStatistics;
 use geoengine_operators::{engine::CanonicOperatorName, pro::cache::tile_cache::TileCache};
 use serde_json::json;
 
@@ -176,46 +175,27 @@ async fn run_bench(simultaneous_queries: usize, writes_per_read: f64) {
         }
     }
 
-    let mut ns = NumberStatistics::default();
-
     for read in reads {
-        ns.add(read.read_query_ms);
+        println!(
+            "{},{},query_cache,{}",
+            simultaneous_queries, writes_per_read, read.read_query_ms
+        );
     }
-
-    println!(
-        "{}, {}, query_cache, {}, {}, {}, {}",
-        simultaneous_queries,
-        writes_per_read,
-        ns.min(),
-        ns.max(),
-        ns.mean(),
-        ns.std_dev()
-    );
-
-    let mut insert_query_ns: NumberStatistics = NumberStatistics::default();
-    let mut insert_tile_ns: NumberStatistics = NumberStatistics::default();
-    let mut finish_query_ns: NumberStatistics = NumberStatistics::default();
 
     for write in writes {
-        insert_query_ns.add(write.insert_query_ms);
-        insert_tile_ns.add(write.insert_tile_ms);
-        finish_query_ns.add(write.finish_query_ms);
-    }
-
-    for (name, ns) in [
-        ("insert_query", insert_query_ns),
-        ("insert_tile", insert_tile_ns),
-        ("finish_query", finish_query_ns),
-    ] {
         println!(
-            "{}, {}, {}, {}, {}, {}, {}",
-            simultaneous_queries,
-            writes_per_read,
-            name,
-            ns.min(),
-            ns.max(),
-            ns.mean(),
-            ns.std_dev()
+            "{},{},insert_query,{}",
+            simultaneous_queries, writes_per_read, write.insert_query_ms
+        );
+
+        println!(
+            "{},{},insert_tile,{}",
+            simultaneous_queries, writes_per_read, write.insert_tile_ms
+        );
+
+        println!(
+            "{}, {}, finish_query, {}",
+            simultaneous_queries, writes_per_read, write.finish_query_ms
         );
     }
 }
@@ -223,12 +203,12 @@ async fn run_bench(simultaneous_queries: usize, writes_per_read: f64) {
 /// This benchmark investigates the performance of the query cache under concurrent read/write access.
 #[tokio::main]
 async fn main() {
-    let simultaneous_queries = [1000, 10000, 100000];
+    let simultaneous_queries = [10_000, 100_000, 1_000_000];
     let writes_per_reads = [0., 0.25, 0.50, 0.75, 1.]; // 0.0 = only reads, 1.0 = only writes
 
     let repititions = 1;
 
-    println!("queries, writes_per_read, operation, min duration (ms), max duration (ms), mean duration (ms), std_dev duration");
+    println!("queries,writes_per_read,operation,duration");
     for simultaneous_queries in simultaneous_queries.iter() {
         for writes_per_read in writes_per_reads.iter() {
             for _ in 0..repititions {
