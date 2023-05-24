@@ -344,7 +344,17 @@ impl BoundingBox2D {
     }
 
     #[must_use]
-    pub fn extend(&mut self, other: &Self) -> Self {
+    pub fn extend_self(&mut self, other: &Self) {
+        self.lower_left_coordinate = self
+            .lower_left_coordinate
+            .min_elements(other.lower_left_coordinate);
+        self.upper_right_coordinate = self
+            .upper_right_coordinate
+            .max_elements(other.upper_right_coordinate);
+    }
+
+    #[must_use]
+    pub fn union(&self, other: &Self) -> Self {
         Self {
             lower_left_coordinate: self
                 .lower_left_coordinate
@@ -586,7 +596,7 @@ pub fn bboxes_extent<I: Iterator<Item = Option<BoundingBox2D>>>(
 
     for bbox in bboxes {
         if let Some(bbox) = bbox {
-            extent = extent.extend(&bbox);
+            extent = extent.union(&bbox);
         } else {
             return None;
         }

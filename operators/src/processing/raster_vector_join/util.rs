@@ -1,7 +1,11 @@
 use std::iter::Enumerate;
 
-use geoengine_datatypes::collections::{FeatureCollection, GeometryRandomAccess};
-use geoengine_datatypes::primitives::{Geometry, MultiPoint, MultiPointAccess, MultiPolygon};
+use geoengine_datatypes::collections::{
+    FeatureCollection, GeometryCollection, GeometryRandomAccess,
+};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, Geometry, MultiPoint, MultiPointAccess, MultiPolygon,
+};
 use geoengine_datatypes::raster::{GridContains, GridShapeAccess};
 use geoengine_datatypes::{
     primitives::TimeInterval,
@@ -101,6 +105,8 @@ pub trait CoveredPixels<G: Geometry>: Send + Sync {
     fn collection_ref(&self) -> &FeatureCollection<G>;
 
     fn collection(self) -> FeatureCollection<G>;
+
+    fn covered_spatial_bounds(&self) -> Option<BoundingBox2D>;
 }
 
 pub struct MultiPointCoveredPixels {
@@ -136,6 +142,10 @@ impl CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
 
     fn collection(self) -> FeatureCollection<MultiPoint> {
         self.collection
+    }
+
+    fn covered_spatial_bounds(&self) -> Option<BoundingBox2D> {
+        self.collection.bbox()
     }
 }
 
@@ -182,6 +192,10 @@ impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
 
     fn collection(self) -> FeatureCollection<MultiPolygon> {
         self.tester_with_collection.into()
+    }
+
+    fn covered_spatial_bounds(&self) -> Option<BoundingBox2D> {
+        self.tester_with_collection.tester().covered_total_bounds()
     }
 }
 

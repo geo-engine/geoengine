@@ -1,6 +1,8 @@
 use geoengine_datatypes::{
-    collections::{FeatureCollectionInfos, GeometryCollection, MultiPolygonCollection},
-    primitives::{BoundingBox2D, Coordinate2D, TimeInterval},
+    collections::{
+        FeatureCollectionInfos, GeometryCollection, IntoGeometryIterator, MultiPolygonCollection,
+    },
+    primitives::{BoundingBox2D, Coordinate2D, MultiPolygonAccess, TimeInterval},
 };
 
 /// Creates a context to check points against polygons
@@ -16,6 +18,7 @@ pub struct PointInPolygonTester<'a> {
     constants: Vec<f64>,
     multiples: Vec<f64>,
     polygon_bounds: Vec<Vec<BoundingBox2D>>,
+    multi_polygon_bounds: Vec<BoundingBox2D>,
 }
 
 impl<'a> PointInPolygonTester<'a> {
@@ -28,12 +31,8 @@ impl<'a> PointInPolygonTester<'a> {
 
         let (constants, multiples) = Self::precalculate_polygons(ring_offsets, coordinates);
 
-        let polygon_bounds = Self::precalculate_polygon_bounds(
-            feature_offsets,
-            polygon_offsets,
-            ring_offsets,
-            coordinates,
-        );
+        let polygon_bounds = Self::precalculate_polygon_bounds(polygons);
+        let multi_polygon_bounds = Self::precalculate_multi_polygon_bounds(&polygon_bounds);
 
         Self {
             feature_offsets,
@@ -44,7 +43,19 @@ impl<'a> PointInPolygonTester<'a> {
             constants,
             multiples,
             polygon_bounds,
+            multi_polygon_bounds,
         }
+    }
+
+    pub fn multi_polygon_bounds(&self) -> &[BoundingBox2D] {
+        &self.multi_polygon_bounds
+    }
+
+    pub fn covered_total_bounds(&self) -> Option<BoundingBox2D> {
+        self.multi_polygon_bounds
+            .iter()
+            .map(|mp_bound| *mp_bound)
+            .reduce(|acc, bound| acc.union(&bound))
     }
 
     fn precalculate_polygons(
@@ -100,36 +111,40 @@ impl<'a> PointInPolygonTester<'a> {
     }
 
     fn precalculate_polygon_bounds(
-        feature_offsets: &'a [i32],
-        polygon_offsets: &'a [i32],
-        ring_offsets: &'a [i32],
-        coordinates: &'a [Coordinate2D],
+        polygons: &'a MultiPolygonCollection,
     ) -> Vec<Vec<BoundingBox2D>> {
-        let mut multi_poly_bounds = Vec::with_capacity(feature_offsets.len() - 1);
+        // TODO: parallelize this using par_iter
+        polygons
+            .geometries()
+            .map(|multi_poly| {
+                multi_poly
+                    .polygons()
+                    .iter()
+                    .map(|poly| {
+                        // we only need to look at the first ring since that is the exterior of the polygon
+                        BoundingBox2D::from_coord_ref_iter(poly[0]).expect(
+                            "Polygons in a collection must be valid and have at least one ring",
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    }
 
-        for (feature_start_index, feature_end_index) in
-            two_tuple_windows(feature_offsets.iter().map(|&c| c as usize))
-        {
-            let multi_polygon_offsets = &polygon_offsets[feature_start_index..=feature_end_index];
-
-            let mut poly_bounds = Vec::with_capacity(multi_polygon_offsets.len() - 1);
-
-            for (polygon_start_index, polygon_end_index) in
-                two_tuple_windows(multi_polygon_offsets.iter().map(|&c| c as usize))
-            {
-                let rings_start = ring_offsets[polygon_start_index] as usize;
-                let rings_end = ring_offsets[polygon_end_index] as usize;
-
-                let poly_coordinates = &coordinates[rings_start..rings_end];
-                let poly_bounding_box = BoundingBox2D::from_coord_ref_iter(poly_coordinates)
-                    .expect("Polygons in a collection must be valid");
-
-                poly_bounds.push(poly_bounding_box);
-            }
-
-            multi_poly_bounds.push(poly_bounds);
-        }
-        multi_poly_bounds
+    fn precalculate_multi_polygon_bounds(
+        polygon_bounds: &[Vec<BoundingBox2D>],
+    ) -> Vec<BoundingBox2D> {
+        let res = polygon_bounds
+            .iter()
+            .map(|polygons| {
+                polygons
+                    .iter()
+                    .map(|poly| *poly)
+                    .reduce(|acc, poly| acc.union(&poly))
+                    .expect("all polygones in a collection must be valid")
+            })
+            .collect::<Vec<BoundingBox2D>>();
+        res
     }
 
     fn ring_contains_coordinate(
@@ -169,8 +184,10 @@ impl<'a> PointInPolygonTester<'a> {
         coordinate: Coordinate2D,
         feature_index: usize,
     ) -> bool {
-        let polygon_offsets = self.polygon_offsets;
-        let ring_offsets = self.ring_offsets;
+        let multi_polygon_bounds = &self.multi_polygon_bounds[feature_index];
+        if !multi_polygon_bounds.contains_coordinate(&coordinate) {
+            return false;
+        }
 
         let polygon_bounding_box = &self.polygon_bounds[feature_index];
         if !polygon_bounding_box
@@ -179,6 +196,9 @@ impl<'a> PointInPolygonTester<'a> {
         {
             return false;
         }
+
+        let polygon_offsets = self.polygon_offsets;
+        let ring_offsets = self.ring_offsets;
 
         self.check_multipolygons_contain_coordinate(
             &coordinate,
@@ -250,6 +270,11 @@ impl<'a> PointInPolygonTester<'a> {
                     multi_polygon_time_interval,
                 )| {
                     if !multi_polygon_time_interval.intersects(time_interval) {
+                        return false;
+                    }
+
+                    let multi_polygon_bounds = &self.multi_polygon_bounds[multi_polygon_idx];
+                    if !multi_polygon_bounds.contains_coordinate(&coordinate) {
                         return false;
                     }
 
