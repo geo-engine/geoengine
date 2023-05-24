@@ -45,7 +45,7 @@ use std::path::PathBuf;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper<C: SimpleApplicationContext>(app_ctx: &C) -> ProjectId {
-    let project = app_ctx
+    app_ctx
         .default_session_context()
         .await
         .db()
@@ -57,9 +57,7 @@ pub async fn create_project_helper<C: SimpleApplicationContext>(app_ctx: &C) -> 
             time_step: None,
         })
         .await
-        .unwrap();
-
-    project
+        .unwrap()
 }
 
 pub fn update_project_helper(project: ProjectId) -> UpdateProject {

@@ -47,11 +47,11 @@ where
 
         for (field, column) in fields.iter().zip(self.table.columns()) {
             if field.name() == Self::GEOMETRY_COLUMN_NAME {
-                record_batch_fields.push(Field::new(
+                record_batch_fields.push(Arc::new(Field::new(
                     Self::GEOMETRY_COLUMN_NAME,
                     arrow::datatypes::DataType::Utf8,
                     false,
-                ));
+                )));
 
                 record_batch_columns.push(wkt_array.clone());
 

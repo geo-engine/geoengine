@@ -192,7 +192,6 @@ where
 
     fn map_indexed_elements(self, map_fn: F) -> Self::Output {
         let (out_data, validity_mask) = (0..self.shape.number_of_elements())
-            .into_iter()
             .map(|lin_idx| {
                 let in_masked_value = None as Option<In>;
 

@@ -299,12 +299,12 @@ impl ArunaDataProvider {
 
         let data_get_response = reqwest::Client::new().get(download_url).send().await?;
 
-        return if let reqwest::StatusCode::OK = data_get_response.status() {
+        if let reqwest::StatusCode::OK = data_get_response.status() {
             let json = data_get_response.json::<GEMetadata>().await?;
             Ok(json)
         } else {
             Err(ArunaProviderError::MissingArunaMetaData)
-        };
+        }
     }
 
     /// Creates a result descriptor for vector data
