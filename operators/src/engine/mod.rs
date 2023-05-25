@@ -184,13 +184,18 @@ macro_rules! call_on_bi_generic_raster_processor {
 }
 
 /// Shorthand type for a function that creates a `Span` for tracing
-pub type CreateSpan = fn() -> Span;
+pub type CreateSpan = fn(operator: &WorkflowOperatorPath, bbox: [f64; 4]) -> Span;
 
 /// Macro for creating a span-fn for a given type, e.g. `span_fn!(MyType)`
 macro_rules! span_fn {
     ($op: ty) => {
         fn span(&self) -> crate::engine::CreateSpan {
-            || tracing::span!(tracing::Level::TRACE, <$op>::TYPE_NAME)
+            |operator, bbox| tracing::span!(
+                tracing::Level::TRACE,
+                <$op>::TYPE_NAME,
+                operator = %operator,
+                bbox = %format!("[{},{},{},{}]", bbox[0], bbox[1], bbox[2], bbox[3])
+            )
         }
     };
 }

@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle};
+use tracing::{span, Level};
 
 // A wrapper around an initialized operator that adds statistics and quota tracking
 pub struct InitializedOperatorWrapper<S> {
@@ -127,7 +128,6 @@ where
     processor: Q,
     span: CreateSpan,
     path: WorkflowOperatorPath,
-    query_count: AtomicUsize,
 }
 
 impl<Q, T> QueryProcessorWrapper<Q, T>
@@ -139,12 +139,7 @@ where
             processor,
             span,
             path,
-            query_count: AtomicUsize::new(0),
         }
-    }
-
-    pub fn inc_query_count(&self) -> usize {
-        self.query_count.fetch_add(1, Ordering::SeqCst)
     }
 }
 
@@ -163,13 +158,19 @@ where
         query: QueryRectangle<Self::SpatialBounds>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let qc = self.inc_query_count() + 1;
+        // the top level operator creates a new query span for identifying individual queries
+        let query_span = if self.path.is_root() {
+            let span = span!(
+                Level::TRACE,
+                "Query",
+                query_id = %uuid::Uuid::new_v4()
+            );
+            Some(span)
+        } else {
+            None
+        };
 
-        tracing::trace!(
-            event = "query",
-            query_count = qc,
-            path = self.path.to_string()
-        );
+        let _query_span_enter = query_span.as_ref().map(tracing::Span::enter);
 
         let quota_checker = ctx
             .extensions()
@@ -185,15 +186,32 @@ where
             .expect("`QuotaTracking` extension should be set during `ProContext` creation")
             .clone();
 
-        let span = (self.span)();
+        // TODO: also include query counter
+        // TODO: maybe only give the subquery a subquery id and log the parent child
+        // e.g. query x spawns subquery y on operator z
+        //      subquery y spawns subquery a on operator b
+        //      then we have a tree of queries which a script can analyze
+        let span = (self.span)(
+            &self.path,
+            [
+                query.spatial_bounds.lower_left().x,
+                query.spatial_bounds.lower_left().y,
+                query.spatial_bounds.upper_right().x,
+                query.spatial_bounds.upper_right().y,
+            ],
+        );
         let _enter = span.enter();
 
+        tracing::trace!(
+            event = %"query_start",
+        );
+
         let stream_result = self.processor.query(query, ctx).await;
-        tracing::debug!(event = "query ready");
+        tracing::debug!(event = %"query_ready");
 
         match stream_result {
             Ok(stream) => {
-                tracing::debug!(event = "query ok", path = self.path.to_string());
+                tracing::debug!(event = %"query_ok");
                 Ok(StreamStatisticsAdapter::new(
                     stream,
                     span.clone(),
@@ -203,7 +221,7 @@ where
                 .boxed())
             }
             Err(err) => {
-                tracing::debug!(event = "query error", path = self.path.to_string());
+                tracing::debug!(event = %"query_error");
                 Err(err)
             }
         }

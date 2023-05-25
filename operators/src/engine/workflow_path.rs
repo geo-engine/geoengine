@@ -60,7 +60,7 @@ impl Display for WorkflowOperatorPath {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let sep = ", ";
 
-        write!(f, "OperatorWorkflowPath: [")?;
+        write!(f, "[")?;
 
         for (i, id) in self.id.iter().enumerate() {
             if i > 0 {
