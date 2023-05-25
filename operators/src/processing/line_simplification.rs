@@ -336,7 +336,7 @@ mod tests {
             FeatureCollectionInfos, GeometryCollection, MultiLineStringCollection,
             MultiPointCollection, MultiPolygonCollection,
         },
-        dataset::{DataId, DatasetId},
+        dataset::{DataId, DatasetId, NamedData},
         primitives::{FeatureData, MultiLineString, MultiPoint, TimeInterval},
         spatial_reference::SpatialReference,
         test_data,
@@ -532,9 +532,11 @@ mod tests {
     #[tokio::test]
     async fn test_polygon_simplification() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("polygons");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/germany_polygon.gpkg").into(),
@@ -577,7 +579,7 @@ mod tests {
             },
             sources: OgrSource {
                 params: OgrSourceParameters {
-                    data: id,
+                    data: name,
                     attribute_projection: None,
                     attribute_filters: None,
                 },

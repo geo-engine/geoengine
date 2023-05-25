@@ -51,7 +51,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use gdal::errors::GdalError;
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 use std::convert::{TryFrom, TryInto};
 
 use self::dataset_iterator::OgrDatasetIterator;
@@ -59,7 +59,7 @@ use self::dataset_iterator::OgrDatasetIterator;
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceParameters {
-    pub data: DataId,
+    pub data: NamedData,
     pub attribute_projection: Option<Vec<String>>,
     pub attribute_filters: Option<Vec<AttributeFilter>>,
 }
@@ -73,8 +73,8 @@ pub struct AttributeFilter {
 }
 
 impl OperatorData for OgrSourceParameters {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        data_ids.push(self.data.clone());
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        data_names.push(self.data.clone());
     }
 }
 
@@ -360,9 +360,11 @@ impl VectorOperator for OgrSource {
 
         debug!("Initializing OgrSource with path: {:?}", path);
 
+        let data_id = context.resolve_named_data(&self.params.data).await?;
+
         let info: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = context.meta_data(&self.params.data).await?;
+        > = context.meta_data(&data_id).await?;
 
         let result_descriptor = info.result_descriptor().await?;
 
@@ -1812,9 +1814,11 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_bbox_filter() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -1842,7 +1846,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -1908,9 +1912,11 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_force_spatial_filter() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -1938,7 +1944,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -2004,9 +2010,11 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_fast_spatial_filter() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!(
@@ -2037,7 +2045,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -2104,9 +2112,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports_columns() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -2187,7 +2197,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id.clone(),
+                data: name.clone(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -2328,9 +2338,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -2358,7 +2370,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id.clone(),
+                data: name.clone(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -3733,9 +3745,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn chunked() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -3763,7 +3777,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id.clone(),
+                data: name.clone(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -3981,9 +3995,11 @@ mod tests {
     #[tokio::test]
     async fn empty() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -4011,7 +4027,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4058,9 +4074,11 @@ mod tests {
     #[tokio::test]
     async fn polygon_gpkg() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("german-polygons");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/germany_polygon.gpkg").into(),
@@ -4098,7 +4116,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4155,9 +4173,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("points");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points.csv").into(),
@@ -4215,7 +4235,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4278,9 +4298,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_date_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("lon-lat-date");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date.csv").into(),
@@ -4338,7 +4360,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4397,9 +4419,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_date_time_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("lon-lat-datetime");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date_time.csv").into(),
@@ -4459,7 +4483,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4518,9 +4542,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_date_time_tz_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("lon-lat-time-tz");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date_time_tz.csv").into(),
@@ -4580,7 +4606,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4639,9 +4665,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_unix_date() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("lon-lat-unix-date");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_unix_date.csv").into(),
@@ -4697,7 +4725,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4756,9 +4784,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn vector_date_time_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("lon-lat-datetime");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date_time.csv").into(),
@@ -4827,7 +4857,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4892,9 +4922,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_bool_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("points-with-bool");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points_with_bool.csv").into(),
@@ -4943,7 +4975,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },

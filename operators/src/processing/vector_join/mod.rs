@@ -1,4 +1,4 @@
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -43,9 +43,9 @@ pub struct VectorJoinSources {
 }
 
 impl OperatorData for VectorJoinSources {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        self.left.data_ids_collect(data_ids);
-        self.right.data_ids_collect(data_ids);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        self.left.data_names_collect(data_names);
+        self.right.data_names_collect(data_names);
     }
 }
 

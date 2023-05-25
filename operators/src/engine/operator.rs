@@ -4,7 +4,7 @@ use tracing::debug;
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
@@ -15,13 +15,13 @@ use super::{
 
 pub trait OperatorData {
     /// Get the ids of all the data involoved in this operator and its sources
-    fn data_ids(&self) -> Vec<DataId> {
+    fn data_names(&self) -> Vec<NamedData> {
         let mut datasets = vec![];
-        self.data_ids_collect(&mut datasets);
+        self.data_names_collect(&mut datasets);
         datasets
     }
 
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>);
 }
 
 /// Common methods for `RasterOperator`s
@@ -357,11 +357,11 @@ macro_rules! call_on_typed_operator {
 }
 
 impl OperatorData for TypedOperator {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+    fn data_names_collect(&self, data_ids: &mut Vec<NamedData>) {
         match self {
-            TypedOperator::Vector(v) => v.data_ids_collect(data_ids),
-            TypedOperator::Raster(r) => r.data_ids_collect(data_ids),
-            TypedOperator::Plot(p) => p.data_ids_collect(data_ids),
+            TypedOperator::Vector(v) => v.data_names_collect(data_ids),
+            TypedOperator::Raster(r) => r.data_names_collect(data_ids),
+            TypedOperator::Plot(p) => p.data_names_collect(data_ids),
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::util::statistics::StatisticsError;
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::prelude::*;
@@ -132,6 +132,15 @@ pub enum Error {
     UnknownDataset {
         name: String,
         source: std::io::Error,
+    },
+
+    UnknownDatasetName {
+        name: NamedData,
+    },
+
+    CannotResolveDatasetName {
+        name: NamedData,
+        source: Box<dyn ErrorSource>,
     },
 
     InvalidDatasetSpec {
