@@ -51,6 +51,7 @@ impl<'a> PointInPolygonTester<'a> {
         &self.multi_polygon_bounds
     }
 
+    /// Returns the `BoundingBox2D` of all the polygons in the collection
     pub fn covered_total_bounds(&self) -> Option<BoundingBox2D> {
         self.multi_polygon_bounds
             .iter()
@@ -197,6 +198,7 @@ impl<'a> PointInPolygonTester<'a> {
             return false;
         }
 
+        let feature_offsets = self.feature_offsets;
         let polygon_offsets = self.polygon_offsets;
         let ring_offsets = self.ring_offsets;
 
@@ -204,8 +206,8 @@ impl<'a> PointInPolygonTester<'a> {
             &coordinate,
             polygon_offsets,
             ring_offsets,
-            feature_index,
-            feature_index + 1,
+            feature_offsets[feature_index] as usize,
+            feature_offsets[feature_index + 1] as usize,
         )
     }
 
@@ -342,9 +344,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::primitives::MultiPolygon;
-
     use super::*;
+    use geoengine_datatypes::primitives::MultiPolygon;
 
     #[test]
     fn point_in_polygon_tester() {
@@ -413,6 +414,74 @@ mod tests {
                 &Default::default()
             ),
             vec![false]
+        );
+    }
+
+    #[test]
+    fn tester_two_polygons() {
+        let collection = MultiPolygonCollection::from_data(
+            vec![
+                MultiPolygon::new(vec![
+                    vec![vec![
+                        Coordinate2D::new(20., 20.),
+                        Coordinate2D::new(30., 20.),
+                        Coordinate2D::new(30., 30.),
+                        Coordinate2D::new(20., 30.),
+                        Coordinate2D::new(20., 20.),
+                    ]],
+                    vec![vec![
+                        Coordinate2D::new(0., 0.),
+                        Coordinate2D::new(10., 0.),
+                        Coordinate2D::new(10., 10.),
+                        Coordinate2D::new(0., 10.),
+                        Coordinate2D::new(0., 0.),
+                    ]],
+                ])
+                .unwrap(),
+                MultiPolygon::new(vec![vec![vec![
+                    Coordinate2D::new(120., 120.),
+                    Coordinate2D::new(130., 120.),
+                    Coordinate2D::new(130., 130.),
+                    Coordinate2D::new(120., 130.),
+                    Coordinate2D::new(120., 120.),
+                ]]])
+                .unwrap(),
+            ],
+            vec![Default::default(); 2],
+            Default::default(),
+        )
+        .unwrap();
+
+        let tester = PointInPolygonTester::new(&collection);
+
+        assert!(!tester.ring_contains_coordinate(&Coordinate2D::new(4., 5.), 0, 5));
+        assert!(tester.ring_contains_coordinate(&Coordinate2D::new(4., 5.), 5, 10));
+        assert!(!tester.ring_contains_coordinate(&Coordinate2D::new(4., 5.), 10, 15));
+
+        assert!(!tester.ring_contains_coordinate(&Coordinate2D::new(124., 125.), 0, 5));
+        assert!(!tester.ring_contains_coordinate(&Coordinate2D::new(124., 125.), 5, 10));
+        assert!(tester.ring_contains_coordinate(&Coordinate2D::new(124., 125.), 10, 15));
+
+        assert!(tester.multi_polygon_contains_coordinate(Coordinate2D::new(4., 5.), 0));
+        assert!(!tester.multi_polygon_contains_coordinate(Coordinate2D::new(124., 125.), 0));
+
+        assert!(!tester.multi_polygon_contains_coordinate(Coordinate2D::new(4., 5.), 1),);
+        assert!(tester.multi_polygon_contains_coordinate(Coordinate2D::new(124., 125.), 1),);
+
+        assert_eq!(
+            tester.multi_polygons_containing_coordinate(
+                &Coordinate2D::new(4., 5.),
+                &Default::default()
+            ),
+            vec![true, false]
+        );
+
+        assert_eq!(
+            tester.multi_polygons_containing_coordinate(
+                &Coordinate2D::new(124., 125.),
+                &Default::default()
+            ),
+            vec![false, true]
         );
     }
 }

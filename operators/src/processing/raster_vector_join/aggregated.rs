@@ -70,14 +70,9 @@ where
 
         let collection = covered_pixels.collection_ref();
 
-        let covered_bounds = covered_pixels
-            .covered_spatial_bounds()
-            .and_then(|b| b.intersection(&query.spatial_bounds))
-            .unwrap_or(query.spatial_bounds); // TODO: if the intersection is empty, we should skip the query
-
         for time_span in FeatureTimeSpanIter::new(collection.time_intervals()) {
             let query = VectorQueryRectangle {
-                spatial_bounds: covered_bounds,
+                spatial_bounds: query.spatial_bounds,
                 time_interval: time_span.time_interval,
                 spatial_resolution: query.spatial_resolution,
             };
