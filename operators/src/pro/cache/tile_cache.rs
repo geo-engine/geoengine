@@ -12,10 +12,10 @@ use pin_project::pin_project;
 use snafu::ensure;
 use tokio::sync::RwLock;
 
+use crate::engine::CanonicOperatorName;
 use crate::util::Result;
-use crate::{
-    engine::CanonicOperatorName, pro::cache::error::CacheMustBeLargerOrEqualThanLandingZone,
-};
+
+use super::error::CacheError;
 
 /// The tile cache caches all tiles of a query and is able to answer queries that are fully contained in the cache.
 /// New tiles are inserted into the cache on-the-fly as they are produced by query processors.
@@ -45,19 +45,26 @@ pub struct TileCache {
 }
 
 impl TileCache {
-    pub fn new(cache_byte_size_total: usize, landing_zone_byte_size_total: usize) -> Result<Self> {
-        ensure!(
-            cache_byte_size_total >= landing_zone_byte_size_total,
-            CacheMustBeLargerOrEqualThanLandingZone
-        );
+    pub fn new(cache_size_in_mb: usize, landing_zone_ratio: f64) -> Result<Self> {
+        if landing_zone_ratio <= 0.0 {
+            return Err(crate::error::Error::QueryingProcessorFailed {
+                source: Box::new(CacheError::LandingZoneRatioMustBeLargerThanZero),
+            });
+        }
 
         Ok(Self {
             backend: RwLock::new(TileCacheBackend {
                 operator_caches: Default::default(),
                 lru: LruCache::unbounded(), // we need no cap because we evict manually
-                cache_byte_size_total,
+                cache_byte_size_total: (cache_size_in_mb as f64
+                    * (1.0 - landing_zone_ratio)
+                    * 1024.0
+                    * 1024.0) as usize,
                 cache_byte_size_used: 0,
-                landing_zone_byte_size_total,
+                landing_zone_byte_size_total: (cache_size_in_mb as f64
+                    * landing_zone_ratio
+                    * 1024.0
+                    * 1024.0) as usize,
                 landing_zone_byte_size_used: 0,
             }),
         })
@@ -324,7 +331,10 @@ pub enum TypedCacheTileStream {
 pub trait Cachable: Sized {
     fn stream(b: TypedCacheTileStream) -> Option<CacheTileStream<Self>>;
 
-    fn insert_tile(tiles: &mut LandingZoneQueryTiles, tile: RasterTile2D<Self>) -> Result<()>;
+    fn insert_tile(
+        tiles: &mut LandingZoneQueryTiles,
+        tile: RasterTile2D<Self>,
+    ) -> Result<(), CacheError>;
 
     fn create_active_query_tiles() -> LandingZoneQueryTiles;
 }
@@ -342,7 +352,7 @@ macro_rules! impl_tile_streamer {
             fn insert_tile(
                 tiles: &mut LandingZoneQueryTiles,
                 tile: RasterTile2D<Self>,
-            ) -> Result<()> {
+            ) -> Result<(), CacheError> {
                 if let LandingZoneQueryTiles::$variant(ref mut tiles) = tiles {
                     tiles.push(tile);
                     return Ok(());
@@ -401,7 +411,7 @@ impl TileCache {
         &self,
         key: CanonicOperatorName,
         query: &RasterQueryRectangle,
-    ) -> Result<QueryId> {
+    ) -> Result<QueryId, CacheError> {
         let mut backend = self.backend.write().await;
 
         let mut entry_size =
@@ -439,7 +449,7 @@ impl TileCache {
         key: CanonicOperatorName,
         query_id: QueryId,
         tile: RasterTile2D<T>,
-    ) -> Result<()>
+    ) -> Result<(), CacheError>
     where
         T: Pixel + Cachable,
     {
@@ -457,7 +467,7 @@ impl TileCache {
                 backend.landing_zone_byte_size_used -= entry.byte_size();
             }
 
-            return Err(super::error::CacheError::NotEnoughSpaceInLandingZone.into());
+            return Err(super::error::CacheError::NotEnoughSpaceInLandingZone);
         }
 
         let cache = backend.operator_caches.entry(key).or_default();
@@ -488,7 +498,11 @@ impl TileCache {
     }
 
     /// Finish the query and make the tiles available in the cache
-    pub async fn finish_query(&self, key: CanonicOperatorName, query_id: QueryId) -> Result<()> {
+    pub async fn finish_query(
+        &self,
+        key: CanonicOperatorName,
+        query_id: QueryId,
+    ) -> Result<(), CacheError> {
         // TODO: maybe check if this cache result is already in the cache or could displace another one
 
         let mut backend = self.backend.write().await;
@@ -599,8 +613,16 @@ mod tests {
     #[tokio::test]
     async fn it_evicts_lru() {
         // set limits s.t. three tiles fit
-        let mut tile_cache = TileCache::new(1248, 1248).unwrap();
-
+        let mut tile_cache = TileCache {
+            backend: RwLock::new(TileCacheBackend {
+                operator_caches: Default::default(),
+                lru: LruCache::unbounded(),
+                cache_byte_size_total: 1248,
+                cache_byte_size_used: 0,
+                landing_zone_byte_size_total: 1248,
+                landing_zone_byte_size_used: 0,
+            }),
+        };
         // process three different queries
         process_query(&mut tile_cache, op(1)).await;
         process_query(&mut tile_cache, op(2)).await;

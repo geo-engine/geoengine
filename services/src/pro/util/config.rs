@@ -57,16 +57,16 @@ impl ConfigElement for OpenTelemetry {
 #[derive(Debug, Deserialize, Clone, Copy)]
 pub struct Cache {
     pub enabled: bool,
-    pub landing_zone_byte_size: usize,
-    pub cache_byte_size: usize,
+    pub cache_size_in_mb: usize,
+    pub landing_zone_ratio: f64,
 }
 
 impl TestDefault for Cache {
     fn test_default() -> Self {
         Self {
             enabled: false,
-            landing_zone_byte_size: usize::MAX,
-            cache_byte_size: usize::MAX,
+            cache_size_in_mb: usize::MAX,
+            landing_zone_ratio: 0.5,
         }
     }
 }

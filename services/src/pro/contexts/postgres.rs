@@ -132,8 +132,8 @@ where
             volumes: Default::default(),
             tile_cache: Arc::new(
                 TileCache::new(
-                    cache_config.cache_byte_size,
-                    cache_config.landing_zone_byte_size,
+                    cache_config.cache_size_in_mb,
+                    cache_config.landing_zone_ratio,
                 )
                 .expect("tile cache creation should work because the config is valid"),
             ),
