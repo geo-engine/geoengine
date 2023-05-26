@@ -201,7 +201,8 @@ async fn run_bench(simultaneous_queries: usize, writes_per_read: f64) {
 }
 
 /// This benchmark investigates the performance of the query cache under concurrent read/write access.
-#[tokio::main]
+// #[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() {
     let simultaneous_queries = [10_000, 100_000, 1_000_000];
     let writes_per_reads = [0., 0.25, 0.50, 0.75, 1.]; // 0.0 = only reads, 1.0 = only writes
