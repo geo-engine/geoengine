@@ -7,6 +7,7 @@ use float_cmp::ApproxEq;
 use postgres_types::{FromSql, ToSql};
 use proj::Coord;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::{
     fmt,
     ops::{Add, Div, Mul, Sub},
@@ -197,7 +198,7 @@ impl ArrowTyped for Coordinate2D {
     fn arrow_data_type() -> DataType {
         let nullable = true; // TODO: should actually be false, but arrow's builders set it to `true` currently
 
-        DataType::FixedSizeList(Box::new(Field::new("item", DataType::Float64, nullable)), 2)
+        DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float64, nullable)), 2)
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
@@ -213,7 +214,7 @@ impl ArrowTyped for Coordinate2D {
 
     fn concat(a: &Self::ArrowArray, b: &Self::ArrowArray) -> Result<Self::ArrowArray, ArrowError> {
         Ok(arrow::array::FixedSizeListArray::from(
-            arrow::compute::concat(&[a, b])?.data().clone(),
+            arrow::compute::concat(&[a, b])?.to_data(),
         ))
     }
 
@@ -222,9 +223,7 @@ impl ArrowTyped for Coordinate2D {
         filter_array: &BooleanArray,
     ) -> Result<Self::ArrowArray, ArrowError> {
         Ok(arrow::array::FixedSizeListArray::from(
-            arrow::compute::filter(data_array, filter_array)?
-                .data()
-                .clone(),
+            arrow::compute::filter(data_array, filter_array)?.to_data(),
         ))
     }
 

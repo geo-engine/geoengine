@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::sync::Arc;
 
 use arrow::array::{Array, ArrayBuilder, ArrayRef, BooleanArray};
 use arrow::datatypes::{DataType, Field};
@@ -46,7 +47,7 @@ pub trait ArrowTyped {
 
     fn arrow_list_data_type() -> DataType {
         let nullable = true; // TODO: should actually be false, but arrow's builders set it to `true` currently
-        DataType::List(Box::new(Field::new(
+        DataType::List(Arc::new(Field::new(
             "item",
             Self::arrow_data_type(),
             nullable,

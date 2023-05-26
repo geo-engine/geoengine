@@ -154,7 +154,10 @@ mod tests {
     use serde_json::json;
 
     use crate::{
-        api::model::services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
+        api::model::{
+            datatypes::NamedData,
+            services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
+        },
         contexts::{Session, SessionContext, SessionId},
         datasets::{
             listing::DatasetProvider,
@@ -190,7 +193,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart_files(&files);
         let res = send_pro_test_request(req, app_ctx).await;
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "{res:?}");
 
         let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
         let root = upload.id.root_path()?;
@@ -217,8 +220,8 @@ mod tests {
             },
             "definition": {
                 "properties": {
-                    "id": null,
-                    "name": "Uploaded Natural Earth 10m Ports",
+                    "name": null,
+                    "displayName": "Uploaded Natural Earth 10m Ports",
                     "description": "Ports from Natural Earth",
                     "sourceOperator": "OgrSource"
                 },
@@ -290,7 +293,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(s);
         let res = send_pro_test_request(req, app_ctx).await;
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "response: {res:?}");
 
         let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
         dataset.id
@@ -298,11 +301,11 @@ mod tests {
 
     pub async fn make_ogr_source<C: ExecutionContext>(
         exe_ctx: &C,
-        dataset_id: DatasetId,
+        named_data: NamedData,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         OgrSource {
             params: OgrSourceParameters {
-                data: dataset_id.into(),
+                data: named_data.into(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -341,7 +344,15 @@ mod tests {
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
         let exe_ctx = ctx.execution_context()?;
 
-        let source = make_ogr_source(&exe_ctx, dataset_id).await?;
+        let source = make_ogr_source(
+            &exe_ctx,
+            NamedData {
+                namespace: Some(session.user.id.to_string()),
+                provider: None,
+                name: dataset_id.to_string(),
+            },
+        )
+        .await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
         let query_ctx = ctx.query_context()?;
@@ -397,8 +408,8 @@ mod tests {
             data_path: DataPath::Volume(volume.clone()),
             definition: DatasetDefinition {
                 properties: AddDataset {
-                    id: None,
-                    name: "ndvi".to_string(),
+                    name: None,
+                    display_name: "ndvi".to_string(),
                     description: "ndvi".to_string(),
                     source_operator: "GdalSource".to_string(),
                     symbology: None,
@@ -464,7 +475,7 @@ mod tests {
 
         let res = send_pro_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "response: {res:?}");
 
         assert!(db.load_dataset(&dataset_id).await.is_err());
 
@@ -486,8 +497,8 @@ mod tests {
             data_path: DataPath::Volume(volume.clone()),
             definition: DatasetDefinition {
                 properties: AddDataset {
-                    id: None,
-                    name: "ndvi".to_string(),
+                    name: None,
+                    display_name: "ndvi".to_string(),
                     description: "ndvi".to_string(),
                     source_operator: "GdalSource".to_string(),
                     symbology: None,

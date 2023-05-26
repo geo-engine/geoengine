@@ -433,7 +433,7 @@ mod tests {
         histogram
             .add_feature_data(FeatureDataRef::Float(FloatDataRef::new(
                 data.values(),
-                data.data().null_bitmap(),
+                data.nulls(),
             )))
             .unwrap();
 
@@ -459,7 +459,7 @@ mod tests {
         histogram
             .add_feature_data(FeatureDataRef::Float(FloatDataRef::new(
                 data.values(),
-                data.data_ref().null_bitmap(),
+                data.nulls(),
             )))
             .unwrap();
 
@@ -483,7 +483,7 @@ mod tests {
         histogram
             .add_feature_data(FeatureDataRef::Int(IntDataRef::new(
                 data.values(),
-                data.data().null_bitmap(),
+                data.nulls(),
             )))
             .unwrap();
 
@@ -506,7 +506,7 @@ mod tests {
         histogram
             .add_feature_data(FeatureDataRef::Category(CategoryDataRef::new(
                 data.values(),
-                data.data().null_bitmap(),
+                data.nulls(),
             )))
             .unwrap();
 
@@ -529,7 +529,7 @@ mod tests {
         histogram
             .add_feature_data(FeatureDataRef::Int(IntDataRef::new(
                 data.values(),
-                data.data().null_bitmap(),
+                data.nulls(),
             )))
             .unwrap();
 
@@ -553,7 +553,7 @@ mod tests {
         histogram
             .add_feature_data(FeatureDataRef::Float(FloatDataRef::new(
                 data.values(),
-                data.data_ref().null_bitmap(),
+                data.nulls(),
             )))
             .unwrap();
 

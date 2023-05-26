@@ -1,6 +1,7 @@
+use crate::api::model::datatypes::DatasetName;
 use crate::contexts::{ApplicationContext, GeoEngineDb, QueryContextImpl, SessionId};
 use crate::datasets::upload::{Volume, Volumes};
-use crate::error;
+use crate::error::{self, Error};
 
 use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDbBackend};
 use crate::pro::contexts::SessionContext;
@@ -281,6 +282,20 @@ pub struct ProInMemoryDb {
 impl ProInMemoryDb {
     fn new(backend: Arc<ProInMemoryDbBackend>, session: UserSession) -> Self {
         Self { backend, session }
+    }
+
+    /// Check whether the namepsace of the given dataset is allowed for insertion
+    pub(crate) fn check_namespace(&self, id: &DatasetName) -> Result<()> {
+        let is_ok = match &id.namespace {
+            Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
+            None => self.session.is_admin(),
+        };
+
+        if is_ok {
+            Ok(())
+        } else {
+            Err(Error::InvalidDatasetIdNamespace)
+        }
     }
 }
 

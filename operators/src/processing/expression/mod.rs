@@ -11,7 +11,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::try_join;
 use geoengine_datatypes::{
-    dataset::DataId,
+    dataset::NamedData,
     primitives::{partitions_extent, time_interval_extent, Measurement, SpatialResolution},
     raster::RasterDataType,
 };
@@ -64,9 +64,9 @@ pub struct ExpressionSources {
 }
 
 impl OperatorData for ExpressionSources {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
         for source in self.iter() {
-            source.data_ids_collect(data_ids);
+            source.data_names_collect(data_names);
         }
     }
 }

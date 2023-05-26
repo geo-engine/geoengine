@@ -1,4 +1,3 @@
-use crate::collections::feature_collection::struct_array_from_data;
 use crate::collections::{error, FeatureCollectionError, TypedFeatureCollection};
 use crate::collections::{FeatureCollection, VectorDataType};
 use crate::primitives::{
@@ -7,7 +6,9 @@ use crate::primitives::{
 };
 use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
-use arrow::array::{ArrayData, ArrayRef, FixedSizeListArray, ListArray, PrimitiveArray};
+use arrow::array::{
+    ArrayData, ArrayRef, FixedSizeListArray, ListArray, PrimitiveArray, StructArray,
+};
 use arrow::buffer::Buffer;
 use arrow::datatypes::{ArrowPrimitiveType, DataType, Field};
 use snafu::ensure;
@@ -419,7 +420,7 @@ impl RawFeatureCollectionBuilder {
         arrays.push(time.expect("checked"));
 
         Ok(FeatureCollection::<CollectionType>::new_from_internals(
-            struct_array_from_data(columns, arrays, self.num_features)?,
+            StructArray::try_new(columns.into(), arrays, None)?,
             self.types.clone(),
         ))
     }

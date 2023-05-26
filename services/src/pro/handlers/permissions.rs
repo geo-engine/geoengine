@@ -126,7 +126,7 @@ where
 #[cfg(test)]
 mod tests {
 
-    use geoengine_datatypes::{dataset::DataId, util::test::TestDefault};
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::{
         engine::{RasterOperator, VectorOperator, WorkflowOperatorPath},
         source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
@@ -169,22 +169,20 @@ mod tests {
 
         // setup data and operators
 
-        let gdal_dataset_id = add_ndvi_to_datasets(&app_ctx, false, false).await;
+        let (gdal_dataset_id, gdal_dataset_name) =
+            add_ndvi_to_datasets(&app_ctx, false, false).await;
         let gdal = GdalSource {
             params: GdalSourceParameters {
-                data: DataId::Internal {
-                    dataset_id: gdal_dataset_id.into(),
-                },
+                data: gdal_dataset_name.into(),
             },
         }
         .boxed();
 
-        let ogr_dataset_id = add_ports_to_datasets(&app_ctx, false, false).await;
+        let (ogr_dataset_id, ogr_dataset_name) =
+            add_ports_to_datasets(&app_ctx, false, false).await;
         let ogr = OgrSource {
             params: OgrSourceParameters {
-                data: DataId::Internal {
-                    dataset_id: ogr_dataset_id.into(),
-                },
+                data: ogr_dataset_name.into(),
                 attribute_filters: None,
                 attribute_projection: None,
             },

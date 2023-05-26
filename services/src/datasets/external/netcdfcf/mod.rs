@@ -4,9 +4,7 @@ use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
-use crate::api::model::datatypes::{
-    DataId, DataProviderId, ExternalDataId, LayerId, ResamplingMethod,
-};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId, ResamplingMethod};
 use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::MetaDataDefinition;
@@ -1208,18 +1206,15 @@ pub fn layer_from_netcdf_overview(
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        data: DataId::External(ExternalDataId {
-                            provider_id,
-                            layer_id: LayerId(
-                                json!({
-                                    "fileName": overview.file_name,
-                                    "groupNames": groups,
-                                    "entity": entity
-                                })
-                                .to_string(),
-                            ),
-                        })
-                        .into(),
+                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                            provider_id.to_string(),
+                            json!({
+                                "fileName": overview.file_name,
+                                "groupNames": groups,
+                                "entity": entity
+                            })
+                            .to_string(),
+                        ),
                     },
                 }
                 .boxed(),
@@ -1522,6 +1517,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use super::*;
 
+    use crate::api::model::datatypes::ExternalDataId;
     use crate::contexts::{SessionContext, SimpleApplicationContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::layers::storage::LayerProviderDb;
@@ -2248,24 +2244,23 @@ mod tests {
                 sources: ExpressionSources::new_a_b(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: ExternalDataId {
-                                provider_id: EBV_PROVIDER_ID,
-                                layer_id: LayerId(
-                                    serde_json::json!({
-                                        "fileName": "dataset_irr_ts.nc",
-                                        "groupNames": ["metric_1"],
-                                        "entity": 0
-                                    })
-                                    .to_string(),
-                                ),
-                            }
-                            .into(),
+                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                EBV_PROVIDER_ID.to_string(),
+                                serde_json::json!({
+                                    "fileName": "dataset_irr_ts.nc",
+                                    "groupNames": ["metric_1"],
+                                    "entity": 0
+                                })
+                                .to_string(),
+                            ),
                         },
                     }
                     .boxed(),
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: land_cover_dataset_id.into(),
+                            data: geoengine_datatypes::dataset::NamedData::with_system_name(
+                                land_cover_dataset_id.to_string(),
+                            ),
                         },
                     }
                     .boxed(),
