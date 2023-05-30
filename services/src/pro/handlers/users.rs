@@ -1255,7 +1255,7 @@ mod tests {
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_request_db(server_url);
 
-        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let ctx = ProInMemoryContext::new_with_oidc(request_db, TestDefault::test_default());
         let res = oidc_init_test_helper(Method::POST, ctx).await;
 
         assert_eq!(res.status(), 200);
@@ -1286,7 +1286,7 @@ mod tests {
             ),
         );
 
-        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let ctx = ProInMemoryContext::new_with_oidc(request_db, TestDefault::test_default());
         let res = oidc_init_test_helper(Method::POST, ctx).await;
 
         ErrorResponse::assert(
@@ -1336,7 +1336,7 @@ mod tests {
             state: SINGLE_STATE.to_string(),
         };
 
-        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let ctx = ProInMemoryContext::new_with_oidc(request_db, TestDefault::test_default());
         let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
 
         assert_eq!(res.status(), 200);
@@ -1356,7 +1356,7 @@ mod tests {
             state: SINGLE_STATE.to_string(),
         };
 
-        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let ctx = ProInMemoryContext::new_with_oidc(request_db, TestDefault::test_default());
         let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
 
         ErrorResponse::assert(
@@ -1399,7 +1399,7 @@ mod tests {
             state: SINGLE_STATE.to_string(),
         };
 
-        let ctx = ProInMemoryContext::new_with_oidc(request_db);
+        let ctx = ProInMemoryContext::new_with_oidc(request_db, TestDefault::test_default());
         let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
 
         ErrorResponse::assert(

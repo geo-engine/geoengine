@@ -52,7 +52,7 @@ async fn main() {
 
     let processor = cached_op.query_processor().unwrap().get_u8().unwrap();
 
-    let tile_cache = Arc::new(TileCache::default());
+    let tile_cache = Arc::new(TileCache::test_default());
 
     let mut extensions = QueryContextExtensions::default();
 

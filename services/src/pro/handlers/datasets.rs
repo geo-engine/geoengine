@@ -329,6 +329,7 @@ mod tests {
         let app_ctx = ProInMemoryContext::new_with_context_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
+            TestDefault::test_default(),
         );
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
