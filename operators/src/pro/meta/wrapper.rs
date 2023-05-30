@@ -205,7 +205,12 @@ where
                 query.spatial_bounds.lower_left().x,
                 query.spatial_bounds.lower_left().y,
                 query.spatial_bounds.upper_right().x,
-                query.spatial_bounds.upper_right().y)
+                query.spatial_bounds.upper_right().y
+            ),
+            time = %format!("[{},{}]",
+                query.time_interval.start().inner(),
+                query.time_interval.end().inner()
+            )
         );
 
         let stream_result = self.processor.query(query, ctx).await;
