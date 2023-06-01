@@ -1,3 +1,5 @@
+use std::hint::black_box;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use futures::future::join_all;
@@ -9,7 +11,14 @@ use geoengine_datatypes::{
     util::test::TestDefault,
 };
 use geoengine_operators::{engine::CanonicOperatorName, pro::cache::tile_cache::TileCache};
+use lazy_static::lazy_static;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use serde_json::json;
+
+lazy_static! {
+    static ref WRITTEN_ELEMENTS: AtomicUsize = AtomicUsize::new(0);
+}
 
 enum Measurement {
     Read(ReadMeasurement),
@@ -41,7 +50,8 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
 
     let query_id = tile_cache
         .insert_query::<u8>(op_name.clone(), &query_rect())
-        .await;
+        .await
+        .unwrap();
 
     let insert_query_s = start.elapsed().as_millis();
 
@@ -56,12 +66,17 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
 
     let start = std::time::Instant::now();
 
-    tile_cache
-        .finish_query(op_name.clone(), query_id)
-        .await
-        .unwrap();
+    #[allow(clippy::unit_arg)]
+    black_box(
+        tile_cache
+            .finish_query(op_name.clone(), query_id)
+            .await
+            .unwrap(),
+    );
 
     let finish_query_s = start.elapsed().as_millis();
+
+    WRITTEN_ELEMENTS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
     WriteMeasurement {
         insert_query_ms: insert_query_s,
@@ -70,13 +85,18 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
     }
 }
 
-async fn read_cache(tile_cache: &TileCache) -> ReadMeasurement {
-    let op = op(0);
+async fn read_cache(tile_cache: &TileCache, op_no: usize) -> ReadMeasurement {
+    // read from one of the previously written queries at random.
+    // as it is not predictable which queries are already written, this means the benchmark may run differently each times
+    let mut rng: SmallRng = SeedableRng::seed_from_u64(op_no as u64);
+
+    let op = op(rng.gen_range(0..WRITTEN_ELEMENTS.load(Ordering::SeqCst)));
+
     let query = query_rect();
 
     let start = std::time::Instant::now();
 
-    tile_cache.query_cache::<u8>(op, &query).await;
+    black_box(tile_cache.query_cache::<u8>(op, &query).await);
 
     let read_query_s = start.elapsed().as_millis();
 
@@ -94,7 +114,7 @@ fn query_rect() -> RasterQueryRectangle {
 }
 
 fn op(idx: usize) -> CanonicOperatorName {
-    CanonicOperatorName::new(json!({
+    CanonicOperatorName::new_unchecked(&json!({
         "type": "GdalSource",
         "params": {
             "data": idx
@@ -114,7 +134,7 @@ async fn cache_access(
     operation: Operation,
 ) -> Measurement {
     match operation {
-        Operation::Read => Measurement::Read(read_cache(&tile_cache).await),
+        Operation::Read => Measurement::Read(read_cache(&tile_cache, op_no).await),
         Operation::Write => Measurement::Write(write_cache(&tile_cache, op(op_no)).await),
     }
 }
@@ -150,7 +170,7 @@ fn generate_operations(simultaneous_queries: usize, writes_per_read: f64) -> Vec
 
 async fn run_bench(simultaneous_queries: usize, writes_per_read: f64) {
     // cache without limits, because we do not care about eviction here
-    let tile_cache = Arc::new(TileCache::default());
+    let tile_cache = Arc::new(TileCache::test_default());
 
     // pre-fill the query cache
     write_cache(&tile_cache, op(0)).await;

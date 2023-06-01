@@ -194,12 +194,6 @@ impl CanonicOperatorName {
     }
 }
 
-impl CanonicOperatorName {
-    pub fn new(value: serde_json::Value) -> Self {
-        CanonicOperatorName(value)
-    }
-}
-
 impl<T> From<&T> for CanonicOperatorName
 where
     T: Serialize,
