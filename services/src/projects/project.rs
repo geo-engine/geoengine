@@ -429,17 +429,16 @@ impl From<&Project> for ProjectListing {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema, Default)]
 pub enum ProjectFilter {
-    Name { term: String },
-    Description { term: String },
+    Name {
+        term: String,
+    },
+    Description {
+        term: String,
+    },
+    #[default]
     None,
-}
-
-impl Default for ProjectFilter {
-    fn default() -> Self {
-        ProjectFilter::None
-    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, Validate)]

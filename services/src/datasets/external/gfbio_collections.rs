@@ -3,7 +3,7 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error::ProviderDoesNotSupportBrowsing;
 use crate::error::{Error, Result};
@@ -632,11 +632,10 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
                         operator: TypedOperator::Vector(
                             OgrSource {
                                 params: OgrSourceParameters {
-                                    data: DataId::External(ExternalDataId {
-                                        provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
-                                        layer_id: id.clone(),
-                                    })
-                                    .into(),
+                                    data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                        GFBIO_COLLECTIONS_PROVIDER_ID.to_string(),
+                                        id.to_string(),
+                                    ),
                                     attribute_filters: None,
                                     attribute_projection: None,
                                 },
@@ -800,7 +799,9 @@ mod tests {
     use rand::RngCore;
     use tokio_postgres::Config;
 
-    use crate::{datasets::listing::Provenance, util::config};
+    use crate::{
+        api::model::datatypes::ExternalDataId, datasets::listing::Provenance, util::config,
+    };
 
     use super::*;
 

@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use geoengine_datatypes::util::test::TestDefault;
 use serde::Deserialize;
 
 use crate::util::config::ConfigElement;
@@ -53,9 +54,21 @@ impl ConfigElement for OpenTelemetry {
     const KEY: &'static str = "open_telemetry";
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, Copy)]
 pub struct Cache {
     pub enabled: bool,
+    pub cache_size_in_mb: usize,
+    pub landing_zone_ratio: f64,
+}
+
+impl TestDefault for Cache {
+    fn test_default() -> Self {
+        Self {
+            enabled: false,
+            cache_size_in_mb: usize::MAX,
+            landing_zone_ratio: 0.5,
+        }
+    }
 }
 
 impl ConfigElement for Cache {

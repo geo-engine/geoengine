@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error;
 use crate::error::Error;
@@ -270,11 +270,10 @@ impl LayerCollectionProvider for Nature40DataProvider {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: DataId::External(ExternalDataId {
-                                provider_id: self.id,
-                                layer_id: id.clone(),
-                            })
-                            .into(),
+                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                self.id.to_string(),
+                                id.to_string(),
+                            ),
                         },
                     }
                     .boxed(),
@@ -529,7 +528,9 @@ mod tests {
     };
     use serde_json::json;
 
-    use crate::{layers::layer::ProviderLayerCollectionId, test_data};
+    use crate::{
+        api::model::datatypes::ExternalDataId, layers::layer::ProviderLayerCollectionId, test_data,
+    };
 
     use super::*;
 

@@ -294,7 +294,7 @@ mod tests {
     use crate::util::gdal::add_ndvi_dataset;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
-    use geoengine_datatypes::dataset::DataId;
+    use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DataRef, DateTime, FeatureDataRef, MultiPoint, SpatialResolution,
         TimeInterval, VectorQueryRectangle,
@@ -343,9 +343,9 @@ mod tests {
         assert_eq!(deserialized.params, raster_vector_join.params);
     }
 
-    fn ndvi_source(id: DataId) -> Box<dyn RasterOperator> {
+    fn ndvi_source(name: NamedData) -> Box<dyn RasterOperator> {
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { data: id },
+            params: GdalSourceParameters { data: name },
         };
 
         gdal_source.boxed()

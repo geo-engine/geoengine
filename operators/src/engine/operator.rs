@@ -4,7 +4,7 @@ use tracing::debug;
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
@@ -15,13 +15,13 @@ use super::{
 
 pub trait OperatorData {
     /// Get the ids of all the data involoved in this operator and its sources
-    fn data_ids(&self) -> Vec<DataId> {
+    fn data_names(&self) -> Vec<NamedData> {
         let mut datasets = vec![];
-        self.data_ids_collect(&mut datasets);
+        self.data_names_collect(&mut datasets);
         datasets
     }
 
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>);
 }
 
 /// Common methods for `RasterOperator`s
@@ -172,14 +172,25 @@ pub trait InitializedVectorOperator: Send + Sync {
 }
 
 /// A canonic name for an operator and its sources
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CanonicOperatorName(serde_json::Value);
+/// We use a byte representation of the operator json
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CanonicOperatorName(Vec<u8>);
 
-#[allow(clippy::derive_hash_xor_eq)] // since the hash is basically also derived (from String), this should be fine
-impl std::hash::Hash for CanonicOperatorName {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        // TODO: serializing to string is potentially too expensive to perform each time.
-        self.0.to_string().hash(state);
+impl CanonicOperatorName {
+    pub fn new<T: Serialize>(value: &T) -> Result<Self> {
+        Ok(CanonicOperatorName(serde_json::to_vec(&value)?))
+    }
+
+    ///
+    /// # Panics
+    ///
+    /// if the value cannot be serialized as json
+    pub fn new_unchecked<T: Serialize>(value: &T) -> Self {
+        CanonicOperatorName(serde_json::to_vec(&value).unwrap())
+    }
+
+    pub fn byte_size(&self) -> usize {
+        std::mem::size_of::<CanonicOperatorName>() + self.0.len() * std::mem::size_of::<u8>()
     }
 }
 
@@ -194,7 +205,7 @@ where
     T: Serialize,
 {
     fn from(value: &T) -> Self {
-        CanonicOperatorName(serde_json::to_value(value).unwrap())
+        CanonicOperatorName::new_unchecked(value)
     }
 }
 
@@ -363,15 +374,31 @@ macro_rules! call_on_typed_operator {
 }
 
 impl OperatorData for TypedOperator {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+    fn data_names_collect(&self, data_ids: &mut Vec<NamedData>) {
         match self {
-            TypedOperator::Vector(v) => v.data_ids_collect(data_ids),
-            TypedOperator::Raster(r) => r.data_ids_collect(data_ids),
-            TypedOperator::Plot(p) => p.data_ids_collect(data_ids),
+            TypedOperator::Vector(v) => v.data_names_collect(data_ids),
+            TypedOperator::Raster(r) => r.data_names_collect(data_ids),
+            TypedOperator::Plot(p) => p.data_names_collect(data_ids),
         }
     }
 }
 
 pub trait OperatorName {
     const TYPE_NAME: &'static str;
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn op_name_byte_size() {
+        let op = CanonicOperatorName::new_unchecked(&json!({"foo": "bar"}));
+        assert_eq!(op.byte_size(), 37);
+
+        let op = CanonicOperatorName::new_unchecked(&json!({"foo": {"bar": [1,2,3]}}));
+        assert_eq!(op.byte_size(), 47);
+    }
 }

@@ -193,13 +193,7 @@ async fn list_upload_file_layers_handler<C: ApplicationContext>(
         let dataset = gdal_open_dataset(&file_path)?;
 
         // TODO: hide system/internal layer like "layer_styles"
-        Result::<_, Error>::Ok(
-            dataset
-                .layers()
-                .into_iter()
-                .map(|l| l.name())
-                .collect::<Vec<_>>(),
-        )
+        Result::<_, Error>::Ok(dataset.layers().map(|l| l.name()).collect::<Vec<_>>())
     })
     .await??;
 
@@ -249,7 +243,8 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        let files: UploadFilesResponse = test::read_body_json(res).await;
+        let mut files: UploadFilesResponse = test::read_body_json(res).await;
+        files.files.sort();
 
         assert_eq!(
             files.files,

@@ -1,4 +1,6 @@
 use crate::api::model::datatypes::Coordinate2D;
+use crate::api::model::datatypes::DatasetName;
+use crate::api::model::datatypes::NamedData;
 use crate::api::model::datatypes::RasterDataType;
 use crate::api::model::datatypes::SpatialResolution;
 use crate::api::model::operators::FileNotFoundHandling;
@@ -45,7 +47,7 @@ use std::path::PathBuf;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper<C: SimpleApplicationContext>(app_ctx: &C) -> ProjectId {
-    let project = app_ctx
+    app_ctx
         .default_session_context()
         .await
         .db()
@@ -57,9 +59,7 @@ pub async fn create_project_helper<C: SimpleApplicationContext>(app_ctx: &C) -> 
             time_step: None,
         })
         .await
-        .unwrap();
-
-    project
+        .unwrap()
 }
 
 pub fn update_project_helper(project: ProjectId) -> UpdateProject {
@@ -84,7 +84,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn register_ndvi_workflow_helper(app_ctx: &InMemoryContext) -> (Workflow, WorkflowId) {
-    let dataset = add_ndvi_to_datasets(app_ctx).await;
+    let (_, dataset) = add_ndvi_to_datasets(app_ctx).await;
 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
@@ -109,11 +109,16 @@ pub async fn register_ndvi_workflow_helper(app_ctx: &InMemoryContext) -> (Workfl
     (workflow, id)
 }
 
-pub async fn add_ndvi_to_datasets(app_ctx: &InMemoryContext) -> DatasetId {
+pub async fn add_ndvi_to_datasets(app_ctx: &InMemoryContext) -> (DatasetId, NamedData) {
+    let dataset_name = DatasetName {
+        namespace: None,
+        name: "NDVI".to_string(),
+    };
+
     let ndvi = DatasetDefinition {
         properties: AddDataset {
-            id: None,
-            name: "NDVI".to_string(),
+            name: Some(dataset_name.clone()),
+            display_name: "NDVI".to_string(),
             description: "NDVI data from MODIS".to_string(),
             source_operator: "GdalSource".to_string(),
             symbology: None,
@@ -126,22 +131,29 @@ pub async fn add_ndvi_to_datasets(app_ctx: &InMemoryContext) -> DatasetId {
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
 
-    app_ctx
+    let dataset_id = app_ctx
         .default_session_context()
         .await
         .db()
         .add_dataset(ndvi.properties, Box::new(ndvi.meta_data))
         .await
-        .expect("dataset db access")
-        .into()
+        .expect("dataset db access");
+
+    let named_data = NamedData {
+        namespace: dataset_name.namespace,
+        provider: None,
+        name: dataset_name.name,
+    };
+
+    (dataset_id.into(), named_data)
 }
 
 #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
 pub async fn add_land_cover_to_datasets(ctx: &InMemorySessionContext) -> DatasetId {
     let ndvi = DatasetDefinition {
         properties: AddDataset {
-            id: None,
-            name: "Land Cover".to_string(),
+            name: None,
+            display_name: "Land Cover".to_string(),
             description: "Land Cover derived from MODIS/Terra+Aqua Land Cover".to_string(),
             source_operator: "GdalSource".to_string(),
             symbology: Some(Symbology::Raster(RasterSymbology {
