@@ -756,6 +756,7 @@ mod tests {
 
     use super::*;
     use crate::api::model::datatypes::{DataProviderId, DatasetName, LayerId};
+    use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -1414,7 +1415,10 @@ let ctx = app_ctx.session_context(session);
 
             let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
-            let dataset_id = db
+            let DatasetIdAndName {
+                id: dataset_id,
+                name: dataset_name,
+            } = db
                 .add_dataset(
                     AddDataset {
                         name: Some(dataset_name.clone()),
@@ -1776,7 +1780,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1.add_dataset(ds, meta).await.unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap().id;
 
             assert!(db1.load_provenance(&id).await.is_ok());
 
@@ -1831,7 +1835,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1.add_dataset(ds, meta).await.unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap().id;
 
             assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1892,7 +1896,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1.add_dataset(ds, meta).await.unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap().id;
 
             assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1953,7 +1957,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1.add_dataset(ds, meta).await.unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -2062,7 +2066,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db.add_dataset(vector_ds, meta).await.unwrap();
+            let id = db.add_dataset(vector_ds, meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -2083,7 +2087,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataRegular(meta));
 
-            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+            let _result = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -2099,7 +2103,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalStatic(meta));
 
-            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -2114,7 +2118,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataList(meta));
 
-            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -2136,7 +2140,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetadataNetCdfCf(meta));
 
-            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -2990,7 +2994,8 @@ let ctx = app_ctx.session_context(session);
                     wrap,
                 )
                 .await
-                .unwrap();
+                .unwrap()
+                .id;
 
             assert!(db.load_dataset(&dataset_id).await.is_ok());
 
@@ -3082,7 +3087,8 @@ let ctx = app_ctx.session_context(session);
                     wrap,
                 )
                 .await
-                .unwrap();
+                .unwrap()
+                .id;
 
             assert!(db.load_dataset(&dataset_id).await.is_ok());
 

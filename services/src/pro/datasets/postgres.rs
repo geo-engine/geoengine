@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId};
+use crate::api::model::responses::datasets::DatasetIdAndName;
 use crate::api::model::services::AddDataset;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
@@ -444,7 +445,7 @@ where
         &self,
         dataset: AddDataset,
         meta_data: Box<dyn PostgresStorable<Tls>>,
-    ) -> Result<DatasetId> {
+    ) -> Result<DatasetIdAndName> {
         let id = DatasetId::new();
         let name = dataset.name.unwrap_or_else(|| DatasetName {
             namespace: Some(self.session.user.id.to_string()),
@@ -515,7 +516,7 @@ where
 
         tx.commit().await?;
 
-        Ok(id)
+        Ok(DatasetIdAndName { id, name })
     }
 
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {

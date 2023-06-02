@@ -18,6 +18,7 @@ use crate::api::model::operators::{
     TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
     VectorResultDescriptor,
 };
+use crate::api::model::responses::datasets::DatasetNameResponse;
 use crate::api::model::responses::{
     BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
     UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
@@ -139,6 +140,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             UnsupportedMediaTypeForJsonResponse,
             PayloadTooLargeResponse,
             IdResponse,
+            DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
             BadRequestQueryResponse
