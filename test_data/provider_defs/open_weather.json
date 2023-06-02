@@ -1,0 +1,5 @@
+{
+  "type": "EdrDataProviderDefinition",
+  "name": "Open Weather",
+  "baseUrl": "https://ogcie.iblsoft.com/edr"
+}
