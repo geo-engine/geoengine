@@ -11,14 +11,11 @@ use geoengine_datatypes::{
     util::test::TestDefault,
 };
 use geoengine_operators::{engine::CanonicOperatorName, pro::cache::tile_cache::TileCache};
-use lazy_static::lazy_static;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde_json::json;
 
-lazy_static! {
-    static ref WRITTEN_ELEMENTS: AtomicUsize = AtomicUsize::new(0);
-}
+static WRITTEN_ELEMENTS: AtomicUsize = AtomicUsize::new(0);
 
 enum Measurement {
     Read(ReadMeasurement),
