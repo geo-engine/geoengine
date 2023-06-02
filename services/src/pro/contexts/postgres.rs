@@ -2087,7 +2087,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataRegular(meta));
 
-            let _result = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
