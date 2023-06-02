@@ -1,0 +1,5 @@
+{
+  "type": "EdrDataProviderDefinition",
+  "name": "ChronicleDB Demo",
+  "baseUrl": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr"
+}

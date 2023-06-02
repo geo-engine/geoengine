@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
+use lazy_static::lazy_static;
 use url::Url;
 use snafu::prelude::*;
 use geoengine_datatypes::raster::RasterDataType;
@@ -122,6 +123,15 @@ struct EdrDataQueries {
     cube: Option<serde_json::Value>,
 }
 
+lazy_static! {
+    static ref GEO_FILETYPES: HashMap<String, bool> = {
+        let mut m = HashMap::new();
+        m.insert("GeoTIFF".to_string(), true);
+        m.insert("GeoJSON".to_string(), false);
+        m
+    };
+}
+
 impl EdrCollectionMetaData {
     fn get_time_interval(&self) -> Result<TimeInterval, geoengine_operators::error::Error> {
         let temporal_extent = self.extent.temporal.as_ref().ok_or_else(|| geoengine_operators::error::Error::DatasetMetaData {
@@ -154,28 +164,26 @@ impl EdrCollectionMetaData {
     }
 
     fn select_output_format(&self) -> Result<String, geoengine_operators::error::Error> {
-        let supported_output_formats = ["GeoTIFF".to_string()];
+        let supported_output_formats = ["GeoTIFF".to_string(), "GeoJSON".to_string()];
 
-        for format in &self.output_formats {
+        for format in GEO_FILETYPES.keys() {
             if supported_output_formats.contains(&format) {
-                println!("Selecting format: {}", format);
                 return Ok(format.to_string());
             }
         }
         return Err(geoengine_operators::error::Error::DatasetMetaData {
-            source: Box::new(EdrProviderError::MissingVerticalExtent)
+            source: Box::new(EdrProviderError::NoSupportedOutputFormat)
         });
     }
 
     fn is_raster_file(&self) -> Result<bool, geoengine_operators::error::Error> {
-        let raster_file_formats = ["GeoTIFF".to_string()];
-        return Ok(raster_file_formats.contains(&&self.select_output_format()?));
+        GEO_FILETYPES
+            .get(self.select_output_format()?)
+            .expect("can only return values in map")
     }
 
     fn get_download_url(&self, base_url: &Url) -> Result<PathBuf, geoengine_operators::error::Error> {
-        let vertical_extent = self.extent.vertical.as_ref().ok_or_else(|| geoengine_operators::error::Error::DatasetMetaData {
-            source: Box::new(EdrProviderError::MissingVerticalExtent)
-        })?;
+        let vertical_extent = &self.extent.vertical;
         let spatial_extent = self.extent.spatial.as_ref().ok_or_else(|| geoengine_operators::error::Error::DatasetMetaData {
             source: Box::new(EdrProviderError::MissingSpatialExtent)
         })?;
@@ -205,7 +213,8 @@ impl EdrCollectionMetaData {
 #[derive(Deserialize)]
 struct EdrExtents {
     spatial: Option<EdrSpatialExtent>,
-    vertical: Option<EdrVerticalExtent>,
+    #[serde(default)]
+    vertical: EdrVerticalExtent,
     temporal: Option<EdrTemporalExtent>,
 }
 
@@ -217,6 +226,15 @@ struct EdrSpatialExtent {
 #[derive(Deserialize)]
 struct EdrVerticalExtent {
     interval: Vec<Vec<String>>,
+}
+
+impl Default for EdrVerticalExtent {
+    fn default() -> Self {
+        EdrVerticalExtent {
+            //default from OpenWeather
+            interval: vec![vec!["300".to_string(), "1000".to_string()]]
+        }
+    }
 }
 
 #[derive(Deserialize)]
