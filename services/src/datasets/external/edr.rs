@@ -1,10 +1,10 @@
 use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
-use crate::error::{self, Error, Result};
+use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerCollectionId, ProviderLayerId,
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
+    LayerListing, ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::parsing::deserialize_base_url;
@@ -12,8 +12,9 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, ContinuousMeasurement, Coordinate2D, FeatureDataType, Measurement,
-    RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, ContinuousMeasurement, Coordinate2D, FeatureDataType,
+    Measurement, RasterQueryRectangle, SpatialPartition2D, TimeInstance, TimeInterval,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
@@ -37,6 +38,16 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use url::Url;
+
+lazy_static! {
+    static ref GEO_FILETYPES: HashMap<String, bool> = {
+        let mut m = HashMap::new();
+        //name:is_raster
+        m.insert("GeoTIFF".to_string(), true);
+        m.insert("GeoJSON".to_string(), false);
+        m
+    };
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -102,7 +113,7 @@ impl EdrDataProvider {
     async fn load_metadata(
         &self,
         id: &geoengine_datatypes::dataset::DataId,
-    ) -> Result<EdrCollectionMetaData, geoengine_operators::error::Error> {
+    ) -> Result<(EdrCollectionId, EdrCollectionMetaData), geoengine_operators::error::Error> {
         let layer_id = id
             .external()
             .ok_or(Error::InvalidDataId)
@@ -110,14 +121,24 @@ impl EdrDataProvider {
                 source: Box::new(e),
             })?
             .layer_id;
+        let edr_id: EdrCollectionId = EdrCollectionId::from_str(&layer_id.0).map_err(|e| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            }
+        })?;
+        let collection_id = edr_id.get_collection_id().map_err(|e| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            }
+        })?;
 
         self.client
             .get(
                 self.base_url
-                    .join(&format!("collections/{layer_id}?f=json"))
+                    .join(&format!("collections/{collection_id}?f=json"))
                     .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                         source: Box::new(e),
-                    })?
+                    })?,
             )
             .send()
             .await
@@ -129,6 +150,7 @@ impl EdrDataProvider {
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
             })
+            .map(|item| (edr_id, item))
     }
 }
 
@@ -151,15 +173,6 @@ struct EdrCollectionMetaData {
 #[derive(Deserialize)]
 struct EdrDataQueries {
     cube: Option<serde_json::Value>,
-}
-
-lazy_static! {
-    static ref GEO_FILETYPES: HashMap<String, bool> = {
-        let mut m = HashMap::new();
-        m.insert("GeoTIFF".to_string(), true);
-        m.insert("GeoJSON".to_string(), false);
-        m
-    };
 }
 
 impl EdrCollectionMetaData {
@@ -209,6 +222,7 @@ impl EdrCollectionMetaData {
     fn get_download_url(
         &self,
         base_url: &Url,
+        edr_id: EdrCollectionId,
     ) -> Result<PathBuf, geoengine_operators::error::Error> {
         let vertical_extent = &self.extent.vertical;
         let spatial_extent = self.extent.spatial.as_ref().ok_or_else(|| {
@@ -221,8 +235,7 @@ impl EdrCollectionMetaData {
                 source: Box::new(EdrProviderError::MissingTemporalExtent),
             }
         })?;
-
-        Ok(format!(
+        let mut download_url = format!(
             "/vsicurl/{}collections/{}/cube?bbox={},{},{},{}&z={}%2F{}&datetime={}%2F{}&f={}",
             base_url,
             self.id,
@@ -235,8 +248,12 @@ impl EdrCollectionMetaData {
             temporal_extent.interval[0][0],
             temporal_extent.interval[0][1],
             self.select_output_format()?
-        )
-        .into())
+        );
+        if let EdrCollectionId::Parameter { parameter, .. } = edr_id {
+            download_url.push_str("&parameter-name=");
+            download_url.push_str(parameter.as_str());
+        }
+        Ok(download_url.into())
     }
 }
 
@@ -289,68 +306,215 @@ struct ObservedProperty {
     label: String,
 }
 
+enum EdrCollectionId {
+    Collections,
+    Collection {
+        collection: String,
+    },
+    Parameter {
+        collection: String,
+        parameter: String,
+    },
+}
+
+impl EdrCollectionId {
+    fn get_collection_id(&self) -> Result<&String> {
+        match self {
+            EdrCollectionId::Collections => Err(Error::InvalidLayerId),
+            EdrCollectionId::Collection { collection } => Ok(collection),
+            EdrCollectionId::Parameter { collection, .. } => Ok(collection),
+        }
+    }
+}
+
+impl FromStr for EdrCollectionId {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let split = s.split('/').collect::<Vec<_>>();
+
+        Ok(match *split.as_slice() {
+            ["collections"] => EdrCollectionId::Collections,
+            ["collections", collection] => EdrCollectionId::Collection {
+                collection: collection.to_string(),
+            },
+            ["collections", collection, parameter] => EdrCollectionId::Parameter {
+                collection: collection.to_string(),
+                parameter: parameter.to_string(),
+            },
+            _ => return Err(Error::InvalidLayerCollectionId),
+        })
+    }
+}
+
+impl TryFrom<EdrCollectionId> for LayerCollectionId {
+    type Error = Error;
+
+    fn try_from(value: EdrCollectionId) -> std::result::Result<Self, Self::Error> {
+        let s = match value {
+            EdrCollectionId::Collections => "collections".to_string(),
+            EdrCollectionId::Collection { collection } => format!("collections/{collection}"),
+            EdrCollectionId::Parameter { .. } => return Err(Error::InvalidLayerCollectionId),
+        };
+
+        Ok(LayerCollectionId(s))
+    }
+}
+
+impl TryFrom<EdrCollectionId> for LayerId {
+    type Error = Error;
+
+    fn try_from(value: EdrCollectionId) -> std::result::Result<Self, Self::Error> {
+        let s = match value {
+            EdrCollectionId::Collections => return Err(Error::InvalidLayerId),
+            EdrCollectionId::Collection { collection } => format!("collections/{collection}"),
+            EdrCollectionId::Parameter {
+                collection,
+                parameter,
+            } => format!("collections/{collection}/{parameter}"),
+        };
+
+        Ok(LayerId(s))
+    }
+}
+
 #[async_trait]
 impl LayerCollectionProvider for EdrDataProvider {
     async fn load_layer_collection(
         &self,
-        collection: &LayerCollectionId,
+        collection_id: &LayerCollectionId,
         options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
-        ensure!(
-            *collection == self.get_root_layer_collection_id().await?,
-            error::UnknownLayerCollectionId {
-                id: collection.clone()
-            }
-        );
+        let edr_id: EdrCollectionId = EdrCollectionId::from_str(&collection_id.0)
+            .map_err(|_e| Error::InvalidLayerCollectionId)?;
 
-        let collections: EdrCollectionsMetaData = self
-            .client
-            .get(self.base_url.join("collections?f=json")?)
-            .send()
-            .await?
-            .json()
-            .await?;
+        match edr_id {
+            EdrCollectionId::Collections => {
+                let collections: EdrCollectionsMetaData = self
+                    .client
+                    .get(self.base_url.join("collections?f=json")?)
+                    .send()
+                    .await?
+                    .json()
+                    .await?;
 
-        let items: Vec<_> = collections
-            .collections
-            .into_iter()
-            .filter(|item| item.data_queries.cube.is_some())
-            .skip(options.offset as usize)
-            .take(options.limit as usize)
-            .map(|item| {
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
+                let items = collections
+                    .collections
+                    .into_iter()
+                    .filter(|item| item.data_queries.cube.is_some())
+                    .skip(options.offset as usize)
+                    .take(options.limit as usize)
+                    .map(|item| {
+                        if item.is_raster_file()? {
+                            Ok(CollectionItem::Collection(LayerCollectionListing {
+                                id: ProviderLayerCollectionId {
+                                    provider_id: self.id,
+                                    collection_id: EdrCollectionId::Collection {
+                                        collection: item.id,
+                                    }
+                                    .try_into()?,
+                                },
+                                name: item.title,
+                                description: item.description.unwrap_or(String::new()),
+                                properties: vec![],
+                            }))
+                        } else {
+                            Ok(CollectionItem::Layer(LayerListing {
+                                id: ProviderLayerId {
+                                    provider_id: self.id,
+                                    layer_id: EdrCollectionId::Collection {
+                                        collection: item.id,
+                                    }
+                                    .try_into()?,
+                                },
+                                name: item.title,
+                                description: item.description.unwrap_or(String::new()),
+                                properties: vec![],
+                            }))
+                        }
+                    })
+                    .collect::<Result<Vec<CollectionItem>>>()?;
+
+                Ok(LayerCollection {
+                    id: ProviderLayerCollectionId {
                         provider_id: self.id,
-                        layer_id: LayerId(item.id),
+                        collection_id: collection_id.clone(),
                     },
-                    name: item.title,
-                    description: item.description.unwrap_or(String::new()),
+                    name: "EDR".to_owned(),
+                    description: "Environmental Data Retrieval".to_owned(),
+                    items,
+                    entry_label: None,
                     properties: vec![],
                 })
-            })
-            .collect();
+            }
+            EdrCollectionId::Collection { collection } => {
+                let collection_meta: EdrCollectionMetaData = self
+                    .client
+                    .get(
+                        self.base_url
+                            .join(&format!("collections/{collection}?f=json"))?,
+                    )
+                    .send()
+                    .await?
+                    .json()
+                    .await?;
 
-        Ok(LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: self.id,
-                collection_id: collection.clone(),
-            },
-            name: "EDR".to_owned(),
-            description: "Environmental Data Retrieval".to_owned(),
-            items,
-            entry_label: None,
-            properties: vec![],
-        })
+                if !collection_meta.is_raster_file()? {
+                    return Err(Error::InvalidLayerCollectionId);
+                }
+
+                let items = collection_meta
+                    .parameter_names
+                    .into_keys()
+                    .skip(options.offset as usize)
+                    .take(options.limit as usize)
+                    .map(|item| {
+                        Ok(CollectionItem::Layer(LayerListing {
+                            id: ProviderLayerId {
+                                provider_id: self.id,
+                                layer_id: EdrCollectionId::Parameter {
+                                    collection: collection.clone(),
+                                    parameter: item.clone(),
+                                }
+                                .try_into()?,
+                            },
+                            name: item,
+                            description: String::new(),
+                            properties: vec![],
+                        }))
+                    })
+                    .collect::<Result<Vec<CollectionItem>>>()?;
+
+                Ok(LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: self.id,
+                        collection_id: collection_id.clone(),
+                    },
+                    name: collection.clone(),
+                    description: format!("Parameters of {collection}"),
+                    items,
+                    entry_label: None,
+                    properties: vec![],
+                })
+            }
+            EdrCollectionId::Parameter { .. } => Err(Error::InvalidLayerCollectionId),
+        }
     }
 
     async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
-        Ok(LayerCollectionId("edr".to_owned()))
+        EdrCollectionId::Collections.try_into()
     }
 
     async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
+        let edr_id: EdrCollectionId = EdrCollectionId::from_str(&id.0)?;
+        let collection_id = edr_id.get_collection_id()?;
+
         let collection: EdrCollectionMetaData = self
             .client
-            .get(self.base_url.join(&format!("collections/{id}?f=json"))?)
+            .get(
+                self.base_url
+                    .join(&format!("collections/{collection_id}?f=json"))?,
+            )
             .send()
             .await?
             .json()
@@ -434,13 +598,12 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let column_spec =
-            self.column_spec
-                .clone()
-                .ok_or_else(|| geoengine_operators::error::Error::DatasetMetaData {
-                    source: Box::new(EdrProviderError::NoColumnSpecConfigured),
-                })?;
-        let collection = self.load_metadata(id).await?;
+        let column_spec = self.column_spec.clone().ok_or_else(|| {
+            geoengine_operators::error::Error::DatasetMetaData {
+                source: Box::new(EdrProviderError::NoColumnSpecConfigured),
+            }
+        })?;
+        let (edr_id, collection) = self.load_metadata(id).await?;
 
         // Map column definition
         let int = vec![];
@@ -466,7 +629,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
         Ok(Box::new(StaticMetaData {
             loading_info: OgrSourceDataset {
-                file_name: collection.get_download_url(&self.base_url)?,
+                file_name: collection.get_download_url(&self.base_url, edr_id)?,
                 layer_name: "EDR".to_string(),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::Start {
@@ -515,7 +678,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let collection = self.load_metadata(id).await?;
+        let (edr_id, collection) = self.load_metadata(id).await?;
+        let bbox = collection.get_bounding_box()?;
+        let bbox = SpatialPartition2D::new_unchecked(bbox.upper_left(), bbox.lower_right());
 
         Ok(Box::new(StaticMetaData {
             loading_info: GdalLoadingInfo {
@@ -523,7 +688,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                     parts: vec![GdalLoadingInfoTemporalSlice {
                         time: collection.get_time_interval()?,
                         params: Some(GdalDatasetParameters {
-                            file_path: collection.get_download_url(&self.base_url)?,
+                            file_path: collection.get_download_url(&self.base_url, edr_id)?,
                             rasterband_channel: 0,
                             geo_transform: GdalDatasetGeoTransform {
                                 origin_coordinate: Coordinate2D::new(0.0, 0.0),
@@ -551,7 +716,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 ),
                 measurement: Default::default(),
                 time: Some(collection.get_time_interval()?),
-                bbox: None,
+                bbox: Some(bbox),
                 resolution: None,
             },
             phantom: Default::default(),
