@@ -1,5 +1,6 @@
 #[cfg(feature = "nfdi")]
 pub mod aruna;
+mod edr;
 #[cfg(feature = "nfdi")]
 pub mod gbif;
 #[cfg(feature = "nfdi")]
@@ -13,4 +14,3 @@ pub mod nature40;
 pub mod netcdfcf;
 #[cfg(feature = "nfdi")]
 pub mod pangaea;
-mod edr;

@@ -11,30 +11,48 @@ use crate::util::parsing::deserialize_base_url;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::primitives::{BoundingBox2D, ContinuousMeasurement, Coordinate2D, FeatureDataType, Measurement, RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, ContinuousMeasurement, Coordinate2D, FeatureDataType, Measurement,
+    RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle,
+};
+use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-use geoengine_operators::engine::{MetaData, MetaDataProvider, RasterOperator, RasterResultDescriptor, StaticMetaData, TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor};
+use geoengine_operators::engine::{
+    MetaData, MetaDataProvider, RasterOperator, RasterResultDescriptor, StaticMetaData,
+    TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+};
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::source::{FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator, GdalSource, GdalSourceParameters, OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat};
+use geoengine_operators::source::{
+    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
+    GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator, GdalSource,
+    GdalSourceParameters, OgrSource, OgrSourceColumnSpec, OgrSourceDataset,
+    OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters,
+    OgrSourceTimeFormat,
+};
+use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use snafu::prelude::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
-use lazy_static::lazy_static;
 use url::Url;
-use snafu::prelude::*;
-use geoengine_datatypes::raster::RasterDataType;
-
-pub const EDR_PROVIDER_ID: DataProviderId =
-    DataProviderId::from_u128(0xa5e8_e3c0_7cf7_4d90_9211_d09a_bf68_4334);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EdrDataProviderDefinition {
     name: String,
+    id: DataProviderId,
     #[serde(deserialize_with = "deserialize_base_url")]
     base_url: Url,
+    column_spec: Option<EdrColumnSpec>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EdrColumnSpec {
+    x: String,
+    y: Option<String>,
+    t: String,
 }
 
 #[typetag::serde]
@@ -42,7 +60,9 @@ pub struct EdrDataProviderDefinition {
 impl DataProviderDefinition for EdrDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(EdrDataProvider {
+            id: self.id,
             base_url: self.base_url,
+            column_spec: self.column_spec,
             client: Client::new(),
         }))
     }
@@ -56,13 +76,15 @@ impl DataProviderDefinition for EdrDataProviderDefinition {
     }
 
     fn id(&self) -> DataProviderId {
-        EDR_PROVIDER_ID
+        self.id
     }
 }
 
 #[derive(Debug)]
 pub struct EdrDataProvider {
+    id: DataProviderId,
     base_url: Url,
+    column_spec: Option<EdrColumnSpec>,
     client: Client,
 }
 
@@ -77,7 +99,10 @@ impl DataProvider for EdrDataProvider {
 }
 
 impl EdrDataProvider {
-    async fn load_metadata(&self, id: &geoengine_datatypes::dataset::DataId) -> Result<EdrCollectionMetaData, geoengine_operators::error::Error> {
+    async fn load_metadata(
+        &self,
+        id: &geoengine_datatypes::dataset::DataId,
+    ) -> Result<EdrCollectionMetaData, geoengine_operators::error::Error> {
         let layer_id = id
             .external()
             .ok_or(Error::InvalidDataId)
@@ -86,9 +111,14 @@ impl EdrDataProvider {
             })?
             .layer_id;
 
-        self
-            .client
-            .get(format!("{}collections/{}?f=json", self.base_url, layer_id))
+        self.client
+            .get(
+                self.base_url
+                    .join(&format!("collections/{layer_id}?f=json"))
+                    .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    })?
+            )
             .send()
             .await
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
@@ -134,61 +164,62 @@ lazy_static! {
 
 impl EdrCollectionMetaData {
     fn get_time_interval(&self) -> Result<TimeInterval, geoengine_operators::error::Error> {
-        let temporal_extent = self.extent.temporal.as_ref().ok_or_else(|| geoengine_operators::error::Error::DatasetMetaData {
-            source: Box::new(EdrProviderError::MissingTemporalExtent)
+        let temporal_extent = self.extent.temporal.as_ref().ok_or_else(|| {
+            geoengine_operators::error::Error::DatasetMetaData {
+                source: Box::new(EdrProviderError::MissingTemporalExtent),
+            }
         })?;
 
         Ok(TimeInterval::new_unchecked(
-            TimeInstance::from_str(temporal_extent.interval[0][0].as_str())
-                .unwrap(),
-            TimeInstance::from_str(temporal_extent.interval[0][1].as_str())
-                .unwrap()
+            TimeInstance::from_str(temporal_extent.interval[0][0].as_str()).unwrap(),
+            TimeInstance::from_str(temporal_extent.interval[0][1].as_str()).unwrap(),
         ))
     }
 
     fn get_bounding_box(&self) -> Result<BoundingBox2D, geoengine_operators::error::Error> {
-        let spatial_extent = self.extent.spatial.as_ref().ok_or_else(|| geoengine_operators::error::Error::DatasetMetaData {
-            source: Box::new(EdrProviderError::MissingSpatialExtent)
+        let spatial_extent = self.extent.spatial.as_ref().ok_or_else(|| {
+            geoengine_operators::error::Error::DatasetMetaData {
+                source: Box::new(EdrProviderError::MissingSpatialExtent),
+            }
         })?;
 
         Ok(BoundingBox2D::new_unchecked(
-            Coordinate2D::new(
-                spatial_extent.bbox[0][0],
-                spatial_extent.bbox[0][1],
-            ),
-            Coordinate2D::new(
-                spatial_extent.bbox[0][2],
-                spatial_extent.bbox[0][3],
-            ),
+            Coordinate2D::new(spatial_extent.bbox[0][0], spatial_extent.bbox[0][1]),
+            Coordinate2D::new(spatial_extent.bbox[0][2], spatial_extent.bbox[0][3]),
         ))
     }
 
     fn select_output_format(&self) -> Result<String, geoengine_operators::error::Error> {
-        let supported_output_formats = ["GeoTIFF".to_string(), "GeoJSON".to_string()];
-
-        for format in GEO_FILETYPES.keys() {
-            if supported_output_formats.contains(&format) {
+        for format in &self.output_formats {
+            if GEO_FILETYPES.contains_key(format) {
                 return Ok(format.to_string());
             }
         }
         return Err(geoengine_operators::error::Error::DatasetMetaData {
-            source: Box::new(EdrProviderError::NoSupportedOutputFormat)
+            source: Box::new(EdrProviderError::NoSupportedOutputFormat),
         });
     }
 
     fn is_raster_file(&self) -> Result<bool, geoengine_operators::error::Error> {
-        GEO_FILETYPES
-            .get(self.select_output_format()?)
-            .expect("can only return values in map")
+        Ok(*GEO_FILETYPES
+            .get(&self.select_output_format()?)
+            .expect("can only return values in map"))
     }
 
-    fn get_download_url(&self, base_url: &Url) -> Result<PathBuf, geoengine_operators::error::Error> {
+    fn get_download_url(
+        &self,
+        base_url: &Url,
+    ) -> Result<PathBuf, geoengine_operators::error::Error> {
         let vertical_extent = &self.extent.vertical;
-        let spatial_extent = self.extent.spatial.as_ref().ok_or_else(|| geoengine_operators::error::Error::DatasetMetaData {
-            source: Box::new(EdrProviderError::MissingSpatialExtent)
+        let spatial_extent = self.extent.spatial.as_ref().ok_or_else(|| {
+            geoengine_operators::error::Error::DatasetMetaData {
+                source: Box::new(EdrProviderError::MissingSpatialExtent),
+            }
         })?;
-        let temporal_extent = self.extent.temporal.as_ref().ok_or_else(|| geoengine_operators::error::Error::DatasetMetaData {
-            source: Box::new(EdrProviderError::MissingTemporalExtent)
+        let temporal_extent = self.extent.temporal.as_ref().ok_or_else(|| {
+            geoengine_operators::error::Error::DatasetMetaData {
+                source: Box::new(EdrProviderError::MissingTemporalExtent),
+            }
         })?;
 
         Ok(format!(
@@ -205,8 +236,7 @@ impl EdrCollectionMetaData {
             temporal_extent.interval[0][1],
             self.select_output_format()?
         )
-            .into()
-        )
+        .into())
     }
 }
 
@@ -232,7 +262,7 @@ impl Default for EdrVerticalExtent {
     fn default() -> Self {
         EdrVerticalExtent {
             //default from OpenWeather
-            interval: vec![vec!["300".to_string(), "1000".to_string()]]
+            interval: vec![vec!["300".to_string(), "1000".to_string()]],
         }
     }
 }
@@ -275,7 +305,7 @@ impl LayerCollectionProvider for EdrDataProvider {
 
         let collections: EdrCollectionsMetaData = self
             .client
-            .get(format!("{}collections?f=json", self.base_url))
+            .get(self.base_url.join("collections?f=json")?)
             .send()
             .await?
             .json()
@@ -290,7 +320,7 @@ impl LayerCollectionProvider for EdrDataProvider {
             .map(|item| {
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
-                        provider_id: EDR_PROVIDER_ID,
+                        provider_id: self.id,
                         layer_id: LayerId(item.id),
                     },
                     name: item.title,
@@ -302,7 +332,7 @@ impl LayerCollectionProvider for EdrDataProvider {
 
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
-                provider_id: EDR_PROVIDER_ID,
+                provider_id: self.id,
                 collection_id: collection.clone(),
             },
             name: "EDR".to_owned(),
@@ -320,7 +350,7 @@ impl LayerCollectionProvider for EdrDataProvider {
     async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let collection: EdrCollectionMetaData = self
             .client
-            .get(format!("{}collections/{}?f=json", self.base_url, id))
+            .get(self.base_url.join(&format!("collections/{id}?f=json"))?)
             .send()
             .await?
             .json()
@@ -331,41 +361,39 @@ impl LayerCollectionProvider for EdrDataProvider {
                 GdalSource {
                     params: GdalSourceParameters {
                         data: DataId::External(ExternalDataId {
-                            provider_id: EDR_PROVIDER_ID,
+                            provider_id: self.id,
                             layer_id: id.clone(),
                         })
-                            .into()
-                    }
+                        .into(),
+                    },
                 }
-                    .boxed()
+                .boxed(),
             )
         } else {
             TypedOperator::Vector(
                 OgrSource {
                     params: OgrSourceParameters {
                         data: DataId::External(ExternalDataId {
-                            provider_id: EDR_PROVIDER_ID,
+                            provider_id: self.id,
                             layer_id: id.clone(),
                         })
-                            .into(),
+                        .into(),
                         attribute_projection: None,
                         attribute_filters: None,
                     },
                 }
-                    .boxed()
+                .boxed(),
             )
         };
 
         Ok(Layer {
             id: ProviderLayerId {
-                provider_id: EDR_PROVIDER_ID,
+                provider_id: self.id,
                 layer_id: id.clone(),
             },
             name: collection.title,
             description: String::new(),
-            workflow: Workflow {
-                operator,
-            },
+            workflow: Workflow { operator },
             symbology: None, // TODO
             properties: vec![],
             metadata: HashMap::new(),
@@ -406,6 +434,12 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
+        let column_spec =
+            self.column_spec
+                .clone()
+                .ok_or_else(|| geoengine_operators::error::Error::DatasetMetaData {
+                    source: Box::new(EdrProviderError::NoColumnSpecConfigured),
+                })?;
         let collection = self.load_metadata(id).await?;
 
         // Map column definition
@@ -436,15 +470,15 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 layer_name: "EDR".to_string(),
                 data_type: Some(VectorDataType::MultiPoint),
                 time: OgrSourceDatasetTimeType::Start {
-                    start_field: "datetime".to_string(),
+                    start_field: column_spec.t,
                     start_format: OgrSourceTimeFormat::Auto,
                     duration: OgrSourceDurationSpec::Zero,
                 },
                 default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
                     format_specifics: None,
-                    x: "x".to_string(),
-                    y: Some("y".to_string()),
+                    x: column_spec.x,
+                    y: column_spec.y,
                     int,
                     float,
                     text,
@@ -494,7 +528,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                             geo_transform: GdalDatasetGeoTransform {
                                 origin_coordinate: Coordinate2D::new(0.0, 0.0),
                                 x_pixel_size: 1.0,
-                                y_pixel_size: 1.0
+                                y_pixel_size: 1.0,
                             },
                             width: 0,
                             height: 0,
@@ -504,20 +538,23 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                             gdal_open_options: None,
                             gdal_config_options: None,
                             allow_alphaband_as_mask: false,
-                            retry: None
-                        })
-                    }].into_iter(),
-                }
+                            retry: None,
+                        }),
+                    }]
+                    .into_iter(),
+                },
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::F32,
-                spatial_reference: SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
+                spatial_reference: SpatialReferenceOption::SpatialReference(
+                    SpatialReference::epsg_4326(),
+                ),
                 measurement: Default::default(),
                 time: Some(collection.get_time_interval()?),
                 bbox: None,
-                resolution: None
+                resolution: None,
             },
-            phantom: Default::default()
+            phantom: Default::default(),
         }))
     }
 }
@@ -529,5 +566,6 @@ pub enum EdrProviderError {
     MissingVerticalExtent,
     MissingSpatialExtent,
     MissingTemporalExtent,
-    NoSupportedOutputFormat
+    NoSupportedOutputFormat,
+    NoColumnSpecConfigured,
 }

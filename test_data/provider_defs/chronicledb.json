@@ -1,5 +1,11 @@
 {
   "type": "EdrDataProviderDefinition",
+  "id": "2579a45e-a2c3-4fdb-946a-d98d9d0eacc4",
   "name": "ChronicleDB Demo",
-  "baseUrl": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr"
+  "baseUrl": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr",
+  "columnSpec": {
+    "x": "geometry",
+    "y": null,
+    "t": "datetime"
+  }
 }
