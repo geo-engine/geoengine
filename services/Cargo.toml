@@ -102,7 +102,7 @@ httptest = "0.15.2"
 hyper = "0.14"
 prost = "0.11"
 rand = "0.8.4"
-serial_test = "1.0"
+serial_test = "2.0"
 tempfile = "3.1"
 xml-rs = "0.8.3"
 
