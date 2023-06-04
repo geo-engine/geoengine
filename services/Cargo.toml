@@ -64,7 +64,7 @@ postgres-protocol = "0.6"
 proj = "0.22"
 proj-sys = "0.19"
 pwhash = "1.0"
-quick-xml = { version = "0.27", optional = true }
+quick-xml = { version = "0.28", optional = true }
 rayon = "1.5"
 regex = "1.5"
 reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
@@ -107,7 +107,7 @@ tempfile = "3.1"
 xml-rs = "0.8.3"
 
 [build-dependencies]
-vergen = "7"
+vergen = { version = "8", features = ["build", "cargo", "git", "gitcl"] }
 
 [[bench]]
 name = "quota_check"
