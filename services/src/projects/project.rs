@@ -770,7 +770,7 @@ mod tests {
         });
 
         assert_eq!(
-            serde_json::to_value(&symbology).unwrap(),
+            serde_json::to_value(symbology).unwrap(),
             json!({
                 "type": "point",
                 "radius": {
@@ -807,7 +807,7 @@ mod tests {
     #[test]
     fn serialize_derived_number_param() {
         assert_eq!(
-            serde_json::to_value(&NumberParam::Derived(DerivedNumber {
+            serde_json::to_value(NumberParam::Derived(DerivedNumber {
                 attribute: "foo".to_owned(),
                 factor: 1.,
                 default_value: 0.
