@@ -809,7 +809,7 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
                     .iter()
                     .map(|part| {
                         let mut new_part = part.clone();
-                        if let Some(mut params) = new_part.params.as_mut() {
+                        if let Some(params) = new_part.params.as_mut() {
                             params.file_path = PathBuf::from(
                                 params
                                     .file_path

@@ -26,7 +26,6 @@ gdal-sys = "0.8"
 geo = "0.25"
 geoengine-datatypes = { path = "../datatypes" }
 itertools = "0.10"
-lazy_static = "1.4"
 libloading = "0.8"
 log = "0.4"
 lru = "0.10"
