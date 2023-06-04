@@ -2233,7 +2233,6 @@ dependencies = [
  "httptest",
  "hyper",
  "image",
- "lazy_static",
  "log",
  "mime",
  "nix",

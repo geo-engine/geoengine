@@ -7,44 +7,44 @@ use crate::util::parsing::{
 };
 use config::{Config, Environment, File};
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
-use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::RwLock;
+use std::sync::{OnceLock, RwLock};
 use url::Url;
 
-lazy_static! {
-    static ref SETTINGS: RwLock<Config> = RwLock::new({
-        let mut settings = Config::builder();
+static SETTINGS: OnceLock<RwLock<Config>> = OnceLock::new();
 
-        let dir: PathBuf = retrieve_settings_dir().expect("settings directory should exist");
+// TODO: change to `LazyLock' once stable
+fn init_settings() -> RwLock<Config> {
+    let mut settings = Config::builder();
 
-        #[cfg(test)]
-        let files = ["Settings-default.toml", "Settings-test.toml"];
+    let dir: PathBuf = retrieve_settings_dir().expect("settings directory should exist");
 
-        #[cfg(not(test))]
-        let files = ["Settings-default.toml", "Settings.toml"];
+    #[cfg(test)]
+    let files = ["Settings-default.toml", "Settings-test.toml"];
 
-        let files: Vec<File<_, _>> = files
-            .iter()
-            .map(|f| dir.join(f))
-            .filter(|p| p.exists())
-            .map(File::from)
-            .collect();
+    #[cfg(not(test))]
+    let files = ["Settings-default.toml", "Settings.toml"];
 
-        settings = settings.add_source(files);
+    let files: Vec<File<_, _>> = files
+        .iter()
+        .map(|f| dir.join(f))
+        .filter(|p| p.exists())
+        .map(File::from)
+        .collect();
 
-        // Override config with environment variables that start with `GEOENGINE_`,
-        // e.g. `GEOENGINE_WEB__EXTERNAL_ADDRESS=https://path.to.geoengine.io`
-        // Note: Since variables contain underscores, we need to use something different
-        // for seperating groups, for instance double underscores `__`
-        settings = settings.add_source(Environment::with_prefix("geoengine").separator("__"));
+    settings = settings.add_source(files);
 
-        settings.build().unwrap()
-    });
+    // Override config with environment variables that start with `GEOENGINE_`,
+    // e.g. `GEOENGINE_WEB__EXTERNAL_ADDRESS=https://path.to.geoengine.io`
+    // Note: Since variables contain underscores, we need to use something different
+    // for seperating groups, for instance double underscores `__`
+    settings = settings.add_source(Environment::with_prefix("geoengine").separator("__"));
+
+    RwLock::new(settings.build().unwrap())
 }
 
 /// test may run in subdirectory
@@ -81,6 +81,7 @@ where
     T: Into<config::Value>,
 {
     let mut settings = SETTINGS
+        .get_or_init(init_settings)
         .write()
         .map_err(|_error| error::Error::ConfigLockFailed)?;
 
@@ -98,6 +99,7 @@ where
     T: Deserialize<'a>,
 {
     SETTINGS
+        .get_or_init(init_settings)
         .read()
         .map_err(|_error| error::Error::ConfigLockFailed)?
         .get::<T>(key)
