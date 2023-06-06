@@ -6,7 +6,7 @@ use snafu::ensure;
 
 use super::{
     error::{self, ExpressionError},
-    functions::FUNCTIONS,
+    functions::{init_functions, FUNCTIONS},
 };
 
 type Result<T, E = ExpressionError> = std::result::Result<T, E>;
@@ -350,7 +350,7 @@ pub struct AstFunction {
 
 impl ToTokens for AstFunction {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let Some(function) = FUNCTIONS.get(self.name.as_ref()) else {
+        let Some(function) = FUNCTIONS.get_or_init(init_functions).get(self.name.as_ref()) else {
             return; // do nothing if, for some reason, the function doesn't exist
         };
 

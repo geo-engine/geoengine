@@ -14,19 +14,18 @@ pro = ["geoengine-datatypes/pro"]
 xgboost = ["dep:xgboost-rs", "pro"]
 
 [dependencies]
-arrow = { version = "39.0", features = ["simd"] }
+arrow = { version = "40.0", features = ["simd"] }
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
 csv = "1.1"
 float-cmp = "0.9"
 futures = "0.3"
-gdal =  "0.14"
-gdal-sys = "0.8"
+gdal =  "0.15"
+gdal-sys = "0.9"
 geo = "0.25"
 geoengine-datatypes = { path = "../datatypes" }
 itertools = "0.10"
-lazy_static = "1.4"
 libloading = "0.8"
 log = "0.4"
 lru = "0.10"
@@ -49,7 +48,7 @@ stream-cancel = "0.8"
 tempfile = "3.1"
 tokio = { version = "1.15", features = ["macros", "signal", "sync", "rt-multi-thread", "time"] }
 tracing = "0.1"
-tracing-opentelemetry = "0.18"
+tracing-opentelemetry = "0.19"
 typetag = "0.2"
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
 xgboost-rs = {version = "0.1", optional = true}

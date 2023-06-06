@@ -503,7 +503,7 @@ impl GfbioCollectionsDataProvider {
                 time: None,
                 bbox: None,
             },
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         }))
     }
 

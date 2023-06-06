@@ -39,7 +39,7 @@ where
         Self {
             sources,
             program: Arc::new(program),
-            phantom_data: PhantomData::default(),
+            phantom_data: PhantomData,
             map_no_data,
         }
     }
