@@ -125,7 +125,7 @@ mod tests {
         };
 
         assert_eq!(
-            serde_json::to_value(&session).unwrap(),
+            serde_json::to_value(session).unwrap(),
             serde_json::json!({
                 "id": "d1322969-5ada-4a2c-bacf-a3045383ba41", // redundant, but id is not stable
                 "project": "c26e05b2-6709-4d96-ad00-9361ee68a25c",

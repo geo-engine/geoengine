@@ -211,7 +211,6 @@ async fn create_dataset<C: SessionContext>(
 ) -> error::Result<DatasetId> {
     ensure!(!slice_info.is_empty(), error::EmptyDatasetCannotBeImported);
 
-    let dataset_id = DatasetId::new();
     let first_start = slice_info
         .first()
         .expect("slice_info should have at least one element")
@@ -253,8 +252,8 @@ async fn create_dataset<C: SessionContext>(
 
     let dataset_definition = DatasetDefinition {
         properties: AddDataset {
-            id: Some(dataset_id),
-            name: info.name,
+            name: None,
+            display_name: info.name,
             description: info.description.unwrap_or_default(),
             source_operator: "GdalSource".to_owned(),
             symbology: None,  // TODO add symbology?

@@ -213,10 +213,10 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiPolygonRef<'c>, MultiPolygon> for 
 
 impl<'c> LineSimplificationAlgorithmImpl<MultiLineStringRef<'c>, MultiLineString> for Visvalingam {
     fn simplify(geometry: MultiLineStringRef<'c>, epsilon: f64) -> MultiLineString {
-        use geo::SimplifyVWPreserve;
+        use geo::SimplifyVwPreserve;
 
         let geo_geometry = geo::MultiLineString::<f64>::from(&geometry);
-        let geo_geometry = geo_geometry.simplifyvw_preserve(&epsilon);
+        let geo_geometry = geo_geometry.simplify_vw_preserve(&epsilon);
         geo_geometry.into()
     }
 
@@ -229,10 +229,10 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiLineStringRef<'c>, MultiLineString
 
 impl<'c> LineSimplificationAlgorithmImpl<MultiPolygonRef<'c>, MultiPolygon> for Visvalingam {
     fn simplify(geometry: MultiPolygonRef<'c>, epsilon: f64) -> MultiPolygon {
-        use geo::SimplifyVWPreserve;
+        use geo::SimplifyVwPreserve;
 
         let geo_geometry = geo::MultiPolygon::<f64>::from(&geometry);
-        let geo_geometry = geo_geometry.simplifyvw_preserve(&epsilon);
+        let geo_geometry = geo_geometry.simplify_vw_preserve(&epsilon);
         geo_geometry.into()
     }
 
@@ -336,8 +336,9 @@ mod tests {
             FeatureCollectionInfos, GeometryCollection, MultiLineStringCollection,
             MultiPointCollection, MultiPolygonCollection,
         },
-        dataset::{DataId, DatasetId},
+        dataset::{DataId, DatasetId, NamedData},
         primitives::{BoundingBox2D, FeatureData, MultiLineString, MultiPoint, TimeInterval},
+        primitives::{FeatureData, MultiLineString, MultiPoint, TimeInterval},
         spatial_reference::SpatialReference,
         test_data,
         util::{test::TestDefault, Identifier},
@@ -532,9 +533,11 @@ mod tests {
     #[tokio::test]
     async fn test_polygon_simplification() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("polygons");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/germany_polygon.gpkg").into(),
@@ -577,7 +580,7 @@ mod tests {
             },
             sources: OgrSource {
                 params: OgrSourceParameters {
-                    data: id,
+                    data: name,
                     attribute_projection: None,
                     attribute_filters: None,
                 },

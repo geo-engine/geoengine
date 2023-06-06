@@ -9,7 +9,7 @@ use std::{
 use gdal::{Dataset, DatasetOptions, DriverManager};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DataId, DatasetId},
+    dataset::{DataId, DatasetId, NamedData},
     hashmap,
     primitives::{
         BoundingBox2D, DateTimeParseFormat, FeatureDataType, Measurement, SpatialPartition2D,
@@ -95,10 +95,11 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
 }
 
 // TODO: move test helper somewhere else?
-pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DataId {
+pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> NamedData {
     let id: DataId = DatasetId::new().into();
-    ctx.add_meta_data(id.clone(), Box::new(create_ndvi_meta_data()));
-    id
+    let name = NamedData::with_system_name("ndvi");
+    ctx.add_meta_data(id, name.clone(), Box::new(create_ndvi_meta_data()));
+    name
 }
 
 #[allow(clippy::missing_panics_doc)]
@@ -186,7 +187,11 @@ pub fn create_ports_meta_data(
 
 pub fn add_ports_dataset(ctx: &mut MockExecutionContext) -> DataId {
     let id: DataId = DatasetId::new().into();
-    ctx.add_meta_data(id.clone(), Box::new(create_ports_meta_data()));
+    ctx.add_meta_data(
+        id.clone(),
+        NamedData::with_system_name("ne_10m_ports"),
+        Box::new(create_ports_meta_data()),
+    );
     id
 }
 
@@ -220,7 +225,7 @@ pub fn raster_descriptor_from_dataset(
     let spatial_ref: SpatialReference =
         dataset.spatial_ref()?.try_into().context(error::DataType)?;
 
-    let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type().try_into()?)
+    let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
 
     let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
@@ -331,35 +336,5 @@ pub fn register_gdal_drivers_from_list<S: BuildHasher>(mut drivers: HashSet<Stri
         drivers.sort();
         let remaining_drivers = drivers.into_iter().join(", ");
         debug!("Could not register drivers: {remaining_drivers}");
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_gdal_driver_restriction() {
-        register_gdal_drivers_from_list(HashSet::new());
-
-        let dataset_path = test_data!("raster/geotiff_from_stream_compressed.tiff").to_path_buf();
-
-        assert!(Dataset::open(&dataset_path).is_err());
-
-        DriverManager::register_all();
-
-        register_gdal_drivers_from_list(HashSet::from([
-            "GTiff".to_string(),
-            "CSV".to_string(),
-            "GPKG".to_string(),
-        ]));
-
-        assert!(Dataset::open(&dataset_path).is_ok());
-
-        // reset for other tests
-
-        DriverManager::register_all();
-
-        assert!(Dataset::open(&dataset_path).is_ok());
     }
 }

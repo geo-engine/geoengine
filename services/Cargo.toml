@@ -24,10 +24,10 @@ xgboost = ["pro", "geoengine-operators/xgboost"]
 [dependencies]
 actix = { version = "0.13", default-features = false }
 actix-files = "0.6"
-actix-http = { version = "3.2", features = ["ws"] }
-actix-multipart = "0.5"
-actix-rt = "2.6"
-actix-web = "4.2"
+actix-http = { version = "3.3", features = ["ws"] }
+actix-multipart = "0.6"
+actix-rt = "2.8"
+actix-web = "4.3"
 actix-web-actors = "4.2"
 actix-web-httpauth = "0.8"
 aruna-rust-api = { version = "1.0.0-rc.6", optional = true }
@@ -42,20 +42,20 @@ flexi_logger = { version = "0.25", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
-gdal =  "0.14.0"
-gdal-sys = "0.8"
-geo = "0.23"
+gdal =  "0.15.0"
+gdal-sys = "0.9"
+geo = "0.25"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
 geojson = {version = "0.24", features = ["geo-types"]}
 image = "0.24"
-lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
 oauth2 = "4.2.3"
-openidconnect = "2.3.2"
-opentelemetry = { version = "0.18", default-features = false, features = ["trace"] }
-opentelemetry-jaeger = "0.17"
+openidconnect = "3.1"
+# `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-jaeger`
+opentelemetry = { version = "0.19", default-features = false, features = ["trace"] }
+opentelemetry-jaeger = "0.18"
 ordered-float = { version= "3.0", features = ["serde"] }
 num-traits = "0.2"
 paste = "1.0"
@@ -64,14 +64,14 @@ postgres-protocol = "0.6"
 proj = "0.22"
 proj-sys = "0.19"
 pwhash = "1.0"
-quick-xml = { version = "0.27", optional = true }
+quick-xml = { version = "0.28", optional = true }
 rayon = "1.5"
 regex = "1.5"
 reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
-serde_with = "2.0"
+serde_with = "3.0"
 snafu = "0.7"
 stream-cancel = "0.8"
 strum = { version = "0.24", features = ["derive"] }
@@ -82,12 +82,12 @@ tokio-util = { version = "0.7", features = ["codec"] }
 tonic = { version = "0.9", features = ["tls", "tls-roots"] } # must be compatible with `aruna-rust-api`
 tracing = "0.1"
 tracing-actix-web = "0.7"
-tracing-opentelemetry = "0.18"
+tracing-opentelemetry = "0.19"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi", "tracing-log"] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
 utoipa = { version = "3.0", features = ["actix_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { version = "=3.0.2", features = ["actix-web"] }
+utoipa-swagger-ui = { version = "3.1", features = ["actix-web"] }
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
 validator = { version = "0.16", features = ["derive"] }
 walkdir = "2.3"
@@ -102,12 +102,12 @@ httptest = "0.15.2"
 hyper = "0.14"
 prost = "0.11"
 rand = "0.8.4"
-serial_test = "1.0"
+serial_test = "2.0"
 tempfile = "3.1"
 xml-rs = "0.8.3"
 
 [build-dependencies]
-vergen = "7"
+vergen = { version = "8", features = ["build", "cargo", "git", "gitcl"] }
 
 [[bench]]
 name = "quota_check"

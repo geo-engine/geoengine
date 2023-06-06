@@ -27,11 +27,11 @@ where
     cfg.service(web::resource("/upload").route(web::post().to(upload_handler::<C>)))
         .service(
             web::resource("/uploads/{upload_id}/files")
-                .route(web::get().to(list_upload_files_handler::<C>)),
+                .route(web::get().to(list_upload_files_handler)),
         )
         .service(
             web::resource("/uploads/{upload_id}/files/{file_name}/layers")
-                .route(web::get().to(list_upload_file_layers_handler::<C>)),
+                .route(web::get().to(list_upload_file_layers_handler)),
         );
 }
 
@@ -143,9 +143,7 @@ pub struct UploadFilesResponse {
         ("session_token" = [])
     )
 )]
-async fn list_upload_files_handler<C: ApplicationContext>(
-    upload_id: web::Path<UploadId>,
-) -> Result<impl Responder> {
+async fn list_upload_files_handler(upload_id: web::Path<UploadId>) -> Result<impl Responder> {
     let root = upload_id.root_path()?;
 
     let mut entries = fs::read_dir(root).await?;
@@ -183,7 +181,7 @@ pub struct UploadFileLayersResponse {
         ("session_token" = [])
     )
 )]
-async fn list_upload_file_layers_handler<C: ApplicationContext>(
+async fn list_upload_file_layers_handler(
     path: web::Path<(UploadId, String)>,
 ) -> Result<impl Responder> {
     let (upload_id, file_name) = path.into_inner();
@@ -193,13 +191,7 @@ async fn list_upload_file_layers_handler<C: ApplicationContext>(
         let dataset = gdal_open_dataset(&file_path)?;
 
         // TODO: hide system/internal layer like "layer_styles"
-        Result::<_, Error>::Ok(
-            dataset
-                .layers()
-                .into_iter()
-                .map(|l| l.name())
-                .collect::<Vec<_>>(),
-        )
+        Result::<_, Error>::Ok(dataset.layers().map(|l| l.name()).collect::<Vec<_>>())
     })
     .await??;
 
@@ -249,7 +241,8 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        let files: UploadFilesResponse = test::read_body_json(res).await;
+        let mut files: UploadFilesResponse = test::read_body_json(res).await;
+        files.files.sort();
 
         assert_eq!(
             files.files,

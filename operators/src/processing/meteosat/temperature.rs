@@ -254,7 +254,6 @@ where
 fn create_lookup_table(channel: &Channel, offset: f64, slope: f64, _pool: &ThreadPool) -> Vec<f32> {
     // this should propably be done with SIMD not a threadpool
     (0..1024)
-        .into_iter()
         .map(|i| {
             let radiance = offset + f64::from(i) * slope;
             channel.calculate_temperature_from_radiance(radiance) as f32

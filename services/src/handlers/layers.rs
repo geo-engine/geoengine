@@ -890,8 +890,7 @@ async fn remove_collection_from_collection<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
 
-    use std::sync::Arc;
-
+    use super::*;
     use crate::contexts::{SessionId, SimpleApplicationContext, SimpleSession};
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::handlers::ErrorResponse;
@@ -930,8 +929,7 @@ mod tests {
         engine::VectorOperator,
         mock::{MockPointSource, MockPointSourceParams},
     };
-
-    use super::*;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_add_layer_to_collection() {
@@ -1559,7 +1557,9 @@ mod tests {
         let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
         let dataset_operator = GdalSource {
             params: GdalSourceParameters {
-                data: dataset_id.into(),
+                data: geoengine_datatypes::dataset::NamedData::with_system_name(
+                    dataset_id.to_string(),
+                ),
             },
         }
         .boxed();

@@ -23,7 +23,7 @@ use geoengine_operators::source::{
     OgrSourceErrorSpec, OgrSourceParameters,
 };
 
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -362,11 +362,10 @@ impl LayerCollectionProvider for GbifDataProvider {
                 operator: TypedOperator::Vector(
                     OgrSource {
                         params: OgrSourceParameters {
-                            data: DataId::External(ExternalDataId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                layer_id: id.clone(),
-                            })
-                            .into(),
+                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                GBIF_PROVIDER_ID.to_string(),
+                                id.to_string(),
+                            ),
                             attribute_projection: None,
                             attribute_filters: None,
                         },
@@ -2162,11 +2161,10 @@ mod tests {
                         operator: TypedOperator::Vector(
                             OgrSource {
                                 params: OgrSourceParameters {
-                                    data: DataId::External(ExternalDataId {
-                                        provider_id: GBIF_PROVIDER_ID,
-                                        layer_id: layer_id.clone(),
-                                    })
-                                    .into(),
+                                    data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                        GBIF_PROVIDER_ID.to_string(),
+                                        layer_id.to_string(),
+                                    ),
                                     attribute_projection: None,
                                     attribute_filters: None,
                                 },

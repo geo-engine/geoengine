@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::OnceLock};
 
 use pest::{
     iterators::{Pair, Pairs},
@@ -16,7 +16,7 @@ use super::{
         BooleanOperator, Branch, ExpressionAst, Identifier,
     },
     error::{self, ExpressionError},
-    functions::FUNCTIONS,
+    functions::{init_functions, FUNCTIONS},
 };
 
 type Result<T, E = ExpressionError> = std::result::Result<T, E>;
@@ -35,15 +35,22 @@ pub struct ExpressionParser {
     functions: Rc<RefCell<Vec<AstFunction>>>,
 }
 
-lazy_static::lazy_static! {
-    static ref EXPRESSION_PARSER: PrattParser<Rule> = PrattParser::new()
+static EXPRESSION_PARSER: OnceLock<PrattParser<Rule>> = OnceLock::new();
+static BOOLEAN_EXPRESSION_PARSER: OnceLock<PrattParser<Rule>> = OnceLock::new();
+
+// TODO: change to `LazyLock' once stable
+fn init_expression_parser() -> PrattParser<Rule> {
+    PrattParser::new()
         .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::subtract, Assoc::Left))
         .op(Op::infix(Rule::multiply, Assoc::Left) | Op::infix(Rule::divide, Assoc::Left))
-        .op(Op::infix(Rule::power, Assoc::Right));
+        .op(Op::infix(Rule::power, Assoc::Right))
+}
 
-    static ref BOOLEAN_EXPRESSION_PARSER: PrattParser<Rule> = PrattParser::new()
+// TODO: change to `LazyLock' once stable
+fn init_boolean_expression_parser() -> PrattParser<Rule> {
+    PrattParser::new()
         .op(Op::infix(Rule::or, Assoc::Left))
-        .op(Op::infix(Rule::and, Assoc::Left));
+        .op(Op::infix(Rule::and, Assoc::Left))
 }
 
 impl ExpressionParser {
@@ -90,6 +97,7 @@ impl ExpressionParser {
 
     fn build_ast(&self, pairs: Pairs<'_, Rule>) -> Result<AstNode> {
         EXPRESSION_PARSER
+            .get_or_init(init_expression_parser)
             .map_primary(|primary| self.resolve_expression_rule(primary))
             .map_infix(|left, op, right| self.resolve_infix_operations(left, &op, right))
             // TODO: is there another way to remove EOIs?
@@ -209,7 +217,7 @@ impl ExpressionParser {
             .map(|pair| self.build_ast(pair.into_inner()))
             .collect::<Result<Vec<_>, _>>()?;
 
-        match FUNCTIONS.get(name.as_ref()) {
+        match FUNCTIONS.get_or_init(init_functions).get(name.as_ref()) {
             Some(function) if function.num_args.contains(&args.len()) => {
                 self.functions.borrow_mut().push(AstFunction {
                     name: name.clone(),
@@ -272,6 +280,7 @@ impl ExpressionParser {
 
     fn build_boolean_expression(&self, pairs: Pairs<'_, Rule>) -> Result<BooleanExpression> {
         BOOLEAN_EXPRESSION_PARSER
+            .get_or_init(init_boolean_expression_parser)
             .map_primary(|primary| self.resolve_boolean_expression_rule(primary))
             .map_infix(|left, op, right| Self::resolve_infix_boolean_operations(left, &op, right))
             .parse(pairs)

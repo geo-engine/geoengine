@@ -19,25 +19,16 @@ where
 /// A bucket in the hash map.
 /// A filled bucket is most of the time a single element,
 /// but may contain more elements in the case of collisions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum Bucket<K, V>
 where
     K: Copy + Debug,
     V: Clone + Debug,
 {
+    #[default]
     Empty,
     Single(Entry<K, V>),
     Multi(Vec<Entry<K, V>>),
-}
-
-impl<K, V> Default for Bucket<K, V>
-where
-    K: Copy + Debug,
-    V: Clone + Debug,
-{
-    fn default() -> Self {
-        Bucket::Empty
-    }
 }
 
 impl<K, V> Bucket<K, V>

@@ -493,7 +493,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
-        dataset::DatasetId,
+        dataset::NamedData,
         primitives::{
             BoundingBox2D, DateTime, Measurement, MultiPoint, SpatialPartition2D,
             SpatialResolution, TimeGranularity,
@@ -510,7 +510,7 @@ mod tests {
                 source: RasterOrVectorOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: DatasetId::from_u128(1337).into(),
+                            data: NamedData::with_system_name("test-raster"),
                         },
                     }
                     .boxed(),
@@ -540,10 +540,7 @@ mod tests {
                     "source": {
                         "type": "GdalSource",
                         "params": {
-                            "data": {
-                                "type": "internal",
-                                "datasetId": "00000000-0000-0000-0000-000000000539"
-                            }
+                            "data": "test-raster"
                         }
                     }
                 }
@@ -562,7 +559,7 @@ mod tests {
                 source: RasterOrVectorOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: DatasetId::from_u128(1337).into(),
+                            data: NamedData::with_system_name("test-raster"),
                         },
                     }
                     .boxed(),
@@ -588,10 +585,7 @@ mod tests {
                     "source": {
                         "type": "GdalSource",
                         "params": {
-                            "data": {
-                                "type": "internal",
-                                "datasetId": "00000000-0000-0000-0000-000000000539"
-                            }
+                            "data": "test-raster"
                         }
                     }
                 }

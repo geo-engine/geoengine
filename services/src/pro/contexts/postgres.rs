@@ -1,8 +1,9 @@
+use crate::api::model::datatypes::DatasetName;
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId};
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::datasets::upload::{Volume, Volumes};
-use crate::error::{self, Result};
+use crate::error::{self, Error, Result};
 use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::add_datasets_from_directory;
@@ -13,7 +14,7 @@ use crate::pro::permissions::Role;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::{OidcRequestDb, UserAuth, UserSession};
-use crate::pro::util::config::Oidc;
+use crate::pro::util::config::{Cache, Oidc};
 
 use crate::tasks::SimpleTaskManagerContext;
 use crate::util::config::get_config_element;
@@ -25,6 +26,7 @@ use bb8_postgres::{
     PostgresConnectionManager,
 };
 use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
 use geoengine_operators::pro::cache::tile_cache::TileCache;
@@ -92,7 +94,7 @@ where
             quota,
             pool,
             volumes: Default::default(),
-            tile_cache: Default::default(),
+            tile_cache: Arc::new(TileCache::test_default()),
         })
     }
 
@@ -108,6 +110,7 @@ where
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
         oidc_config: Oidc,
+        cache_config: Cache,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -128,7 +131,13 @@ where
             quota,
             pool,
             volumes: Default::default(),
-            tile_cache: Default::default(),
+            tile_cache: Arc::new(
+                TileCache::new(
+                    cache_config.cache_size_in_mb,
+                    cache_config.landing_zone_ratio,
+                )
+                .expect("tile cache creation should work because the config is valid"),
+            ),
         };
 
         if uninitialized {
@@ -348,9 +357,17 @@ where
                             workflow json NOT NULL
                         );
 
+                        -- TODO: add constraint not null
+                        -- TODO: add length constraints
+                        CREATE TYPE "DatasetName" AS (
+                            namespace text,
+                            name text
+                        );
+
                         CREATE TABLE datasets (
                             id UUID PRIMARY KEY,
-                            name text NOT NULL,
+                            name "DatasetName" UNIQUE NOT NULL,
+                            display_name text NOT NULL,
                             description text NOT NULL, 
                             tags text[], 
                             source_operator text NOT NULL,
@@ -699,6 +716,20 @@ where
     pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>, session: UserSession) -> Self {
         Self { conn_pool, session }
     }
+
+    /// Check whether the namepsace of the given dataset is allowed for insertion
+    pub(crate) fn check_namespace(&self, id: &DatasetName) -> Result<()> {
+        let is_ok = match &id.namespace {
+            Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
+            None => self.session.is_admin(),
+        };
+
+        if is_ok {
+            Ok(())
+        } else {
+            Err(Error::InvalidDatasetIdNamespace)
+        }
+    }
 }
 
 impl<Tls> GeoEngineDb for PostgresDb<Tls>
@@ -724,7 +755,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::api::model::datatypes::{DataProviderId, DatasetId, LayerId};
+    use crate::api::model::datatypes::{DataProviderId, DatasetName, LayerId};
     use crate::api::model::services::AddDataset;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -1323,8 +1354,6 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_datasets() {
         with_temp_context(|app_ctx, _| async move {
-            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
-
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
                 layer_name: "test.csv".to_owned(),
@@ -1381,25 +1410,28 @@ let ctx = app_ctx.session_context(session);
 
             let session = app_ctx.create_anonymous_session().await.unwrap();
 
+            let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
+
             let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
-            db.add_dataset(
-                AddDataset {
-                    id: Some(dataset_id),
-                    name: "Ogr Test".to_owned(),
-                    description: "desc".to_owned(),
-                    source_operator: "OgrSource".to_owned(),
-                    symbology: None,
-                    provenance: Some(vec![Provenance {
-                        citation: "citation".to_owned(),
-                        license: "license".to_owned(),
-                        uri: "uri".to_owned(),
-                    }]),
-                },
-                wrap,
-            )
-            .await
-            .unwrap();
+            let dataset_id = db
+                .add_dataset(
+                    AddDataset {
+                        name: Some(dataset_name.clone()),
+                        display_name: "Ogr Test".to_owned(),
+                        description: "desc".to_owned(),
+                        source_operator: "OgrSource".to_owned(),
+                        symbology: None,
+                        provenance: Some(vec![Provenance {
+                            citation: "citation".to_owned(),
+                            license: "license".to_owned(),
+                            uri: "uri".to_owned(),
+                        }]),
+                    },
+                    wrap,
+                )
+                .await
+                .unwrap();
 
             let datasets = db
                 .list_datasets(DatasetListOptions {
@@ -1417,7 +1449,8 @@ let ctx = app_ctx.session_context(session);
                 datasets[0],
                 DatasetListing {
                     id: dataset_id,
-                    name: "Ogr Test".to_owned(),
+                    name: dataset_name,
+                    display_name: "Ogr Test".to_owned(),
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
                     symbology: None,
@@ -1637,8 +1670,8 @@ let ctx = app_ctx.session_context(session);
             };
 
             let ds = AddDataset {
-                id: None,
-                name: "OgrDataset".to_string(),
+                name: None,
+                display_name: "OgrDataset".to_string(),
                 description: "My Ogr dataset".to_string(),
                 source_operator: "OgrSource".to_string(),
                 symbology: None,
@@ -1712,8 +1745,8 @@ let ctx = app_ctx.session_context(session);
             };
 
             let ds = AddDataset {
-                id: None,
-                name: "OgrDataset".to_string(),
+                name: None,
+                display_name: "OgrDataset".to_string(),
                 description: "My Ogr dataset".to_string(),
                 source_operator: "OgrSource".to_string(),
                 symbology: None,
@@ -1767,8 +1800,8 @@ let ctx = app_ctx.session_context(session);
             };
 
             let ds = AddDataset {
-                id: None,
-                name: "OgrDataset".to_string(),
+                name: None,
+                display_name: "OgrDataset".to_string(),
                 description: "My Ogr dataset".to_string(),
                 source_operator: "OgrSource".to_string(),
                 symbology: None,
@@ -1828,8 +1861,8 @@ let ctx = app_ctx.session_context(session);
             };
 
             let ds = AddDataset {
-                id: None,
-                name: "OgrDataset".to_string(),
+                name: None,
+                display_name: "OgrDataset".to_string(),
                 description: "My Ogr dataset".to_string(),
                 source_operator: "OgrSource".to_string(),
                 symbology: None,
@@ -1889,8 +1922,8 @@ let ctx = app_ctx.session_context(session);
             };
 
             let ds = AddDataset {
-                id: None,
-                name: "OgrDataset".to_string(),
+                name: None,
+                display_name: "OgrDataset".to_string(),
                 description: "My Ogr dataset".to_string(),
                 source_operator: "OgrSource".to_string(),
                 symbology: None,
@@ -1970,8 +2003,8 @@ let ctx = app_ctx.session_context(session);
             };
 
             let vector_ds = AddDataset {
-                id: None,
-                name: "OgrDataset".to_string(),
+                name: None,
+                display_name: "OgrDataset".to_string(),
                 description: "My Ogr dataset".to_string(),
                 source_operator: "OgrSource".to_string(),
                 symbology: None,
@@ -1979,8 +2012,8 @@ let ctx = app_ctx.session_context(session);
             };
 
             let raster_ds = AddDataset {
-                id: None,
-                name: "GdalDataset".to_string(),
+                name: None,
+                display_name: "GdalDataset".to_string(),
                 description: "My Gdal dataset".to_string(),
                 source_operator: "GdalSource".to_string(),
                 symbology: None,
@@ -2877,8 +2910,6 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     async fn it_deletes_dataset() {
         with_temp_context(|app_ctx, _| async move {
-            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
-
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
                 layer_name: "test.csv".to_owned(),
@@ -2935,25 +2966,28 @@ let ctx = app_ctx.session_context(session);
 
             let session = app_ctx.create_anonymous_session().await.unwrap();
 
+            let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
+
             let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
-            db.add_dataset(
-                AddDataset {
-                    id: Some(dataset_id),
-                    name: "Ogr Test".to_owned(),
-                    description: "desc".to_owned(),
-                    source_operator: "OgrSource".to_owned(),
-                    symbology: None,
-                    provenance: Some(vec![Provenance {
-                        citation: "citation".to_owned(),
-                        license: "license".to_owned(),
-                        uri: "uri".to_owned(),
-                    }]),
-                },
-                wrap,
-            )
-            .await
-            .unwrap();
+            let dataset_id = db
+                .add_dataset(
+                    AddDataset {
+                        name: Some(dataset_name),
+                        display_name: "Ogr Test".to_owned(),
+                        description: "desc".to_owned(),
+                        source_operator: "OgrSource".to_owned(),
+                        symbology: None,
+                        provenance: Some(vec![Provenance {
+                            citation: "citation".to_owned(),
+                            license: "license".to_owned(),
+                            uri: "uri".to_owned(),
+                        }]),
+                    },
+                    wrap,
+                )
+                .await
+                .unwrap();
 
             assert!(db.load_dataset(&dataset_id).await.is_ok());
 
@@ -2968,7 +3002,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     async fn it_deletes_admin_dataset() {
         with_temp_context(|app_ctx, _| async move {
-            let dataset_id = DatasetId::from_str("2e8af98d-3b98-4e2c-a35b-e487bffad7b6").unwrap();
+            let dataset_name = DatasetName::new(None, "my_dataset");
 
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
@@ -3028,23 +3062,24 @@ let ctx = app_ctx.session_context(session);
 
             let db = app_ctx.session_context(session).db();
             let wrap = db.wrap_meta_data(meta_data);
-            db.add_dataset(
-                AddDataset {
-                    id: Some(dataset_id),
-                    name: "Ogr Test".to_owned(),
-                    description: "desc".to_owned(),
-                    source_operator: "OgrSource".to_owned(),
-                    symbology: None,
-                    provenance: Some(vec![Provenance {
-                        citation: "citation".to_owned(),
-                        license: "license".to_owned(),
-                        uri: "uri".to_owned(),
-                    }]),
-                },
-                wrap,
-            )
-            .await
-            .unwrap();
+            let dataset_id = db
+                .add_dataset(
+                    AddDataset {
+                        name: Some(dataset_name),
+                        display_name: "Ogr Test".to_owned(),
+                        description: "desc".to_owned(),
+                        source_operator: "OgrSource".to_owned(),
+                        symbology: None,
+                        provenance: Some(vec![Provenance {
+                            citation: "citation".to_owned(),
+                            license: "license".to_owned(),
+                            uri: "uri".to_owned(),
+                        }]),
+                    },
+                    wrap,
+                )
+                .await
+                .unwrap();
 
             assert!(db.load_dataset(&dataset_id).await.is_ok());
 

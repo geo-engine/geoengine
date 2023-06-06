@@ -34,7 +34,7 @@ impl GeometryCollection for MultiLineStringCollection {
         let coordinates_ref = line_strings.values();
         let coordinates: &FixedSizeListArray = downcast_array(coordinates_ref);
 
-        let number_of_coordinates = coordinates.data().len();
+        let number_of_coordinates = coordinates.len();
 
         let floats_ref = coordinates.values();
         let floats: &Float64Array = downcast_array(floats_ref);
@@ -47,7 +47,6 @@ impl GeometryCollection for MultiLineStringCollection {
         }
     }
 
-    #[allow(clippy::cast_ptr_alignment)]
     fn feature_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table
@@ -55,15 +54,11 @@ impl GeometryCollection for MultiLineStringCollection {
             .expect("There should exist a geometry column because it is added during creation of the collection");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
-        let data = geometries.data();
-        let buffer = &data.buffers()[0];
-
-        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), geometries.len() + 1) }
+        geometries.offsets()
     }
 }
 
 impl MultiLineStringCollection {
-    #[allow(clippy::cast_ptr_alignment)]
     pub fn line_string_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table
@@ -74,10 +69,7 @@ impl MultiLineStringCollection {
         let line_strings_ref = geometries.values();
         let line_strings: &ListArray = downcast_array(line_strings_ref);
 
-        let data = line_strings.data();
-        let buffer = &data.buffers()[0];
-
-        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), line_strings.len() + 1) }
+        line_strings.offsets()
     }
 }
 
@@ -353,25 +345,23 @@ impl ReplaceRawArrayCoords for MultiLineStringCollection {
     fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Result<ArrayData> {
         let geometries: &ListArray = downcast_array(array_ref);
 
-        let feature_offset_array = geometries.data();
+        let num_features = geometries.len();
+        let feature_offsets = geometries.offsets();
 
-        let feature_offsets_buffer = &feature_offset_array.buffers()[0];
-        let num_features = feature_offset_array.len();
-
-        let line_offsets_array = &feature_offset_array.child_data()[0];
-        let line_offsets_buffer = &line_offsets_array.buffers()[0];
-        let num_lines = line_offsets_array.len();
+        let lines: &ListArray = downcast_array(geometries.values());
+        let num_lines = lines.len();
+        let line_offsets = lines.offsets();
 
         let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
         let num_floats = num_coords * 2;
 
         Ok(ArrayData::builder(MultiLineString::arrow_data_type())
             .len(num_features)
-            .add_buffer(feature_offsets_buffer.clone())
+            .add_buffer(feature_offsets.inner().inner().clone())
             .add_child_data(
                 ArrayData::builder(Coordinate2D::arrow_list_data_type())
                     .len(num_lines)
-                    .add_buffer(line_offsets_buffer.clone())
+                    .add_buffer(line_offsets.inner().inner().clone())
                     .add_child_data(
                         ArrayData::builder(Coordinate2D::arrow_data_type())
                             .len(num_coords)
@@ -673,7 +663,6 @@ mod tests {
         // Assert geometrys are approx equal
         proj_collection
             .geometries()
-            .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(

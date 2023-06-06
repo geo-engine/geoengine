@@ -99,14 +99,6 @@ impl Array for NoArrowArray {
         unreachable!("There is no implementation since there is no geometry")
     }
 
-    fn data(&self) -> &ArrayData {
-        unreachable!("There is no implementation since there is no geometry")
-    }
-
-    fn data_ref(&self) -> &ArrayData {
-        unreachable!("There is no implementation since there is no geometry")
-    }
-
     fn get_buffer_memory_size(&self) -> usize {
         0
     }
@@ -116,6 +108,34 @@ impl Array for NoArrowArray {
     }
 
     fn into_data(self) -> ArrayData {
+        unreachable!("There is no implementation since there is no geometry")
+    }
+
+    fn to_data(&self) -> ArrayData {
+        unreachable!("There is no implementation since there is no geometry")
+    }
+
+    fn data_type(&self) -> &DataType {
+        unreachable!("There is no implementation since there is no geometry")
+    }
+
+    fn slice(&self, _offset: usize, _length: usize) -> ArrayRef {
+        unreachable!("There is no implementation since there is no geometry")
+    }
+
+    fn len(&self) -> usize {
+        0
+    }
+
+    fn is_empty(&self) -> bool {
+        true
+    }
+
+    fn offset(&self) -> usize {
+        0
+    }
+
+    fn nulls(&self) -> Option<&arrow::buffer::NullBuffer> {
         unreachable!("There is no implementation since there is no geometry")
     }
 }

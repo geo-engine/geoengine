@@ -416,7 +416,7 @@ impl<'a> ToSchema<'a> for OgrMetaData {
     fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
         (
-            "MockMetaData",
+            "OgrMetaData",
             ObjectBuilder::new()
                 .property("loadingInfo", Ref::from_schema_name("OgrSourceDataset"))
                 .required("loadingInfo")
@@ -909,6 +909,8 @@ pub struct GdalDatasetParameters {
     // Configs as key, value pairs that will be set as thread local config options, e.g.
     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
     // TODO: validate the config options: only allow specific keys and specific values
+    // TODO: remove, when <https://github.com/juhaku/utoipa/issues/429> is fixed
+    #[schema(value_type = Option<Vec<StringPair>>)]
     pub gdal_config_options: Option<Vec<GdalConfigOption>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,

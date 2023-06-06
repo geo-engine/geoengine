@@ -202,6 +202,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                 chunk_byte_size,
                 static_files_dir,
                 web_config,
+                cache_config,
             )
             .await
         }
@@ -213,6 +214,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                 chunk_byte_size,
                 static_files_dir,
                 web_config,
+                cache_config,
             )
             .await
         }
@@ -226,6 +228,7 @@ async fn start_in_memory(
     chunk_byte_size: ChunkByteSize,
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
+    cache_config: crate::pro::util::config::Cache,
 ) -> Result<()> {
     info!("Using in memory backend");
     let ctx = ProInMemoryContext::new_with_data(
@@ -236,6 +239,7 @@ async fn start_in_memory(
         tiling_spec,
         chunk_byte_size,
         oidc_config,
+        cache_config,
     )
     .await;
 
@@ -256,6 +260,7 @@ async fn start_postgres(
     chunk_byte_size: ChunkByteSize,
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
+    cache_config: crate::pro::util::config::Cache,
 ) -> Result<()> {
     #[cfg(feature = "postgres")]
     {
@@ -281,6 +286,7 @@ async fn start_postgres(
             tiling_spec,
             chunk_byte_size,
             oidc_config,
+            cache_config,
         )
         .await?;
 

@@ -10,7 +10,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::{SpatialQuery, VectorQueryRectangle};
 use geoengine_datatypes::{
     collections::MultiPointCollection,
@@ -63,7 +63,7 @@ impl OperatorName for MockPointSource {
 }
 
 impl OperatorData for MockPointSource {
-    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
+    fn data_names_collect(&self, _data_names: &mut Vec<NamedData>) {}
 }
 
 #[typetag::serde]

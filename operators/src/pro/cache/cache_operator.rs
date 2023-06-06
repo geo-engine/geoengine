@@ -144,6 +144,13 @@ where
             .insert_query::<T>(self.cache_key.clone(), &query)
             .await;
 
+        if let Err(e) = query_id {
+            log::debug!("could not insert query into cache: {:?}", e);
+            return Ok(source_stream);
+        }
+
+        let query_id = query_id.expect("query_id should be set because of the previous check");
+
         // lazily insert tiles into the cache as they are produced
         let (stream_event_sender, mut stream_event_receiver) = unbounded_channel();
 
@@ -295,7 +302,7 @@ mod tests {
 
         let processor = cached_op.query_processor().unwrap().get_u8().unwrap();
 
-        let tile_cache = Arc::new(TileCache::default());
+        let tile_cache = Arc::new(TileCache::test_default());
 
         let mut extensions = QueryContextExtensions::default();
 

@@ -1,7 +1,7 @@
 use crate::error;
 use crate::primitives::TimeInstance;
 use crate::util::Result;
-use arrow::bitmap::Bitmap;
+use arrow::buffer::NullBuffer;
 use gdal::vector::OGRFieldType;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -220,7 +220,7 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub struct FloatDataRef<'f> {
     buffer: &'f [f64],
-    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f NullBuffer>,
 }
 
 impl<'f> DataRef<'f, f64> for FloatDataRef<'f> {
@@ -235,7 +235,7 @@ impl<'f> DataRef<'f, f64> for FloatDataRef<'f> {
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
             .as_ref()
-            .map_or(true, |bitmap| bitmap.is_set(i))
+            .map_or(true, |bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -290,7 +290,7 @@ where
         Self {
             data_ref,
             i: 0,
-            t: PhantomData::default(),
+            t: PhantomData,
         }
     }
 }
@@ -337,7 +337,7 @@ where
         Self {
             data_ref,
             i: 0,
-            t: PhantomData::default(),
+            t: PhantomData,
         }
     }
 }
@@ -378,7 +378,7 @@ impl<'f> From<FloatDataRef<'f>> for FeatureDataRef<'f> {
 }
 
 impl<'f> FloatDataRef<'f> {
-    pub fn new(buffer: &'f [f64], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [f64], null_bitmap: Option<&'f NullBuffer>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -389,11 +389,11 @@ impl<'f> FloatDataRef<'f> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct IntDataRef<'f> {
     buffer: &'f [i64],
-    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f NullBuffer>,
 }
 
 impl<'f> IntDataRef<'f> {
-    pub fn new(buffer: &'f [i64], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [i64], null_bitmap: Option<&'f NullBuffer>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -413,7 +413,7 @@ impl<'f> DataRef<'f, i64> for IntDataRef<'f> {
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
             .as_ref()
-            .map_or(true, |bitmap| bitmap.is_set(i))
+            .map_or(true, |bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -461,9 +461,9 @@ impl<'f> From<IntDataRef<'f>> for FeatureDataRef<'f> {
     }
 }
 
-fn null_bitmap_to_bools(null_bitmap: Option<&Bitmap>, len: usize) -> Vec<bool> {
+fn null_bitmap_to_bools(null_bitmap: Option<&NullBuffer>, len: usize) -> Vec<bool> {
     if let Some(nulls) = null_bitmap {
-        (0..len).map(|i| !nulls.is_set(i)).collect()
+        (0..len).map(|i| !nulls.is_valid(i)).collect()
     } else {
         vec![false; len]
     }
@@ -472,11 +472,11 @@ fn null_bitmap_to_bools(null_bitmap: Option<&Bitmap>, len: usize) -> Vec<bool> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BoolDataRef<'f> {
     buffer: Vec<bool>,
-    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f NullBuffer>,
 }
 
 impl<'f> BoolDataRef<'f> {
-    pub fn new(buffer: Vec<bool>, null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: Vec<bool>, null_bitmap: Option<&'f NullBuffer>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -496,7 +496,7 @@ impl<'f> DataRef<'f, bool> for BoolDataRef<'f> {
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
             .as_ref()
-            .map_or(true, |bitmap| bitmap.is_set(i))
+            .map_or(true, |bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -577,11 +577,11 @@ impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DateTimeDataRef<'f> {
     buffer: &'f [TimeInstance],
-    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f NullBuffer>,
 }
 
 impl<'f> DateTimeDataRef<'f> {
-    pub fn new(buffer: &'f [TimeInstance], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [TimeInstance], null_bitmap: Option<&'f NullBuffer>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -601,7 +601,7 @@ impl<'f> DataRef<'f, TimeInstance> for DateTimeDataRef<'f> {
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
             .as_ref()
-            .map_or(true, |bitmap| bitmap.is_set(i))
+            .map_or(true, |bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -682,7 +682,7 @@ impl<'f> Iterator for DateTimeDataRefFloatOptionIter<'f> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CategoryDataRef<'f> {
     buffer: &'f [u8],
-    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f NullBuffer>,
 }
 
 impl<'f> DataRef<'f, u8> for CategoryDataRef<'f> {
@@ -697,7 +697,7 @@ impl<'f> DataRef<'f, u8> for CategoryDataRef<'f> {
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
             .as_ref()
-            .map_or(true, |bitmap| bitmap.is_set(i))
+            .map_or(true, |bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -746,7 +746,7 @@ impl<'f> From<CategoryDataRef<'f>> for FeatureDataRef<'f> {
 }
 
 impl<'f> CategoryDataRef<'f> {
-    pub fn new(buffer: &'f [u8], null_bitmap: Option<&'f arrow::bitmap::Bitmap>) -> Self {
+    pub fn new(buffer: &'f [u8], null_bitmap: Option<&'f NullBuffer>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -777,7 +777,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 ///
 /// assert_eq!(string_array.len(), 3);
 ///
-/// let text_data_ref = TextDataRef::new(string_array.value_data(), string_array.value_offsets(), string_array.data_ref().null_bitmap());
+/// let text_data_ref = TextDataRef::new(string_array.value_data(), string_array.value_offsets(), string_array.nulls());
 ///
 /// assert_eq!(text_data_ref.as_ref().len(), 9);
 /// assert_eq!(text_data_ref.offsets().len(), 4);
@@ -792,7 +792,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 pub struct TextDataRef<'f> {
     data_buffer: &'f [u8],
     offsets: &'f [i32],
-    valid_bitmap: Option<&'f arrow::bitmap::Bitmap>,
+    valid_bitmap: Option<&'f NullBuffer>,
 }
 
 impl<'f> AsRef<[u8]> for TextDataRef<'f> {
@@ -851,7 +851,7 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
     ///
     /// assert_eq!(string_array.len(), 3);
     ///
-    /// let text_data_ref = TextDataRef::new(string_array.value_data(), string_array.value_offsets(), string_array.data_ref().null_bitmap());
+    /// let text_data_ref = TextDataRef::new(string_array.value_data(), string_array.value_offsets(), string_array.nulls());
     ///
     /// assert_eq!(text_data_ref.nulls(), vec![false, true, false]);
     /// ```
@@ -863,7 +863,7 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
             .as_ref()
-            .map_or(true, |bitmap| bitmap.is_set(i))
+            .map_or(true, |bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -963,7 +963,7 @@ impl<'r> TextDataRef<'r> {
     pub fn new(
         data_buffer: &'r [u8],
         offsets: &'r [i32],
-        valid_bitmap: Option<&'r arrow::bitmap::Bitmap>,
+        valid_bitmap: Option<&'r NullBuffer>,
     ) -> Self {
         Self {
             data_buffer,

@@ -10,6 +10,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::fmt::{Debug, Display};
+use std::sync::Arc;
 use std::{cmp::Ordering, convert::TryInto};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
@@ -410,7 +411,7 @@ impl ArrowTyped for TimeInterval {
 
         let nullable = true; // TODO: should actually be false, but arrow's builders set it to `true` currently
 
-        DataType::FixedSizeList(Box::new(Field::new("item", DataType::Int64, nullable)), 2)
+        DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Int64, nullable)), 2)
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {

@@ -1171,11 +1171,11 @@ x;y
         let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
-        let ndvi_id: DataId =
+        let _ndvi_id: DataId =
             add_dataset_definition_to_datasets(&app_ctx, test_data!("dataset_defs/ndvi.json"))
                 .await
                 .into();
-        let ne_10m_ports_id: DataId = add_dataset_definition_to_datasets(
+        let _points_with_time_id: DataId = add_dataset_definition_to_datasets(
             &app_ctx,
             test_data!("dataset_defs/points_with_time.json"),
         )
@@ -1197,14 +1197,14 @@ x;y
                     "vector": {
                         "type": "OgrSource",
                         "params": {
-                            "data": ne_10m_ports_id,
+                            "data": "points_with_time",
                             "attributeProjection": null
                         }
                     },
                     "rasters": [{
                         "type": "GdalSource",
                         "params": {
-                            "data": ndvi_id,
+                            "data": "ndvi",
                         }
                     }],
                 }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::api::model::datatypes::{DatasetId, LayerId};
+use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId};
 use crate::api::model::services::AddDataset;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
@@ -75,8 +75,9 @@ where
             .prepare(
                 "
             SELECT 
-                d.id, 
-                d.name, 
+                d.id,
+                d.name,
+                d.display_name,
                 d.description,
                 d.tags,
                 d.source_operator,
@@ -98,11 +99,12 @@ where
                 Result::<DatasetListing>::Ok(DatasetListing {
                     id: row.get(0),
                     name: row.get(1),
-                    description: row.get(2),
-                    tags: row.get::<_, Option<_>>(3).unwrap_or_default(),
-                    source_operator: row.get(4),
-                    result_descriptor: serde_json::from_value(row.get(5))?,
-                    symbology: serde_json::from_value(row.get(6))?,
+                    display_name: row.get(2),
+                    description: row.get(3),
+                    tags: row.get::<_, Option<_>>(4).unwrap_or_default(),
+                    source_operator: row.get(5),
+                    result_descriptor: serde_json::from_value(row.get(6))?,
+                    symbology: serde_json::from_value(row.get(7))?,
                 })
             })
             .filter_map(Result::ok)
@@ -117,6 +119,7 @@ where
             SELECT
                 d.id,
                 d.name,
+                d.display_name,
                 d.description,
                 d.result_descriptor,
                 d.source_operator,
@@ -140,11 +143,12 @@ where
         Ok(Dataset {
             id: row.get(0),
             name: row.get(1),
-            description: row.get(2),
-            result_descriptor: serde_json::from_value(row.get(3))?,
-            source_operator: row.get(4),
-            symbology: serde_json::from_value(row.get(5))?,
-            provenance: serde_json::from_value(row.get(6))?,
+            display_name: row.get(2),
+            description: row.get(3),
+            result_descriptor: serde_json::from_value(row.get(4))?,
+            source_operator: row.get(5),
+            symbology: serde_json::from_value(row.get(6))?,
+            provenance: serde_json::from_value(row.get(7))?,
         })
     }
 
@@ -172,6 +176,22 @@ where
             data: (*dataset).into(),
             provenance: serde_json::from_value(row.get(0)).context(error::SerdeJson)?,
         })
+    }
+
+    async fn resolve_dataset_name_to_id(&self, dataset_name: &DatasetName) -> Result<DatasetId> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "SELECT id
+                FROM datasets
+                WHERE name = $1",
+            )
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&dataset_name]).await?;
+
+        Ok(serde_json::from_value(row.get(0)).context(error::SerdeJson)?)
     }
 }
 
@@ -216,13 +236,12 @@ where
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
     > {
-        let id: DatasetId = id
+        let id = id
             .internal()
-            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?
-            .into();
+            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
 
         if !self
-            .has_permission(id, Permission::Read)
+            .has_permission(DatasetId::from(id), Permission::Read)
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -284,13 +303,12 @@ where
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     > {
-        let id: DatasetId = id
+        let id = id
             .internal()
-            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?
-            .into();
+            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
 
         if !self
-            .has_permission(id, Permission::Read)
+            .has_permission(DatasetId::from(id), Permission::Read)
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -307,13 +325,13 @@ where
         let stmt = conn
             .prepare(
                 "
-        SELECT
-            d.meta_data
-        FROM
-            user_permitted_datasets p JOIN datasets d
-                ON (p.dataset_id = d.id)
-        WHERE
-            d.id = $1 AND p.user_id = $2",
+            SELECT
+                d.meta_data
+            FROM
+                user_permitted_datasets p JOIN datasets d
+                    ON (p.dataset_id = d.id)
+            WHERE
+                d.id = $1 AND p.user_id = $2",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
@@ -427,7 +445,13 @@ where
         dataset: AddDataset,
         meta_data: Box<dyn PostgresStorable<Tls>>,
     ) -> Result<DatasetId> {
-        let id = dataset.id.unwrap_or_else(DatasetId::new);
+        let id = DatasetId::new();
+        let name = dataset.name.unwrap_or_else(|| DatasetName {
+            namespace: Some(self.session.user.id.to_string()),
+            name: id.to_string(),
+        });
+
+        self.check_namespace(&name)?;
 
         let meta_data_json = meta_data.to_json()?;
 
@@ -435,12 +459,15 @@ where
 
         let tx = conn.build_transaction().start().await?;
 
+        // unique constraint on `id` checks if dataset with same id exists
+
         let stmt = tx
             .prepare(
                 "
                 INSERT INTO datasets (
                     id,
                     name,
+                    display_name,
                     description,
                     source_operator,
                     result_descriptor,
@@ -448,7 +475,7 @@ where
                     symbology,
                     provenance
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             )
             .await?;
 
@@ -456,7 +483,8 @@ where
             &stmt,
             &[
                 &id,
-                &dataset.name,
+                &name,
+                &dataset.display_name,
                 &dataset.description,
                 &dataset.source_operator,
                 &meta_data_json.result_descriptor,
@@ -682,6 +710,7 @@ where
                 "
                 SELECT 
                     d.name, 
+                    d.display_name,
                     d.description,
                     d.source_operator,
                     d.symbology
@@ -702,19 +731,20 @@ where
             )
             .await?;
 
-        let name: String = row.get(0);
-        let description: String = row.get(1);
-        let source_operator: String = row.get(2);
-        let symbology: Option<Symbology> = serde_json::from_value(row.get(3))?;
+        let name: DatasetName = row.get(0);
+        let display_name: String = row.get(1);
+        let description: String = row.get(2);
+        let source_operator: String = row.get(3);
+        let symbology: Option<Symbology> = serde_json::from_value(row.get(4))?;
 
-        let operator = source_operator_from_dataset(&source_operator, &dataset_id.into())?;
+        let operator = source_operator_from_dataset(&source_operator, &name.into())?;
 
         Ok(Layer {
             id: ProviderLayerId {
                 provider_id: DATASET_DB_LAYER_PROVIDER_ID,
                 layer_id: id.clone(),
             },
-            name,
+            name: display_name,
             description,
             workflow: Workflow { operator },
             symbology,

@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId, NamedData};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::{self, Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -190,11 +190,11 @@ impl SentinelS2L2aCogsDataProvider {
                         workflow: Workflow {
                             operator: source_operator_from_dataset(
                                 GdalSource::TYPE_NAME,
-                                &DataId::External(ExternalDataId {
-                                    provider_id: *id,
-                                    layer_id: layer_id.clone(),
-                                })
-                                .into(),
+                                &NamedData {
+                                    namespace: None,
+                                    provider: Some(id.to_string()),
+                                    name: layer_id.to_string(),
+                                },
                             )
                             .expect("Gdal source is a valid operator."),
                         },
@@ -311,10 +311,11 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: DataId::External(ExternalDataId {
-                                provider_id: self.id,
-                                layer_id: id.clone(),
-                            })
+                            data: NamedData {
+                                namespace: None,
+                                provider: Some(self.id.to_string()),
+                                name: id.to_string(),
+                            }
                             .into(),
                         },
                     }
@@ -734,7 +735,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use std::{fs::File, io::BufReader, str::FromStr};
 
-    use crate::test_data;
+    use crate::{api::model::datatypes::ExternalDataId, test_data};
     use futures::StreamExt;
     use geoengine_datatypes::{
         dataset::DatasetId,
@@ -859,23 +860,24 @@ mod tests {
                 )
                 .await?;
 
+        let name = NamedData {
+            namespace: None,
+            provider: Some("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".into()),
+            name: "UTM32N-B01".into(),
+        };
+
         exe.add_meta_data(
             ExternalDataId {
                 provider_id: DataProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
                 layer_id: LayerId("UTM32N:B01".to_owned()),
             }
             .into(),
+            name.clone().into(),
             meta,
         );
 
         let op = GdalSource {
-            params: GdalSourceParameters {
-                data: ExternalDataId {
-                    provider_id: DataProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
-                    layer_id: LayerId("UTM32N:B01".to_owned()),
-                }
-                .into(),
-            },
+            params: GdalSourceParameters { data: name.into() },
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe)
@@ -1220,8 +1222,14 @@ mod tests {
 
         let mut execution_context = MockExecutionContext::test_default();
         let id: geoengine_datatypes::dataset::DataId = DatasetId::new().into();
+        let name = NamedData {
+            namespace: None,
+            provider: None,
+            name: "UTM36S-B04".into(),
+        };
         execution_context.add_meta_data(
             id.clone(),
+            name.clone().into(),
             Box::new(GdalMetaDataStatic {
                 time: None,
                 result_descriptor: RasterResultDescriptor {
@@ -1237,7 +1245,7 @@ mod tests {
         );
 
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { data: id },
+            params: GdalSourceParameters { data: name.into() },
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
