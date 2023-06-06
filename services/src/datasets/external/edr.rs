@@ -224,7 +224,24 @@ impl EdrCollectionMetaData {
         base_url: &Url,
         edr_id: EdrCollectionId,
     ) -> Result<PathBuf, geoengine_operators::error::Error> {
-        let vertical_extent = &self.extent.vertical;
+        let (vertical_extent, parameter_name) = match (self.is_raster_file()?, edr_id) {
+            (
+                true,
+                EdrCollectionId::ParameterAndHeight {
+                    parameter, height, ..
+                },
+            ) => (height, Some(parameter)),
+            (true, EdrCollectionId::ParameterOrHeight { parameter, .. }) => {
+                ("0".to_string(), Some(parameter))
+            }
+            (false, EdrCollectionId::ParameterOrHeight { parameter, .. }) => (parameter, None),
+            (false, EdrCollectionId::Collection { .. }) => ("0".to_string(), None),
+            (_, _) => {
+                return Err(geoengine_operators::error::Error::DatasetMetaData {
+                    source: Box::new(EdrProviderError::MissingVerticalExtent),
+                });
+            }
+        };
         let spatial_extent = self.extent.spatial.as_ref().ok_or_else(|| {
             geoengine_operators::error::Error::DatasetMetaData {
                 source: Box::new(EdrProviderError::MissingSpatialExtent),
@@ -243,15 +260,15 @@ impl EdrCollectionMetaData {
             spatial_extent.bbox[0][1],
             spatial_extent.bbox[0][2],
             spatial_extent.bbox[0][3],
-            vertical_extent.interval[0][1],
-            vertical_extent.interval[0][0],
+            vertical_extent,
+            vertical_extent,
             temporal_extent.interval[0][0],
             temporal_extent.interval[0][1],
             self.select_output_format()?
         );
-        if let EdrCollectionId::Parameter { parameter, .. } = edr_id {
+        if let Some(parameter_name) = parameter_name {
             download_url.push_str("&parameter-name=");
-            download_url.push_str(parameter.as_str());
+            download_url.push_str(parameter_name.as_str());
         }
         Ok(download_url.into())
     }
@@ -260,8 +277,7 @@ impl EdrCollectionMetaData {
 #[derive(Deserialize)]
 struct EdrExtents {
     spatial: Option<EdrSpatialExtent>,
-    #[serde(default)]
-    vertical: EdrVerticalExtent,
+    vertical: Option<EdrVerticalExtent>,
     temporal: Option<EdrTemporalExtent>,
 }
 
@@ -272,21 +288,13 @@ struct EdrSpatialExtent {
 
 #[derive(Deserialize)]
 struct EdrVerticalExtent {
-    interval: Vec<Vec<String>>,
-}
-
-impl Default for EdrVerticalExtent {
-    fn default() -> Self {
-        EdrVerticalExtent {
-            //default from OpenWeather
-            interval: vec![vec!["300".to_string(), "1000".to_string()]],
-        }
-    }
+    values: Vec<String>,
 }
 
 #[derive(Deserialize)]
 struct EdrTemporalExtent {
     interval: Vec<Vec<String>>,
+    values: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -311,9 +319,14 @@ enum EdrCollectionId {
     Collection {
         collection: String,
     },
-    Parameter {
+    ParameterOrHeight {
         collection: String,
         parameter: String,
+    },
+    ParameterAndHeight {
+        collection: String,
+        parameter: String,
+        height: String,
     },
 }
 
@@ -322,7 +335,8 @@ impl EdrCollectionId {
         match self {
             EdrCollectionId::Collections => Err(Error::InvalidLayerId),
             EdrCollectionId::Collection { collection } => Ok(collection),
-            EdrCollectionId::Parameter { collection, .. } => Ok(collection),
+            EdrCollectionId::ParameterOrHeight { collection, .. } => Ok(collection),
+            EdrCollectionId::ParameterAndHeight { collection, .. } => Ok(collection),
         }
     }
 }
@@ -338,9 +352,14 @@ impl FromStr for EdrCollectionId {
             ["collections", collection] => EdrCollectionId::Collection {
                 collection: collection.to_string(),
             },
-            ["collections", collection, parameter] => EdrCollectionId::Parameter {
+            ["collections", collection, parameter] => EdrCollectionId::ParameterOrHeight {
                 collection: collection.to_string(),
                 parameter: parameter.to_string(),
+            },
+            ["collections", collection, parameter, height] => EdrCollectionId::ParameterAndHeight {
+                collection: collection.to_string(),
+                parameter: parameter.to_string(),
+                height: height.to_string(),
             },
             _ => return Err(Error::InvalidLayerCollectionId),
         })
@@ -354,7 +373,13 @@ impl TryFrom<EdrCollectionId> for LayerCollectionId {
         let s = match value {
             EdrCollectionId::Collections => "collections".to_string(),
             EdrCollectionId::Collection { collection } => format!("collections/{collection}"),
-            EdrCollectionId::Parameter { .. } => return Err(Error::InvalidLayerCollectionId),
+            EdrCollectionId::ParameterOrHeight {
+                collection,
+                parameter,
+            } => format!("collections/{collection}/{parameter}"),
+            EdrCollectionId::ParameterAndHeight { .. } => {
+                return Err(Error::InvalidLayerCollectionId)
+            }
         };
 
         Ok(LayerCollectionId(s))
@@ -368,10 +393,15 @@ impl TryFrom<EdrCollectionId> for LayerId {
         let s = match value {
             EdrCollectionId::Collections => return Err(Error::InvalidLayerId),
             EdrCollectionId::Collection { collection } => format!("collections/{collection}"),
-            EdrCollectionId::Parameter {
+            EdrCollectionId::ParameterOrHeight {
                 collection,
                 parameter,
             } => format!("collections/{collection}/{parameter}"),
+            EdrCollectionId::ParameterAndHeight {
+                collection,
+                parameter,
+                height,
+            } => format!("collections/{collection}/{parameter}/{height}"),
         };
 
         Ok(LayerId(s))
@@ -401,21 +431,21 @@ impl LayerCollectionProvider for EdrDataProvider {
                 let items = collections
                     .collections
                     .into_iter()
-                    .filter(|item| item.data_queries.cube.is_some())
+                    .filter(|collection| collection.data_queries.cube.is_some())
                     .skip(options.offset as usize)
                     .take(options.limit as usize)
-                    .map(|item| {
-                        if item.is_raster_file()? {
+                    .map(|collection| {
+                        if collection.is_raster_file()? {
                             Ok(CollectionItem::Collection(LayerCollectionListing {
                                 id: ProviderLayerCollectionId {
                                     provider_id: self.id,
                                     collection_id: EdrCollectionId::Collection {
-                                        collection: item.id,
+                                        collection: collection.id,
                                     }
                                     .try_into()?,
                                 },
-                                name: item.title,
-                                description: item.description.unwrap_or(String::new()),
+                                name: collection.title,
+                                description: collection.description.unwrap_or(String::new()),
                                 properties: vec![],
                             }))
                         } else {
@@ -423,12 +453,12 @@ impl LayerCollectionProvider for EdrDataProvider {
                                 id: ProviderLayerId {
                                     provider_id: self.id,
                                     layer_id: EdrCollectionId::Collection {
-                                        collection: item.id,
+                                        collection: collection.id,
                                     }
                                     .try_into()?,
                                 },
-                                name: item.title,
-                                description: item.description.unwrap_or(String::new()),
+                                name: collection.title,
+                                description: collection.description.unwrap_or(String::new()),
                                 properties: vec![],
                             }))
                         }
@@ -459,26 +489,120 @@ impl LayerCollectionProvider for EdrDataProvider {
                     .json()
                     .await?;
 
-                if !collection_meta.is_raster_file()? {
+                if collection_meta.is_raster_file()? {
+                    let items = collection_meta
+                        .parameter_names
+                        .into_keys()
+                        .skip(options.offset as usize)
+                        .take(options.limit as usize)
+                        .map(|parameter_name| {
+                            Ok(CollectionItem::Collection(LayerCollectionListing {
+                                id: ProviderLayerCollectionId {
+                                    provider_id: self.id,
+                                    collection_id: EdrCollectionId::ParameterOrHeight {
+                                        collection: collection.clone(),
+                                        parameter: parameter_name.clone(),
+                                    }
+                                    .try_into()?,
+                                },
+                                name: parameter_name,
+                                description: String::new(),
+                                properties: vec![],
+                            }))
+                        })
+                        .collect::<Result<Vec<CollectionItem>>>()?;
+
+                    Ok(LayerCollection {
+                        id: ProviderLayerCollectionId {
+                            provider_id: self.id,
+                            collection_id: collection_id.clone(),
+                        },
+                        name: collection.clone(),
+                        description: format!("Parameters of {collection}"),
+                        items,
+                        entry_label: None,
+                        properties: vec![],
+                    })
+                } else if collection_meta.extent.vertical.is_some() {
+                    let items = collection_meta
+                        .extent
+                        .vertical
+                        .expect("checked before")
+                        .values
+                        .into_iter()
+                        .skip(options.offset as usize)
+                        .take(options.limit as usize)
+                        .map(|height| {
+                            Ok(CollectionItem::Layer(LayerListing {
+                                id: ProviderLayerId {
+                                    provider_id: self.id,
+                                    layer_id: EdrCollectionId::ParameterOrHeight {
+                                        collection: collection.clone(),
+                                        parameter: height.clone(),
+                                    }
+                                    .try_into()?,
+                                },
+                                name: height,
+                                description: String::new(),
+                                properties: vec![],
+                            }))
+                        })
+                        .collect::<Result<Vec<CollectionItem>>>()?;
+
+                    Ok(LayerCollection {
+                        id: ProviderLayerCollectionId {
+                            provider_id: self.id,
+                            collection_id: collection_id.clone(),
+                        },
+                        name: collection.clone(),
+                        description: format!("Height selection of {collection}"),
+                        items,
+                        entry_label: None,
+                        properties: vec![],
+                    })
+                } else {
+                    Err(Error::InvalidLayerCollectionId)
+                }
+            }
+            EdrCollectionId::ParameterOrHeight {
+                collection,
+                parameter,
+            } => {
+                let collection_meta: EdrCollectionMetaData = self
+                    .client
+                    .get(
+                        self.base_url
+                            .join(&format!("collections/{collection}?f=json"))?,
+                    )
+                    .send()
+                    .await?
+                    .json()
+                    .await?;
+
+                if !collection_meta.is_raster_file()? || collection_meta.extent.vertical.is_none() {
                     return Err(Error::InvalidLayerCollectionId);
                 }
 
                 let items = collection_meta
-                    .parameter_names
-                    .into_keys()
+                    .extent
+                    .vertical
+                    .expect("checked before")
+                    .values
+                    .into_iter()
                     .skip(options.offset as usize)
                     .take(options.limit as usize)
-                    .map(|item| {
+                    .map(|height| {
                         Ok(CollectionItem::Layer(LayerListing {
                             id: ProviderLayerId {
                                 provider_id: self.id,
-                                layer_id: EdrCollectionId::Parameter {
+                                layer_id: EdrCollectionId::ParameterAndHeight {
                                     collection: collection.clone(),
-                                    parameter: item.clone(),
+                                    parameter: parameter.clone(),
+                                    height: height.clone(),
                                 }
                                 .try_into()?,
                             },
-                            name: item,
+                            name: height,
                             description: String::new(),
                             properties: vec![],
                         }))
@@ -491,13 +615,13 @@ impl LayerCollectionProvider for EdrDataProvider {
                         collection_id: collection_id.clone(),
                     },
                     name: collection.clone(),
-                    description: format!("Parameters of {collection}"),
+                    description: format!("Height selection of {collection}"),
                     items,
                     entry_label: None,
                     properties: vec![],
                 })
             }
-            EdrCollectionId::Parameter { .. } => Err(Error::InvalidLayerCollectionId),
+            EdrCollectionId::ParameterAndHeight { .. } => Err(Error::InvalidLayerCollectionId),
         }
     }
 
@@ -681,17 +805,25 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         let (edr_id, collection) = self.load_metadata(id).await?;
         let bbox = collection.get_bounding_box()?;
         let bbox = SpatialPartition2D::new_unchecked(bbox.upper_left(), bbox.lower_right());
+        let download_url = collection.get_download_url(&self.base_url, edr_id)?;
 
-        Ok(Box::new(StaticMetaData {
-            loading_info: GdalLoadingInfo {
-                info: GdalLoadingInfoTemporalSliceIterator::Static {
-                    parts: vec![GdalLoadingInfoTemporalSlice {
-                        time: collection.get_time_interval()?,
+        let mut parts: Vec<GdalLoadingInfoTemporalSlice> = Vec::new();
+
+        if let Some(temporal_extent) = collection.extent.temporal {
+            let mut previous_start: Option<String> = None;
+
+            for (i, elem) in temporal_extent.values.into_iter().enumerate() {
+                if let Some(previous_start_val) = previous_start.clone() {
+                    parts.push(GdalLoadingInfoTemporalSlice {
+                        time: TimeInterval::new_unchecked(
+                            TimeInstance::from_str(previous_start_val.as_str()).unwrap(),
+                            TimeInstance::from_str(elem.as_str()).unwrap(),
+                        ),
                         params: Some(GdalDatasetParameters {
-                            file_path: collection.get_download_url(&self.base_url, edr_id)?,
-                            rasterband_channel: 0,
+                            file_path: format!("GTIFF_DIR:{i}:{download_url}").into(),
+                            rasterband_channel: 1,
                             geo_transform: GdalDatasetGeoTransform {
-                                origin_coordinate: Coordinate2D::new(0.0, 0.0),
+                                origin_coordinate: bbox.upper_left(),
                                 x_pixel_size: 1.0,
                                 y_pixel_size: 1.0,
                             },
@@ -705,12 +837,71 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                             allow_alphaband_as_mask: false,
                             retry: None,
                         }),
-                    }]
-                    .into_iter(),
+                    });
+                }
+                previous_start = Some(elem);
+            }
+            parts.push(GdalLoadingInfoTemporalSlice {
+                time: TimeInterval::new_unchecked(
+                    TimeInstance::from_str(previous_start_val.as_str()).unwrap(),
+                    TimeInstance::from_str(temporal_extent.interval[0][1].as_str()).unwrap(),
+                ),
+                params: Some(GdalDatasetParameters {
+                    file_path: format!(
+                        "GTIFF_DIR:{}:{}",
+                        temporal_extent.values.len(),
+                        download_url
+                    )
+                    .into(),
+                    rasterband_channel: 1,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: bbox.upper_left(),
+                        x_pixel_size: 1.0,
+                        y_pixel_size: 1.0,
+                    },
+                    width: 0,
+                    height: 0,
+                    file_not_found_handling: FileNotFoundHandling::NoData,
+                    no_data_value: None,
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: false,
+                    retry: None,
+                }),
+            });
+        } else {
+            parts.push(GdalLoadingInfoTemporalSlice {
+                time: collection.get_time_interval()?,
+                params: Some(GdalDatasetParameters {
+                    file_path: format!("GTIFF_DIR:1:{download_url}").into(),
+                    rasterband_channel: 1,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: bbox.upper_left(),
+                        x_pixel_size: 1.0,
+                        y_pixel_size: 1.0,
+                    },
+                    width: 0,
+                    height: 0,
+                    file_not_found_handling: FileNotFoundHandling::NoData,
+                    no_data_value: None,
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: false,
+                    retry: None,
+                }),
+            });
+        }
+
+        Ok(Box::new(StaticMetaData {
+            loading_info: GdalLoadingInfo {
+                info: GdalLoadingInfoTemporalSliceIterator::Static {
+                    parts: parts.into_iter(),
                 },
             },
             result_descriptor: RasterResultDescriptor {
-                data_type: RasterDataType::F32,
+                data_type: RasterDataType::U8,
                 spatial_reference: SpatialReferenceOption::SpatialReference(
                     SpatialReference::epsg_4326(),
                 ),
