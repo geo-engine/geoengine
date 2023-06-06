@@ -338,7 +338,6 @@ mod tests {
         },
         dataset::{DataId, DatasetId, NamedData},
         primitives::{BoundingBox2D, FeatureData, MultiLineString, MultiPoint, TimeInterval},
-        primitives::{FeatureData, MultiLineString, MultiPoint, TimeInterval},
         spatial_reference::SpatialReference,
         test_data,
         util::{test::TestDefault, Identifier},
