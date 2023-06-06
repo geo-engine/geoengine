@@ -6405,9 +6405,9 @@ dependencies = [
 
 [[package]]
 name = "xgboost-rs"
-version = "0.1.31"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "497ab740ce0a669d39ea698a7fc72c93121c0d1dcec5a47485f3e87c0d2cb5af"
+checksum = "841f5e1011730c1d71d9cdc20ac269242dfaf64710c07e153c18770d46cd039b"
 dependencies = [
  "derive_builder",
  "indexmap",
