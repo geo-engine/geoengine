@@ -414,7 +414,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 time: None,
                 bbox: None,
             },
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         }))
     }
 }

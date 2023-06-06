@@ -290,7 +290,7 @@ where
         Self {
             data_ref,
             i: 0,
-            t: PhantomData::default(),
+            t: PhantomData,
         }
     }
 }
@@ -337,7 +337,7 @@ where
         Self {
             data_ref,
             i: 0,
-            t: PhantomData::default(),
+            t: PhantomData,
         }
     }
 }

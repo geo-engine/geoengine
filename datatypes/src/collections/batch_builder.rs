@@ -407,7 +407,7 @@ impl RawFeatureCollectionBuilder {
                 false,
             ));
 
-            let geo = std::mem::replace(&mut self.geo_array, None);
+            let geo = self.geo_array.take();
             arrays.push(geo.expect("checked"));
         }
 
@@ -416,7 +416,7 @@ impl RawFeatureCollectionBuilder {
             TimeInterval::arrow_data_type(),
             false,
         ));
-        let time = std::mem::replace(&mut self.time_array, None);
+        let time = self.time_array.take();
         arrays.push(time.expect("checked"));
 
         Ok(FeatureCollection::<CollectionType>::new_from_internals(

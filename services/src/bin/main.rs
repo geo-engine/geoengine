@@ -4,7 +4,6 @@ use geoengine_services::error::Result;
 use geoengine_services::util::config;
 use geoengine_services::util::config::get_config_element;
 use std::str::FromStr;
-use time::format_description;
 use tracing::metadata::LevelFilter;
 use tracing::Subscriber;
 use tracing_subscriber::field::RecordFields;
@@ -198,12 +197,4 @@ fn reroute_gdal_logging() {
             }
         };
     });
-}
-
-const TIME_FORMAT_STR: &str = "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:6] \
-                [offset_hour sign:mandatory]:[offset_minute]";
-
-lazy_static::lazy_static! {
-    static ref TIME_FORMAT: Vec<format_description::FormatItem<'static>>
-        = format_description::parse(TIME_FORMAT_STR).expect("time format must be parsable");
 }

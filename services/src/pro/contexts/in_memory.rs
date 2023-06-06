@@ -15,7 +15,7 @@ use crate::pro::projects::ProHashMapProjectDbBackend;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::{HashMapUserDbBackend, OidcRequestDb, UserAuth, UserSession};
-use crate::pro::util::config::Oidc;
+use crate::pro::util::config::{Cache, Oidc};
 use crate::tasks::SimpleTaskManagerContext;
 use crate::workflows::registry::HashMapRegistryBackend;
 use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
@@ -61,12 +61,12 @@ impl TestDefault for ProInMemoryContext {
             oidc_request_db: Arc::new(None),
             quota: TestDefault::test_default(),
             volumes: Default::default(),
-            tile_cache: Default::default(),
+            tile_cache: Arc::new(TileCache::test_default()),
         }
     }
 }
 impl ProInMemoryContext {
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
     pub async fn new_with_data(
         dataset_defs_path: PathBuf,
         provider_defs_path: PathBuf,
@@ -75,6 +75,7 @@ impl ProInMemoryContext {
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
         oidc_config: Oidc,
+        cache_config: Cache,
     ) -> Self {
         let db_backend = Arc::new(ProInMemoryDbBackend::default());
 
@@ -91,7 +92,13 @@ impl ProInMemoryContext {
             oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
             quota,
             volumes: Default::default(),
-            tile_cache: Default::default(),
+            tile_cache: Arc::new(
+                TileCache::new(
+                    cache_config.cache_size_in_mb,
+                    cache_config.landing_zone_ratio,
+                )
+                .expect("tile cache creation should work because the config is valid"),
+            ),
         };
 
         let mut db = app_ctx.session_context(session).db();
@@ -114,6 +121,7 @@ impl ProInMemoryContext {
     pub fn new_with_context_spec(
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
+        cache_config: Cache,
     ) -> Self {
         let db_backend = Arc::new(ProInMemoryDbBackend::default());
 
@@ -129,11 +137,17 @@ impl ProInMemoryContext {
             oidc_request_db: Arc::new(None),
             quota,
             volumes: Default::default(),
-            tile_cache: Default::default(),
+            tile_cache: Arc::new(
+                TileCache::new(
+                    cache_config.cache_size_in_mb,
+                    cache_config.landing_zone_ratio,
+                )
+                .expect("tile cache creation should work because the config is valid"),
+            ),
         }
     }
 
-    pub fn new_with_oidc(oidc_db: OidcRequestDb) -> Self {
+    pub fn new_with_oidc(oidc_db: OidcRequestDb, cache_config: Cache) -> Self {
         let db_backend = Arc::new(ProInMemoryDbBackend::default());
 
         let db = ProInMemoryDb::new(db_backend.clone(), UserSession::admin_session());
@@ -148,7 +162,13 @@ impl ProInMemoryContext {
             oidc_request_db: Arc::new(Some(oidc_db)),
             quota,
             volumes: Default::default(),
-            tile_cache: Default::default(),
+            tile_cache: Arc::new(
+                TileCache::new(
+                    cache_config.cache_size_in_mb,
+                    cache_config.landing_zone_ratio,
+                )
+                .expect("tile cache creation should work because the config is valid"),
+            ),
         }
     }
 }

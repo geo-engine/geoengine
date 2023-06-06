@@ -1187,7 +1187,7 @@ mod tests {
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
-                bounds: HistogramBounds::Data(Data::default()),
+                bounds: HistogramBounds::Data(Data),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
                 },
@@ -1391,7 +1391,7 @@ mod tests {
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
-                bounds: HistogramBounds::Data(Data::default()),
+                bounds: HistogramBounds::Data(Data),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
                 },
