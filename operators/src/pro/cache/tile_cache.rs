@@ -567,19 +567,7 @@ mod tests {
             .unwrap();
 
         tile_cache
-            .insert_tile(
-                op_name.clone(),
-                query_id,
-                RasterTile2D::<u8> {
-                    time: TimeInterval::new_unchecked(1, 1),
-                    tile_position: [-1, 0].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
-                        .unwrap()
-                        .into(),
-                    properties: RasterProperties::default(),
-                },
-            )
+            .insert_tile(op_name.clone(), query_id, create_tile())
             .await
             .unwrap();
 
@@ -587,6 +575,18 @@ mod tests {
             .finish_query(op_name.clone(), query_id)
             .await
             .unwrap();
+    }
+
+    fn create_tile() -> RasterTile2D<u8> {
+        RasterTile2D::<u8> {
+            time: TimeInterval::new_unchecked(1, 1),
+            tile_position: [-1, 0].into(),
+            global_geo_transform: TestDefault::test_default(),
+            grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
+                .unwrap()
+                .into(),
+            properties: RasterProperties::default(),
+        }
     }
 
     fn query_rect() -> RasterQueryRectangle {
@@ -612,14 +612,21 @@ mod tests {
 
     #[tokio::test]
     async fn it_evicts_lru() {
+        let cache_entry = CacheEntry {
+            query: query_rect(),
+            tiles: CachedTiles::U8(vec![create_tile()].into()),
+        };
+        let size_of_cache_entry = cache_entry.byte_size();
+        let total_cache_size = size_of_cache_entry * 4;
+
         // set limits s.t. three tiles fit
         let mut tile_cache = TileCache {
             backend: RwLock::new(TileCacheBackend {
                 operator_caches: Default::default(),
                 lru: LruCache::unbounded(),
-                cache_byte_size_total: 1248,
+                cache_byte_size_total: total_cache_size,
                 cache_byte_size_used: 0,
-                landing_zone_byte_size_total: 1248,
+                landing_zone_byte_size_total: total_cache_size,
                 landing_zone_byte_size_used: 0,
             }),
         };
