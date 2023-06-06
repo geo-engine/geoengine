@@ -2,5 +2,11 @@
   "type": "EdrDataProviderDefinition",
   "id": "0668d980-6c82-47c4-b1d9-1096f6770666",
   "name": "Open Weather",
-  "baseUrl": "https://ogcie.iblsoft.com/edr"
+  "baseUrl": "https://ogcie.iblsoft.com/edr",
+  "rasterSpec": {
+    "xPixelSize": 0.499305555555556,
+    "yPixelSize": -0.498614958448753,
+    "width": 720,
+    "height": 361
+  }
 }
