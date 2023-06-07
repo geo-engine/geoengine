@@ -69,8 +69,8 @@ impl Resource {
     path = "/permissions",
     request_body(content = PermissionRequest, example =
         json!({
-            "resourceId": {
-                "type": "Layer",
+            "resource": {
+                "type": "layer",
                 "id": "00000000-0000-0000-0000-000000000000",
             },
             "roleId": "00000000-0000-0000-0000-000000000000",
@@ -112,8 +112,8 @@ where
     path = "/permissions",
     request_body(content = PermissionRequest, example =
         json!({
-            "resourceId": {
-                "type": "Layer",
+            "resource": {
+                "type": "layer",
                 "id": "00000000-0000-0000-0000-000000000000",
             },
             "roleId": "00000000-0000-0000-0000-000000000000",
