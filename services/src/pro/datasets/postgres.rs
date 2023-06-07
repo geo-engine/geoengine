@@ -186,13 +186,13 @@ where
             .prepare(
                 "SELECT id
                 FROM datasets
-                WHERE name = $1",
+                WHERE name = $1::\"DatasetName\"",
             )
             .await?;
 
         let row = conn.query_one(&stmt, &[&dataset_name]).await?;
 
-        Ok(serde_json::from_value(row.get(0)).context(error::SerdeJson)?)
+        Ok(row.get(0))
     }
 }
 
@@ -639,7 +639,7 @@ where
                 "
                 SELECT 
                     concat(d.id, ''), 
-                    d.name, 
+                    d.display_name, 
                     d.description
                 FROM 
                     user_permitted_datasets p JOIN datasets d 
