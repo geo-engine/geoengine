@@ -143,7 +143,7 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     Ok(web::Json(list))
 }
 
-/// Retrieves details about a dataset using the internal id.
+/// Retrieves details about a dataset using the internal name.
 #[utoipa::path(
     tag = "Datasets",
     get,
