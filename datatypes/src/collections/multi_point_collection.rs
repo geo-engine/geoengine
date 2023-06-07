@@ -335,6 +335,7 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
+    #[allow(clippy::redundant_clone)] // this test is about the clone implementation
     fn clone() {
         let pc = MultiPointCollection::empty();
         let cloned = pc.clone();
@@ -719,6 +720,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::redundant_clone)] // this test is about the clone implementation
     fn clone2() {
         let pc = MultiPointCollection::from_data(
             MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)]]).unwrap(),

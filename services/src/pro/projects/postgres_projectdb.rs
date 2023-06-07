@@ -89,18 +89,12 @@ where
     Ok(plots)
 }
 
-async fn update_plots<Tls>(
+async fn update_plots(
     trans: &Transaction<'_>,
     project_id: &ProjectId,
     project_version_id: &ProjectVersionId,
     plots: &[Plot],
-) -> Result<()>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
+) -> Result<()> {
     for (idx, plot) in plots.iter().enumerate() {
         let stmt = trans
             .prepare(
@@ -352,7 +346,7 @@ where
                 .await?;
         }
 
-        update_plots::<Tls>(&trans, &project.id, &project.version.id, &project.plots).await?;
+        update_plots(&trans, &project.id, &project.version.id, &project.plots).await?;
 
         trans.commit().await?;
 

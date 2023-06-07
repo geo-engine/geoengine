@@ -825,7 +825,10 @@ where
                 FieldValue::DateValue(value) => Ok(DateTime::from(
                     value
                         .and_hms_opt(0, 0, 0)
-                        .expect("`00:00:00` should be a valid time"),
+                        .expect("`00:00:00` should be a valid time")
+                        .and_local_timezone(chrono::Utc) // we don't have any other information
+                        .single()
+                        .expect("setting timezone to Utc should not fail"),
                 )
                 .into()),
                 FieldValue::DateTimeValue(value) => Ok(DateTime::from(value).into()),

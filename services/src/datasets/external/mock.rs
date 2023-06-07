@@ -87,9 +87,7 @@ impl MockExternalDataProvider {
     fn collection(&self, collection_id: &LayerCollectionId) -> Option<&MockCollection> {
         let mut queue = vec![&self.root_collection];
 
-        while !queue.is_empty() {
-            let current = queue.pop().unwrap();
-
+        while let Some(current) = queue.pop() {
             if &current.id == collection_id {
                 return Some(current);
             }
@@ -103,9 +101,7 @@ impl MockExternalDataProvider {
     fn layer(&self, layer_id: &LayerId) -> Option<&MockLayer> {
         let mut queue = vec![&self.root_collection];
 
-        while !queue.is_empty() {
-            let current = queue.pop().unwrap();
-
+        while let Some(current) = queue.pop() {
             for layer in &current.layers {
                 if &layer.id == layer_id {
                     return Some(layer);

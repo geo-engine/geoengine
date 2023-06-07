@@ -225,7 +225,7 @@ pub fn raster_descriptor_from_dataset(
     let spatial_ref: SpatialReference =
         dataset.spatial_ref()?.try_into().context(error::DataType)?;
 
-    let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type().try_into()?)
+    let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
 
     let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
