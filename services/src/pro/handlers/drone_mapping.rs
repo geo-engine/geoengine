@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 use std::path::Path;
 
-use crate::api::model::datatypes::DatasetId;
+use crate::api::model::datatypes::DatasetName;
 use crate::api::model::services::AddDataset;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
@@ -69,7 +69,7 @@ pub struct OdmErrorResponse {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct CreateDatasetResponse {
     upload: UploadId,
-    dataset: DatasetId,
+    dataset: DatasetName,
 }
 
 /// Create a new drone mapping task from a given upload. Returns the task id
@@ -273,7 +273,7 @@ where
 
     Ok(web::Json(CreateDatasetResponse {
         upload: upload_id,
-        dataset,
+        dataset: dataset.name,
     }))
 }
 
@@ -372,6 +372,7 @@ mod tests {
 
     use super::*;
     use crate::contexts::{Session, SessionContext};
+    use crate::datasets::listing::DatasetProvider;
     use crate::error::Result;
     use crate::test_data;
     use crate::util::tests::TestDataUploads;
@@ -497,7 +498,12 @@ mod tests {
         test_data.uploads.push(dataset_response.upload);
 
         // test if the meta data is correct
-        let dataset_id = dataset_response.dataset;
+        let dataset_name = dataset_response.dataset;
+        let dataset_id = ctx
+            .db()
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap();
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             ctx.execution_context()
                 .unwrap()

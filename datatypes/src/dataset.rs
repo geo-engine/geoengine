@@ -63,6 +63,7 @@ impl From<ExternalDataId> for DataId {
 }
 
 pub const NAME_DELIMITER: char = ':';
+pub const NAME_BRACE: char = '`';
 pub const SYSTEM_NAMESPACE: &str = "_";
 pub const SYSTEM_PROVIDER: &str = "_";
 
@@ -155,9 +156,18 @@ impl Serialize for NamedData {
     where
         S: serde::Serializer,
     {
+        let name = if self
+            .name
+            .contains(|c| c == NAME_DELIMITER || c == NAME_BRACE || is_invalid_name_char(c))
+        {
+            brace_name(&self.name)
+        } else {
+            self.name.clone()
+        };
+
         let d = NAME_DELIMITER;
-        let serialized = match (&self.namespace, &self.provider, &self.name) {
-            (None, None, name) => name.to_string(),
+        let serialized = match (&self.namespace, &self.provider, name) {
+            (None, None, name) => name,
             (None, Some(provider), name) => {
                 format!("{SYSTEM_NAMESPACE}{d}{provider}{d}{name}")
             }
@@ -173,6 +183,19 @@ impl Serialize for NamedData {
     }
 }
 
+fn brace_name(name: &str) -> String {
+    let mut result = String::with_capacity(name.len() + 2);
+    result.push(NAME_BRACE);
+    for c in name.chars() {
+        if c == NAME_BRACE {
+            result.push(NAME_BRACE);
+        }
+        result.push(c);
+    }
+    result.push(NAME_BRACE);
+    result
+}
+
 // TODO: move this to services at some point
 impl<'de> Deserialize<'de> for NamedData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -184,6 +207,123 @@ impl<'de> Deserialize<'de> for NamedData {
 }
 
 struct NamedDataDeserializeVisitor;
+
+impl NamedDataDeserializeVisitor {
+    fn parse_string<E>(s: &str) -> Result<[String; 3], E>
+    where
+        E: serde::de::Error,
+    {
+        enum Mode {
+            Simple,
+            BraceStart { num_braces: usize },
+            Braced,
+            BraceEnd { num_braces: usize },
+        }
+
+        let mut strings = [String::new(), String::new(), String::new()];
+        let mut strings_idx = 0;
+        let mut mode = Mode::Simple;
+
+        for c in s.chars() {
+            if strings_idx >= strings.len() {
+                return Err(E::custom("named data must consist of at most three parts"));
+            }
+
+            match mode {
+                Mode::Simple => match c {
+                    NAME_DELIMITER => {
+                        strings_idx += 1;
+                    }
+                    NAME_BRACE => {
+                        mode = Mode::BraceStart { num_braces: 1 };
+                    }
+                    c if !is_allowed_name_char(c) => {
+                        return Err(E::custom(format!(
+                            "character '{c}' is not allowed in a dataset name"
+                        )));
+                    }
+                    c => strings[strings_idx].push(c),
+                },
+                Mode::BraceStart { num_braces } => match c {
+                    NAME_BRACE => {
+                        mode = Mode::BraceStart {
+                            num_braces: num_braces + 1,
+                        };
+                    }
+                    c if num_braces % 2 == 0 => {
+                        return Err(E::custom(format!(
+                            "character '{c}' must not follow {num_braces} braces"
+                        )));
+                    }
+                    c => {
+                        mode = Mode::Braced;
+
+                        for _ in 0..(num_braces / 2) {
+                            strings[strings_idx].push(NAME_BRACE);
+                        }
+
+                        strings[strings_idx].push(c);
+                    }
+                },
+                Mode::Braced => match c {
+                    NAME_BRACE => {
+                        mode = Mode::BraceEnd { num_braces: 1 };
+                    }
+                    c => strings[strings_idx].push(c),
+                },
+                Mode::BraceEnd { num_braces } => match c {
+                    NAME_BRACE => {
+                        mode = Mode::BraceEnd {
+                            num_braces: num_braces + 1,
+                        };
+                    }
+                    NAME_DELIMITER if num_braces % 2 == 1 => {
+                        for _ in 0..(num_braces / 2) {
+                            strings[strings_idx].push(NAME_BRACE);
+                        }
+
+                        mode = Mode::Simple;
+                        strings_idx += 1;
+                    }
+                    c if num_braces % 2 == 1 => {
+                        return Err(E::custom(format!(
+                            "character '{c}' must not follow {num_braces} braces"
+                        )));
+                    }
+                    c => {
+                        for _ in 0..(num_braces / 2) {
+                            strings[strings_idx].push(NAME_BRACE);
+                        }
+
+                        mode = Mode::Braced;
+                        strings[strings_idx].push(c);
+                    }
+                },
+            }
+        }
+
+        match mode {
+            Mode::Simple => { /* nothing to do */ }
+            Mode::BraceStart { num_braces: _ } => {
+                return Err(E::custom("must not start with opening braces"));
+            }
+            Mode::Braced => {
+                return Err(E::custom("name was not closed with closing braces"));
+            }
+            Mode::BraceEnd { num_braces } => {
+                if num_braces % 2 == 0 {
+                    return Err(E::custom("name was not closed with closing braces"));
+                }
+
+                for _ in 0..(num_braces / 2) {
+                    strings[strings_idx].push(NAME_BRACE);
+                }
+            }
+        }
+
+        Ok(strings)
+    }
+}
 
 impl<'de> Visitor<'de> for NamedDataDeserializeVisitor {
     type Value = NamedData;
@@ -200,37 +340,23 @@ impl<'de> Visitor<'de> for NamedDataDeserializeVisitor {
     where
         E: serde::de::Error,
     {
-        let mut strings = [None, None, None];
-        let mut split = s.split(NAME_DELIMITER);
-
-        for (buffer, part) in strings.iter_mut().zip(&mut split) {
-            if part.is_empty() {
-                return Err(E::custom("empty part in named data"));
-            }
-
-            if let Some(c) = part.matches(is_invalid_name_char).next() {
-                return Err(E::custom(format!("invalid character '{c}' in named data")));
-            }
-
-            *buffer = Some(part.to_string());
-        }
-
-        if split.next().is_some() {
-            return Err(E::custom("named data must consist of at most three parts"));
-        }
-
+        let strings = Self::parse_string(s)?;
         match strings {
-            [Some(namespace), Some(provider), Some(name)] => Ok(NamedData {
-                namespace: NamedData::canonicalize(namespace, SYSTEM_NAMESPACE),
-                provider: NamedData::canonicalize(provider, SYSTEM_PROVIDER),
-                name,
-            }),
-            [Some(namespace), Some(name), None] => Ok(NamedData {
+            [namespace, provider, name]
+                if !namespace.is_empty() && !provider.is_empty() && !name.is_empty() =>
+            {
+                Ok(NamedData {
+                    namespace: NamedData::canonicalize(namespace, SYSTEM_NAMESPACE),
+                    provider: NamedData::canonicalize(provider, SYSTEM_PROVIDER),
+                    name,
+                })
+            }
+            [namespace, name, _] if !namespace.is_empty() && !name.is_empty() => Ok(NamedData {
                 namespace: NamedData::canonicalize(namespace, SYSTEM_NAMESPACE),
                 provider: None,
                 name,
             }),
-            [Some(name), None, None] => Ok(NamedData {
+            [name, _, _] if !name.is_empty() => Ok(NamedData {
                 namespace: None,
                 provider: None,
                 name,
@@ -365,5 +491,99 @@ mod tests {
         serde_json::from_value::<NamedData>(serde_json::json!("")).unwrap_err();
         serde_json::from_value::<NamedData>(serde_json::json!(":b:c")).unwrap_err();
         serde_json::from_value::<NamedData>(serde_json::json!(":::")).unwrap_err();
+    }
+
+    #[test]
+    fn test_bracing_deserialization() {
+        assert_eq!(
+            serde_json::from_value::<NamedData>(serde_json::json!("foo:`bar:baz`")).unwrap(),
+            NamedData {
+                namespace: Some("foo".to_string()),
+                provider: None,
+                name: "bar:baz".to_string()
+            }
+        );
+
+        assert_eq!(
+            serde_json::from_value::<NamedData>(serde_json::json!("foo:bar:`fizz:buzz`")).unwrap(),
+            NamedData {
+                namespace: Some("foo".to_string()),
+                provider: Some("bar".to_string()),
+                name: "fizz:buzz".to_string()
+            }
+        );
+
+        assert_eq!(
+            serde_json::from_value::<NamedData>(serde_json::json!("foo:```Code```")).unwrap(),
+            NamedData {
+                namespace: Some("foo".to_string()),
+                provider: None,
+                name: "`Code`".to_string()
+            }
+        );
+
+        assert_eq!(
+            serde_json::from_value::<NamedData>(serde_json::json!("foo:`bar``baz`")).unwrap(),
+            NamedData {
+                namespace: Some("foo".to_string()),
+                provider: None,
+                name: "bar`baz".to_string()
+            }
+        );
+
+        serde_json::from_value::<NamedData>(serde_json::json!("foo:bar:`")).unwrap_err();
+    }
+
+    #[test]
+    fn test_bracing_serialization() {
+        assert_eq!(
+            serde_json::to_value(NamedData {
+                namespace: Some("foo".to_string()),
+                provider: None,
+                name: "bar:baz".to_string()
+            })
+            .unwrap(),
+            serde_json::json!("foo:`bar:baz`"),
+        );
+
+        assert_eq!(
+            serde_json::to_value(NamedData {
+                namespace: Some("foo".to_string()),
+                provider: Some("bar".to_string()),
+                name: "fizz:buzz".to_string()
+            })
+            .unwrap(),
+            serde_json::json!("foo:bar:`fizz:buzz`"),
+        );
+
+        assert_eq!(
+            serde_json::to_value(NamedData {
+                namespace: Some("foo".to_string()),
+                provider: None,
+                name: "`Code`".to_string()
+            })
+            .unwrap(),
+            serde_json::json!("foo:```Code```"),
+        );
+
+        assert_eq!(
+            serde_json::to_value(NamedData {
+                namespace: Some("foo".to_string()),
+                provider: None,
+                name: "bar`baz".to_string()
+            })
+            .unwrap(),
+            serde_json::json!("foo:`bar``baz`"),
+        );
+
+        assert_eq!(
+            serde_json::to_value(NamedData {
+                namespace: Some("foo".to_string()),
+                provider: None,
+                name: "bar".to_string()
+            })
+            .unwrap(),
+            serde_json::json!("foo:bar"),
+        );
     }
 }
