@@ -137,7 +137,8 @@ pub async fn add_ndvi_to_datasets(app_ctx: &InMemoryContext) -> (DatasetId, Name
         .db()
         .add_dataset(ndvi.properties, Box::new(ndvi.meta_data))
         .await
-        .expect("dataset db access");
+        .expect("dataset db access")
+        .id;
 
     let named_data = NamedData {
         namespace: dataset_name.namespace,
@@ -248,6 +249,7 @@ pub async fn add_land_cover_to_datasets(ctx: &InMemorySessionContext) -> Dataset
         .add_dataset(ndvi.properties, Box::new(ndvi.meta_data))
         .await
         .expect("dataset db access")
+        .id
         .into()
 }
 

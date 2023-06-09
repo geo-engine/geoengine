@@ -376,7 +376,8 @@ where
     let dataset_id = db
         .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
         .await
-        .expect("dataset db access");
+        .expect("dataset db access")
+        .id;
 
     if share_with_users {
         db.add_permission(
@@ -434,7 +435,8 @@ where
     let dataset_id = db
         .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
         .await
-        .expect("dataset db access");
+        .expect("dataset db access")
+        .id;
 
     if share_with_users {
         db.add_permission(

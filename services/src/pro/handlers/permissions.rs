@@ -2,12 +2,16 @@ use actix_web::{web, FromRequest, HttpResponse};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
+use crate::api::model::datatypes::{DatasetName, LayerId};
 use crate::contexts::{ApplicationContext, SessionContext};
+use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 
+use crate::layers::listing::LayerCollectionId;
 use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
+use crate::projects::ProjectId;
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -28,9 +32,34 @@ where
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionRequest {
-    resource_id: ResourceId,
+    resource: Resource,
     role_id: RoleId,
     permission: Permission,
+}
+
+/// A resource that is affected by a permission.
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase", tag = "type", content = "id")]
+pub enum Resource {
+    Layer(LayerId),
+    LayerCollection(LayerCollectionId),
+    Project(ProjectId),
+    Dataset(DatasetName),
+}
+
+impl Resource {
+    pub async fn into_resource_id<D: DatasetDb>(self, db: &D) -> Result<ResourceId> {
+        Ok(match self {
+            Resource::Layer(layer_id) => ResourceId::Layer(layer_id),
+            Resource::LayerCollection(layer_collection_id) => {
+                ResourceId::LayerCollection(layer_collection_id)
+            }
+            Resource::Project(project_id) => ResourceId::Project(project_id),
+            Resource::Dataset(dataset_name) => {
+                ResourceId::DatasetId(db.resolve_dataset_name_to_id(&dataset_name).await?)
+            }
+        })
+    }
 }
 
 /// Adds a new permission.
@@ -40,8 +69,8 @@ pub struct PermissionRequest {
     path = "/permissions",
     request_body(content = PermissionRequest, example =
         json!({
-            "resourceId": {
-                "type": "Layer",
+            "resource": {
+                "type": "layer",
                 "id": "00000000-0000-0000-0000-000000000000",
             },
             "roleId": "00000000-0000-0000-0000-000000000000",
@@ -65,15 +94,13 @@ where
 {
     let permission = permission.into_inner();
 
-    app_ctx
-        .session_context(session)
-        .db()
-        .add_permission(
-            permission.role_id,
-            permission.resource_id,
-            permission.permission,
-        )
-        .await?;
+    let db = app_ctx.session_context(session).db();
+    db.add_permission(
+        permission.role_id,
+        permission.resource.into_resource_id(&db).await?,
+        permission.permission,
+    )
+    .await?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -85,8 +112,8 @@ where
     path = "/permissions",
     request_body(content = PermissionRequest, example =
         json!({
-            "resourceId": {
-                "type": "Layer",
+            "resource": {
+                "type": "layer",
                 "id": "00000000-0000-0000-0000-000000000000",
             },
             "roleId": "00000000-0000-0000-0000-000000000000",
@@ -110,15 +137,13 @@ where
 {
     let permission = permission.into_inner();
 
-    app_ctx
-        .session_context(session)
-        .db()
-        .remove_permission(
-            permission.role_id,
-            permission.resource_id,
-            permission.permission,
-        )
-        .await?;
+    let db = app_ctx.session_context(session).db();
+    db.remove_permission(
+        permission.role_id,
+        permission.resource.into_resource_id(&db).await?,
+        permission.permission,
+    )
+    .await?;
 
     Ok(HttpResponse::Ok().finish())
 }

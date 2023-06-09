@@ -1,4 +1,5 @@
 use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId, NamedData};
+use crate::api::model::responses::datasets::DatasetIdAndName;
 use crate::api::model::services::AddDataset;
 use crate::contexts::InMemoryDb;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
@@ -178,7 +179,7 @@ impl DatasetStore for InMemoryDb {
         &self,
         dataset: AddDataset,
         meta_data: Box<dyn HashMapStorable>,
-    ) -> Result<DatasetId> {
+    ) -> Result<DatasetIdAndName> {
         let id = DatasetId::new();
         let name = dataset.name.unwrap_or_else(|| DatasetName {
             namespace: None,
@@ -214,10 +215,10 @@ impl DatasetStore for InMemoryDb {
 
         let mut backend = self.backend.dataset_db.write().await;
 
-        backend.datasets_by_name.insert(name, d.clone());
+        backend.datasets_by_name.insert(name.clone(), d.clone());
         backend.datasets_by_id.insert(id, d);
 
-        Ok(id)
+        Ok(DatasetIdAndName { id, name })
     }
 
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {
@@ -579,7 +580,7 @@ mod tests {
         };
 
         let db = ctx.db();
-        let id = db.add_dataset(ds, Box::new(meta)).await?;
+        let id = db.add_dataset(ds, Box::new(meta)).await?.id;
 
         let exe_ctx = ctx.execution_context()?;
 
