@@ -518,23 +518,27 @@ impl TileCache {
             .remove(&query_id)
             .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?;
 
-        let entry_size = active_query.byte_size(); // TODO is active query and cache entry the same size?
+        let loading_zone_entry_size = active_query.byte_size(); // The loading zone entry might have a different size than the cache entry
 
         // move entry from landing zone into cache
         let entry: CacheEntry = active_query.into();
         let entry_id = CacheEntryId::new();
+
+        // calculate size of cache entry. This might be different from the size of the landing zone entry.
+        let cache_entry_size = entry.byte_size();
         cache.entries.insert(entry_id, entry);
 
         backend.lru.push(entry_id, key);
-
-        backend.landing_zone_byte_size_used -= entry_size;
+        // reduce the size of the landing zone
+        backend.landing_zone_byte_size_used -= loading_zone_entry_size;
         // TODO: include the size of the entry in the lru and the operator_caches as well(?)
-        backend.cache_byte_size_used += entry_size;
+        // increase the size of the cache
+        backend.cache_byte_size_used += cache_entry_size;
 
         // cache bound can be temporarily exceeded as the entry is moved form the landing zone into the cache
         // but the total of cache + landing zone is still below the bound
         // We now evict elements from the cache until bound is satisfied again
-        while backend.cache_byte_size_used + entry_size > backend.cache_byte_size_total {
+        while backend.cache_byte_size_used > backend.cache_byte_size_total {
             // this should always work, because otherwise it would mean the cache is not empty but the lru is.
             // the landing zone is smaller than the cache size and the entry must fit into the landing zone.
             if let Some(entry) = backend
@@ -567,19 +571,7 @@ mod tests {
             .unwrap();
 
         tile_cache
-            .insert_tile(
-                op_name.clone(),
-                query_id,
-                RasterTile2D::<u8> {
-                    time: TimeInterval::new_unchecked(1, 1),
-                    tile_position: [-1, 0].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
-                        .unwrap()
-                        .into(),
-                    properties: RasterProperties::default(),
-                },
-            )
+            .insert_tile(op_name.clone(), query_id, create_tile())
             .await
             .unwrap();
 
@@ -587,6 +579,18 @@ mod tests {
             .finish_query(op_name.clone(), query_id)
             .await
             .unwrap();
+    }
+
+    fn create_tile() -> RasterTile2D<u8> {
+        RasterTile2D::<u8> {
+            time: TimeInterval::new_unchecked(1, 1),
+            tile_position: [-1, 0].into(),
+            global_geo_transform: TestDefault::test_default(),
+            grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
+                .unwrap()
+                .into(),
+            properties: RasterProperties::default(),
+        }
     }
 
     fn query_rect() -> RasterQueryRectangle {
@@ -612,14 +616,26 @@ mod tests {
 
     #[tokio::test]
     async fn it_evicts_lru() {
+        // Create cache entry and landing zone entry to geht the size of both
+        let landing_zone_entry = LandingZoneEntry {
+            query: query_rect(),
+            tiles: LandingZoneQueryTiles::U8(vec![create_tile()]),
+        };
+        let size_of_landing_zone_entry = landing_zone_entry.byte_size();
+        let cache_entry: CacheEntry = landing_zone_entry.into();
+        let size_of_cache_entry = cache_entry.byte_size();
+        // Select the max of both sizes
+        // This is done because the landing zone should not be smaller then the cache
+        let m_size = size_of_cache_entry.max(size_of_landing_zone_entry);
+
         // set limits s.t. three tiles fit
         let mut tile_cache = TileCache {
             backend: RwLock::new(TileCacheBackend {
                 operator_caches: Default::default(),
                 lru: LruCache::unbounded(),
-                cache_byte_size_total: 1248,
+                cache_byte_size_total: m_size * 3,
                 cache_byte_size_used: 0,
-                landing_zone_byte_size_total: 1248,
+                landing_zone_byte_size_total: m_size * 3,
                 landing_zone_byte_size_used: 0,
             }),
         };
@@ -633,7 +649,6 @@ mod tests {
             .query_cache::<u8>(op(1), &query_rect())
             .await
             .unwrap();
-
         // process a fourth query
         process_query(&mut tile_cache, op(4)).await;
 

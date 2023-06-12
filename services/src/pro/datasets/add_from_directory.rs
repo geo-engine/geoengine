@@ -29,7 +29,8 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
                 def.properties.clone(),
                 db.wrap_meta_data(def.meta_data.clone()),
             )
-            .await?;
+            .await?
+            .id;
 
         db.add_permission(
             Role::registered_user_role_id(),

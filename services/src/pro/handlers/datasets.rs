@@ -3,8 +3,7 @@ use snafu::ResultExt;
 
 use crate::{
     api::model::{
-        datatypes::DatasetId,
-        responses::datasets::errors::*,
+        responses::datasets::{errors::*, DatasetNameResponse},
         services::{CreateDataset, DataPath, DatasetDefinition},
     },
     contexts::{ApplicationContext, SessionContext},
@@ -22,10 +21,7 @@ use crate::{
         contexts::{ProApplicationContext, ProGeoEngineDb},
         permissions::{Permission, PermissionDb, Role},
     },
-    util::{
-        config::{get_config_element, Data},
-        IdResponse,
-    },
+    util::config::{get_config_element, Data},
 };
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
@@ -68,7 +64,7 @@ async fn create_dataset_handler<C: ProApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError>
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError>
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -90,7 +86,7 @@ async fn create_system_dataset<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError>
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError>
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -111,28 +107,48 @@ where
     let db = app_ctx.session_context(session).db();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
-    let dataset_id = db
+    let dataset = db
         .add_dataset(definition.properties, meta_data)
         .await
         .context(DatabaseAccess)?;
 
     db.add_permission(
         Role::registered_user_role_id(),
-        dataset_id,
+        dataset.id,
         Permission::Read,
     )
     .await
     .context(DatabaseAccess)?;
 
-    db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+    db.add_permission(Role::anonymous_role_id(), dataset.id, Permission::Read)
         .await
         .context(DatabaseAccess)?;
 
-    Ok(web::Json(IdResponse::from(dataset_id)))
+    Ok(web::Json(dataset.name.into()))
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        api::model::{
+            datatypes::{DatasetName, NamedData},
+            services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
+        },
+        contexts::{Session, SessionContext, SessionId},
+        datasets::{
+            listing::DatasetProvider,
+            upload::{UploadId, UploadRootPath, VolumeName},
+        },
+        pro::{
+            contexts::ProInMemoryContext,
+            users::UserAuth,
+            util::tests::{admin_login, send_pro_test_request},
+        },
+        util::{
+            tests::{SetMultipartBody, TestDataUploads},
+            IdResponse,
+        },
+    };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::TryStreamExt;
@@ -152,24 +168,6 @@ mod tests {
         util::gdal::create_ndvi_meta_data,
     };
     use serde_json::json;
-
-    use crate::{
-        api::model::{
-            datatypes::NamedData,
-            services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
-        },
-        contexts::{Session, SessionContext, SessionId},
-        datasets::{
-            listing::DatasetProvider,
-            upload::{UploadId, UploadRootPath, VolumeName},
-        },
-        pro::{
-            contexts::ProInMemoryContext,
-            users::UserAuth,
-            util::tests::{admin_login, send_pro_test_request},
-        },
-        util::tests::{SetMultipartBody, TestDataUploads},
-    };
 
     use super::*;
 
@@ -210,7 +208,7 @@ mod tests {
         app_ctx: C,
         upload_id: UploadId,
         session_id: SessionId,
-    ) -> DatasetId
+    ) -> DatasetName
     where
         <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     {
@@ -295,8 +293,8 @@ mod tests {
         let res = send_pro_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200, "response: {res:?}");
 
-        let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-        dataset.id
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        dataset_name
     }
 
     pub async fn make_ogr_source<C: ExecutionContext>(
@@ -340,19 +338,11 @@ mod tests {
         let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
 
-        let dataset_id =
+        let dataset_name =
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
         let exe_ctx = ctx.execution_context()?;
 
-        let source = make_ogr_source(
-            &exe_ctx,
-            NamedData {
-                namespace: Some(session.user.id.to_string()),
-                provider: None,
-                name: dataset_id.to_string(),
-            },
-        )
-        .await?;
+        let source = make_ogr_source(&exe_ctx, dataset_name.into()).await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
         let query_ctx = ctx.query_context()?;
@@ -433,11 +423,10 @@ mod tests {
         let res = send_pro_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
-        let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-        let dataset_id = dataset_id.id;
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
 
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/{dataset_id}"))
+            .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
 
@@ -460,15 +449,16 @@ mod tests {
         let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
 
-        let dataset_id =
+        let dataset_name =
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
 
         let db = ctx.db();
+        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
 
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
-            .uri(&format!("/dataset/{dataset_id}"))
+            .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
@@ -521,13 +511,13 @@ mod tests {
             .set_payload(serde_json::to_string(&create)?);
         let res = send_pro_test_request(req, app_ctx.clone()).await;
 
-        let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-        let dataset_id = dataset_id.id;
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
 
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
-            .uri(&format!("/dataset/{dataset_id}"))
+            .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));

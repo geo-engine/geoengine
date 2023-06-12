@@ -1,5 +1,6 @@
 use crate::api::model::datatypes::{DataProviderId, DatasetId, DatasetName};
 use crate::api::model::operators::TypedResultDescriptor;
+use crate::api::model::responses::datasets::DatasetIdAndName;
 use crate::api::model::services::AddDataset;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
@@ -193,7 +194,7 @@ pub trait DatasetStore: DatasetStorer {
         &self,
         dataset: AddDataset,
         meta_data: Self::StorageType,
-    ) -> Result<DatasetId>;
+    ) -> Result<DatasetIdAndName>;
 
     async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
 
