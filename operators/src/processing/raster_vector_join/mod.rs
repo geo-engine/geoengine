@@ -49,7 +49,7 @@ pub struct RasterVectorJoinParams {
     /// Whether NO DATA values should be ignored in aggregating the joined feature data
     /// `false` by default
     #[serde(default)]
-    pub feature_aggregation_ignore_nodata: bool,
+    pub feature_aggregation_ignore_no_data: bool,
 
     /// Specifies which method is used for aggregating values over time
     pub temporal_aggregation: TemporalAggregationMethod,
@@ -57,7 +57,7 @@ pub struct RasterVectorJoinParams {
     /// Whether NO DATA values should be ignored in aggregating the joined temporal data
     /// `false` by default
     #[serde(default)]
-    pub temporal_aggregation_ignore_nodata: bool,
+    pub temporal_aggregation_ignore_no_data: bool,
 }
 
 /// How to aggregate the values for the geometries inside a feature e.g.
@@ -225,7 +225,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                         typed_raster_processors,
                         self.state.names.clone(),
                         self.state.feature_aggregation,
-                        self.state.feature_aggregation_ignore_nodata,
+                        self.state.feature_aggregation_ignore_no_data,
                     )
                     .boxed(),
                     TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
@@ -234,9 +234,9 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                             typed_raster_processors,
                             self.state.names.clone(),
                             self.state.feature_aggregation,
-                            self.state.feature_aggregation_ignore_nodata,
+                            self.state.feature_aggregation_ignore_no_data,
                             self.state.temporal_aggregation,
-                            self.state.temporal_aggregation_ignore_nodata,
+                            self.state.temporal_aggregation_ignore_no_data,
                         )
                         .boxed()
                     }
@@ -249,7 +249,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                         typed_raster_processors,
                         self.state.names.clone(),
                         self.state.feature_aggregation,
-                        self.state.feature_aggregation_ignore_nodata,
+                        self.state.feature_aggregation_ignore_no_data,
                     )
                     .boxed(),
                     TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
@@ -258,9 +258,9 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                             typed_raster_processors,
                             self.state.names.clone(),
                             self.state.feature_aggregation,
-                            self.state.feature_aggregation_ignore_nodata,
+                            self.state.feature_aggregation_ignore_no_data,
                             self.state.temporal_aggregation,
-                            self.state.temporal_aggregation_ignore_nodata,
+                            self.state.temporal_aggregation_ignore_no_data,
                         )
                         .boxed()
                     }
@@ -278,7 +278,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
 pub fn create_feature_aggregator<P: Pixel>(
     number_of_features: usize,
     aggregation: FeatureAggregationMethod,
-    ignore_nodata: bool,
+    ignore_no_data: bool,
 ) -> TypedAggregator {
     match aggregation {
         FeatureAggregationMethod::First => match P::TYPE {
@@ -290,14 +290,14 @@ pub fn create_feature_aggregator<P: Pixel>(
             | RasterDataType::I16
             | RasterDataType::I32
             | RasterDataType::I64 => {
-                FirstValueIntAggregator::new(number_of_features, ignore_nodata).into_typed()
+                FirstValueIntAggregator::new(number_of_features, ignore_no_data).into_typed()
             }
             RasterDataType::F32 | RasterDataType::F64 => {
-                FirstValueFloatAggregator::new(number_of_features, ignore_nodata).into_typed()
+                FirstValueFloatAggregator::new(number_of_features, ignore_no_data).into_typed()
             }
         },
         FeatureAggregationMethod::Mean => {
-            MeanValueAggregator::new(number_of_features, ignore_nodata).into_typed()
+            MeanValueAggregator::new(number_of_features, ignore_no_data).into_typed()
         }
     }
 }
@@ -330,9 +330,9 @@ mod tests {
             params: RasterVectorJoinParams {
                 names: ["foo", "bar"].iter().copied().map(str::to_string).collect(),
                 feature_aggregation: FeatureAggregationMethod::First,
-                feature_aggregation_ignore_nodata: false,
+                feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
-                temporal_aggregation_ignore_nodata: false,
+                temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![]).boxed(),
@@ -406,9 +406,9 @@ mod tests {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
                 feature_aggregation: FeatureAggregationMethod::First,
-                feature_aggregation_ignore_nodata: false,
+                feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::First,
-                temporal_aggregation_ignore_nodata: false,
+                temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
@@ -481,9 +481,9 @@ mod tests {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
                 feature_aggregation: FeatureAggregationMethod::First,
-                feature_aggregation_ignore_nodata: false,
+                feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
-                temporal_aggregation_ignore_nodata: false,
+                temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
@@ -559,9 +559,9 @@ mod tests {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
                 feature_aggregation: FeatureAggregationMethod::First,
-                feature_aggregation_ignore_nodata: false,
+                feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
-                temporal_aggregation_ignore_nodata: false,
+                temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
@@ -628,9 +628,9 @@ mod tests {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
                 feature_aggregation: FeatureAggregationMethod::First,
-                feature_aggregation_ignore_nodata: false,
+                feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
-                temporal_aggregation_ignore_nodata: false,
+                temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: point_source,

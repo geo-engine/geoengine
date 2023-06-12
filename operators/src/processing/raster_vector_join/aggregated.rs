@@ -28,9 +28,9 @@ pub struct RasterVectorAggregateJoinProcessor<G> {
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
     feature_aggregation: FeatureAggregationMethod,
-    feature_aggregation_ignore_nodata: bool,
+    feature_aggregation_ignore_no_data: bool,
     temporal_aggregation: TemporalAggregationMethod,
-    temporal_aggregation_ignore_nodata: bool,
+    temporal_aggregation_ignore_no_data: bool,
 }
 
 impl<G> RasterVectorAggregateJoinProcessor<G>
@@ -43,18 +43,18 @@ where
         raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
         feature_aggregation: FeatureAggregationMethod,
-        feature_aggregation_ignore_nodata: bool,
+        feature_aggregation_ignore_no_data: bool,
         temporal_aggregation: TemporalAggregationMethod,
-        temporal_aggregation_ignore_nodata: bool,
+        temporal_aggregation_ignore_no_data: bool,
     ) -> Self {
         Self {
             collection,
             raster_processors,
             column_names,
             feature_aggregation,
-            feature_aggregation_ignore_nodata,
+            feature_aggregation_ignore_no_data,
             temporal_aggregation,
-            temporal_aggregation_ignore_nodata,
+            temporal_aggregation_ignore_no_data,
         }
     }
 
@@ -64,16 +64,16 @@ where
         raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &str,
         feature_aggreation: FeatureAggregationMethod,
-        feature_aggregation_ignore_nodata: bool,
+        feature_aggregation_ignore_no_data: bool,
         temporal_aggregation: TemporalAggregationMethod,
-        temporal_aggregation_ignore_nodata: bool,
+        temporal_aggregation_ignore_no_data: bool,
         query: VectorQueryRectangle,
         ctx: &dyn QueryContext,
     ) -> Result<FeatureCollection<G>> {
         let mut temporal_aggregator = Self::create_aggregator::<P>(
             collection.len(),
             temporal_aggregation,
-            temporal_aggregation_ignore_nodata,
+            temporal_aggregation_ignore_no_data,
         );
 
         let collection = collection.sort_by_time_asc()?;
@@ -96,7 +96,7 @@ where
             let mut feature_aggregator = create_feature_aggregator::<P>(
                 collection.len(),
                 feature_aggreation,
-                feature_aggregation_ignore_nodata,
+                feature_aggregation_ignore_no_data,
             );
 
             let mut time_end = None;
@@ -115,7 +115,7 @@ where
                         feature_aggregator = create_feature_aggregator::<P>(
                             collection.len(),
                             feature_aggreation,
-                            feature_aggregation_ignore_nodata,
+                            feature_aggregation_ignore_no_data,
                         );
 
                         if temporal_aggregator.is_satisfied() {
@@ -226,9 +226,9 @@ where
                             raster,
                             new_column_name,
                             self.feature_aggregation,
-                            self.feature_aggregation_ignore_nodata,
+                            self.feature_aggregation_ignore_no_data,
                             self.temporal_aggregation,
-                            self.temporal_aggregation_ignore_nodata,
+                            self.temporal_aggregation_ignore_no_data,
                             query,
                             ctx
                         ).await?
