@@ -1,4 +1,5 @@
 use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId};
+use crate::api::model::responses::datasets::DatasetIdAndName;
 use crate::api::model::services::AddDataset;
 
 use crate::datasets::listing::{
@@ -183,7 +184,7 @@ impl DatasetStore for ProInMemoryDb {
         &self,
         dataset: AddDataset,
         meta_data: Box<dyn ProHashMapStorable>,
-    ) -> Result<DatasetId> {
+    ) -> Result<DatasetIdAndName> {
         info!("Add dataset {:?}", dataset.name);
 
         let id = DatasetId::new();
@@ -220,12 +221,12 @@ impl DatasetStore for ProInMemoryDb {
 
         let mut backend = self.backend.dataset_db.write().await;
 
-        backend.datasets_by_name.insert(name, d.clone());
+        backend.datasets_by_name.insert(name.clone(), d.clone());
         backend.datasets_by_id.insert(id, d);
 
         self.create_resource(id).await?;
 
-        Ok(id)
+        Ok(DatasetIdAndName { id, name })
     }
 
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {
@@ -634,7 +635,7 @@ mod tests {
 
         let db = ctx.db();
 
-        let id = db.add_dataset(ds, Box::new(meta)).await?;
+        let id = db.add_dataset(ds, Box::new(meta)).await?.id;
 
         let exe_ctx = ctx.execution_context()?;
 
@@ -798,7 +799,7 @@ mod tests {
         let db1 = app_ctx.session_context(session1.clone()).db();
         let db2 = app_ctx.session_context(session2.clone()).db();
 
-        let id = db1.add_dataset(ds, Box::new(meta)).await?;
+        let id = db1.add_dataset(ds, Box::new(meta)).await?.id;
 
         assert!(db1.load_provenance(&id).await.is_ok());
 
@@ -852,7 +853,7 @@ mod tests {
         let db1 = app_ctx.session_context(session1.clone()).db();
         let db2 = app_ctx.session_context(session2.clone()).db();
 
-        let id = db1.add_dataset(ds, Box::new(meta)).await?;
+        let id = db1.add_dataset(ds, Box::new(meta)).await?.id;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -911,7 +912,7 @@ mod tests {
         let db1 = app_ctx.session_context(session1.clone()).db();
         let db2 = app_ctx.session_context(session2.clone()).db();
 
-        let id = db1.add_dataset(ds, Box::new(meta)).await?;
+        let id = db1.add_dataset(ds, Box::new(meta)).await?.id;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -970,7 +971,7 @@ mod tests {
         let db1 = app_ctx.session_context(session1.clone()).db();
         let db2 = app_ctx.session_context(session2.clone()).db();
 
-        let id = db1.add_dataset(ds, Box::new(meta)).await?;
+        let id = db1.add_dataset(ds, Box::new(meta)).await?.id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -1044,7 +1045,7 @@ mod tests {
         let db1 = app_ctx.session_context(session1.clone()).db();
         let db2 = app_ctx.session_context(session2.clone()).db();
 
-        let id = db1.add_dataset(ds, Box::new(meta)).await?;
+        let id = db1.add_dataset(ds, Box::new(meta)).await?.id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,

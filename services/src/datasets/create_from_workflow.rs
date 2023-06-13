@@ -1,4 +1,5 @@
-use crate::api::model::datatypes::DatasetId;
+use crate::api::model::datatypes::DatasetName;
+use crate::api::model::responses::datasets::DatasetIdAndName;
 use crate::api::model::services::AddDataset;
 use crate::contexts::SessionContext;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
@@ -49,7 +50,7 @@ const fn default_as_cog() -> bool {
 /// response of the dataset from workflow handler
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct RasterDatasetFromWorkflowResult {
-    pub dataset: DatasetId,
+    pub dataset: DatasetName,
     pub upload: UploadId,
 }
 
@@ -125,7 +126,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
         .await?;
 
         Ok(RasterDatasetFromWorkflowResult {
-            dataset,
+            dataset: dataset.name,
             upload: self.upload,
         })
     }
@@ -201,7 +202,7 @@ async fn create_dataset<C: SessionContext>(
     origin_result_descriptor: &RasterResultDescriptor,
     query_rectangle: RasterQueryRectangle,
     ctx: &C,
-) -> error::Result<DatasetId> {
+) -> error::Result<DatasetIdAndName> {
     ensure!(!slice_info.is_empty(), error::EmptyDatasetCannotBeImported);
 
     let first_start = slice_info
@@ -257,7 +258,7 @@ async fn create_dataset<C: SessionContext>(
 
     let db = ctx.db();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
-    let dataset = db.add_dataset(dataset_definition.properties, meta).await?;
+    let result = db.add_dataset(dataset_definition.properties, meta).await?;
 
-    Ok(dataset)
+    Ok(result)
 }

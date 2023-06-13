@@ -361,6 +361,16 @@ impl From<DatasetName> for NamedData {
     }
 }
 
+impl From<DatasetName> for geoengine_datatypes::dataset::NamedData {
+    fn from(DatasetName { namespace, name }: DatasetName) -> Self {
+        geoengine_datatypes::dataset::NamedData {
+            namespace,
+            provider: None,
+            name,
+        }
+    }
+}
+
 impl<'a> ToSchema<'a> for DatasetName {
     fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;

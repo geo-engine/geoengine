@@ -1551,12 +1551,9 @@ mod tests {
                 .unwrap();
 
         // query the newly created dataset
-        let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
         let dataset_operator = GdalSource {
             params: GdalSourceParameters {
-                data: geoengine_datatypes::dataset::NamedData::with_system_name(
-                    dataset_id.to_string(),
-                ),
+                data: response.dataset.into(),
             },
         }
         .boxed();

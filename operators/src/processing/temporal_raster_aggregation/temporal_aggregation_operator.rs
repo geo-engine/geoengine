@@ -1462,7 +1462,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_mean_ignore_nodata() {
+    async fn test_mean_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
         let mrs = MockRasterSource {
@@ -1771,7 +1771,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_sum_ignore_nodata() {
+    async fn test_sum_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
         let mrs = MockRasterSource {
@@ -2216,7 +2216,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_count_ignore_nodata() {
+    async fn test_count_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
         let mrs = MockRasterSource {
