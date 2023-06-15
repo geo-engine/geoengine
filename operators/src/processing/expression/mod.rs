@@ -533,6 +533,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
+    use geoengine_datatypes::primitives::ttl::CacheUntil;
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
@@ -1113,6 +1114,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
             },
             real_raster,
+            CacheUntil(None), // TODO
         );
 
         MockRasterSource {

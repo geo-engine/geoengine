@@ -337,7 +337,7 @@ mod tests {
             MultiPointCollection, MultiPolygonCollection,
         },
         dataset::{DataId, DatasetId, NamedData},
-        primitives::{FeatureData, MultiLineString, MultiPoint, TimeInterval},
+        primitives::{ttl::CacheUntil, FeatureData, MultiLineString, MultiPoint, TimeInterval},
         spatial_reference::SpatialReference,
         test_data,
         util::{test::TestDefault, Identifier},
@@ -464,6 +464,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -523,6 +524,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 

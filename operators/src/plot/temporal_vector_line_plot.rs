@@ -277,6 +277,7 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::primitives::ttl::CacheUntil;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
@@ -327,6 +328,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                CacheUntil(None),
             )
             .unwrap(),
         )
@@ -474,6 +476,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                CacheUntil(None),
             )
             .unwrap(),
         )
@@ -609,6 +612,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                CacheUntil(None),
             )
             .unwrap(),
         )

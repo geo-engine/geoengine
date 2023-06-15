@@ -1,4 +1,5 @@
 use super::from_index_fn::FromIndexFnParallel;
+use crate::primitives::ttl::CacheUntil;
 use crate::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use crate::raster::{
     EmptyGrid, GridIdx, GridIdx2D, GridIndexAccess, GridOrEmpty, Pixel, RasterTile2D,
@@ -33,6 +34,7 @@ where
                 input.time,
                 *info_out,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
+                CacheUntil(None),
             ));
         }
 
@@ -61,6 +63,7 @@ where
             info_out.global_tile_position,
             info_out.global_geo_transform,
             out_data,
+            CacheUntil(None),
         );
 
         Ok(out_tile)
@@ -109,6 +112,7 @@ where
                 input.time,
                 *info_out,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
+                CacheUntil(None),
             ));
         }
 
@@ -170,6 +174,7 @@ where
             info_out.global_tile_position,
             info_out.global_geo_transform,
             out_data,
+            CacheUntil(None),
         );
 
         Ok(out_tile)
@@ -197,6 +202,7 @@ mod tests {
             GridOrEmpty::Grid(MaskedGrid::from(
                 Grid2D::new([3, 3].into(), vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap(),
             )),
+            CacheUntil(None),
         );
 
         let output_info = TileInformation {
@@ -269,6 +275,7 @@ mod tests {
             GridOrEmpty::Grid(MaskedGrid::from(
                 Grid2D::new([3, 3].into(), vec![1., 2., 3., 4., 5., 6., 7., 8., 9.]).unwrap(),
             )),
+            CacheUntil(None),
         );
 
         let output_info = TileInformation {

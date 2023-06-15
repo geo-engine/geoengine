@@ -173,6 +173,7 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
+            cache_until: self.cache_until,
         }
     }
 }
@@ -348,6 +349,7 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
+            cache_until: self.cache_until,
         }
     }
 }
@@ -355,7 +357,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        primitives::TimeInterval,
+        primitives::{ttl::CacheUntil, TimeInterval},
         raster::{EmptyGrid2D, GeoTransform, Grid2D},
         util::test::TestDefault,
     };
@@ -453,7 +455,13 @@ mod tests {
         let geo = GeoTransform::test_default();
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
-        let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
+        let t1 = RasterTile2D::new(
+            TimeInterval::default(),
+            [0, 0].into(),
+            geo,
+            r1,
+            CacheUntil(None),
+        );
 
         let scaled_r1 = t1.map_elements_parallel(|p: u8| p * 2 + 1);
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
@@ -470,7 +478,13 @@ mod tests {
         let geo = GeoTransform::test_default();
 
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
-        let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
+        let t1 = RasterTile2D::new(
+            TimeInterval::default(),
+            [0, 0].into(),
+            geo,
+            r1,
+            CacheUntil(None),
+        );
 
         let scaled_r1 = t1.map_elements(|p| {
             if let Some(p) = p {

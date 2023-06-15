@@ -1,7 +1,7 @@
 use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
     operations::image::{Colorizer, DefaultColors, RgbaColor, ToPng},
-    primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
+    primitives::{ttl::CacheUntil, AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
     raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
@@ -49,6 +49,7 @@ where
         time.unwrap_or_default(),
         query_geo_transform,
         GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
+        CacheUntil(None),
     ));
 
     let output_tile: BoxFuture<Result<RasterTile2D<T>>> =

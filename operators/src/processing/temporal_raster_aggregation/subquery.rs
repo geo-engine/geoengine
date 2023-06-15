@@ -6,7 +6,10 @@ use crate::{
 use async_trait::async_trait;
 use futures::TryFuture;
 use geoengine_datatypes::{
-    primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
+    primitives::{
+        ttl::CacheUntil, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval,
+        TimeStep,
+    },
     raster::{
         EmptyGrid2D, GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D,
         GridShapeAccess, Pixel, RasterTile2D, TileInformation, UpdateIndexedElementsParallel,
@@ -119,6 +122,7 @@ where
             tile_position,
             global_geo_transform,
             F::into_grid(state_grid)?,
+            CacheUntil(None), // TODO: take min cache_until from all tiles that went into the aggregator
         ))
     }
 

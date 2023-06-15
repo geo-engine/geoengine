@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use futures::TryStreamExt;
 use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
+use geoengine_datatypes::primitives::ttl::CacheUntil;
 use geoengine_datatypes::primitives::{
     Measurement, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
 };
@@ -297,7 +298,12 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
                 )
                 .unwrap();
-                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+                RasterTile2D::new_with_tile_info(
+                    query_time,
+                    tile_info,
+                    data.into(),
+                    CacheUntil(None),
+                )
             })
             .collect();
 
@@ -365,7 +371,12 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
                 )
                 .unwrap();
-                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+                RasterTile2D::new_with_tile_info(
+                    query_time,
+                    tile_info,
+                    data.into(),
+                    CacheUntil(None),
+                )
             })
             .collect();
 
@@ -445,7 +456,12 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
                 )
                 .unwrap();
-                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+                RasterTile2D::new_with_tile_info(
+                    query_time,
+                    tile_info,
+                    data.into(),
+                    CacheUntil(None),
+                )
             })
             .collect();
 
@@ -519,7 +535,12 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
                 )
                 .unwrap();
-                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+                RasterTile2D::new_with_tile_info(
+                    query_time,
+                    tile_info,
+                    data.into(),
+                    CacheUntil(None),
+                )
             })
             .collect();
         let mock_raster_operator = MockRasterSource {

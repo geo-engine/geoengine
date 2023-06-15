@@ -316,6 +316,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::NamedData;
+    use geoengine_datatypes::primitives::ttl::CacheUntil;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DataRef, DateTime, FeatureDataRef, MultiPoint, SpatialResolution,
         TimeInterval, VectorQueryRectangle,
@@ -394,6 +395,7 @@ mod tests {
                     4
                 ],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap(),
         )
@@ -469,6 +471,7 @@ mod tests {
                     4
                 ],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap(),
         )
@@ -547,6 +550,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 4],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap(),
         )
@@ -615,6 +619,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 4],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap()],
             SpatialReference::from_str("EPSG:3857").unwrap(),

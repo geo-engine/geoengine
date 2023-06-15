@@ -232,10 +232,12 @@ async fn create_dataset<C: SessionContext>(
         let params = loading_info_slice
             .params
             .expect("datasets with exactly one timestep should have data");
+        let cache_ttl_seconds = loading_info_slice.cache_ttl_seconds;
         MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
             time,
             params,
             result_descriptor,
+            cache_ttl_seconds,
         })
     } else {
         MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {

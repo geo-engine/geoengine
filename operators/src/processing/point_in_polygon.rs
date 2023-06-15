@@ -323,6 +323,7 @@ mod tests {
     use super::*;
     use std::str::FromStr;
 
+    use geoengine_datatypes::primitives::ttl::CacheUntil;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
@@ -346,6 +347,7 @@ mod tests {
             .unwrap()],
             vec![Default::default(); 1],
             Default::default(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -394,6 +396,7 @@ mod tests {
             MultiPoint::many(vec![(0.001, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheUntil(None),
         )?;
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
@@ -409,6 +412,7 @@ mod tests {
                 ]]])?],
                 vec![TimeInterval::new_unchecked(0, 1); 1],
                 Default::default(),
+                CacheUntil(None),
             )?)
             .boxed();
 
@@ -455,14 +459,19 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheUntil(None),
         )?;
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
-        let polygon_source = MockFeatureCollectionSource::single(
-            MultiPolygonCollection::from_data(vec![], vec![], Default::default())?,
-        )
-        .boxed();
+        let polygon_source =
+            MockFeatureCollectionSource::single(MultiPolygonCollection::from_data(
+                vec![],
+                vec![],
+                Default::default(),
+                CacheUntil(None),
+            )?)
+            .boxed();
 
         let operator = PointInPolygonFilter {
             params: PointInPolygonFilterParams {},
@@ -509,6 +518,7 @@ mod tests {
                 TimeInterval::new(0, 5)?,
             ],
             Default::default(),
+            CacheUntil(None),
         )?;
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
@@ -526,6 +536,7 @@ mod tests {
                 vec![polygon.clone(), polygon],
                 vec![TimeInterval::new(0, 1)?, TimeInterval::new(1, 2)?],
                 Default::default(),
+                CacheUntil(None),
             )?)
             .boxed();
 
@@ -573,11 +584,13 @@ mod tests {
             MultiPoint::many(vec![(5.0, 5.1), (15.0, 15.1)]).unwrap(),
             vec![TimeInterval::new(0, 1)?; 2],
             Default::default(),
+            CacheUntil(None),
         )?;
         let points2 = MultiPointCollection::from_data(
             MultiPoint::many(vec![(6.0, 6.1), (16.0, 16.1)]).unwrap(),
             vec![TimeInterval::new(1, 2)?; 2],
             Default::default(),
+            CacheUntil(None),
         )?;
 
         let point_source =
@@ -603,11 +616,13 @@ mod tests {
                 vec![polygon1.clone()],
                 vec![TimeInterval::new(0, 1)?],
                 Default::default(),
+                CacheUntil(None),
             )?,
             MultiPolygonCollection::from_data(
                 vec![polygon1, polygon2],
                 vec![TimeInterval::new(1, 2)?, TimeInterval::new(1, 2)?],
                 Default::default(),
+                CacheUntil(None),
             )?,
         ])
         .boxed();
@@ -675,7 +690,8 @@ mod tests {
     #[tokio::test]
     async fn empty_points() {
         let point_collection =
-            MultiPointCollection::from_data(vec![], vec![], Default::default()).unwrap();
+            MultiPointCollection::from_data(vec![], vec![], Default::default(), CacheUntil(None))
+                .unwrap();
 
         let polygon_collection = MultiPolygonCollection::from_data(
             vec![MultiPolygon::new(vec![vec![vec![
@@ -688,6 +704,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::default()],
             Default::default(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -732,7 +749,8 @@ mod tests {
     #[tokio::test]
     async fn it_checks_sref() {
         let point_collection =
-            MultiPointCollection::from_data(vec![], vec![], Default::default()).unwrap();
+            MultiPointCollection::from_data(vec![], vec![], Default::default(), CacheUntil(None))
+                .unwrap();
 
         let polygon_collection = MultiPolygonCollection::from_data(
             vec![MultiPolygon::new(vec![vec![vec![
@@ -745,6 +763,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::default()],
             Default::default(),
+            CacheUntil(None),
         )
         .unwrap();
 

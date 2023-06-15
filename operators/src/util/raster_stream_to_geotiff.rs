@@ -12,6 +12,7 @@ use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
 use gdal::{Dataset, DriverManager, Metadata};
+use geoengine_datatypes::primitives::ttl::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, DateTimeParseFormat, QueryRectangle, RasterQueryRectangle,
     SpatialPartition2D, TimeInterval,
@@ -690,6 +691,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             self.result.push(GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: Some(dataset_parameters),
+                cache_ttl_seconds: CacheTtlSeconds(None), // not relevant for writing tiffs
             });
             self.init_new_intermediate_dataset(
                 time_interval,
@@ -1029,6 +1031,7 @@ mod tests {
     use std::marker::PhantomData;
     use std::ops::Add;
 
+    use geoengine_datatypes::primitives::ttl::CacheUntil;
     use geoengine_datatypes::primitives::{DateTime, Duration};
     use geoengine_datatypes::raster::Grid;
     use geoengine_datatypes::{
@@ -1579,6 +1582,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: *time_intervals.get(1).unwrap(),
@@ -1586,6 +1590,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
         ];
 

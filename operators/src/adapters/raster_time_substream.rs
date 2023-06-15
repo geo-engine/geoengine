@@ -72,6 +72,7 @@ where
 
         let mut this = self.project();
 
+        // TODO: update the cache_until here somewhere or not?
         let value: Accum = loop {
             // Retrieve either results from the future or more data from the stream
             // Stops when there is something to output or when the stream is empty.
@@ -143,6 +144,7 @@ mod tests {
     use super::*;
 
     use futures::stream::{self, StreamExt};
+    use geoengine_datatypes::primitives::ttl::CacheUntil;
     use geoengine_datatypes::primitives::TimeInterval;
     use geoengine_datatypes::raster::{Grid2D, TileInformation};
     use geoengine_datatypes::util::test::TestDefault;
@@ -163,6 +165,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
@@ -170,6 +173,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(2, 3).unwrap(),
@@ -177,6 +181,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
+                CacheUntil(None),
             ),
         ];
         let stream = stream::iter(
@@ -224,6 +229,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
@@ -231,6 +237,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
@@ -238,6 +245,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                     .unwrap()
                     .into(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(2, 3).unwrap(),
@@ -245,6 +253,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
+                CacheUntil(None),
             ),
         ];
         let stream = stream::iter(

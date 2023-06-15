@@ -18,6 +18,7 @@ mod spatio_temporal_bounded;
 mod time_instance;
 mod time_interval;
 mod time_step;
+pub mod ttl;
 
 pub use bounding_box::{bboxes_extent, BoundingBox2D};
 pub use circle::Circle;

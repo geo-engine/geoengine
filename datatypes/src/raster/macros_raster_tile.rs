@@ -241,7 +241,7 @@ macro_rules! call_generic_raster_tile_2d_ext {
 #[cfg(test)]
 mod tests {
     use crate::{
-        primitives::TimeInterval,
+        primitives::{ttl::CacheUntil, TimeInterval},
         raster::{GeoTransform, Grid2D, GridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D},
         util::test::TestDefault,
     };
@@ -259,6 +259,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
+            CacheUntil(None),
         );
         let typed_raster = TypedRasterTile2D::U32(t);
 
@@ -279,6 +280,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
+            CacheUntil(None),
         );
         let typed_raster = TypedRasterTile2D::U32(t);
 
@@ -310,6 +312,7 @@ mod tests {
                 TimeInterval::default(),
                 GeoTransform::test_default(),
                 r,
+                CacheUntil(None),
             )
         }
 
@@ -318,7 +321,8 @@ mod tests {
             TypedRasterTile2D::U8(RasterTile2D::new_without_offset(
                 TimeInterval::default(),
                 GeoTransform::test_default(),
-                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6],).unwrap()
+                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6],).unwrap(),
+                CacheUntil(None),
             ),)
         );
     }
@@ -336,6 +340,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
+            CacheUntil(None),
         );
         let typed_raster_a = TypedRasterTile2D::U32(t);
 
@@ -344,6 +349,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
+            CacheUntil(None),
         );
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
@@ -369,6 +375,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
+            CacheUntil(None),
         );
         let typed_raster_a = TypedRasterTile2D::U32(t);
 
@@ -377,6 +384,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
+            CacheUntil(None),
         );
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
@@ -418,6 +426,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
+            CacheUntil(None),
         );
         let typed_raster_a = TypedRasterTile2D::U32(t);
 
@@ -426,6 +435,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
+            CacheUntil(None),
         );
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
@@ -485,6 +495,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheUntil(None),
         ));
 
         call_generic_raster_tile_2d_ext!(typed_raster_a, Foo, (raster, e) => {

@@ -16,6 +16,7 @@ use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
+use geoengine_datatypes::primitives::ttl::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, Measurement, RasterQueryRectangle,
     SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,
@@ -495,6 +496,7 @@ impl SentinelS2L2aCogsMetaData {
                     max_retries: self.gdal_retries.number_of_retries,
                 }),
             }),
+            cache_ttl_seconds: CacheTtlSeconds(None),
         })
     }
 
@@ -824,6 +826,7 @@ mod tests {
                 allow_alphaband_as_mask: true,
                 retry: Some(GdalRetryOptions { max_retries: 10 }),
             }),
+            cache_ttl_seconds: CacheTtlSeconds(None),
         }];
 
         if let GdalLoadingInfoTemporalSliceIterator::Static { parts } = loading_info.info {
@@ -1207,6 +1210,7 @@ mod tests {
                     allow_alphaband_as_mask: true,
                     retry: Some(GdalRetryOptions { max_retries: 999 }),
                 }),
+                cache_ttl_seconds: CacheTtlSeconds(None),
             }]
         );
 
@@ -1247,6 +1251,7 @@ mod tests {
                     resolution: None,
                 },
                 params,
+                cache_ttl_seconds: CacheTtlSeconds(None),
             }),
         );
 

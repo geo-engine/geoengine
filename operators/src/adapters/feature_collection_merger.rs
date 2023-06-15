@@ -136,6 +136,7 @@ mod tests {
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
     use futures::{StreamExt, TryStreamExt};
+    use geoengine_datatypes::primitives::ttl::CacheUntil;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval, VectorQueryRectangle,
     };
@@ -190,6 +191,7 @@ mod tests {
             MultiPoint::many(coordinates[0..5].to_vec()).unwrap(),
             vec![TimeInterval::default(); 5],
             Default::default(),
+            CacheUntil(None),
         )
         .unwrap()
         .byte_size();
@@ -210,7 +212,8 @@ mod tests {
             MultiPointCollection::from_data(
                 MultiPoint::many(coordinates[0..6].to_vec()).unwrap(),
                 vec![TimeInterval::default(); 6],
-                Default::default()
+                Default::default(),
+                CacheUntil(None)
             )
             .unwrap()
         );
@@ -220,7 +223,8 @@ mod tests {
             MultiPointCollection::from_data(
                 MultiPoint::many(coordinates[6..10].to_vec()).unwrap(),
                 vec![TimeInterval::default(); 4],
-                Default::default()
+                Default::default(),
+                CacheUntil(None)
             )
             .unwrap()
         );
@@ -261,16 +265,19 @@ mod tests {
                 MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
+                CacheUntil(None),
             ),
             MultiPointCollection::from_data(
                 vec![], // should fail
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
+                CacheUntil(None),
             ),
             MultiPointCollection::from_data(
                 MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
+                CacheUntil(None),
             ),
         ])
         .map_err(Error::from);
@@ -286,6 +293,7 @@ mod tests {
                 MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
+                CacheUntil(None)
             )
             .unwrap()
         );
@@ -296,6 +304,7 @@ mod tests {
                 MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
+                CacheUntil(None)
             )
             .unwrap()
         );
@@ -310,6 +319,7 @@ mod tests {
                     MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                     vec![TimeInterval::new(0, 1).unwrap()],
                     Default::default(),
+                    CacheUntil(None),
                 )
                 .map_err(Error::from),
             )),
@@ -319,6 +329,7 @@ mod tests {
                     MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
                     vec![TimeInterval::new(0, 1).unwrap()],
                     Default::default(),
+                    CacheUntil(None),
                 )
                 .map_err(Error::from),
             )),
@@ -346,6 +357,7 @@ mod tests {
                 MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
                 vec![TimeInterval::new(0, 1).unwrap(); 2],
                 Default::default(),
+                CacheUntil(None)
             )
             .unwrap()
         );

@@ -101,8 +101,29 @@ pub struct OperatorTileCache {
 identifier!(QueryId);
 
 impl OperatorTileCache {
-    pub fn find_match(&self, query: &RasterQueryRectangle) -> Option<(&CacheEntryId, &CacheEntry)> {
-        self.entries.iter().find(|(_id, r)| r.matches(query))
+    /// Find a match for the query in the cache.
+    ///
+    /// This method will also remove expired entries it encounters.
+    pub fn find_match(&mut self, query: &RasterQueryRectangle) -> Option<CacheEntryId> {
+        let mut expired_entries = vec![];
+
+        let found = self.entries.iter().find(|(id, r)| {
+            let matches = r.matches(query);
+
+            if matches && r.is_expired() {
+                expired_entries.push(**id);
+            }
+
+            matches
+        });
+
+        let found = found.map(|(id, _)| *id);
+
+        for id in expired_entries {
+            self.entries.remove(&id);
+        }
+
+        found
     }
 }
 
@@ -132,6 +153,10 @@ impl CacheEntry {
 
     fn byte_size(&self) -> usize {
         self.tiles.byte_size() + std::mem::size_of::<RasterQueryRectangle>()
+    }
+
+    fn is_expired(&self) -> bool {
+        self.tiles.is_expired()
     }
 }
 
@@ -164,6 +189,21 @@ impl CachedTiles {
                 CachedTiles::F32(v) => v.len() * std::mem::size_of::<RasterTile2D<f32>>(),
                 CachedTiles::F64(v) => v.len() * std::mem::size_of::<RasterTile2D<f64>>(),
             }
+    }
+
+    fn is_expired(&self) -> bool {
+        match self {
+            CachedTiles::U8(v) => v.iter().any(|t| t.cache_until.is_expired()),
+            CachedTiles::U16(v) => v.iter().any(|t| t.cache_until.is_expired()),
+            CachedTiles::U32(v) => v.iter().any(|t| t.cache_until.is_expired()),
+            CachedTiles::U64(v) => v.iter().any(|t| t.cache_until.is_expired()),
+            CachedTiles::I8(v) => v.iter().any(|t| t.cache_until.is_expired()),
+            CachedTiles::I16(v) => v.iter().any(|t| t.cache_until.is_expired()),
+            CachedTiles::I32(v) => v.iter().any(|t| t.cache_until.is_expired()),
+            CachedTiles::I64(v) => v.iter().any(|t| t.cache_until.is_expired()),
+            CachedTiles::F32(v) => v.iter().any(|t| t.cache_until.is_expired()),
+            CachedTiles::F64(v) => v.iter().any(|t| t.cache_until.is_expired()),
+        }
     }
 }
 
@@ -390,13 +430,17 @@ impl TileCache {
         let mut backend = self.backend.write().await;
 
         let (entry_id, typed_stream) = {
-            let cache = backend.operator_caches.get(&key)?;
+            let cache = backend.operator_caches.get_mut(&key)?;
 
-            let (id, entry) = cache.find_match(query)?;
+            let id = cache.find_match(query)?;
 
-            let typed_stream = entry.tile_stream(query);
+            let typed_stream = cache
+                .entries
+                .get(&id)
+                .expect("entry should exist because it was returned from `find_match`")
+                .tile_stream(query);
 
-            (*id, typed_stream)
+            (id, typed_stream)
         };
 
         // set as most recently used
@@ -557,7 +601,9 @@ impl TileCache {
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{
+            ttl::CacheUntil, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
+        },
         raster::{Grid, RasterProperties},
     };
     use serde_json::json;
@@ -590,6 +636,7 @@ mod tests {
                 .unwrap()
                 .into(),
             properties: RasterProperties::default(),
+            cache_until: CacheUntil(None),
         }
     }
 

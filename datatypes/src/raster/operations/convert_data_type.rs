@@ -55,6 +55,7 @@ where
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             tile_position: self.tile_position,
+            cache_until: self.cache_until,
         }
     }
 }
@@ -125,6 +126,7 @@ where
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             tile_position: self.tile_position,
+            cache_until: self.cache_until,
         }
     }
 }
@@ -148,7 +150,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        primitives::TimeInterval,
+        primitives::{ttl::CacheUntil, TimeInterval},
         raster::{EmptyGrid2D, GeoTransform, Grid2D, GridOrEmpty2D, RasterTile2D},
     };
 
@@ -235,6 +237,7 @@ mod tests {
             [0, 0].into(),
             GeoTransform::new((0., 0.).into(), 1., -1.),
             g_u8,
+            CacheUntil(None),
         );
         let tile_f64: RasterTile2D<f32> = tile_u8.convert_data_type();
 
@@ -261,6 +264,7 @@ mod tests {
             [0, 0].into(),
             GeoTransform::new((0., 0.).into(), 1., -1.),
             g_u8,
+            CacheUntil(None),
         );
         let tile_f64: RasterTile2D<f32> = tile_u8.convert_data_type_parallel();
 

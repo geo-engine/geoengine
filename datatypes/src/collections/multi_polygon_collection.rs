@@ -511,6 +511,7 @@ mod tests {
     use super::*;
 
     use crate::collections::{BuilderProvider, FeatureCollectionModifications};
+    use crate::primitives::ttl::CacheUntil;
     use crate::primitives::{FeatureData, FeatureDataRef, TimeInterval};
 
     #[test]
@@ -1080,6 +1081,7 @@ mod tests {
             .unwrap()],
             vec![Default::default(); 1],
             Default::default(),
+            CacheUntil(None),
         )
         .unwrap();
 

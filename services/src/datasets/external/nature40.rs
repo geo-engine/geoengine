@@ -16,6 +16,7 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
+use geoengine_datatypes::primitives::ttl::CacheTtlSeconds;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -464,6 +465,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 Some(self.auth().to_vec()),
             )?,
             result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize)?,
+            cache_ttl_seconds: CacheTtlSeconds(Some(15 * 60)),
         }))
     }
 }
@@ -511,7 +513,8 @@ mod tests {
 
     use geoengine_datatypes::{
         primitives::{
-            Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+            ttl::CacheTtlSeconds, Measurement, QueryRectangle, SpatialPartition2D,
+            SpatialResolution, TimeInterval,
         },
         raster::RasterDataType,
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
@@ -959,7 +962,8 @@ mod tests {
                         gdal_config_options: None,
                         allow_alphaband_as_mask: true,
                         retry: None,
-                    })
+                    }),
+                    cache_ttl_seconds: CacheTtlSeconds(Some(15 * 60)),
                 }
             );
 

@@ -14,11 +14,11 @@ use gdal::{
     Dataset, DatasetOptions, GdalOpenFlags,
 };
 use gdal_sys::GDALGetRasterStatistics;
-use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{DateTimeParseFormat, TimeInstance, TimeInterval},
 };
+use geoengine_datatypes::{primitives::ttl::CacheTtlSeconds, util::canonicalize_subpath};
 use geoengine_operators::{
     source::{
         GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
@@ -714,6 +714,7 @@ fn generate_loading_info(
                 .into_iter()
                 .collect(),
                 data_time: time_interval,
+                cache_ttl_seconds: CacheTtlSeconds(None),
             })
         }
         TimeCoverage::List { ref time_stamps } => {
@@ -731,6 +732,7 @@ fn generate_loading_info(
                 params_list.push(GdalLoadingInfoTemporalSlice {
                     time: time_interval,
                     params: Some(params),
+                    cache_ttl_seconds: CacheTtlSeconds(None),
                 });
             }
 
@@ -867,6 +869,7 @@ mod tests {
                     DateTime::new_utc(2021, 1, 1, 0, 0, 0)
                 )
                 .unwrap(),
+                cache_ttl_seconds: CacheTtlSeconds(None),
             })
         );
     }
@@ -962,6 +965,7 @@ mod tests {
                     DateTime::new_utc(2003, 1, 1, 0, 0, 0)
                 )
                 .unwrap(),
+                cache_ttl_seconds: CacheTtlSeconds(None),
             })
         );
     }
@@ -1223,6 +1227,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
+                        cache_ttl_seconds: CacheTtlSeconds(None),
                     },
                     GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new(
@@ -1249,6 +1254,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
+                        cache_ttl_seconds: CacheTtlSeconds(None),
                     },
                     GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new(
@@ -1275,6 +1281,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
+                        cache_ttl_seconds: CacheTtlSeconds(None),
                     }
                 ],
             })

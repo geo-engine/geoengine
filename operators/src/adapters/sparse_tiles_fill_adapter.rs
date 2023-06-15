@@ -1,7 +1,7 @@
 use crate::util::Result;
 use futures::{ready, Stream};
 use geoengine_datatypes::{
-    primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInterval},
+    primitives::{ttl::CacheUntil, RasterQueryRectangle, SpatialPartitioned, TimeInterval},
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
         Pixel, RasterTile2D, TilingSpecification,
@@ -70,6 +70,7 @@ impl<T: Pixel> StateContainer<T> {
             self.current_idx,
             self.global_geo_transform,
             self.no_data_grid.into(),
+            CacheUntil(None), // TODO: ???
         )
     }
 
@@ -477,7 +478,11 @@ where
 #[cfg(test)]
 mod tests {
     use futures::{stream, StreamExt};
-    use geoengine_datatypes::{primitives::TimeInterval, raster::Grid, util::test::TestDefault};
+    use geoengine_datatypes::{
+        primitives::{ttl::CacheUntil, TimeInterval},
+        raster::Grid,
+        util::test::TestDefault,
+    };
 
     use super::*;
 
@@ -490,6 +495,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -497,6 +503,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             // GAP
             // GAP
@@ -509,6 +516,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -518,6 +526,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             // GAP
         ];
@@ -613,6 +622,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -620,6 +630,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             // GAP
             // GAP
@@ -631,6 +642,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -640,6 +652,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
         ];
 
@@ -690,6 +703,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 1, 1, 1]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -697,6 +711,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![2, 2, 2, 2]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -704,6 +719,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![3, 3, 3, 3]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             // GAP
             RasterTile2D {
@@ -714,6 +730,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -723,6 +740,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -732,6 +750,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -741,6 +760,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
         ];
 
@@ -791,6 +811,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -798,6 +819,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             // GAP
             // GAP
@@ -809,6 +831,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -818,6 +841,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             // GAP
             // GAP
@@ -870,6 +894,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -879,6 +904,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
         ];
 
@@ -924,6 +950,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -931,6 +958,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -938,6 +966,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -945,6 +974,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -954,6 +984,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -963,6 +994,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -972,6 +1004,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -981,6 +1014,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
         ];
 
@@ -1031,6 +1065,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             // GAP
             // GAP
@@ -1040,6 +1075,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
         ];
 
@@ -1086,6 +1122,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             }),
             Err(crate::error::Error::NoSpatialBoundsAvailable),
         ];
@@ -1121,6 +1158,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1128,6 +1166,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1135,6 +1174,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1142,6 +1182,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(10, 15),
@@ -1151,6 +1192,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(10, 15),
@@ -1160,6 +1202,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(10, 15),
@@ -1169,6 +1212,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(10, 15),
@@ -1178,6 +1222,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
         ];
 
@@ -1233,6 +1278,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(10, 15),
@@ -1242,6 +1288,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
         ];
 

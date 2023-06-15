@@ -238,6 +238,7 @@ mod tests {
     use crate::engine::QueryProcessor;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
+    use geoengine_datatypes::primitives::ttl::CacheUntil;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
@@ -254,6 +255,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -354,6 +356,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 

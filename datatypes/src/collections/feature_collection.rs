@@ -20,6 +20,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::{mem, slice};
 
+use crate::primitives::ttl::CacheUntil;
 use crate::primitives::{BoolDataRef, Coordinate2D, DateTimeDataRef, TimeInstance};
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
@@ -51,6 +52,8 @@ pub struct FeatureCollection<CollectionType> {
 
     #[serde(skip)]
     collection_type: PhantomData<CollectionType>,
+
+    pub cache_until: CacheUntil,
 }
 
 impl<CollectionType> FeatureCollection<CollectionType> {
@@ -65,11 +68,13 @@ impl<CollectionType> FeatureCollection<CollectionType> {
     pub(super) fn new_from_internals(
         table: StructArray,
         types: HashMap<String, FeatureDataType>,
+        cache_until: CacheUntil,
     ) -> Self {
         Self {
             table,
             types,
             collection_type: Default::default(),
+            cache_until,
         }
     }
 }
@@ -213,6 +218,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.clone(), filtered_data, None)?,
             self.types.clone(),
+            self.cache_until,
         ))
     }
 
@@ -309,6 +315,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             types,
+            self.cache_until,
         ))
     }
 
@@ -394,6 +401,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             types,
+            self.cache_until,
         ))
     }
 
@@ -532,6 +540,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.clone(), new_data, None)?,
             self.types.clone(),
+            self.cache_until.merged(&other.cache_until),
         ))
     }
 
@@ -638,6 +647,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             types,
+            self.cache_until,
         ))
     }
 
@@ -659,7 +669,11 @@ where
 
         let table = StructArray::from(table_ref.into_data());
 
-        Ok(Self::new_from_internals(table, self.types.clone()))
+        Ok(Self::new_from_internals(
+            table,
+            self.types.clone(),
+            self.cache_until,
+        ))
     }
 
     fn replace_time(&self, time_intervals: &[TimeInterval]) -> Result<Self::Output> {
@@ -719,6 +733,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             self.types.clone(),
+            self.cache_until,
         ))
     }
 }
@@ -1116,7 +1131,7 @@ where
     /// assert_eq!(pc.len(), 0);
     /// ```
     pub fn empty() -> Self {
-        Self::from_data(vec![], vec![], Default::default())
+        Self::from_data(vec![], vec![], Default::default(), CacheUntil(None))
             .expect("should not fail because no data is given")
     }
 
@@ -1150,6 +1165,7 @@ where
         features: Vec<CollectionType>,
         time_intervals: Vec<TimeInterval>,
         data: HashMap<String, FeatureData>,
+        cache_until: CacheUntil,
     ) -> Result<Self> {
         let number_of_rows = time_intervals.len();
         let number_of_column: usize = data.len() + 1 + usize::from(CollectionType::IS_GEOMETRY);
@@ -1212,6 +1228,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), arrays, None)?,
             types,
+            cache_until,
         ))
     }
 
@@ -1233,6 +1250,7 @@ where
             data.iter()
                 .map(|(k, v)| (k.clone().into(), v.clone().into()))
                 .collect(),
+            CacheUntil(None),
         )
     }
 
@@ -1248,6 +1266,7 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
             table: self.table.clone(),
             types: self.types.clone(),
             collection_type: Default::default(),
+            cache_until: self.cache_until,
         }
     }
 }
@@ -1567,6 +1586,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             self.types.clone(),
+            self.cache_until,
         ))
     }
 }
@@ -1593,6 +1613,7 @@ mod tests {
                 vec![],
                 vec![TimeInterval::new(0, 1).unwrap(); length],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap()
         }
@@ -1645,6 +1666,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -1665,6 +1687,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 

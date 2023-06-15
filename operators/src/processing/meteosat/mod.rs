@@ -39,6 +39,7 @@ mod test_util {
 
     use futures::StreamExt;
     use geoengine_datatypes::hashmap;
+    use geoengine_datatypes::primitives::ttl::{CacheTtlSeconds, CacheUntil};
     use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
 
@@ -178,6 +179,7 @@ mod test_util {
             },
             raster,
             props,
+            CacheUntil(None),
         );
 
         MockRasterSource {
@@ -267,6 +269,7 @@ mod test_util {
                 bbox: None,
                 resolution: None,
             },
+            cache_ttl_seconds: CacheTtlSeconds(None),
         };
         ctx.add_meta_data(dataset_id, dataset_name.clone(), Box::new(meta));
 

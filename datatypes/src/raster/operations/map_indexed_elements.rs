@@ -316,6 +316,7 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
+            cache_until: self.cache_until,
         }
     }
 }
@@ -637,6 +638,7 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
+            cache_until: self.cache_until,
         }
     }
 }

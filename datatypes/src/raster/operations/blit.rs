@@ -55,6 +55,8 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
 
         self.grid_array.grid_blit_from(&shifted_source);
 
+        self.cache_until = self.cache_until.merged(&source.cache_until);
+
         Ok(())
     }
 }
@@ -110,7 +112,7 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for RasterTile2D<T> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        primitives::TimeInterval,
+        primitives::{ttl::CacheUntil, TimeInterval},
         raster::{Blit, GeoTransform, Grid2D, RasterTile2D},
     };
 
@@ -122,14 +124,16 @@ mod tests {
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
-        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1)
-            .into_materialized_tile();
+        let mut t1 =
+            RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1, CacheUntil(None))
+                .into_materialized_tile();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 
         let r2 = Grid2D::new(dim.into(), data).unwrap();
-        let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2);
+        let t2 =
+            RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2, CacheUntil(None));
 
         t1.blit(t2).unwrap();
 
@@ -147,14 +151,16 @@ mod tests {
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
-        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1)
-            .into_materialized_tile();
+        let mut t1 =
+            RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1, CacheUntil(None))
+                .into_materialized_tile();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((-5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 
         let r2 = Grid2D::new(dim.into(), data).unwrap();
-        let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2);
+        let t2 =
+            RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2, CacheUntil(None));
 
         t1.blit(t2).unwrap();
 
@@ -172,14 +178,16 @@ mod tests {
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
-        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1)
-            .into_materialized_tile();
+        let mut t1 =
+            RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1, CacheUntil(None))
+                .into_materialized_tile();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((-5.0, 10.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 
         let r2 = Grid2D::new(dim.into(), data).unwrap();
-        let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2);
+        let t2 =
+            RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2, CacheUntil(None));
 
         t1.blit(t2).unwrap();
 
@@ -197,13 +205,15 @@ mod tests {
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
-        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1);
+        let mut t1 =
+            RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1, CacheUntil(None));
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 
         let r2 = Grid2D::new(dim.into(), data).unwrap();
-        let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2);
+        let t2 =
+            RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2, CacheUntil(None));
 
         t1.blit(t2).unwrap();
 

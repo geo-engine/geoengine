@@ -12,9 +12,9 @@ use geoengine_datatypes::{
     dataset::{DataId, DatasetId, NamedData},
     hashmap,
     primitives::{
-        BoundingBox2D, DateTimeParseFormat, FeatureDataType, Measurement, SpatialPartition2D,
-        SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-        VectorQueryRectangle,
+        ttl::CacheTtlSeconds, BoundingBox2D, DateTimeParseFormat, FeatureDataType, Measurement,
+        SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
+        TimeStep, VectorQueryRectangle,
     },
     raster::{GeoTransform, RasterDataType},
     spatial_reference::SpatialReference,
@@ -91,6 +91,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             )),
             resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
         },
+        cache_ttl_seconds: CacheTtlSeconds(None),
     }
 }
 

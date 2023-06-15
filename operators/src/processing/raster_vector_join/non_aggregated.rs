@@ -297,6 +297,7 @@ mod tests {
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
     use geoengine_datatypes::collections::{MultiPointCollection, MultiPolygonCollection};
+    use geoengine_datatypes::primitives::ttl::CacheUntil;
     use geoengine_datatypes::primitives::{BoundingBox2D, DateTime, FeatureData, MultiPolygon};
     use geoengine_datatypes::primitives::{Measurement, SpatialResolution};
     use geoengine_datatypes::primitives::{MultiPoint, TimeInterval};
@@ -323,6 +324,7 @@ mod tests {
                 .unwrap(),
                 vec![time_instant; 5],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap(),
         )
@@ -413,6 +415,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap(); 4],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap(),
         )
@@ -513,6 +516,7 @@ mod tests {
                     4
                 ],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap(),
         )
@@ -617,6 +621,7 @@ mod tests {
                     4
                 ],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap(),
         )
@@ -728,6 +733,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
+            CacheUntil(None),
         );
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -739,6 +745,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
+            CacheUntil(None),
         );
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -750,6 +757,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheUntil(None),
         );
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -761,6 +769,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
+            CacheUntil(None),
         );
 
         let raster_source = MockRasterSource {
@@ -802,6 +811,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::default(); 2],
             Default::default(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -886,6 +896,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
+            CacheUntil(None),
         );
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -897,6 +908,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
+            CacheUntil(None),
         );
         let raster_tile_a_2 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -908,6 +920,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![600, 500, 400, 300, 200, 100])
                 .unwrap()
                 .into(),
+            CacheUntil(None),
         );
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -919,6 +932,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheUntil(None),
         );
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -930,6 +944,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
+            CacheUntil(None),
         );
 
         let raster_tile_b_2 = RasterTile2D::new_with_tile_info(
@@ -942,6 +957,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![100, 200, 300, 400, 500, 600])
                 .unwrap()
                 .into(),
+            CacheUntil(None),
         );
 
         let raster_source = MockRasterSource {
@@ -987,6 +1003,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::default(); 1],
             Default::default(),
+            CacheUntil(None),
         )
         .unwrap();
 

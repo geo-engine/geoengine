@@ -182,6 +182,7 @@ where
             properties: self.properties,
             tile_position: self.tile_position,
             time: self.time,
+            cache_until: self.cache_until,
         }
     }
 }
@@ -190,7 +191,7 @@ where
 mod tests {
 
     use crate::{
-        primitives::TimeInterval,
+        primitives::{ttl::CacheUntil, TimeInterval},
         raster::{GeoTransform, Grid2D, MaskedGrid2D},
         util::test::TestDefault,
     };
@@ -308,7 +309,13 @@ mod tests {
 
         let r1: GridOrEmpty2D<i32> =
             GridOrEmpty::Grid(Grid2D::new(dim.into(), data).unwrap().into());
-        let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
+        let t1 = RasterTile2D::new(
+            TimeInterval::default(),
+            [0, 0].into(),
+            geo,
+            r1,
+            CacheUntil(None),
+        );
 
         let scaled_r1 = t1.transform_elements::<CheckedMulThenAddTransformation>(2, 1);
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();
@@ -360,7 +367,13 @@ mod tests {
         let geo = GeoTransform::test_default();
 
         let r1: GridOrEmpty2D<i32> = GridOrEmpty2D::from(Grid2D::new(dim.into(), data).unwrap());
-        let t1 = RasterTile2D::new(TimeInterval::default(), [0, 0].into(), geo, r1);
+        let t1 = RasterTile2D::new(
+            TimeInterval::default(),
+            [0, 0].into(),
+            geo,
+            r1,
+            CacheUntil(None),
+        );
 
         let scaled_r1 = t1.transform_elements::<CheckedSubThenDivTransformation>(2, 1);
         let mat_scaled_r1 = scaled_r1.into_materialized_tile();

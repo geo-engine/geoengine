@@ -281,6 +281,7 @@ where
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
+    use geoengine_datatypes::primitives::ttl::CacheUntil;
     use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D, SpatialResolution};
     use geoengine_datatypes::raster::{Grid, MaskedGrid, RasterDataType, RasterProperties};
     use geoengine_datatypes::util::test::TestDefault;
@@ -303,6 +304,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
             },
             raster.into(),
+            CacheUntil(None),
         );
 
         let mrs = MockRasterSource {
@@ -409,6 +411,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
+                        cache_until: CacheUntil(None),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(1, 1),
@@ -418,6 +421,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
+                        cache_until: CacheUntil(None),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 2),
@@ -427,6 +431,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
+                        cache_until: CacheUntil(None),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 2),
@@ -436,6 +441,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
+                        cache_until: CacheUntil(None),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {

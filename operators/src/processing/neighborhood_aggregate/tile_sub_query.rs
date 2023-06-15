@@ -4,6 +4,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{FutureExt, TryFutureExt};
+use geoengine_datatypes::primitives::ttl::CacheUntil;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     Blit, EmptyGrid, EmptyGrid2D, FromIndexFnParallel, GeoTransform, GridIdx, GridIdx2D,
@@ -196,6 +197,7 @@ where
             input.time,
             *info_out,
             EmptyGrid::new(info_out.tile_size_in_pixels).into(),
+            CacheUntil(None),
         );
     }
 
@@ -229,6 +231,7 @@ where
         info_out.global_tile_position,
         info_out.global_geo_transform,
         out_data,
+        CacheUntil(None),
     )
 }
 
@@ -267,6 +270,7 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
         [0, 0].into(),
         geo_transform,
         GridOrEmpty::from(grid),
+        CacheUntil(None),
     );
 
     NeighborhoodAggregateAccu::new(input_tile, tile_info, pool, neighborhood)

@@ -503,7 +503,7 @@ mod tests {
         collections::MultiPointCollection,
         dataset::NamedData,
         primitives::{
-            BoundingBox2D, DateTime, Measurement, MultiPoint, SpatialPartition2D,
+            ttl::CacheUntil, BoundingBox2D, DateTime, Measurement, MultiPoint, SpatialPartition2D,
             SpatialResolution, TimeGranularity,
         },
         raster::{EmptyGrid2D, GridOrEmpty, RasterDataType, TileInformation, TilingSpecification},
@@ -631,6 +631,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap(),
         );
@@ -688,6 +689,7 @@ mod tests {
             )
             .unwrap()],
             Default::default(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -720,6 +722,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap(),
         );
@@ -781,6 +784,7 @@ mod tests {
                 .unwrap(),
             ],
             Default::default(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -803,6 +807,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -815,6 +820,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -827,6 +833,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -839,6 +846,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -851,6 +859,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -863,6 +872,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
         ];
 
@@ -965,6 +975,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -977,6 +988,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -989,6 +1001,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1001,6 +1014,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1013,6 +1027,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1025,6 +1040,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 empty_grid.clone(),
+                CacheUntil(None),
             ),
         ];
 

@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::operations::reproject::Reproject;
+use geoengine_datatypes::primitives::ttl::CacheUntil;
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
@@ -142,6 +143,7 @@ fn build_accu<T: Pixel>(
                 query_rect.time_interval,
                 tile_info,
                 output_raster.into(),
+                CacheUntil(None),
             ),
             coords: projected_coords,
             pool,
@@ -292,6 +294,7 @@ where
     let t_union = accu.accu_tile.time.union(&tile.time)?;
 
     accu.tile_mut().time = t_union;
+    accu.tile_mut().cache_until.merge_with(&tile.cache_until);
 
     if tile.grid_array.is_empty() {
         return Ok(accu);
@@ -381,6 +384,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -388,6 +392,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -397,6 +402,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -406,6 +412,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
         ];
 

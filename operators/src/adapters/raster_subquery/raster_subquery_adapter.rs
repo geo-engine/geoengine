@@ -10,6 +10,7 @@ use futures::{
 };
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
+use geoengine_datatypes::primitives::ttl::CacheUntil;
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
@@ -543,8 +544,12 @@ pub fn identity_accu<T: Pixel>(
 ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> {
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
-        let output_tile =
-            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster);
+        let output_tile = RasterTile2D::new_with_tile_info(
+            query_rect.time_interval,
+            tile_info,
+            output_raster,
+            CacheUntil(None),
+        );
         RasterTileAccu2D::new(output_tile, pool)
     })
     .map_err(From::from)
@@ -569,6 +574,7 @@ where
     }
 
     let mut materialized_tile = accu_tile.into_materialized_tile();
+
     materialized_tile.blit(tile)?;
 
     Ok(RasterTileAccu2D::new(materialized_tile.into(), pool))
@@ -616,6 +622,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -623,6 +630,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -632,6 +640,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -641,6 +650,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_until: CacheUntil(None),
             },
         ];
 

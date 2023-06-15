@@ -397,6 +397,7 @@ mod tests {
     use futures::executor::block_on_stream;
 
     use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::primitives::ttl::CacheUntil;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -471,6 +472,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -481,6 +483,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -494,6 +497,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -515,6 +519,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -528,6 +533,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -541,6 +547,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -559,6 +566,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -569,6 +577,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -582,6 +591,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -600,6 +610,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -622,6 +633,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -652,6 +664,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -670,6 +683,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -680,6 +694,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheUntil(None),
         )
         .unwrap();
 

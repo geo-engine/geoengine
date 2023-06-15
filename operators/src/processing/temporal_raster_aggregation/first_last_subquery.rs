@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
     primitives::{
-        QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval,
-        TimeStep,
+        ttl::CacheUntil, QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance,
+        TimeInterval, TimeStep,
     },
     raster::{EmptyGrid2D, Pixel, RasterTile2D, TileInformation},
 };
@@ -175,6 +175,7 @@ fn build_temporal_accu<T: Pixel>(
             query_rect.time_interval,
             tile_info,
             EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
+            CacheUntil(None),
         ),
         initial_state: true,
         pool,
@@ -248,6 +249,7 @@ fn build_temporal_no_data_accu<T: Pixel>(
                 query_rect.time_interval,
                 tile_info,
                 output_raster,
+                CacheUntil(None),
             ),
             initial_state: true,
             pool,

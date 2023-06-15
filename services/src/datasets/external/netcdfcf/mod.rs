@@ -29,6 +29,7 @@ use gdal::raster::{Dimension, GdalDataType, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
+use geoengine_datatypes::primitives::ttl::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
     TimeInstance, TimeInterval, TimeStep, TimeStepIter, VectorQueryRectangle,
@@ -514,6 +515,7 @@ impl NetCdfCfDataProvider {
                 end, // TODO: Use this or time dimension size (number of steps)?
                 step,
                 band_offset: dataset_id.entity * dimensions_time,
+                cache_ttl_seconds: CacheTtlSeconds(None),
             }),
             TimeCoverage::List { time_stamps } => {
                 let mut params_list = Vec::with_capacity(time_stamps.len());
@@ -526,6 +528,7 @@ impl NetCdfCfDataProvider {
                         time: TimeInterval::new_instant(*time_instance)
                             .context(error::InvalidTimeCoverageInterval)?,
                         params: Some(params),
+                        cache_ttl_seconds: CacheTtlSeconds(None),
                     });
                 }
 
@@ -2000,7 +2003,8 @@ mod tests {
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
                     retry: None,
-                })
+                },),
+                cache_ttl_seconds: CacheTtlSeconds(None),
             }
         );
     }
@@ -2119,7 +2123,8 @@ mod tests {
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
                     retry: None,
-                })
+                }),
+                cache_ttl_seconds: CacheTtlSeconds(None),
             }
         );
     }

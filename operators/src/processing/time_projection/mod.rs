@@ -273,7 +273,8 @@ mod tests {
     use geoengine_datatypes::{
         collections::{MultiPointCollection, VectorDataType},
         primitives::{
-            BoundingBox2D, DateTime, MultiPoint, SpatialResolution, TimeGranularity, TimeInterval,
+            ttl::CacheUntil, BoundingBox2D, DateTime, MultiPoint, SpatialResolution,
+            TimeGranularity, TimeInterval,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -427,6 +428,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap(),
         );
@@ -497,6 +499,7 @@ mod tests {
                 .unwrap(),
             ],
             Default::default(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -529,6 +532,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
+                CacheUntil(None),
             )
             .unwrap(),
         );
@@ -599,6 +603,7 @@ mod tests {
                 .unwrap(),
             ],
             Default::default(),
+            CacheUntil(None),
         )
         .unwrap();
 

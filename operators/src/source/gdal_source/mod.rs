@@ -27,6 +27,7 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::ttl::CacheUntil;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
     SpatialPartition2D, SpatialPartitioned,
@@ -432,6 +433,7 @@ impl GdalRasterLoader {
         dataset_params: GdalDatasetParameters,
         tile_information: TileInformation,
         tile_time: TimeInterval,
+        cache_until: CacheUntil,
     ) -> Result<RasterTile2D<T>> {
         // TODO: detect usage of vsi curl properly, e.g. also check for `/vsicurl_streaming` and combinations with `/vsizip`
         let is_vsi_curl = dataset_params.file_path.starts_with("/vsicurl/");
@@ -450,7 +452,7 @@ impl GdalRasterLoader {
 
                 async move {
                     let load_tile_result = crate::util::spawn_blocking(move || {
-                        Self::load_tile_data(&ds, tile_information, tile_time)
+                        Self::load_tile_data(&ds, tile_information, tile_time, cache_until)
                     })
                     .await
                     .context(crate::error::TokioJoin);
@@ -477,6 +479,7 @@ impl GdalRasterLoader {
         dataset_params: Option<GdalDatasetParameters>,
         tile_information: TileInformation,
         tile_time: TimeInterval,
+        cache_until: CacheUntil,
     ) -> Result<RasterTile2D<T>> {
         match dataset_params {
             // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
@@ -489,12 +492,16 @@ impl GdalRasterLoader {
                     "Loading tile {:?}, from {:?}, band: {}",
                     &tile_information, ds.file_path, ds.rasterband_channel
                 );
-                Self::load_tile_data_async(ds, tile_information, tile_time).await
+                Self::load_tile_data_async(ds, tile_information, tile_time, cache_until).await
             }
             Some(_) => {
                 debug!("Skipping tile not in query rect {:?}", &tile_information);
 
-                Ok(create_no_data_tile(tile_information, tile_time))
+                Ok(create_no_data_tile(
+                    tile_information,
+                    tile_time,
+                    cache_until,
+                ))
             }
 
             _ => {
@@ -503,7 +510,11 @@ impl GdalRasterLoader {
                     &tile_information
                 );
 
-                Ok(create_no_data_tile(tile_information, tile_time))
+                Ok(create_no_data_tile(
+                    tile_information,
+                    tile_time,
+                    cache_until,
+                ))
             }
         }
     }
@@ -515,6 +526,7 @@ impl GdalRasterLoader {
         dataset_params: &GdalDatasetParameters,
         tile_information: TileInformation,
         tile_time: TimeInterval,
+        cache_until: CacheUntil,
     ) -> Result<RasterTile2D<T>> {
         let start = Instant::now();
 
@@ -548,9 +560,11 @@ impl GdalRasterLoader {
             let is_file_not_found = error_is_gdal_file_not_found(error);
 
             let err_result = match dataset_params.file_not_found_handling {
-                FileNotFoundHandling::NoData if is_file_not_found => {
-                    Ok(create_no_data_tile(tile_information, tile_time))
-                }
+                FileNotFoundHandling::NoData if is_file_not_found => Ok(create_no_data_tile(
+                    tile_information,
+                    tile_time,
+                    cache_until,
+                )),
                 _ => Err(crate::error::Error::CouldNotOpenGdalDataset {
                     file_path: dataset_params.file_path.to_string_lossy().to_string(),
                 }),
@@ -573,6 +587,7 @@ impl GdalRasterLoader {
             dataset_params,
             tile_information,
             tile_time,
+            cache_until,
         )?;
 
         let elapsed = start.elapsed();
@@ -590,7 +605,14 @@ impl GdalRasterLoader {
         tiling_strategy: TilingStrategy,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> {
         stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds)).map(
-            move |tile| GdalRasterLoader::load_tile_async(info.params.clone(), tile, info.time),
+            move |tile| {
+                GdalRasterLoader::load_tile_async(
+                    info.params.clone(),
+                    tile,
+                    info.time,
+                    info.cache_ttl_seconds.cache_until(),
+                )
+            },
         )
     }
 
@@ -1041,6 +1063,7 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
     dataset_params: &GdalDatasetParameters,
     tile_info: TileInformation,
     tile_time: TimeInterval,
+    cache_until: CacheUntil,
 ) -> Result<RasterTile2D<T>> {
     let rasterband = dataset.rasterband(dataset_params.rasterband_channel as isize)?;
 
@@ -1057,23 +1080,28 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
         properties_from_gdal_metadata(&mut properties, &rasterband, properties_mapping);
     }
 
+    // TODO: add cache_until
     Ok(RasterTile2D::new_with_tile_info_and_properties(
         tile_time,
         tile_info,
         result_grid,
         properties,
+        cache_until,
     ))
 }
 
 fn create_no_data_tile<T: Pixel>(
     tile_info: TileInformation,
     tile_time: TimeInterval,
+    cache_until: CacheUntil,
 ) -> RasterTile2D<T> {
+    // TODO: add cache_until
     RasterTile2D::new_with_tile_info_and_properties(
         tile_time,
         tile_info,
         EmptyGrid::new(tile_info.tile_size_in_pixels).into(),
         RasterProperties::default(),
+        cache_until,
     )
 }
 
@@ -1252,6 +1280,7 @@ mod tests {
             },
             TileInformation::with_partition_and_shape(output_bounds, output_shape),
             TimeInterval::default(),
+            CacheUntil(None),
         )
     }
 
@@ -1471,6 +1500,7 @@ mod tests {
             tile_position: _,
             time: _,
             properties,
+            cache_until: _,
         } = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
 
         assert!(!grid.is_empty());
@@ -1525,6 +1555,7 @@ mod tests {
             tile_position: _,
             time: _,
             properties: _,
+            cache_until: _,
         } = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
 
         assert!(!grid.is_empty());
@@ -1560,6 +1591,7 @@ mod tests {
             tile_position: _,
             time: _,
             properties: _,
+            cache_until: _,
         } = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
 
         assert!(!grid.is_empty());
@@ -1761,7 +1793,13 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
         let params = None;
 
-        let tile = GdalRasterLoader::load_tile_async::<f64>(params, tile_info, time_interval).await;
+        let tile = GdalRasterLoader::load_tile_async::<f64>(
+            params,
+            tile_info,
+            time_interval,
+            CacheUntil(None),
+        )
+        .await;
 
         assert!(tile.is_ok());
 
@@ -1769,6 +1807,7 @@ mod tests {
             time_interval,
             tile_info,
             EmptyGrid2D::new(output_shape).into(),
+            CacheUntil(None),
         );
 
         assert_eq!(tile.unwrap(), expected);
@@ -2099,10 +2138,12 @@ mod tests {
             tile_position: _,
             time: _,
             properties,
+            cache_until: _,
         } = GdalRasterLoader::load_tile_data::<u8>(
             &up_side_down_params,
             tile_information,
             TimeInterval::default(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -2165,10 +2206,12 @@ mod tests {
             tile_position: _,
             time: _,
             properties,
+            cache_until: _,
         } = GdalRasterLoader::load_tile_data::<u8>(
             &up_side_down_params,
             tile_information,
             TimeInterval::default(),
+            CacheUntil(None),
         )
         .unwrap();
 
@@ -2226,7 +2269,9 @@ mod tests {
         let tile_time = TimeInterval::default();
 
         // file doesn't exist => no data
-        let result = GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time).unwrap();
+        let result =
+            GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time, CacheUntil(None))
+                .unwrap();
         assert!(matches!(result.grid_array, GridOrEmpty::Empty(_)));
 
         let ds = GdalDatasetParameters {
@@ -2245,7 +2290,8 @@ mod tests {
         };
 
         // invalid channel => error
-        let result = GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time);
+        let result =
+            GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time, CacheUntil(None));
         assert!(result.is_err());
 
         let server = Server::run();
@@ -2289,7 +2335,9 @@ mod tests {
         };
 
         // 404 => no data
-        let result = GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time).unwrap();
+        let result =
+            GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time, CacheUntil(None))
+                .unwrap();
         assert!(matches!(result.grid_array, GridOrEmpty::Empty(_)));
 
         let ds = GdalDatasetParameters {
@@ -2319,7 +2367,8 @@ mod tests {
         };
 
         // 500 => error
-        let result = GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time);
+        let result =
+            GdalRasterLoader::load_tile_data::<u8>(&ds, tile_info, tile_time, CacheUntil(None));
         assert!(result.is_err());
     }
 
