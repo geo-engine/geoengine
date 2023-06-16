@@ -55,7 +55,7 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
 
         self.grid_array.grid_blit_from(&shifted_source);
 
-        self.cache_until = self.cache_until.merged(&source.cache_until);
+        self.cache_until.merge_with(&source.cache_until);
 
         Ok(())
     }
@@ -104,6 +104,8 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for RasterTile2D<T> {
         let shifted_source = source.grid_array.shift_by_offset(global_offset_pixels);
 
         self.grid_array.grid_blit_from(&shifted_source);
+
+        self.cache_until.merge_with(&source.cache_until);
 
         Ok(())
     }

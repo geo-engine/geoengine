@@ -3,6 +3,7 @@ use crate::handlers::ErrorResponse;
 use crate::util::config::get_config_element;
 
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
+use actix_http::header::{HeaderName, HeaderValue};
 use actix_http::uri::PathAndQuery;
 use actix_http::{Extensions, HttpMessage, StatusCode};
 
@@ -10,6 +11,7 @@ use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, HttpRequest, HttpResponse};
 use futures::future::BoxFuture;
+use geoengine_datatypes::primitives::ttl::CacheUntil;
 use log::debug;
 
 use std::any::Any;
@@ -397,5 +399,26 @@ pub fn connection_closed(_req: &HttpRequest, timeout: Option<Duration>) -> BoxFu
         Box::pin(tokio::time::sleep(timeout))
     } else {
         Box::pin(futures::future::pending())
+    }
+}
+
+pub trait CacheControlHeader {
+    fn cache_control_header(&self) -> (HeaderName, HeaderValue);
+}
+
+impl CacheControlHeader for CacheUntil {
+    fn cache_control_header(&self) -> (HeaderName, HeaderValue) {
+        // if let Some(cache_until) = self.0 {
+        //     (
+        //         actix_http::header::CACHE_CONTROL,
+        //         HeaderValue::from_str(&format!("max-age={}", cache_until.as_secs())).unwrap(),
+        //     )
+        // } else {
+        //     (
+        //         actix_http::header::CACHE_CONTROL,
+        //         HeaderValue::from_static("no-cache"),
+        //     )
+        // }
+        todo!()
     }
 }

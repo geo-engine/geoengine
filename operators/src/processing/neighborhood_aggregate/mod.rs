@@ -677,7 +677,7 @@ mod tests {
         )
         .unwrap();
 
-        let bytes = raster_stream_to_png_bytes(
+        let (bytes, _) = raster_stream_to_png_bytes(
             processor,
             query_rect,
             query_ctx,
@@ -749,7 +749,7 @@ mod tests {
         )
         .unwrap();
 
-        let bytes = raster_stream_to_png_bytes(
+        let (bytes, _) = raster_stream_to_png_bytes(
             processor,
             query_rect,
             query_ctx,

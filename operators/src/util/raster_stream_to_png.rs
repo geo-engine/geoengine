@@ -23,7 +23,7 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
     time: Option<TimeInterval>,
     colorizer: Option<Colorizer>,
     conn_closed: BoxFuture<'_, ()>,
-) -> Result<Vec<u8>>
+) -> Result<(Vec<u8>, CacheUntil)>
 where
     T: Pixel,
 {
@@ -72,7 +72,10 @@ where
     let result = abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
 
     let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
-    Ok(result.grid_array.to_png(width, height, &colorizer)?)
+    Ok((
+        result.grid_array.to_png(width, height, &colorizer)?,
+        result.cache_until,
+    ))
 }
 
 /// Method to generate a default `Colorizer`.
@@ -129,7 +132,7 @@ mod tests {
         let query_partition =
             SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let image_bytes = raster_stream_to_png_bytes(
+        let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_partition,

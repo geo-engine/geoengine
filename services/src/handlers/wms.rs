@@ -1,4 +1,5 @@
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use geoengine_datatypes::primitives::ttl::CacheUntil;
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use reqwest::Url;
 use serde_json::json;
@@ -20,7 +21,7 @@ use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::server::{connection_closed, not_implemented_handler};
+use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -260,7 +261,7 @@ async fn wms_map_handler<C: ApplicationContext>(
         request: &web::Query<GetMap>,
         app_ctx: web::Data<C>,
         session: C::Session,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<(Vec<u8>, CacheUntil)> {
         let endpoint = workflow.into_inner();
         let layer = WorkflowId::from_str(&request.layers)?;
 
@@ -368,8 +369,9 @@ async fn wms_map_handler<C: ApplicationContext>(
     }
 
     match compute_result(req, workflow, &request, app_ctx, session).await {
-        Ok(image_bytes) => Ok(HttpResponse::Ok()
+        Ok((image_bytes, cache_until)) => Ok(HttpResponse::Ok()
             .content_type(mime::IMAGE_PNG)
+            .append_header(cache_until.cache_control_header())
             .body(image_bytes)),
         Err(error) => Ok(handle_wms_error(request.exceptions, &error)),
     }
@@ -592,7 +594,7 @@ mod tests {
         let query_partition =
             SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
-        let image_bytes = raster_stream_to_png_bytes(
+        let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_partition,
