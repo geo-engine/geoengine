@@ -604,15 +604,15 @@ where
     // TODO: more efficient merging of the partial feature collections
     let stream = processor.query(query_rect, &query_ctx).await?;
 
-    // TODO: handle case where no feature chunks are produced? What shall be the cache hint then?
-    let mut cache_hint = CacheHint::unlimited();
-
-    let features: BoxFuture<geoengine_operators::util::Result<Vec<serde_json::Value>>> =
+    let future: BoxFuture<geoengine_operators::util::Result<(Vec<serde_json::Value>, CacheHint)>> =
         Box::pin(stream.fold(
-            geoengine_operators::util::Result::<Vec<serde_json::Value>>::Ok(features),
+            geoengine_operators::util::Result::<(Vec<serde_json::Value>, CacheHint)>::Ok((
+                features,
+                CacheHint::unlimited(),
+            )),
             |output, collection| async move {
                 match (output, collection) {
-                    (Ok(mut output), Ok(collection)) => {
+                    (Ok((mut output, mut cache_hint)), Ok(collection)) => {
                         // TODO: avoid parsing the generated json
                         let mut json: serde_json::Value =
                             serde_json::from_str(&collection.to_geo_json())
@@ -627,14 +627,15 @@ where
 
                         cache_hint.merge_with(&collection.cache_hint);
 
-                        Ok(output)
+                        Ok((output, cache_hint))
                     }
                     (Err(error), _) | (_, Err(error)) => Err(error),
                 }
             },
         ));
 
-    let features = abortable_query_execution(features, conn_closed, query_abort_trigger).await?;
+    let (features, cache_hint) =
+        abortable_query_execution(future, conn_closed, query_abort_trigger).await?;
 
     let mut output = json!({
         "type": "FeatureCollection"

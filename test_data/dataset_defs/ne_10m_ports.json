@@ -30,7 +30,8 @@
       },
       "forceOgrTimeFilter": false,
       "onError": "ignore",
-      "provenance": null
+      "provenance": null,
+      "cacheTtl": 3600
     },
     "resultDescriptor": {
       "dataType": "MultiPoint",

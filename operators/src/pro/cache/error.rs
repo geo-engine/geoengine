@@ -9,4 +9,5 @@ pub enum CacheError {
     NotEnoughSpaceInCache,
     QueryNotFoundInLandingZone,
     InvalidRasterDataTypeForInsertion,
+    TileExpiredBeforeInsertion,
 }

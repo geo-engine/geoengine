@@ -499,18 +499,17 @@ impl TileCache {
     {
         let mut backend = self.backend.write().await;
 
-        // check if landing zone has enough space, otherwise abort query
+        // if the tile is already expired we can stop caching the whole query
+        if tile.cache_hint.is_expired() {
+            Self::remove_query_from_landing_zone(&mut backend, key, query_id);
+            return Err(super::error::CacheError::TileExpiredBeforeInsertion);
+        }
+
+        // check if landing zone has enough space, otherwise abort caching the query
         if backend.landing_zone_byte_size_used + std::mem::size_of::<RasterTile2D<T>>()
             > backend.landing_zone_byte_size_total
         {
-            let cache = backend.operator_caches.entry(key).or_default();
-
-            let entry = cache.landing_zone.remove(&query_id);
-
-            if let Some(entry) = entry {
-                backend.landing_zone_byte_size_used -= entry.byte_size();
-            }
-
+            Self::remove_query_from_landing_zone(&mut backend, key, query_id);
             return Err(super::error::CacheError::NotEnoughSpaceInLandingZone);
         }
 
@@ -595,6 +594,20 @@ impl TileCache {
             }
         }
         Ok(())
+    }
+
+    fn remove_query_from_landing_zone(
+        backend: &mut TileCacheBackend,
+        key: CanonicOperatorName,
+        query_id: QueryId,
+    ) {
+        let cache = backend.operator_caches.entry(key).or_default();
+
+        let entry = cache.landing_zone.remove(&query_id);
+
+        if let Some(entry) = entry {
+            backend.landing_zone_byte_size_used -= entry.byte_size();
+        }
     }
 }
 

@@ -111,6 +111,7 @@ pub struct OgrSourceDataset {
     pub on_error: OgrSourceErrorSpec,
     pub sql_query: Option<String>,
     pub attribute_query: Option<String>,
+    #[serde(default)]
     pub cache_ttl: CacheTtl,
 }
 

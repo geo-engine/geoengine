@@ -6,6 +6,7 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint,
     MultiPointAccess, VectorQueryRectangle,
@@ -274,6 +275,7 @@ impl VisualPointClusteringProcessor {
         count_column: &str,
         resolution: f64,
         columns: &HashMap<String, FeatureDataType>,
+        cache_hint: CacheHint,
     ) -> Result<MultiPointCollection> {
         let mut builder = MultiPointCollection::builder();
 
@@ -320,6 +322,8 @@ impl VisualPointClusteringProcessor {
             builder.finish_row();
         }
 
+        builder.cache_hint(cache_hint);
+
         builder.build().map_err(Into::into)
     }
 
@@ -352,6 +356,7 @@ impl VisualPointClusteringProcessor {
 struct GridFoldState {
     grid: Grid<LogScaledRadius>,
     column_mapping: HashMap<String, AttributeAggregateDef>,
+    cache_hint: CacheHint,
 }
 
 #[async_trait]
@@ -379,6 +384,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
         let initial_grid_fold_state = Result::<GridFoldState>::Ok(GridFoldState {
             grid: Grid::new(query.spatial_bounds, scaled_radius_model),
             column_mapping: self.attribute_mapping.clone(),
+            cache_hint: CacheHint::unlimited(),
         });
 
         let grid_future = self.source.query(query, ctx).await?.fold(
@@ -389,6 +395,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                 let GridFoldState {
                     mut grid,
                     column_mapping,
+                    mut cache_hint,
                 } = state?;
 
                 let feature_collection = feature_collection?;
@@ -428,9 +435,12 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                     }
                 }
 
+                cache_hint.merge_with(&feature_collection.cache_hint);
+
                 Ok(GridFoldState {
                     grid,
                     column_mapping,
+                    cache_hint,
                 })
             },
         );
@@ -442,6 +452,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             let GridFoldState {
                 grid,
                 column_mapping: _,
+                cache_hint,
             } = grid?;
 
             let mut cmq = CircleMergingQuadtree::new(query.spatial_bounds, *grid.radius_model(), 1);
@@ -457,6 +468,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                 &self.count_column,
                 joint_resolution,
                 &column_schema,
+                cache_hint,
             )
         });
 

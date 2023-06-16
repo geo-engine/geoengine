@@ -1,10 +1,11 @@
-use serde::{Deserialize, Serialize};
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::DateTime;
 
 /// Config parameter to indicate how long a value may be cached
 /// TODO: json deserialization
-#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum CacheTtl {
     #[default]
     NoCache,
@@ -24,6 +25,51 @@ impl From<CacheTtl> for CacheHint {
                 ),
                 CacheTtl::Unlimited => CacheExpiration::Unlimited,
             },
+        }
+    }
+}
+
+/// A custom deserializer s.t. the ttl can be specified as a simple field
+///
+/// "cacheTtl": 1234
+/// or
+/// "cacheTtl": "unlimited"
+/// or if there should be no caching:
+/// "cacheTtl": null
+impl<'de> Deserialize<'de> for CacheTtl {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let val: serde_json::Value = Deserialize::deserialize(deserializer)?;
+
+        match val {
+            serde_json::Value::Number(n) => {
+                if let Some(num) = n.as_u64() {
+                    Ok(CacheTtl::Seconds(num as u32))
+                } else {
+                    Err(D::Error::custom("Invalid number for CacheTtl::Seconds"))
+                }
+            }
+            serde_json::Value::String(s) if s.eq_ignore_ascii_case("unlimited") => {
+                Ok(CacheTtl::Unlimited)
+            }
+            serde_json::Value::Null => Ok(CacheTtl::NoCache),
+            _ => Err(D::Error::custom("Invalid value for CacheTtl")),
+        }
+    }
+}
+
+/// Corresponding serialize implementation
+impl Serialize for CacheTtl {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match *self {
+            CacheTtl::NoCache => serializer.serialize_none(),
+            CacheTtl::Seconds(num) => serializer.serialize_u32(num),
+            CacheTtl::Unlimited => serializer.serialize_str("unlimited"),
         }
     }
 }
@@ -138,7 +184,44 @@ impl CacheExpiration {
         match self {
             CacheExpiration::NoCache => true,
             CacheExpiration::Unlimited => false,
-            CacheExpiration::Expires(expiration) => *expiration > DateTime::now(),
+            CacheExpiration::Expires(expiration) => *expiration < DateTime::now(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_deserializes_ttl() {
+        assert_eq!(
+            serde_json::from_str::<CacheTtl>("1234").unwrap(),
+            CacheTtl::Seconds(1234)
+        );
+        assert_eq!(
+            serde_json::from_str::<CacheTtl>("\"unlimited\"").unwrap(),
+            CacheTtl::Unlimited
+        );
+        assert_eq!(
+            serde_json::from_value::<CacheTtl>(serde_json::Value::Null).unwrap(),
+            CacheTtl::NoCache
+        );
+    }
+
+    #[test]
+    fn it_serializes_ttl() {
+        assert_eq!(
+            serde_json::to_string(&CacheTtl::Seconds(1234)).unwrap(),
+            "1234".to_string()
+        );
+        assert_eq!(
+            serde_json::to_string(&CacheTtl::Unlimited).unwrap(),
+            "\"unlimited\"".to_string()
+        );
+        assert_eq!(
+            serde_json::to_value(CacheTtl::NoCache).unwrap(),
+            serde_json::Value::Null
+        );
     }
 }

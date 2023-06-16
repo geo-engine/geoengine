@@ -449,6 +449,7 @@ pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
+    #[serde(default)]
     pub cache_ttl: CacheTtl,
 }
 
@@ -492,6 +493,7 @@ pub struct OgrSourceDataset {
     pub on_error: OgrSourceErrorSpec,
     pub sql_query: Option<String>,
     pub attribute_query: Option<String>,
+    #[serde(default)]
     pub cache_ttl: CacheTtl,
 }
 
@@ -872,6 +874,7 @@ pub struct GdalMetaDataRegular {
     pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub data_time: TimeInterval,
     pub step: TimeStep,
+    #[serde(default)]
     pub cache_ttl: CacheTtl,
 }
 
@@ -1126,6 +1129,7 @@ pub struct GdalMetadataNetCdfCf {
     /// A band offset specifies the first band index to use for the first point in time.
     /// All other time steps are added to this offset.
     pub band_offset: usize,
+    #[serde(default)]
     pub cache_ttl: CacheTtl,
 }
 
@@ -1188,6 +1192,7 @@ impl From<GdalMetaDataList> for geoengine_operators::source::GdalMetaDataList {
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
+    #[serde(default)]
     pub cache_ttl: CacheTtl,
 }
 
