@@ -1462,7 +1462,7 @@ mod tests {
         MultiPolygonCollection,
     };
     use geoengine_datatypes::dataset::{DataId, DatasetId};
-    use geoengine_datatypes::primitives::ttl::CacheUntil;
+    use geoengine_datatypes::primitives::ttl::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, Measurement, SpatialResolution, TimeGranularity,
     };
@@ -1809,7 +1809,7 @@ mod tests {
                 MultiPoint::many(vec![vec![(0.0, 0.1)], vec![(1.0, 1.1), (2.0, 2.1)]])?,
                 vec![Default::default(); 2],
                 HashMap::new(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -1908,7 +1908,7 @@ mod tests {
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -2007,7 +2007,7 @@ mod tests {
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -2109,7 +2109,7 @@ mod tests {
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -2336,7 +2336,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -3510,7 +3510,7 @@ mod tests {
                 coordinates,
                 vec![Default::default(); 1081],
                 HashMap::new(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -3627,7 +3627,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -3746,7 +3746,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -3940,7 +3940,7 @@ mod tests {
                     vec![expected_multi_point],
                     vec![Default::default(); 1],
                     Default::default(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 )?
             );
         }
@@ -3975,7 +3975,7 @@ mod tests {
                 expected_multipoints[0..25].to_vec(),
                 vec![Default::default(); result[0].len()],
                 Default::default(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
         assert_eq!(
@@ -3984,7 +3984,7 @@ mod tests {
                 expected_multipoints[25..50].to_vec(),
                 vec![Default::default(); result[1].len()],
                 Default::default(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
         assert_eq!(
@@ -3993,7 +3993,7 @@ mod tests {
                 expected_multipoints[50..75].to_vec(),
                 vec![Default::default(); result[2].len()],
                 Default::default(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
         assert_eq!(
@@ -4002,7 +4002,7 @@ mod tests {
                 expected_multipoints[75..99].to_vec(),
                 vec![Default::default(); result[3].len()],
                 Default::default(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -4305,7 +4305,7 @@ mod tests {
                 );
                 map
             },
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -4427,7 +4427,7 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -4551,7 +4551,7 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -4675,7 +4675,7 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -4795,7 +4795,7 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -4934,7 +4934,7 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -5051,7 +5051,7 @@ mod tests {
                 map.insert("bool".into(), FeatureData::Bool(vec![true, false, true]));
                 map
             },
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -5173,7 +5173,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -5290,7 +5290,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -5405,7 +5405,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -5520,7 +5520,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -5639,7 +5639,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -5766,7 +5766,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -5890,7 +5890,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 
@@ -6005,7 +6005,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheUntil(None)
+                CacheHint::default()
             )?
         );
 

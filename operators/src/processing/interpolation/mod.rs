@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
-use geoengine_datatypes::primitives::ttl::CacheUntil;
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
     SpatialPartitioned, SpatialResolution, TimeInstance, TimeInterval,
@@ -383,7 +383,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
             [0, 0].into(),
             geo_transform,
             GridOrEmpty::from(grid),
-            CacheUntil(None),
+            CacheHint::default(),
         );
 
         InterpolationAccu::new(input_tile, tile_info, pool)
@@ -554,7 +554,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![1, 2, 5, 6]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -564,7 +564,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![3, 4, 7, 8]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -574,7 +574,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![8, 7, 4, 3]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -584,7 +584,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![6, 5, 2, 1]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
         ];
 

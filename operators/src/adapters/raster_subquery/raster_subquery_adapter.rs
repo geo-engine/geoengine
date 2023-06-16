@@ -10,7 +10,7 @@ use futures::{
 };
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
-use geoengine_datatypes::primitives::ttl::CacheUntil;
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
@@ -548,7 +548,7 @@ pub fn identity_accu<T: Pixel>(
             query_rect.time_interval,
             tile_info,
             output_raster,
-            CacheUntil(None),
+            CacheHint::default(),
         );
         RasterTileAccu2D::new(output_tile, pool)
     })
@@ -622,7 +622,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
-                cache_until: CacheUntil(None),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -630,7 +630,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
-                cache_until: CacheUntil(None),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -640,7 +640,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_until: CacheUntil(None),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -650,7 +650,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_until: CacheUntil(None),
+                cache_hint: CacheHint::default(),
             },
         ];
 

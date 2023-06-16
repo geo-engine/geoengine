@@ -345,7 +345,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::primitives::{ttl::CacheUntil, MultiPolygon};
+    use geoengine_datatypes::primitives::{ttl::CacheHint, MultiPolygon};
 
     #[test]
     fn point_in_polygon_tester() {
@@ -382,7 +382,7 @@ mod tests {
             .unwrap()],
             vec![Default::default(); 1],
             Default::default(),
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -450,7 +450,7 @@ mod tests {
             ],
             vec![Default::default(); 2],
             Default::default(),
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 

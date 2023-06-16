@@ -193,16 +193,16 @@ impl CachedTiles {
 
     fn is_expired(&self) -> bool {
         match self {
-            CachedTiles::U8(v) => v.iter().any(|t| t.cache_until.is_expired()),
-            CachedTiles::U16(v) => v.iter().any(|t| t.cache_until.is_expired()),
-            CachedTiles::U32(v) => v.iter().any(|t| t.cache_until.is_expired()),
-            CachedTiles::U64(v) => v.iter().any(|t| t.cache_until.is_expired()),
-            CachedTiles::I8(v) => v.iter().any(|t| t.cache_until.is_expired()),
-            CachedTiles::I16(v) => v.iter().any(|t| t.cache_until.is_expired()),
-            CachedTiles::I32(v) => v.iter().any(|t| t.cache_until.is_expired()),
-            CachedTiles::I64(v) => v.iter().any(|t| t.cache_until.is_expired()),
-            CachedTiles::F32(v) => v.iter().any(|t| t.cache_until.is_expired()),
-            CachedTiles::F64(v) => v.iter().any(|t| t.cache_until.is_expired()),
+            CachedTiles::U8(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::U16(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::U32(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::U64(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::I8(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::I16(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::I32(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::I64(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::F32(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::F64(v) => v.iter().any(|t| t.cache_hint.is_expired()),
         }
     }
 }
@@ -602,7 +602,7 @@ impl TileCache {
 mod tests {
     use geoengine_datatypes::{
         primitives::{
-            ttl::CacheUntil, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
+            ttl::CacheHint, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
         },
         raster::{Grid, RasterProperties},
     };
@@ -636,7 +636,7 @@ mod tests {
                 .unwrap()
                 .into(),
             properties: RasterProperties::default(),
-            cache_until: CacheUntil(None),
+            cache_hint: CacheHint::default(),
         }
     }
 

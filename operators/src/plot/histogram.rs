@@ -660,7 +660,7 @@ mod tests {
     };
     use crate::test_data;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
-    use geoengine_datatypes::primitives::ttl::CacheUntil;
+    use geoengine_datatypes::primitives::ttl::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
@@ -802,7 +802,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
-                    CacheUntil(None),
+                    CacheHint::default(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
@@ -1205,7 +1205,7 @@ mod tests {
                             tile_size_in_pixels,
                         },
                         EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
-                        CacheUntil(None),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1410,7 +1410,7 @@ mod tests {
                             tile_size_in_pixels,
                         },
                         Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
-                        CacheUntil(None),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,

@@ -466,7 +466,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::primitives::ttl::CacheUntil;
+    use geoengine_datatypes::primitives::ttl::CacheHint;
     use geoengine_datatypes::primitives::FeatureData;
     use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::TimeInterval;
@@ -488,7 +488,7 @@ mod tests {
             MultiPoint::many(coordinates).unwrap(),
             vec![TimeInterval::default(); 10],
             HashMap::default(),
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 

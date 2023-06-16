@@ -462,7 +462,7 @@ mod tests {
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::MultiPointCollection;
-    use geoengine_datatypes::primitives::ttl::CacheUntil;
+    use geoengine_datatypes::primitives::ttl::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -855,7 +855,7 @@ mod tests {
                 ("/DataSets/DataSet/Units/Unit/UnitID".to_owned(),FeatureData::NullableText(vec![Some("Unit ID".to_owned()); 2]))]
                 .iter()
                 .cloned()
-                .collect(),CacheUntil(None)
+                .collect(),CacheHint::default()
             )
             .unwrap();
 

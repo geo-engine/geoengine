@@ -1,6 +1,6 @@
 use crate::collections::{error, FeatureCollectionError, TypedFeatureCollection};
 use crate::collections::{FeatureCollection, VectorDataType};
-use crate::primitives::ttl::CacheUntil;
+use crate::primitives::ttl::CacheHint;
 use crate::primitives::{
     Coordinate2D, FeatureDataType, Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
     TimeInterval,
@@ -32,7 +32,7 @@ pub struct RawFeatureCollectionBuilder {
     num_rings: Option<usize>,
     pub output: Option<TypedFeatureCollection>,
     pub output_type: VectorDataType,
-    cache_until: CacheUntil,
+    cache_hint: CacheHint,
 }
 
 impl RawFeatureCollectionBuilder {
@@ -54,7 +54,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: None,
             output: None,
             output_type,
-            cache_until: CacheUntil(None),
+            cache_hint: CacheHint::default(),
         }
     }
 
@@ -75,7 +75,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: None,
             output: None,
             output_type: VectorDataType::MultiPoint,
-            cache_until: CacheUntil(None),
+            cache_hint: CacheHint::default(),
         }
     }
 
@@ -97,7 +97,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: None,
             output: None,
             output_type: VectorDataType::MultiLineString,
-            cache_until: CacheUntil(None),
+            cache_hint: CacheHint::default(),
         }
     }
 
@@ -120,7 +120,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: Some(num_rings),
             output: None,
             output_type: VectorDataType::MultiPolygon,
-            cache_until: CacheUntil(None),
+            cache_hint: CacheHint::default(),
         }
     }
 
@@ -341,8 +341,8 @@ impl RawFeatureCollectionBuilder {
         Ok(())
     }
 
-    pub fn set_cache_until(&mut self, cache_until: CacheUntil) {
-        self.cache_until = cache_until;
+    pub fn set_cache_hint(&mut self, cache_hint: CacheHint) {
+        self.cache_hint = cache_hint;
     }
 
     pub fn finish(&mut self) -> Result<()> {
@@ -432,7 +432,7 @@ impl RawFeatureCollectionBuilder {
         Ok(FeatureCollection::<CollectionType>::new_from_internals(
             StructArray::try_new(columns.into(), arrays, None)?,
             self.types.clone(),
-            self.cache_until,
+            self.cache_hint,
         ))
     }
 }

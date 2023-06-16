@@ -182,7 +182,7 @@ where
             properties: self.properties,
             tile_position: self.tile_position,
             time: self.time,
-            cache_until: self.cache_until,
+            cache_hint: self.cache_hint,
         }
     }
 }
@@ -191,7 +191,7 @@ where
 mod tests {
 
     use crate::{
-        primitives::{ttl::CacheUntil, TimeInterval},
+        primitives::{ttl::CacheHint, TimeInterval},
         raster::{GeoTransform, Grid2D, MaskedGrid2D},
         util::test::TestDefault,
     };
@@ -314,7 +314,7 @@ mod tests {
             [0, 0].into(),
             geo,
             r1,
-            CacheUntil(None),
+            CacheHint::default(),
         );
 
         let scaled_r1 = t1.transform_elements::<CheckedMulThenAddTransformation>(2, 1);
@@ -372,7 +372,7 @@ mod tests {
             [0, 0].into(),
             geo,
             r1,
-            CacheUntil(None),
+            CacheHint::default(),
         );
 
         let scaled_r1 = t1.transform_elements::<CheckedSubThenDivTransformation>(2, 1);

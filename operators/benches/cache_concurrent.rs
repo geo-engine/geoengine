@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use futures::future::join_all;
-use geoengine_datatypes::primitives::ttl::CacheUntil;
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_datatypes::primitives::{DateTime, SpatialPartition2D, SpatialResolution};
 use geoengine_datatypes::raster::RasterProperties;
 use geoengine_datatypes::{
@@ -42,7 +42,7 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
             .unwrap()
             .into(),
         properties: RasterProperties::default(),
-        cache_until: CacheUntil(None),
+        cache_hint: CacheHint::default(),
     };
 
     let start = std::time::Instant::now();

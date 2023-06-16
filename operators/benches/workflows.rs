@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use futures::TryStreamExt;
 use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
-use geoengine_datatypes::primitives::ttl::CacheUntil;
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_datatypes::primitives::{
     Measurement, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
 };
@@ -302,7 +302,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                     query_time,
                     tile_info,
                     data.into(),
-                    CacheUntil(None),
+                    CacheHint::default(),
                 )
             })
             .collect();
@@ -375,7 +375,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                     query_time,
                     tile_info,
                     data.into(),
-                    CacheUntil(None),
+                    CacheHint::default(),
                 )
             })
             .collect();
@@ -460,7 +460,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                     query_time,
                     tile_info,
                     data.into(),
-                    CacheUntil(None),
+                    CacheHint::default(),
                 )
             })
             .collect();
@@ -539,7 +539,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                     query_time,
                     tile_info,
                     data.into(),
-                    CacheUntil(None),
+                    CacheHint::default(),
                 )
             })
             .collect();

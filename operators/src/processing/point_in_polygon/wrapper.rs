@@ -47,7 +47,7 @@ mod tests {
 
     use geoengine_datatypes::{
         collections::FeatureCollectionInfos,
-        primitives::{ttl::CacheUntil, MultiPolygon, TimeInterval},
+        primitives::{ttl::CacheHint, MultiPolygon, TimeInterval},
     };
 
     use super::*;
@@ -81,7 +81,7 @@ mod tests {
             ],
             vec![Default::default(); 2],
             HashMap::new(),
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 

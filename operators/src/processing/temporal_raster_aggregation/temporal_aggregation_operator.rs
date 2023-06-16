@@ -397,7 +397,7 @@ where
 mod tests {
     use futures::stream::StreamExt;
     use geoengine_datatypes::{
-        primitives::{ttl::CacheUntil, Measurement, SpatialResolution, TimeInterval},
+        primitives::{ttl::CacheHint, Measurement, SpatialResolution, TimeInterval},
         raster::{
             EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType,
             TileInformation,
@@ -489,7 +489,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -503,7 +503,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -517,7 +517,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -531,7 +531,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -611,7 +611,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -625,7 +625,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -639,7 +639,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -653,7 +653,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -733,7 +733,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7],).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -747,7 +747,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -761,7 +761,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -775,7 +775,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -855,7 +855,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -869,7 +869,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -883,7 +883,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -897,7 +897,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -915,7 +915,7 @@ mod tests {
                         global_geo_transform: TestDefault::test_default(),
                     },
                     GridOrEmpty::from(EmptyGrid2D::<u8>::new([3, 2].into())),
-                    CacheUntil(None),
+                    CacheHint::default(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
@@ -984,7 +984,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::Empty(EmptyGrid::new([3, 2].into())),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -1063,7 +1063,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 16, 11, 12]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -1084,7 +1084,7 @@ mod tests {
                     )
                     .unwrap()
                 ),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -1163,7 +1163,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![13, 8, 15, 16, 17, 18]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -1184,7 +1184,7 @@ mod tests {
                     )
                     .unwrap()
                 ),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -1270,7 +1270,7 @@ mod tests {
                     )
                     .unwrap()
                 ),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -1284,7 +1284,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into())),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -1363,7 +1363,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -1384,7 +1384,7 @@ mod tests {
                     )
                     .unwrap()
                 ),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -1463,7 +1463,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -1484,7 +1484,7 @@ mod tests {
                     )
                     .unwrap()
                 ),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -1563,7 +1563,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![10, 8, 12, 16, 14, 15]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -1584,7 +1584,7 @@ mod tests {
                     )
                     .unwrap()
                 ),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -1664,7 +1664,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                         .unwrap()
                         .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 ),
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
@@ -1676,7 +1676,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                         .unwrap()
                         .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 ),
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
@@ -1688,7 +1688,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                         .unwrap()
                         .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 ),
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
@@ -1700,7 +1700,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                         .unwrap()
                         .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 )
             ]
         );
@@ -1780,7 +1780,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -1801,7 +1801,7 @@ mod tests {
                     )
                     .unwrap(),
                 ),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -1880,7 +1880,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![20, 8, 24, 16, 28, 30]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -1901,7 +1901,7 @@ mod tests {
                     )
                     .unwrap()
                 ),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -1995,7 +1995,7 @@ mod tests {
                     )
                     .unwrap()
                     .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 ),
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
@@ -2010,7 +2010,7 @@ mod tests {
                     )
                     .unwrap()
                     .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 ),
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
@@ -2025,7 +2025,7 @@ mod tests {
                     )
                     .unwrap()
                     .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 ),
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
@@ -2040,7 +2040,7 @@ mod tests {
                     )
                     .unwrap()
                     .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 )
             ]
         );
@@ -2121,7 +2121,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                         .unwrap()
                         .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 ),
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
@@ -2133,7 +2133,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                         .unwrap()
                         .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 ),
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
@@ -2145,7 +2145,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                         .unwrap()
                         .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 ),
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
@@ -2157,7 +2157,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                         .unwrap()
                         .into(),
-                    CacheUntil(None)
+                    CacheHint::default()
                 )
             ]
         );
@@ -2237,7 +2237,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -2258,7 +2258,7 @@ mod tests {
                     )
                     .unwrap()
                 ),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -2337,7 +2337,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![2, 1, 2, 1, 2, 2]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -2358,7 +2358,7 @@ mod tests {
                     )
                     .unwrap()
                 ),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -2436,7 +2436,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
 
@@ -2450,7 +2450,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
-                CacheUntil(None)
+                CacheHint::default()
             )
         );
     }
@@ -2465,7 +2465,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -2475,7 +2475,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -2485,7 +2485,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -2495,7 +2495,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 30),
@@ -2505,7 +2505,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 30),
@@ -2515,7 +2515,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(30, 40),
@@ -2525,7 +2525,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(30, 40),
@@ -2535,7 +2535,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
         ];
         raster_tiles
@@ -2551,7 +2551,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -2568,7 +2568,7 @@ mod tests {
                     )
                     .unwrap(),
                 ),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -2585,7 +2585,7 @@ mod tests {
                     )
                     .unwrap(),
                 ),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -2595,7 +2595,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 30),
@@ -2612,7 +2612,7 @@ mod tests {
                     )
                     .unwrap(),
                 ),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 30),
@@ -2622,7 +2622,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
         ];
         raster_tiles

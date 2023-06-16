@@ -182,7 +182,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
-    use geoengine_datatypes::primitives::ttl::CacheUntil;
+    use geoengine_datatypes::primitives::ttl::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -245,7 +245,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheUntil(None),
+            CacheHint::default(),
         )
         .unwrap();
 

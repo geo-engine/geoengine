@@ -5,7 +5,7 @@ use super::{
     TileInformation,
 };
 use super::{GridIndexAccessMut, RasterProperties};
-use crate::primitives::ttl::CacheUntil;
+use crate::primitives::ttl::CacheHint;
 use crate::primitives::{
     SpatialBounded, SpatialPartition2D, SpatialPartitioned, SpatialResolution, TemporalBounded,
     TimeInterval,
@@ -46,7 +46,7 @@ pub struct BaseTile<G> {
     /// Metadata for the `BaseTile`
     pub properties: RasterProperties,
     /// Indicate how long the tile may be cached, if `None` the tile may be cached indefinitely.
-    pub cache_until: CacheUntil,
+    pub cache_hint: CacheHint,
 }
 
 impl<G> BaseTile<G>
@@ -100,7 +100,7 @@ where
         time: TimeInterval,
         tile_info: TileInformation,
         data: GridOrEmpty<D, T>,
-        cache_until: CacheUntil,
+        cache_hint: CacheHint,
     ) -> Self
     where
         D: GridSize,
@@ -126,7 +126,7 @@ where
             global_geo_transform: tile_info.global_geo_transform,
             grid_array: data,
             properties: Default::default(),
-            cache_until,
+            cache_hint,
         }
     }
 
@@ -136,7 +136,7 @@ where
         tile_info: TileInformation,
         data: GridOrEmpty<D, T>,
         properties: RasterProperties,
-        cache_until: CacheUntil,
+        cache_hint: CacheHint,
     ) -> Self {
         debug_assert_eq!(
             tile_info.tile_size_in_pixels.axis_size_x(),
@@ -159,7 +159,7 @@ where
             global_geo_transform: tile_info.global_geo_transform,
             grid_array: data,
             properties,
-            cache_until,
+            cache_hint,
         }
     }
 
@@ -169,7 +169,7 @@ where
         tile_position: GridIdx2D,
         global_geo_transform: GeoTransform,
         data: GridOrEmpty<D, T>,
-        cache_until: CacheUntil,
+        cache_hint: CacheHint,
     ) -> Self {
         Self {
             time,
@@ -177,7 +177,7 @@ where
             global_geo_transform,
             grid_array: data,
             properties: RasterProperties::default(),
-            cache_until,
+            cache_hint,
         }
     }
 
@@ -188,7 +188,7 @@ where
         global_geo_transform: GeoTransform,
         data: GridOrEmpty<D, T>,
         properties: RasterProperties,
-        cache_until: CacheUntil,
+        cache_hint: CacheHint,
     ) -> Self {
         Self {
             time,
@@ -196,7 +196,7 @@ where
             global_geo_transform,
             grid_array: data,
             properties,
-            cache_until,
+            cache_hint,
         }
     }
 
@@ -205,7 +205,7 @@ where
         time: TimeInterval,
         global_geo_transform: GeoTransform,
         data: G,
-        cache_until: CacheUntil,
+        cache_hint: CacheHint,
     ) -> Self
     where
         G: Into<GridOrEmpty<D, T>>,
@@ -216,7 +216,7 @@ where
             global_geo_transform,
             grid_array: data.into(),
             properties: RasterProperties::default(),
-            cache_until,
+            cache_hint,
         }
     }
 
@@ -233,7 +233,7 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
-            cache_until: self.cache_until,
+            cache_hint: self.cache_hint,
         }
     }
 
@@ -338,7 +338,7 @@ where
             tile_position: mat_tile.tile_position,
             time: mat_tile.time,
             properties: mat_tile.properties,
-            cache_until: mat_tile.cache_until,
+            cache_hint: mat_tile.cache_hint,
         }
     }
 }

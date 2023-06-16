@@ -6,7 +6,7 @@ use crate::engine::{
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
-use geoengine_datatypes::primitives::ttl::CacheUntil;
+use geoengine_datatypes::primitives::ttl::CacheHint;
 
 use crate::error;
 use crate::processing::rasterization::GridOrDensity::Grid;
@@ -356,7 +356,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
                     query.time_interval,
                     tile_info,
                     GridOrEmpty::Grid(tile_grid.into()),
-                    CacheUntil(None), // TODO: use cache_until from vector input
+                    CacheHint::default(), // TODO: use cache_hint from vector input
                 ))
             });
             Ok(tiles.boxed())
@@ -463,7 +463,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                             )
                             .into(),
                     ),
-                    CacheUntil(None),
+                    CacheHint::default(),
                 ))
             });
 
@@ -494,7 +494,7 @@ fn generate_zeroed_tiles<'a>(
                     query.time_interval,
                     tile_info,
                     GridOrEmpty::Grid(tile_grid.into()),
-                    CacheUntil(None),
+                    CacheHint::default(),
                 ))
             }),
     )

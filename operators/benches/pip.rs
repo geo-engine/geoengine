@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use geo_rand::{GeoRand, GeoRandParameters};
 use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPolygonCollection};
-use geoengine_datatypes::primitives::ttl::CacheUntil;
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, MultiPoint, QueryRectangle, SpatialResolution,
 };
@@ -70,7 +70,7 @@ fn random_points<T: Rng>(rng: &mut T, num_points: usize) -> MultiPointCollection
         MultiPoint::many(coordinates).unwrap(),
         time,
         Default::default(),
-        CacheUntil(None),
+        CacheHint::default(),
     )
     .unwrap()
 }

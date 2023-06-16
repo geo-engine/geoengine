@@ -594,7 +594,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::collections::IntoGeometryIterator;
     use geoengine_datatypes::dataset::NamedData;
-    use geoengine_datatypes::primitives::ttl::{CacheTtlSeconds, CacheUntil};
+    use geoengine_datatypes::primitives::ttl::{CacheHint, CacheTtl};
     use geoengine_datatypes::primitives::{
         AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat,
     };
@@ -635,7 +635,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
-            CacheUntil(None),
+            CacheHint::default(),
         )?;
 
         let expected = MultiPoint::many(vec![
@@ -709,7 +709,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
-            CacheUntil(None),
+            CacheHint::default(),
         )?;
 
         let expected = [MultiLineString::new(vec![vec![
@@ -789,7 +789,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
-            CacheUntil(None),
+            CacheHint::default(),
         )?;
 
         let expected = [MultiPolygon::new(vec![vec![vec![
@@ -867,7 +867,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
-                cache_until: CacheUntil(None),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -875,7 +875,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
-                cache_until: CacheUntil(None),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -885,7 +885,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_until: CacheUntil(None),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -895,7 +895,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_until: CacheUntil(None),
+                cache_hint: CacheHint::default(),
             },
         ];
 
@@ -1116,7 +1116,7 @@ mod tests {
                 bbox: None,
                 resolution: None,
             },
-            cache_ttl_seconds: CacheTtlSeconds(None),
+            cache_ttl: CacheTtl::default(),
         };
 
         let id: DataId = DatasetId::new().into();
@@ -1249,7 +1249,7 @@ mod tests {
                 bbox: None,
                 resolution: None,
             },
-            cache_ttl_seconds: CacheTtlSeconds(None),
+            cache_ttl: CacheTtl::default(),
         };
 
         let id: DataId = DatasetId::new().into();
@@ -1329,7 +1329,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 3],
                 HashMap::default(),
-                CacheUntil(None),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -1405,7 +1405,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 3],
                 HashMap::default(),
-                CacheUntil(None),
+                CacheHint::default(),
             )
             .unwrap()],
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n
@@ -1483,7 +1483,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 1],
                 HashMap::default(),
-                CacheUntil(None),
+                CacheHint::default(),
             )
             .unwrap()],
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n

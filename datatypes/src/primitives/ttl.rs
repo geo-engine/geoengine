@@ -2,42 +2,135 @@ use serde::{Deserialize, Serialize};
 
 use super::DateTime;
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct CacheTtlSeconds(pub Option<u32>);
+/// Config parameter to indicate how long a value may be cached
+/// TODO: json deserialization
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum CacheTtl {
+    #[default]
+    NoCache,
+    Seconds(u32), // NonZeroU32(?) or merge types as Seconds(0)
+    Unlimited,
+}
 
-impl CacheTtlSeconds {
-    pub fn cache_until(self) -> CacheUntil {
-        CacheUntil(self.0.map(|ttl| {
-            let ttl = chrono::Duration::seconds(ttl.into());
-            let now = chrono::offset::Utc::now();
-            let now = now + ttl;
-            DateTime::from(now)
-        }))
+impl From<CacheTtl> for CacheHint {
+    fn from(value: CacheTtl) -> Self {
+        Self {
+            created: DateTime::now(),
+            expires: match value {
+                CacheTtl::NoCache => CacheExpiration::NoCache,
+                CacheTtl::Seconds(seconds) if seconds == 0 => CacheExpiration::NoCache,
+                CacheTtl::Seconds(seconds) => CacheExpiration::Expires(
+                    (chrono::offset::Utc::now() + chrono::Duration::seconds(seconds.into())).into(),
+                ),
+                CacheTtl::Unlimited => CacheExpiration::Unlimited,
+            },
+        }
     }
 }
 
+/// Field for cachable values to indicate when they were created and when they expire
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct CacheUntil(pub Option<DateTime>);
+pub struct CacheHint {
+    created: DateTime,
+    expires: CacheExpiration,
+}
 
-impl CacheUntil {
-    #[must_use]
-    pub fn merged(&self, other: &CacheUntil) -> CacheUntil {
-        match (self.0, other.0) {
-            (Some(a), Some(b)) => CacheUntil(Some(a.min(b))),
-            (Some(a), None) => CacheUntil(Some(a)),
-            (None, Some(b)) => CacheUntil(Some(b)),
-            (None, None) => CacheUntil(None),
+impl Default for CacheHint {
+    fn default() -> Self {
+        Self {
+            created: DateTime::now(),
+            expires: CacheExpiration::NoCache,
+        }
+    }
+}
+
+impl CacheHint {
+    pub fn new(expires: CacheExpiration) -> Self {
+        Self {
+            created: DateTime::now(),
+            expires,
         }
     }
 
-    pub fn merge_with(&mut self, other: &CacheUntil) {
-        self.0 = self.merged(other).0;
+    pub fn no_cache() -> Self {
+        Self {
+            created: DateTime::now(),
+            expires: CacheExpiration::NoCache,
+        }
+    }
+
+    pub fn unlimited() -> Self {
+        Self {
+            created: DateTime::now(),
+            expires: CacheExpiration::Unlimited,
+        }
+    }
+
+    pub fn seconds(seconds: u32) -> Self {
+        Self {
+            created: DateTime::now(),
+            expires: CacheExpiration::Expires(
+                (chrono::offset::Utc::now() + chrono::Duration::seconds(seconds.into())).into(),
+            ),
+        }
+    }
+
+    #[must_use]
+    pub fn merged(&self, other: &CacheHint) -> CacheHint {
+        Self {
+            created: DateTime::now(),
+            expires: self.expires.merged(&other.expires),
+        }
+    }
+
+    pub fn merge_with(&mut self, other: &CacheHint) {
+        *self = self.merged(other);
     }
 
     pub fn is_expired(&self) -> bool {
-        match self.0 {
-            Some(expiration) => expiration > DateTime::now(),
-            None => false,
+        self.expires.is_expired()
+    }
+
+    pub fn may_cache(&self) -> bool {
+        !self.is_expired()
+    }
+}
+
+/// Type for storing the expiration data to avoid recomputing it from creation date time and ttl
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum CacheExpiration {
+    NoCache,
+    Unlimited,
+    Expires(DateTime),
+}
+
+impl CacheExpiration {
+    #[must_use]
+    pub fn merged(&self, other: &CacheExpiration) -> CacheExpiration {
+        match (self, other) {
+            (CacheExpiration::NoCache, _) | (_, CacheExpiration::NoCache) => {
+                CacheExpiration::NoCache
+            }
+            (CacheExpiration::Expires(a), CacheExpiration::Unlimited)
+            | (CacheExpiration::Unlimited, CacheExpiration::Expires(a)) => {
+                CacheExpiration::Expires(*a)
+            }
+            (CacheExpiration::Expires(a), CacheExpiration::Expires(b)) => {
+                CacheExpiration::Expires(*a.min(b))
+            }
+            (CacheExpiration::Unlimited, CacheExpiration::Unlimited) => CacheExpiration::Unlimited,
+        }
+    }
+
+    pub fn merge_with(&mut self, other: &CacheExpiration) {
+        *self = self.merged(other);
+    }
+
+    pub fn is_expired(&self) -> bool {
+        match self {
+            CacheExpiration::NoCache => true,
+            CacheExpiration::Unlimited => false,
+            CacheExpiration::Expires(expiration) => *expiration > DateTime::now(),
         }
     }
 }

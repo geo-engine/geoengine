@@ -1,6 +1,6 @@
 use crate::collections::batch_builder::RawFeatureCollectionBuilder;
 use crate::collections::{error, FeatureCollection, FeatureCollectionError};
-use crate::primitives::ttl::CacheUntil;
+use crate::primitives::ttl::CacheHint;
 use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInstance, TimeInterval};
 use crate::util::arrow::{downcast_mut_array, ArrowTyped};
 use crate::util::Result;
@@ -47,7 +47,7 @@ where
 {
     types: HashMap<String, FeatureDataType>,
     _collection_type: PhantomData<CollectionType>,
-    cache_until: CacheUntil,
+    cache_hint: CacheHint,
 }
 
 impl<CollectionType> FeatureCollectionBuilder<CollectionType>
@@ -95,7 +95,7 @@ where
             rows: 0,
             string_bytes: 0,
             _collection_type: PhantomData,
-            cache_until: self.cache_until,
+            cache_hint: self.cache_hint,
         }
     }
 
@@ -112,8 +112,8 @@ where
         )
     }
 
-    pub fn cache_until(&mut self, cache_until: CacheUntil) {
-        self.cache_until = cache_until;
+    pub fn cache_hint(&mut self, cache_hint: CacheHint) {
+        self.cache_hint = cache_hint;
     }
 }
 
@@ -129,7 +129,7 @@ where
     rows: usize,
     _collection_type: PhantomData<CollectionType>,
     string_bytes: usize, // TODO: remove when `StringBuilder` is able to output those
-    cache_until: CacheUntil,
+    cache_hint: CacheHint,
 }
 
 impl<CollectionType> FeatureCollectionRowBuilder<CollectionType>
@@ -396,7 +396,7 @@ where
         Ok(FeatureCollection::<CollectionType>::new_from_internals(
             table,
             self.types,
-            self.cache_until,
+            self.cache_hint,
         ))
     }
 }
@@ -410,7 +410,7 @@ where
         Self {
             types: Default::default(),
             _collection_type: Default::default(),
-            cache_until: CacheUntil(None),
+            cache_hint: CacheHint::default(),
         }
     }
 }

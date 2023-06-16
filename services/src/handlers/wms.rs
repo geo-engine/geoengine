@@ -1,5 +1,5 @@
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
-use geoengine_datatypes::primitives::ttl::CacheUntil;
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use reqwest::Url;
 use serde_json::json;
@@ -261,7 +261,7 @@ async fn wms_map_handler<C: ApplicationContext>(
         request: &web::Query<GetMap>,
         app_ctx: web::Data<C>,
         session: C::Session,
-    ) -> Result<(Vec<u8>, CacheUntil)> {
+    ) -> Result<(Vec<u8>, CacheHint)> {
         let endpoint = workflow.into_inner();
         let layer = WorkflowId::from_str(&request.layers)?;
 
@@ -369,9 +369,9 @@ async fn wms_map_handler<C: ApplicationContext>(
     }
 
     match compute_result(req, workflow, &request, app_ctx, session).await {
-        Ok((image_bytes, cache_until)) => Ok(HttpResponse::Ok()
+        Ok((image_bytes, cache_hint)) => Ok(HttpResponse::Ok()
             .content_type(mime::IMAGE_PNG)
-            .append_header(cache_until.cache_control_header())
+            .append_header(cache_hint.cache_control_header())
             .body(image_bytes)),
         Err(error) => Ok(handle_wms_error(request.exceptions, &error)),
     }

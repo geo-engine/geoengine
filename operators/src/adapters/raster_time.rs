@@ -572,7 +572,7 @@ mod tests {
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::ttl::CacheUntil;
+    use geoengine_datatypes::primitives::ttl::CacheHint;
     use geoengine_datatypes::raster::{EmptyGrid, Grid, RasterDataType, RasterProperties};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -595,7 +595,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
@@ -605,7 +605,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -615,7 +615,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -625,7 +625,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -651,7 +651,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 3),
@@ -661,7 +661,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
@@ -671,7 +671,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
@@ -681,7 +681,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
@@ -691,7 +691,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
@@ -701,7 +701,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -816,7 +816,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
@@ -826,7 +826,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -836,7 +836,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -846,7 +846,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -872,7 +872,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 3),
@@ -882,7 +882,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
@@ -892,7 +892,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
@@ -902,7 +902,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
@@ -912,7 +912,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
@@ -922,7 +922,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1037,7 +1037,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
@@ -1047,7 +1047,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -1057,7 +1057,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -1067,7 +1067,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1093,7 +1093,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
@@ -1103,7 +1103,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -1113,7 +1113,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -1123,7 +1123,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1222,7 +1222,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
@@ -1232,7 +1232,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -1242,7 +1242,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -1252,7 +1252,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1278,7 +1278,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
@@ -1288,7 +1288,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -1298,7 +1298,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -1308,7 +1308,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1407,7 +1407,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 10),
@@ -1417,7 +1417,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1443,7 +1443,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 4),
@@ -1453,7 +1453,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(4, 10),
@@ -1461,7 +1461,7 @@ mod tests {
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(4, 10),
@@ -1469,7 +1469,7 @@ mod tests {
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1563,7 +1563,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 10),
@@ -1573,7 +1573,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1599,7 +1599,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 4),
@@ -1609,7 +1609,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(4, 10),
@@ -1619,7 +1619,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(4, 10),
@@ -1629,7 +1629,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1722,7 +1722,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 10),
@@ -1732,7 +1732,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(10, 20),
@@ -1740,7 +1740,7 @@ mod tests {
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(10, 20),
@@ -1748,7 +1748,7 @@ mod tests {
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1774,7 +1774,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 9),
@@ -1784,7 +1784,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(9, 20),
@@ -1792,7 +1792,7 @@ mod tests {
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(9, 20),
@@ -1800,7 +1800,7 @@ mod tests {
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: EmptyGrid::new([3, 2].into()).into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1894,7 +1894,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 10),
@@ -1904,7 +1904,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(10, 20),
@@ -1914,7 +1914,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(10, 20),
@@ -1924,7 +1924,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -1950,7 +1950,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 9),
@@ -1960,7 +1960,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(9, 20),
@@ -1970,7 +1970,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(9, 20),
@@ -1980,7 +1980,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -2074,7 +2074,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(1, 1),
@@ -2084,7 +2084,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 2),
@@ -2094,7 +2094,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 2),
@@ -2104,7 +2104,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -2130,7 +2130,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 10),
@@ -2140,7 +2140,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
-                        cache_until: CacheUntil(None),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {

@@ -173,7 +173,7 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
-            cache_until: self.cache_until,
+            cache_hint: self.cache_hint,
         }
     }
 }
@@ -349,7 +349,7 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
-            cache_until: self.cache_until,
+            cache_hint: self.cache_hint,
         }
     }
 }
@@ -357,7 +357,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        primitives::{ttl::CacheUntil, TimeInterval},
+        primitives::{ttl::CacheHint, TimeInterval},
         raster::{EmptyGrid2D, GeoTransform, Grid2D},
         util::test::TestDefault,
     };
@@ -460,7 +460,7 @@ mod tests {
             [0, 0].into(),
             geo,
             r1,
-            CacheUntil(None),
+            CacheHint::default(),
         );
 
         let scaled_r1 = t1.map_elements_parallel(|p: u8| p * 2 + 1);
@@ -483,7 +483,7 @@ mod tests {
             [0, 0].into(),
             geo,
             r1,
-            CacheUntil(None),
+            CacheHint::default(),
         );
 
         let scaled_r1 = t1.map_elements(|p| {

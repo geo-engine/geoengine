@@ -4,7 +4,7 @@ use crate::api::model::datatypes::{
     TimeInstance, TimeStep, VectorQueryRectangle,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::ttl::CacheTtlSeconds;
+use geoengine_datatypes::primitives::ttl::CacheTtl;
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
@@ -449,7 +449,7 @@ pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
-    pub cache_ttl_seconds: CacheTtlSeconds,
+    pub cache_ttl: CacheTtl,
 }
 
 impl From<geoengine_operators::source::GdalMetaDataStatic> for GdalMetaDataStatic {
@@ -458,7 +458,7 @@ impl From<geoengine_operators::source::GdalMetaDataStatic> for GdalMetaDataStati
             time: value.time.map(Into::into),
             params: value.params.into(),
             result_descriptor: value.result_descriptor.into(),
-            cache_ttl_seconds: value.cache_ttl_seconds,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -469,7 +469,7 @@ impl From<GdalMetaDataStatic> for geoengine_operators::source::GdalMetaDataStati
             time: value.time.map(Into::into),
             params: value.params.into(),
             result_descriptor: value.result_descriptor.into(),
-            cache_ttl_seconds: value.cache_ttl_seconds,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -869,7 +869,7 @@ pub struct GdalMetaDataRegular {
     pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub data_time: TimeInterval,
     pub step: TimeStep,
-    pub cache_ttl_seconds: CacheTtlSeconds,
+    pub cache_ttl: CacheTtl,
 }
 
 impl From<geoengine_operators::source::GdalMetaDataRegular> for GdalMetaDataRegular {
@@ -884,7 +884,7 @@ impl From<geoengine_operators::source::GdalMetaDataRegular> for GdalMetaDataRegu
                 .collect(),
             data_time: value.data_time.into(),
             step: value.step.into(),
-            cache_ttl_seconds: value.cache_ttl_seconds,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -901,7 +901,7 @@ impl From<GdalMetaDataRegular> for geoengine_operators::source::GdalMetaDataRegu
                 .collect(),
             data_time: value.data_time.into(),
             step: value.step.into(),
-            cache_ttl_seconds: value.cache_ttl_seconds,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -1123,7 +1123,7 @@ pub struct GdalMetadataNetCdfCf {
     /// A band offset specifies the first band index to use for the first point in time.
     /// All other time steps are added to this offset.
     pub band_offset: usize,
-    pub cache_ttl_seconds: CacheTtlSeconds,
+    pub cache_ttl: CacheTtl,
 }
 
 impl From<geoengine_operators::source::GdalMetadataNetCdfCf> for GdalMetadataNetCdfCf {
@@ -1135,7 +1135,7 @@ impl From<geoengine_operators::source::GdalMetadataNetCdfCf> for GdalMetadataNet
             end: value.end.into(),
             step: value.step.into(),
             band_offset: value.band_offset,
-            cache_ttl_seconds: value.cache_ttl_seconds,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -1149,7 +1149,7 @@ impl From<GdalMetadataNetCdfCf> for geoengine_operators::source::GdalMetadataNet
             end: value.end.into(),
             step: value.step.into(),
             band_offset: value.band_offset,
-            cache_ttl_seconds: value.cache_ttl_seconds,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -1185,7 +1185,7 @@ impl From<GdalMetaDataList> for geoengine_operators::source::GdalMetaDataList {
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
-    pub cache_ttl_seconds: CacheTtlSeconds,
+    pub cache_ttl: CacheTtl,
 }
 
 impl From<geoengine_operators::source::GdalLoadingInfoTemporalSlice>
@@ -1195,7 +1195,7 @@ impl From<geoengine_operators::source::GdalLoadingInfoTemporalSlice>
         Self {
             time: value.time.into(),
             params: value.params.map(Into::into),
-            cache_ttl_seconds: value.cache_ttl_seconds,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -1207,7 +1207,7 @@ impl From<GdalLoadingInfoTemporalSlice>
         Self {
             time: value.time.into(),
             params: value.params.map(Into::into),
-            cache_ttl_seconds: value.cache_ttl_seconds,
+            cache_ttl: value.cache_ttl,
         }
     }
 }

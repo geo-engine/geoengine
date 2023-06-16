@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use futures::TryFuture;
 use geoengine_datatypes::{
     primitives::{
-        ttl::CacheUntil, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval,
+        ttl::CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval,
         TimeStep,
     },
     raster::{
@@ -122,7 +122,7 @@ where
             tile_position,
             global_geo_transform,
             F::into_grid(state_grid)?,
-            CacheUntil(None), // TODO: take min cache_until from all tiles that went into the aggregator
+            CacheHint::default(), // TODO: take min cache_hint from all tiles that went into the aggregator
         ))
     }
 

@@ -945,7 +945,7 @@ mod tests {
 
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::ttl::CacheUntil;
+    use geoengine_datatypes::primitives::ttl::CacheHint;
     use rand::RngCore;
     use tokio::runtime::Handle;
     use tokio_postgres::Config;
@@ -2070,7 +2070,7 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
-                    CacheUntil(None),
+                    CacheHint::default(),
                 )
                 .unwrap();
 

@@ -791,7 +791,7 @@ mod tests {
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::{join, Future};
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::primitives::ttl::CacheTtlSeconds;
+    use geoengine_datatypes::primitives::ttl::CacheTtl;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
         RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
@@ -2084,7 +2084,7 @@ let ctx = app_ctx.session_context(session);
                     granularity: TimeGranularity::Millis,
                     step: 0,
                 },
-                cache_ttl_seconds: CacheTtlSeconds(None),
+                cache_ttl: CacheTtl::default(),
             };
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataRegular(meta));
@@ -2101,7 +2101,7 @@ let ctx = app_ctx.session_context(session);
                 time: None,
                 params: gdal_params.clone(),
                 result_descriptor: raster_descriptor.clone(),
-                cache_ttl_seconds: CacheTtlSeconds(None),
+                cache_ttl: CacheTtl::default(),
             };
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalStatic(meta));
@@ -2139,7 +2139,7 @@ let ctx = app_ctx.session_context(session);
                     step: 0,
                 },
                 band_offset: 0,
-                cache_ttl_seconds: CacheTtlSeconds(None),
+                cache_ttl: CacheTtl::default(),
             };
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetadataNetCdfCf(meta));

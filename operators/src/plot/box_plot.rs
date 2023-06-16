@@ -478,7 +478,7 @@ impl BoxPlotAccum {
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::primitives::ttl::CacheUntil;
+    use geoengine_datatypes::primitives::ttl::CacheHint;
     use serde_json::json;
 
     use geoengine_datatypes::primitives::{
@@ -941,7 +941,7 @@ mod tests {
                             tile_size_in_pixels,
                         },
                         EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
-                        CacheUntil(None),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1010,7 +1010,7 @@ mod tests {
                         Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0])
                             .unwrap()
                             .into(),
-                        CacheUntil(None),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1079,7 +1079,7 @@ mod tests {
                             tile_size_in_pixels,
                         },
                         EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
-                        CacheUntil(None),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1147,7 +1147,7 @@ mod tests {
                             tile_size_in_pixels,
                         },
                         Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
-                        CacheUntil(None),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1229,7 +1229,7 @@ mod tests {
                         )
                         .unwrap()
                         .into(),
-                        CacheUntil(None),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1303,7 +1303,7 @@ mod tests {
                         Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
                             .unwrap()
                             .into(),
-                        CacheUntil(None),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1380,7 +1380,7 @@ mod tests {
                     )
                     .unwrap()
                     .into(),
-                    CacheUntil(None),
+                    CacheHint::default(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,

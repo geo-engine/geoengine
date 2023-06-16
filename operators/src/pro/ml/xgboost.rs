@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::ttl::CacheUntil;
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle, SpatialPartition2D,
     SpatialResolution,
@@ -267,7 +267,7 @@ where
                 global_geo_transform,
                 predicted_grid.into(),
                 props.clone(),
-                CacheUntil(None), // TODO ???
+                CacheHint::default(), // TODO ???
             );
 
         Ok(rt)
@@ -383,7 +383,7 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
 
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::ttl::CacheUntil;
+    use geoengine_datatypes::primitives::ttl::CacheHint;
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
@@ -423,7 +423,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([5, 5].into(), t1).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
             RasterTile2D::<i32>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 1),
@@ -433,7 +433,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([5, 5].into(), t2).unwrap()),
-                CacheUntil(None),
+                CacheHint::default(),
             ),
         ];
 
@@ -468,7 +468,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
             },
             GridOrEmpty::from(Grid2D::new([5, 5].into(), tile).unwrap()),
-            CacheUntil(None),
+            CacheHint::default(),
         )];
 
         MockRasterSource {

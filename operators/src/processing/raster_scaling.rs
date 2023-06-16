@@ -252,7 +252,7 @@ where
 mod tests {
 
     use geoengine_datatypes::{
-        primitives::{ttl::CacheUntil, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{ttl::CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             Grid2D, GridOrEmpty2D, GridShape, MaskedGrid2D, RasterDataType, RasterProperties,
             TileInformation, TilingSpecification,
@@ -295,7 +295,7 @@ mod tests {
             },
             raster.into(),
             raster_props,
-            CacheUntil(None),
+            CacheHint::default(),
         );
 
         let spatial_resolution = raster_tile.spatial_resolution();
@@ -404,7 +404,7 @@ mod tests {
             },
             raster.into(),
             raster_props,
-            CacheUntil(None),
+            CacheHint::default(),
         );
 
         let spatial_resolution = raster_tile.spatial_resolution();

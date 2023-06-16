@@ -1,7 +1,7 @@
 use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
     operations::image::{Colorizer, DefaultColors, RgbaColor, ToPng},
-    primitives::{ttl::CacheUntil, AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
+    primitives::{ttl::CacheHint, AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
     raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
@@ -23,7 +23,7 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
     time: Option<TimeInterval>,
     colorizer: Option<Colorizer>,
     conn_closed: BoxFuture<'_, ()>,
-) -> Result<(Vec<u8>, CacheUntil)>
+) -> Result<(Vec<u8>, CacheHint)>
 where
     T: Pixel,
 {
@@ -49,7 +49,7 @@ where
         time.unwrap_or_default(),
         query_geo_transform,
         GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
-        CacheUntil(None),
+        CacheHint::default(),
     ));
 
     let output_tile: BoxFuture<Result<RasterTile2D<T>>> =
@@ -74,7 +74,7 @@ where
     let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
     Ok((
         result.grid_array.to_png(width, height, &colorizer)?,
-        result.cache_until,
+        result.cache_hint,
     ))
 }
 

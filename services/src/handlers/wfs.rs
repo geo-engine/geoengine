@@ -1,6 +1,6 @@
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use futures::future::BoxFuture;
-use geoengine_datatypes::primitives::ttl::CacheUntil;
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::util::abortable_query_execution;
 use geoengine_operators::util::input::RasterOrVectorOperator;
@@ -659,7 +659,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
         .iter()
         .cloned()
         .collect(),
-        CacheUntil(None),
+        CacheHint::default(),
     )
     .unwrap();
 

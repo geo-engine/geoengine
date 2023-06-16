@@ -3,7 +3,7 @@ use std::{marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
-    primitives::{ttl::CacheUntil, RasterQueryRectangle, SpatialPartition2D, TimeInterval},
+    primitives::{ttl::CacheHint, RasterQueryRectangle, SpatialPartition2D, TimeInterval},
     raster::{
         ConvertDataType, FromIndexFnParallel, GeoTransform, GridIdx2D, GridIndexAccess,
         GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel, Pixel,
@@ -73,7 +73,7 @@ where
                     out_tile_position,
                     out_global_geo_transform,
                     _output_grid_shape,
-                    cache_until,
+                    cache_hint,
                 ) = Tuple::metadata(&rasters);
 
                 let program = self.program.clone();
@@ -90,7 +90,7 @@ where
                     out_tile_position,
                     out_global_geo_transform,
                     out,
-                    cache_until,
+                    cache_hint,
                 ))
             });
 
@@ -119,7 +119,7 @@ trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
         GridIdx2D,
         GeoTransform,
         GridShape2D,
-        CacheUntil,
+        CacheHint,
     );
 
     fn compute_expression(
@@ -166,7 +166,7 @@ where
         GridIdx2D,
         GeoTransform,
         GridShape2D,
-        CacheUntil,
+        CacheHint,
     ) {
         let raster = &tuple;
 
@@ -175,7 +175,7 @@ where
             raster.tile_position,
             raster.global_geo_transform,
             raster.grid_shape(),
-            raster.cache_until, // TODO
+            raster.cache_hint, // TODO
         )
     }
 
@@ -249,7 +249,7 @@ where
         GridIdx2D,
         GeoTransform,
         GridShape2D,
-        CacheUntil,
+        CacheHint,
     ) {
         let raster = &tuple.0;
 
@@ -258,7 +258,7 @@ where
             raster.tile_position,
             raster.global_geo_transform,
             raster.grid_shape(),
-            raster.cache_until, // TODO
+            raster.cache_hint, // TODO
         )
     }
 
@@ -371,7 +371,7 @@ macro_rules! impl_expression_tuple_processor {
             }
 
             #[inline]
-            fn metadata(tuple: &Self::Tuple) -> (TimeInterval, GridIdx2D, GeoTransform, GridShape2D, CacheUntil) {
+            fn metadata(tuple: &Self::Tuple) -> (TimeInterval, GridIdx2D, GeoTransform, GridShape2D, CacheHint) {
                 let raster = &tuple[0];
 
                 (
@@ -379,7 +379,7 @@ macro_rules! impl_expression_tuple_processor {
                     raster.tile_position,
                     raster.global_geo_transform,
                     raster.grid_shape(),
-                    raster.cache_until, // TODO
+                    raster.cache_hint, // TODO
                 )
             }
 

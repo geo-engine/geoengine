@@ -165,7 +165,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        primitives::{ttl::CacheUntil, TimeInterval},
+        primitives::{ttl::CacheHint, TimeInterval},
         raster::{EmptyGrid2D, GridIndexAccessMut, MaskedGrid2D, TileInformation},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -241,7 +241,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
-            CacheUntil(None),
+            CacheHint::default(),
         );
 
         let bytes =
@@ -289,7 +289,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
             },
             EmptyGrid2D::<f64>::new([3, 2].into()).into(),
-            CacheUntil(None),
+            CacheHint::default(),
         );
 
         let bytes =

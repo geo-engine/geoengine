@@ -147,7 +147,7 @@ where
 mod tests {
     use geoengine_datatypes::{
         primitives::{
-            ttl::CacheUntil, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
+            ttl::CacheHint, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
         },
         raster::{
             Grid2D, GridOrEmpty2D, MaskedGrid2D, RasterDataType, TileInformation,
@@ -187,7 +187,7 @@ mod tests {
                 tile_size_in_pixels: grid_shape,
             },
             raster.into(),
-            CacheUntil(None),
+            CacheHint::default(),
         );
 
         let mrs = MockRasterSource {

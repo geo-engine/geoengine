@@ -1,4 +1,4 @@
-use crate::primitives::ttl::CacheUntil;
+use crate::primitives::ttl::CacheHint;
 use crate::primitives::{BoundingBox2D, Coordinate2D, Geometry, GeometryRef, TimeInterval};
 use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
@@ -119,7 +119,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             self.types.clone(),
-            CacheUntil(None),
+            CacheHint::default(),
         ))
     }
 }

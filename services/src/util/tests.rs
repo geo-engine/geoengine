@@ -36,7 +36,7 @@ use flexi_logger::Logger;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::operations::image::RgbaColor;
-use geoengine_datatypes::primitives::ttl::CacheTtlSeconds;
+use geoengine_datatypes::primitives::ttl::CacheTtl;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::test_data;
@@ -243,7 +243,7 @@ pub async fn add_land_cover_to_datasets(ctx: &InMemorySessionContext) -> Dataset
                     x: 0.1, y: 0.1,
                 }),
             },
-            cache_ttl_seconds: CacheTtlSeconds(None),
+            cache_ttl: CacheTtl::default(),
         }.into()),
     };
 

@@ -254,7 +254,7 @@ mod tests {
         source::GdalSourceParameters,
     };
     use geoengine_datatypes::primitives::{
-        ttl::CacheUntil, BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
+        ttl::CacheHint, BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::{dataset::NamedData, plots::PlotMetaData, primitives::DateTime};
     use geoengine_datatypes::{raster::TilingSpecification, spatial_reference::SpatialReference};
@@ -411,7 +411,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                 },
                 Grid2D::new([3, 2].into(), values).unwrap().into(),
-                CacheUntil(None),
+                CacheHint::default(),
             ));
         }
 
