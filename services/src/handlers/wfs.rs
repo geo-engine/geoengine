@@ -19,7 +19,7 @@ use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::server::{connection_closed, not_implemented_handler};
+use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
@@ -529,7 +529,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
     };
     let query_ctx = ctx.query_context()?;
 
-    let json = match processor {
+    let (json, cache_hint) = match processor {
         TypedVectorQueryProcessor::Data(p) => {
             vector_stream_to_geojson(p, query_rect, query_ctx, conn_closed).await
         }
@@ -544,7 +544,9 @@ async fn wfs_feature_handler<C: ApplicationContext>(
         }
     }?;
 
-    Ok(HttpResponse::Ok().json(json))
+    Ok(HttpResponse::Ok()
+        .append_header(cache_hint.cache_control_header())
+        .json(json))
 }
 
 // Define GeoJson types purely for modelling the output of the WFS handler for OpenAPI
@@ -591,7 +593,7 @@ async fn vector_stream_to_geojson<G, C: QueryContext + 'static>(
     query_rect: VectorQueryRectangle,
     mut query_ctx: C,
     conn_closed: BoxFuture<'_, ()>,
-) -> Result<serde_json::Value>
+) -> Result<(serde_json::Value, CacheHint)>
 where
     G: Geometry + 'static,
     for<'c> FeatureCollection<G>: ToGeoJson<'c>,
@@ -601,6 +603,9 @@ where
     let features: Vec<serde_json::Value> = Vec::new();
     // TODO: more efficient merging of the partial feature collections
     let stream = processor.query(query_rect, &query_ctx).await?;
+
+    // TODO: handle case where no feature chunks are produced? What shall be the cache hint then?
+    let mut cache_hint = CacheHint::unlimited();
 
     let features: BoxFuture<geoengine_operators::util::Result<Vec<serde_json::Value>>> =
         Box::pin(stream.fold(
@@ -619,6 +624,9 @@ where
                             .expect("to geojson is correct");
 
                         output.append(more_features);
+
+                        cache_hint.merge_with(&collection.cache_hint);
+
                         Ok(output)
                     }
                     (Err(error), _) | (_, Err(error)) => Err(error),
@@ -637,7 +645,7 @@ where
         .expect("as defined")
         .insert("features".into(), serde_json::Value::Array(features));
 
-    Ok(output)
+    Ok((output, cache_hint))
 }
 
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully

@@ -94,13 +94,21 @@ impl CacheHint {
     pub fn may_cache(&self) -> bool {
         !self.is_expired()
     }
+
+    pub fn created(&self) -> DateTime {
+        self.created
+    }
+
+    pub fn expires(&self) -> CacheExpiration {
+        self.expires
+    }
 }
 
 /// Type for storing the expiration data to avoid recomputing it from creation date time and ttl
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum CacheExpiration {
-    NoCache,
-    Unlimited,
+    NoCache,   // TODO: rename: Always?
+    Unlimited, // TODO: rename: Never?
     Expires(DateTime),
 }
 

@@ -28,7 +28,7 @@ use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::server::{connection_closed, not_implemented_handler};
+use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -441,7 +441,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
 
     let query_ctx = ctx.query_context()?;
 
-    let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
+    let (bytes, cache_hint) = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_multiband_geotiff_bytes(
             p,
             query_rect,
@@ -462,7 +462,10 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         .await)?
     .map_err(error::Error::from)?;
 
-    Ok(HttpResponse::Ok().content_type("image/tiff").body(bytes))
+    Ok(HttpResponse::Ok()
+        .append_header(cache_hint.cache_control_header())
+        .content_type("image/tiff")
+        .body(bytes))
 }
 
 pub struct CoverageResponse {}

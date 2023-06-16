@@ -12,7 +12,7 @@ use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
 use gdal::{Dataset, DriverManager, Metadata};
-use geoengine_datatypes::primitives::ttl::CacheTtl;
+use geoengine_datatypes::primitives::ttl::{CacheHint, CacheTtl};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, DateTimeParseFormat, QueryRectangle, RasterQueryRectangle,
     SpatialPartition2D, TimeInterval,
@@ -44,7 +44,7 @@ pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'stat
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
     tiling_specification: TilingSpecification,
-) -> Result<Vec<u8>>
+) -> Result<(Vec<u8>, CacheHint)>
 where
     T: Pixel + GdalType,
 {
@@ -64,6 +64,8 @@ where
         gdal_tiff_options,
         gdal_tiff_metadata,
     )?;
+
+    let mut cache_hint = CacheHint::unlimited();
 
     spawn_blocking(move || {
         let mut band_idx = 1;
@@ -89,6 +91,8 @@ where
                 )?;
             }
 
+            cache_hint.merge_with(&tile.cache_hint);
+
             writer.write_tile_into_band(tile, dataset.rasterband(band_idx)?)?;
         }
 
@@ -96,7 +100,10 @@ where
     })
     .await??;
 
-    Ok(gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)?)
+    Ok((
+        gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)?,
+        cache_hint,
+    ))
 }
 
 fn create_multiband_dataset_and_writer<T>(
@@ -1718,7 +1725,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
-        let mut bytes = raster_stream_to_multiband_geotiff_bytes(
+        let (mut bytes, _) = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,
