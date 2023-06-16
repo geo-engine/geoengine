@@ -1384,6 +1384,7 @@ let ctx = app_ctx.session_context(session);
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
+                cache_ttl: CacheTtl::default(),
             };
 
             let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -1577,6 +1578,7 @@ let ctx = app_ctx.session_context(session);
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
+                cache_ttl: CacheTtl::default(),
             };
 
             let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -1699,6 +1701,7 @@ let ctx = app_ctx.session_context(session);
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: descriptor.clone(),
                 phantom: Default::default(),
@@ -1774,6 +1777,7 @@ let ctx = app_ctx.session_context(session);
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: descriptor.clone(),
                 phantom: Default::default(),
@@ -1829,6 +1833,7 @@ let ctx = app_ctx.session_context(session);
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: descriptor.clone(),
                 phantom: Default::default(),
@@ -1890,6 +1895,7 @@ let ctx = app_ctx.session_context(session);
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: descriptor.clone(),
                 phantom: Default::default(),
@@ -1951,6 +1957,7 @@ let ctx = app_ctx.session_context(session);
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: descriptor.clone(),
                 phantom: Default::default(),
@@ -2060,6 +2067,7 @@ let ctx = app_ctx.session_context(session);
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: vector_descriptor.clone(),
                 phantom: Default::default(),
@@ -2949,6 +2957,7 @@ let ctx = app_ctx.session_context(session);
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
+                cache_ttl: CacheTtl::default(),
             };
 
             let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -3044,6 +3053,7 @@ let ctx = app_ctx.session_context(session);
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
+                cache_ttl: CacheTtl::default(),
             };
 
             let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -3730,6 +3740,7 @@ let ctx = app_ctx.session_context(session);
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
+                cache_ttl: CacheTtl::default(),
             };
 
             let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<

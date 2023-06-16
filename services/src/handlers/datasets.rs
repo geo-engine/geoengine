@@ -31,7 +31,7 @@ use gdal::{
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
-    primitives::{FeatureDataType, Measurement, VectorQueryRectangle},
+    primitives::{ttl::CacheTtl, FeatureDataType, Measurement, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
@@ -723,6 +723,7 @@ fn auto_detect_meta_data_definition(
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         },
         result_descriptor: VectorResultDescriptor {
             data_type: geometry.data_type,
@@ -1148,6 +1149,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
+                cache_ttl: CacheTtl::default(),
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1178,6 +1180,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
+                cache_ttl: CacheTtl::default(),
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
@@ -1576,6 +1579,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1675,6 +1679,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1753,6 +1758,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1829,6 +1835,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1899,6 +1906,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1973,6 +1981,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2049,6 +2058,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
+                cache_ttl: CacheTtl::default(),
             },
             result_descriptor: descriptor,
             phantom: Default::default(),

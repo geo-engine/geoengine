@@ -293,6 +293,7 @@ mod tests {
     };
     use crate::test_data;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
+    use geoengine_datatypes::primitives::ttl::CacheTtl;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, FeatureDataType, NoGeometry, SpatialResolution, TimeInterval,
     };
@@ -537,6 +538,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,

@@ -22,6 +22,7 @@ use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
 use futures::future::join_all;
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::primitives::ttl::CacheTtl;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
@@ -483,6 +484,7 @@ impl GfbioCollectionsDataProvider {
                     abcd_unit_id,
                     &column_name_to_hash,
                 )?),
+                cache_ttl: CacheTtl::default(),
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -1171,6 +1173,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: Some("surrogate_key = 17 AND adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71 = 'ZFMK Sc0602'".to_string()),
+                cache_ttl: CacheTtl::default(),
             };
 
             if loading_info != expected {

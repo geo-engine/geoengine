@@ -133,6 +133,7 @@ pub fn create_ports_meta_data(
             sql_query: None,
             attribute_query: None,
             default_geometry: None,
+            cache_ttl: CacheTtl::default(),
         },
         result_descriptor: VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,

@@ -399,6 +399,10 @@ where
             self.cache_hint,
         ))
     }
+
+    pub fn cache_hint(&mut self, cache_hint: CacheHint) {
+        self.cache_hint = cache_hint;
+    }
 }
 
 /// By implementing `Default` ourselves we omit `CollectionType` implementing `Default`

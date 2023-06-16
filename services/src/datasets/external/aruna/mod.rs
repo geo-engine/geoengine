@@ -462,6 +462,7 @@ impl ArunaDataProvider {
             on_error: OgrSourceErrorSpec::Abort,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         }
     }
 
@@ -789,6 +790,7 @@ impl ExpiringDownloadLink for OgrSourceDataset {
             on_error: self.on_error,
             sql_query: self.sql_query.clone(),
             attribute_query: self.attribute_query.clone(),
+            cache_ttl: self.cache_ttl,
         })
     }
 }

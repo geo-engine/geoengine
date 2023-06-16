@@ -492,6 +492,7 @@ pub struct OgrSourceDataset {
     pub on_error: OgrSourceErrorSpec,
     pub sql_query: Option<String>,
     pub attribute_query: Option<String>,
+    pub cache_ttl: CacheTtl,
 }
 
 impl From<geoengine_operators::source::OgrSourceDataset> for OgrSourceDataset {
@@ -508,6 +509,7 @@ impl From<geoengine_operators::source::OgrSourceDataset> for OgrSourceDataset {
             on_error: value.on_error.into(),
             sql_query: value.sql_query,
             attribute_query: value.attribute_query,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -526,6 +528,7 @@ impl From<OgrSourceDataset> for geoengine_operators::source::OgrSourceDataset {
             on_error: value.on_error.into(),
             sql_query: value.sql_query,
             attribute_query: value.attribute_query,
+            cache_ttl: value.cache_ttl,
         }
     }
 }

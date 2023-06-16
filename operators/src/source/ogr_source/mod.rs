@@ -17,6 +17,7 @@ use futures::{ready, Stream, StreamExt};
 use futures::{Future, FutureExt};
 use gdal::vector::sql::ResultSet;
 use gdal::vector::{Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType};
+use geoengine_datatypes::primitives::ttl::CacheTtl;
 use log::debug;
 use pin_project::pin_project;
 use postgres_protocol::escape::{escape_identifier, escape_literal};
@@ -110,6 +111,7 @@ pub struct OgrSourceDataset {
     pub on_error: OgrSourceErrorSpec,
     pub sql_query: Option<String>,
     pub attribute_query: Option<String>,
+    pub cache_ttl: CacheTtl,
 }
 
 impl OgrSourceDataset {
@@ -1062,6 +1064,8 @@ where
             }
         }
 
+        builder.cache_hint(dataset_information.cache_ttl.into());
+
         builder.build().map_err(Into::into)
     }
 
@@ -1509,6 +1513,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let serialized_spec = serde_json::to_value(&spec).unwrap();
@@ -1626,6 +1631,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -1677,6 +1683,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -1722,6 +1729,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Abort,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
         let info = StaticMetaData {
             loading_info: dataset_information,
@@ -1771,6 +1779,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
         let info = StaticMetaData {
             loading_info: dataset_information,
@@ -1837,6 +1846,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1936,6 +1946,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2038,6 +2049,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2152,6 +2164,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2365,6 +2378,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -3544,6 +3558,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -3663,6 +3678,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -3775,6 +3791,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4030,6 +4047,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4119,6 +4137,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPolygon,
@@ -4220,6 +4239,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4355,6 +4375,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4479,6 +4500,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4603,6 +4625,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4723,6 +4746,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4847,6 +4871,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4975,6 +5000,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtl::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -5090,6 +5116,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -5207,6 +5234,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -5324,6 +5352,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -5439,6 +5468,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -5558,6 +5588,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -5673,6 +5704,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -5800,6 +5832,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -5924,6 +5957,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: Some("\"c\" = 'foo'".to_string()),
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -6038,6 +6072,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -6127,6 +6162,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -6219,6 +6255,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: Some("\"name\" = 'Bangkok'".to_string()),
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
@@ -6308,6 +6345,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtl::default(),
         };
 
         let info = StaticMetaData {
