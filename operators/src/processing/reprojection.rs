@@ -26,8 +26,8 @@ use geoengine_datatypes::{
         CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
     primitives::{
-        BoundingBox2D, Geometry, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
-        SpatialResolution, VectorQueryRectangle,
+        ttl::CacheExpiration, BoundingBox2D, Geometry, RasterQueryRectangle, SpatialPartition2D,
+        SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
     },
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
@@ -569,6 +569,7 @@ where
                 grid_bounds,
                 tiling_strat.geo_transform,
                 self.tiling_spec.tile_size_in_pixels,
+                CacheExpiration::Unlimited, // gaps only occur where the projection is not defined, so it's safe to cache this forever
             )))
         }
     }

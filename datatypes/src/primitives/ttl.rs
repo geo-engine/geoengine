@@ -98,6 +98,10 @@ impl CacheHint {
         }
     }
 
+    pub fn with_created_and_expires(created: DateTime, expires: CacheExpiration) -> Self {
+        Self { created, expires }
+    }
+
     pub fn no_cache() -> Self {
         Self {
             created: DateTime::now(),
@@ -185,6 +189,15 @@ impl CacheExpiration {
             CacheExpiration::NoCache => true,
             CacheExpiration::Unlimited => false,
             CacheExpiration::Expires(expiration) => *expiration < DateTime::now(),
+        }
+    }
+}
+
+impl From<CacheExpiration> for CacheHint {
+    fn from(expiration: CacheExpiration) -> Self {
+        Self {
+            created: DateTime::now(),
+            expires: expiration,
         }
     }
 }

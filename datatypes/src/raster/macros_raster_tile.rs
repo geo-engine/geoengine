@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn generate_generic_raster2d() {
-        fn generate<T: Pixel>() -> RasterTile2D<T> {
+        fn generate<T: Pixel>(cache_hint: CacheHint) -> RasterTile2D<T> {
             let data: Vec<T> = vec![
                 T::from_(1),
                 T::from_(2),
@@ -312,17 +312,19 @@ mod tests {
                 TimeInterval::default(),
                 GeoTransform::test_default(),
                 r,
-                CacheHint::default(),
+                cache_hint,
             )
         }
 
+        let cache_hint = CacheHint::default();
+
         assert_eq!(
-            generate_generic_raster_tile_2d!(RasterDataType::U8, generate()),
+            generate_generic_raster_tile_2d!(RasterDataType::U8, generate(cache_hint)),
             TypedRasterTile2D::U8(RasterTile2D::new_without_offset(
                 TimeInterval::default(),
                 GeoTransform::test_default(),
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6],).unwrap(),
-                CacheHint::default(),
+                cache_hint,
             ),)
         );
     }

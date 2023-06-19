@@ -1,5 +1,4 @@
 use super::from_index_fn::FromIndexFnParallel;
-use crate::primitives::ttl::CacheHint;
 use crate::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use crate::raster::{
     EmptyGrid, GridIdx, GridIdx2D, GridIndexAccess, GridOrEmpty, Pixel, RasterTile2D,
@@ -34,7 +33,7 @@ where
                 input.time,
                 *info_out,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
-                CacheHint::default(),
+                input.cache_hint,
             ));
         }
 
@@ -63,7 +62,7 @@ where
             info_out.global_tile_position,
             info_out.global_geo_transform,
             out_data,
-            CacheHint::default(),
+            input.cache_hint,
         );
 
         Ok(out_tile)
@@ -112,7 +111,7 @@ where
                 input.time,
                 *info_out,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
-                CacheHint::default(),
+                input.cache_hint,
             ));
         }
 
@@ -174,7 +173,7 @@ where
             info_out.global_tile_position,
             info_out.global_geo_transform,
             out_data,
-            CacheHint::default(),
+            input.cache_hint,
         );
 
         Ok(out_tile)
@@ -186,8 +185,9 @@ mod tests {
     use rayon::ThreadPoolBuilder;
 
     use super::*;
-    use crate::raster::{
-        GeoTransform, Grid2D, GridOrEmpty, MaskedGrid, RasterTile2D, TileInformation,
+    use crate::{
+        primitives::ttl::CacheHint,
+        raster::{GeoTransform, Grid2D, GridOrEmpty, MaskedGrid, RasterTile2D, TileInformation},
     };
 
     #[test]

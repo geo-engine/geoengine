@@ -424,8 +424,13 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
                 let mut tile_data = vec![0.; tile_size_x * tile_size_y];
 
+                let mut cache_hint = CacheHint::unlimited();
+
                 while let Some(chunk) = chunks.next().await {
                     let chunk = chunk?;
+
+                    cache_hint.merge_with(&chunk.cache_hint);
+
                     let stddev = self.stddev;
                     tile_data =
                         spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
@@ -463,7 +468,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                             )
                             .into(),
                     ),
-                    CacheHint::default(),
+                    cache_hint,
                 ))
             });
 

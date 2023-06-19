@@ -100,30 +100,42 @@ pub struct OperatorTileCache {
 
 identifier!(QueryId);
 
+struct FindMatchResult {
+    match_found: Option<CacheEntryId>,
+    expired_entries: Vec<CacheEntryId>,
+}
+
 impl OperatorTileCache {
     /// Find a match for the query in the cache.
     ///
     /// This method will also remove expired entries it encounters.
-    pub fn find_match(&mut self, query: &RasterQueryRectangle) -> Option<CacheEntryId> {
+    ///
+    /// It returns the expired entries, s.t. the caller can remove them from the lru index structure.
+    fn find_match(&mut self, query: &RasterQueryRectangle) -> FindMatchResult {
         let mut expired_entries = vec![];
 
-        let found = self.entries.iter().find(|(id, r)| {
+        let match_found = self.entries.iter().find(|(id, r)| {
             let matches = r.matches(query);
 
             if matches && r.is_expired() {
                 expired_entries.push(**id);
+
+                return false;
             }
 
             matches
         });
 
-        let found = found.map(|(id, _)| *id);
+        let match_found = match_found.map(|(id, _)| *id);
 
-        for id in expired_entries {
-            self.entries.remove(&id);
+        for id in &expired_entries {
+            self.entries.remove(id);
         }
 
-        found
+        FindMatchResult {
+            match_found,
+            expired_entries,
+        }
     }
 }
 
@@ -429,19 +441,37 @@ impl TileCache {
     {
         let mut backend = self.backend.write().await;
 
-        let (entry_id, typed_stream) = {
+        let (result, expired_entries) = {
+            // lookup the corresponding cache
             let cache = backend.operator_caches.get_mut(&key)?;
 
-            let id = cache.find_match(query)?;
+            let FindMatchResult {
+                match_found,
+                expired_entries,
+            } = cache.find_match(query);
 
-            let typed_stream = cache
-                .entries
-                .get(&id)
-                .expect("entry should exist because it was returned from `find_match`")
-                .tile_stream(query);
+            let result = match_found.map(|entry_id| {
+                // if match was found, get the tile stream
+                (
+                    entry_id,
+                    cache
+                        .entries
+                        .get(&entry_id)
+                        .expect("entry should exist because it was returned from `find_match`")
+                        .tile_stream(query),
+                )
+            });
 
-            (id, typed_stream)
+            (result, expired_entries)
         };
+
+        // remove expired entries from lru index
+        for entry in expired_entries {
+            backend.lru.pop_entry(&entry);
+        }
+
+        // unpack match if there is one
+        let (entry_id, typed_stream) = result?;
 
         // set as most recently used
         backend.lru.promote(&entry_id);
@@ -615,7 +645,8 @@ impl TileCache {
 mod tests {
     use geoengine_datatypes::{
         primitives::{
-            ttl::CacheHint, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
+            ttl::{CacheExpiration, CacheHint},
+            DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
         },
         raster::{Grid, RasterProperties},
     };
@@ -649,7 +680,7 @@ mod tests {
                 .unwrap()
                 .into(),
             properties: RasterProperties::default(),
-            cache_hint: CacheHint::default(),
+            cache_hint: CacheHint::unlimited(),
         }
     }
 
@@ -725,5 +756,52 @@ mod tests {
                 .await
                 .is_some());
         }
+    }
+
+    #[tokio::test]
+    async fn it_checks_ttl() {
+        let mut tile_cache = TileCache {
+            backend: RwLock::new(TileCacheBackend {
+                operator_caches: Default::default(),
+                lru: LruCache::unbounded(),
+                cache_byte_size_total: usize::MAX,
+                cache_byte_size_used: 0,
+                landing_zone_byte_size_total: usize::MAX,
+                landing_zone_byte_size_used: 0,
+            }),
+        };
+
+        process_query(&mut tile_cache, op(1)).await;
+
+        // access works because no ttl is set
+        tile_cache
+            .query_cache::<u8>(op(1), &query_rect())
+            .await
+            .unwrap();
+
+        // manually expire entry
+        {
+            let mut backend = tile_cache.backend.write().await;
+            let cache = backend.operator_caches.iter_mut().next().unwrap();
+
+            let tiles = &mut cache.1.entries.iter_mut().next().unwrap().1.tiles;
+            match tiles {
+                CachedTiles::U8(tiles) => {
+                    let mut expired_tiles = (**tiles).clone();
+                    expired_tiles[0].cache_hint = CacheHint::with_created_and_expires(
+                        DateTime::new_utc(0, 1, 1, 0, 0, 0),
+                        CacheExpiration::Expires(DateTime::new_utc(0, 1, 1, 0, 0, 1)),
+                    );
+                    *tiles = Arc::new(expired_tiles);
+                }
+                _ => panic!("wrong tile type"),
+            }
+        }
+
+        // access fails because ttl is expired
+        assert!(tile_cache
+            .query_cache::<u8>(op(1), &query_rect())
+            .await
+            .is_none());
     }
 }

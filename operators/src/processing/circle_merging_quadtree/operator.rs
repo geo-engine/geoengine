@@ -828,4 +828,84 @@ mod tests {
             .unwrap()
         );
     }
+
+    #[tokio::test]
+    async fn it_attaches_cache_hint() {
+        let mut coordinates = vec![(0.0, 0.1); 2];
+        coordinates.extend_from_slice(&[(50.0, 50.1); 2]);
+        coordinates.extend_from_slice(&[(25.0, 25.1); 2]);
+
+        let mut input = MultiPointCollection::from_slices(
+            &MultiPoint::many(coordinates).unwrap(),
+            &[TimeInterval::default(); 6],
+            &[(
+                "text",
+                FeatureData::NullableText(vec![
+                    Some("foo".to_string()),
+                    Some("bar".to_string()),
+                    Some("foo".to_string()),
+                    None,
+                    None,
+                    None,
+                ]),
+            )],
+        )
+        .unwrap();
+
+        let cache_hint = CacheHint::seconds(1234);
+
+        input.cache_hint = cache_hint;
+
+        let operator = VisualPointClustering {
+            params: VisualPointClusteringParams {
+                min_radius_px: 8.,
+                delta_px: 1.,
+                radius_column: "radius".to_string(),
+                count_column: "count".to_string(),
+                column_aggregates: [(
+                    "text".to_string(),
+                    AttributeAggregateDef {
+                        column_name: "text".to_string(),
+                        aggregate_type: AttributeAggregateType::StringSample,
+                        measurement: None,
+                    },
+                )]
+                .iter()
+                .cloned()
+                .collect(),
+            },
+            sources: SingleVectorSource {
+                vector: MockFeatureCollectionSource::single(input).boxed(),
+            },
+        };
+
+        let execution_context = MockExecutionContext::test_default();
+
+        let initialized_operator = operator
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap();
+
+        let query_processor = initialized_operator
+            .query_processor()
+            .unwrap()
+            .multi_point()
+            .unwrap();
+
+        let query_context = MockQueryContext::test_default();
+
+        let qrect = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+        };
+
+        let query = query_processor.query(qrect, &query_context).await.unwrap();
+
+        let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].cache_hint.expires(), cache_hint.expires());
+    }
 }

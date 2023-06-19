@@ -175,7 +175,7 @@ where
             raster.tile_position,
             raster.global_geo_transform,
             raster.grid_shape(),
-            raster.cache_hint, // TODO
+            raster.cache_hint,
         )
     }
 
@@ -258,7 +258,7 @@ where
             raster.tile_position,
             raster.global_geo_transform,
             raster.grid_shape(),
-            raster.cache_hint, // TODO
+            tuple.0.cache_hint.merged(&tuple.1.cache_hint),
         )
     }
 
@@ -379,7 +379,7 @@ macro_rules! impl_expression_tuple_processor {
                     raster.tile_position,
                     raster.global_geo_transform,
                     raster.grid_shape(),
-                    raster.cache_hint, // TODO
+                    tuple.iter().fold(CacheHint::unlimited(), |acc, r| acc.merged(&r.cache_hint)),
                 )
             }
 

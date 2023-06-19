@@ -2212,7 +2212,8 @@ mod tests {
                   "forceOgrSpatialFilter": false,
                   "onError": "ignore",
                   "sqlQuery": null,
-                  "attributeQuery": null
+                  "attributeQuery": null,
+                  "cacheTtl": null,
                 },
                 "resultDescriptor": {
                   "dataType": "MultiPoint",

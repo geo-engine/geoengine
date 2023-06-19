@@ -7,6 +7,7 @@ use std::sync::Arc;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -19,7 +20,7 @@ use crate::engine::{
     VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::engine::{OperatorData, QueryProcessor};
-use crate::error;
+use crate::error::{self, Error};
 use crate::util::Result;
 use arrow::array::BooleanArray;
 use async_trait::async_trait;
@@ -276,22 +277,38 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                     let initial_filter = BooleanArray::from(vec![false; points.len()]);
                     let arc_points = Arc::new(points);
 
-                    let filter = self
+                    let (filter, cache_hint) = self
                         .polygons
                         .query(query, ctx)
                         .await?
-                        .fold(Ok(initial_filter), |filter, polygons| async {
-                            let polygons = polygons?;
+                        .fold(
+                            Result::<(BooleanArray, CacheHint)>::Ok((
+                                initial_filter,
+                                CacheHint::unlimited(),
+                            )),
+                            |acc, polygons| async {
+                                let (filter, mut cache_hint) = acc?;
+                                let polygons = polygons?;
 
-                            if polygons.is_empty() {
-                                return filter;
-                            }
+                                cache_hint.merge_with(&polygons.cache_hint);
 
-                            Self::filter_points(ctx, arc_points.clone(), polygons, &filter?).await
-                        })
+                                if polygons.is_empty() {
+                                    return Ok((filter, cache_hint));
+                                }
+
+                                Ok((
+                                    Self::filter_points(ctx, arc_points.clone(), polygons, &filter)
+                                        .await?,
+                                    cache_hint,
+                                ))
+                            },
+                        )
                         .await?;
 
-                    arc_points.filter(filter).map_err(Into::into)
+                    let mut new_points = arc_points.filter(filter).map_err(Into::<Error>::into)?;
+                    new_points.cache_hint = cache_hint;
+
+                    Ok(new_points)
                 });
 
         Ok(

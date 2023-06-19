@@ -4,6 +4,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
+use geoengine_datatypes::primitives::ttl::CacheExpiration;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::{RasterTile2D, TilingSpecification};
 
@@ -44,7 +45,13 @@ where
             log::debug!("Query was rewritten to empty query. Returning empty / filled stream.");
             let s = futures::stream::empty();
 
-            Ok(SparseTilesFillAdapter::new_like_subquery(s, query, self.additional_data).boxed())
+            Ok(SparseTilesFillAdapter::new_like_subquery(
+                s,
+                query,
+                self.additional_data,
+                CacheExpiration::NoCache, // TODO: can we do better?
+            )
+            .boxed())
         }
     }
 }

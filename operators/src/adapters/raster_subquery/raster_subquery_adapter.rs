@@ -10,7 +10,7 @@ use futures::{
 };
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::ttl::{CacheExpiration, CacheHint};
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
@@ -174,8 +174,13 @@ where
             }
         });
 
-        let s_filled =
-            SparseTilesFillAdapter::new(s, grid_bounds, global_geo_transform, tile_shape);
+        let s_filled = SparseTilesFillAdapter::new(
+            s,
+            grid_bounds,
+            global_geo_transform,
+            tile_shape,
+            CacheExpiration::NoCache, // TODO: can we derive this?
+        );
         s_filled.boxed()
     }
 

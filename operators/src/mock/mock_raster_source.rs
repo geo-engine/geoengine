@@ -8,6 +8,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::ttl::CacheExpiration;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
@@ -137,6 +138,7 @@ where
             tiling_strategy.tile_grid_box(query.spatial_partition()),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
+            CacheExpiration::Unlimited, // cache forever because we know all mock data
         )
         .boxed())
     }
@@ -296,6 +298,7 @@ mod tests {
         let raster =
             MaskedGrid::from(Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6]).unwrap());
 
+        let cache_hint = CacheHint::default();
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
@@ -304,7 +307,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
             },
             raster.into(),
-            CacheHint::default(),
+            cache_hint,
         );
 
         let mrs = MockRasterSource {
@@ -361,7 +364,8 @@ mod tests {
                         "offset":null,
                         "description":null,
                         "propertiesMap": []
-                    }
+                    },
+                    "cacheHint": cache_hint,
                 }],
                 "resultDescriptor": {
                     "dataType": "U8",

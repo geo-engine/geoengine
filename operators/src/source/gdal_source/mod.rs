@@ -27,7 +27,7 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::ttl::{CacheExpiration, CacheHint};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
     SpatialPartition2D, SpatialPartitioned,
@@ -734,6 +734,7 @@ where
             tiling_strategy.tile_grid_box(query.spatial_partition()),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
+            CacheExpiration::NoCache, // TODO: can we do better here? We should be able to use the Ttl of the data set definition?!
         );
         Ok(filled_stream.boxed())
     }
@@ -2443,5 +2444,35 @@ mod tests {
         if let Err(error) = result {
             assert!(error_is_gdal_file_not_found(&error));
         }
+    }
+
+    #[tokio::test]
+    async fn it_attaches_cache_hint() {
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-90., 90.).into(), (90., -90.).into());
+        let output_shape: GridShape2D = [256, 256].into();
+
+        let tile_info = TileInformation::with_partition_and_shape(output_bounds, output_shape);
+        let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
+        let params = None;
+
+        let tile = GdalRasterLoader::load_tile_async::<f64>(
+            params,
+            tile_info,
+            time_interval,
+            CacheHint::seconds(1234),
+        )
+        .await;
+
+        assert!(tile.is_ok());
+
+        let expected = RasterTile2D::<f64>::new_with_tile_info(
+            time_interval,
+            tile_info,
+            EmptyGrid2D::new(output_shape).into(),
+            CacheHint::seconds(1234),
+        );
+
+        assert_eq!(tile.unwrap(), expected);
     }
 }

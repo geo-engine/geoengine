@@ -30,7 +30,7 @@ pub type MaterializedRasterTile3D<T> = MaterializedRasterTile<GridShape3D, T>;
 
 /// A `BaseTile` is the main type used to iterate over tiles of raster data
 /// The data of the `RasterTile` is stored as `Grid` or `NoDataGrid`. The enum `GridOrEmpty` allows a combination of both.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BaseTile<G> {
     /// The `TimeInterval` where this tile is valid.
@@ -47,6 +47,22 @@ pub struct BaseTile<G> {
     pub properties: RasterProperties,
     /// Indicate how long the tile may be cached, if `None` the tile may be cached indefinitely.
     pub cache_hint: CacheHint,
+}
+
+// Manual implementation of equality because the cache hint field contains the creation time of the tile and shall not be considered for equality.
+// TODO: find a different solution for this, e.g. not inclduing the creation time, or by implementing PartialEq on CacheHint using only the expiration date.
+impl<G> PartialEq for BaseTile<G>
+where
+    G: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.time == other.time
+            && self.tile_position == other.tile_position
+            && self.global_geo_transform == other.global_geo_transform
+            && self.grid_array == other.grid_array
+            && self.properties == other.properties
+        // deliberately omitted: self.cache_hint == other.cache_hint
+    }
 }
 
 impl<G> BaseTile<G>

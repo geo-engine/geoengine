@@ -40,6 +40,7 @@ pub struct TileAccumulator<P: Pixel, F: TemporalRasterPixelAggregator<P>> {
     state_grid: GridOrEmpty2D<F::PixelState>,
     prestine: bool,
     pool: Arc<ThreadPool>,
+    cache_hint: CacheHint,
 }
 
 impl<P, F> TileAccumulator<P, F>
@@ -96,6 +97,7 @@ where
         }
 
         self.prestine = false;
+        self.cache_hint.merge_with(&in_tile.cache_hint);
     }
 }
 
@@ -115,6 +117,7 @@ where
             state_grid,
             prestine: _,
             pool: _pool,
+            cache_hint,
         } = self;
 
         Ok(RasterTile2D::new(
@@ -122,7 +125,7 @@ where
             tile_position,
             global_geo_transform,
             F::into_grid(state_grid)?,
-            CacheHint::default(), // TODO: take min cache_hint from all tiles that went into the aggregator
+            cache_hint,
         ))
     }
 
@@ -169,6 +172,7 @@ where
             state_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
             prestine: true,
             pool: pool.clone(),
+            cache_hint: CacheHint::unlimited(),
         };
 
         futures::future::ok(accu)

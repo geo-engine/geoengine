@@ -43,6 +43,7 @@ use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
 
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FeatureCollection<CollectionType> {
     #[serde(with = "struct_serde")]
     pub(super) table: StructArray,
@@ -1141,7 +1142,7 @@ where
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionInfos};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint, ttl::CacheHint};
     /// use std::collections::HashMap;
     ///
     /// let pc = MultiPointCollection::from_data(
@@ -1152,6 +1153,7 @@ where
     ///         map.insert("float".into(), FeatureData::Float(vec![0., 1.]));
     ///         map
     ///     },
+    ///     CacheHint::default(),
     /// ).unwrap();
     ///
     /// assert_eq!(pc.len(), 2);

@@ -299,6 +299,8 @@ where
             self.has_ended = true;
         }
 
+        // TODO: incorporate both cache_hints here
+
         builder.build().map_err(Into::into)
     }
 }

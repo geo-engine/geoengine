@@ -4,6 +4,7 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -82,6 +83,8 @@ where
 
         let collection = covered_pixels.collection_ref();
 
+        let mut cache_hint = CacheHint::unlimited();
+
         for time_span in FeatureTimeSpanIter::new(collection.time_intervals()) {
             let query = VectorQueryRectangle {
                 spatial_bounds: query.spatial_bounds,
@@ -150,6 +153,8 @@ where
                         break;
                     }
                 }
+
+                cache_hint.merge_with(&raster.cache_hint);
             }
 
             temporal_aggregator.add_feature_data(
@@ -162,9 +167,13 @@ where
             }
         }
 
-        collection
+        let mut new_collection = collection
             .add_column(new_column_name, temporal_aggregator.into_data())
-            .map_err(Into::into)
+            .map_err(Into::<crate::error::Error>::into)?;
+
+        new_collection.cache_hint = cache_hint;
+
+        Ok(new_collection)
     }
 
     fn create_aggregator<P: Pixel>(

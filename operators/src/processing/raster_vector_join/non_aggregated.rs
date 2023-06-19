@@ -2,6 +2,7 @@ use crate::adapters::FeatureCollectionStreamExt;
 use crate::processing::raster_vector_join::create_feature_aggregator;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
+use geoengine_datatypes::primitives::ttl::CacheHint;
 use geoengine_datatypes::primitives::{BoundingBox2D, Geometry, VectorQueryRectangle};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use std::marker::PhantomData;
@@ -150,6 +151,7 @@ struct VectorRasterJoiner<G, C> {
     state: Option<JoinerState<G, C>>,
     aggregation_method: FeatureAggregationMethod,
     ignore_no_data: bool,
+    cache_hint: CacheHint,
 }
 
 impl<G, C> VectorRasterJoiner<G, C>
@@ -165,6 +167,7 @@ where
             state: None,
             aggregation_method,
             ignore_no_data,
+            cache_hint: CacheHint::unlimited(),
         }
     }
 
@@ -236,6 +239,8 @@ where
             }
         }
 
+        self.cache_hint.merge_with(&raster.cache_hint);
+
         Ok(self)
     }
 
@@ -243,10 +248,14 @@ where
         let Some(state) = self.state else {
             return Err(Error::EmptyInput); // TODO: maybe output empty dataset or just nulls
         };
-        Ok(state
+        let mut new_collection = state
             .covered_pixels
             .collection()
-            .add_column(new_column_name, state.aggregator.into_data())?)
+            .add_column(new_column_name, state.aggregator.into_data())?;
+
+        new_collection.cache_hint = self.cache_hint;
+
+        Ok(new_collection)
     }
 }
 

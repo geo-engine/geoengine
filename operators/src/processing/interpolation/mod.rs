@@ -383,7 +383,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
             [0, 0].into(),
             geo_transform,
             GridOrEmpty::from(grid),
-            CacheHint::default(),
+            CacheHint::unlimited(),
         );
 
         InterpolationAccu::new(input_tile, tile_info, pool)
@@ -458,7 +458,7 @@ mod tests {
             [2, 2].into(),
         ));
 
-        let raster = make_raster();
+        let raster = make_raster(CacheHint::unlimited());
 
         let operator = Interpolation {
             params: InterpolationParams {
@@ -536,7 +536,7 @@ mod tests {
         Ok(())
     }
 
-    fn make_raster() -> Box<dyn RasterOperator> {
+    fn make_raster(cache_hint: CacheHint) -> Box<dyn RasterOperator> {
         // test raster:
         // [0, 10)
         // || 1 | 2 || 3 | 4 ||
@@ -554,7 +554,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![1, 2, 5, 6]).unwrap()),
-                CacheHint::default(),
+                cache_hint,
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -564,7 +564,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![3, 4, 7, 8]).unwrap()),
-                CacheHint::default(),
+                cache_hint,
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -574,7 +574,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![8, 7, 4, 3]).unwrap()),
-                CacheHint::default(),
+                cache_hint,
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -584,7 +584,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![6, 5, 2, 1]).unwrap()),
-                CacheHint::default(),
+                cache_hint,
             ),
         ];
 
@@ -602,5 +602,48 @@ mod tests {
             },
         }
         .boxed()
+    }
+
+    #[tokio::test]
+    async fn it_attaches_cache_hint() -> Result<()> {
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [2, 2].into(),
+        ));
+
+        let cache_hint = CacheHint::seconds(1234);
+        let raster = make_raster(cache_hint);
+
+        let operator = Interpolation {
+            params: InterpolationParams {
+                interpolation: InterpolationMethod::NearestNeighbor,
+                input_resolution: InputResolution::Value(SpatialResolution::one()),
+            },
+            sources: SingleRasterSource { raster },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await?;
+
+        let processor = operator.query_processor()?.get_i8().unwrap();
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 20),
+            spatial_resolution: SpatialResolution::zero_point_five(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let result_stream = processor.query(query_rect, &query_ctx).await?;
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>()?;
+
+        for tile in result {
+            // dbg!(tile.time, tile.grid_array);
+            assert_eq!(tile.cache_hint.expires(), cache_hint.expires());
+        }
+
+        Ok(())
     }
 }

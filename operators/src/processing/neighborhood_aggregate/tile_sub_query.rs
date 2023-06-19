@@ -270,7 +270,7 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
         [0, 0].into(),
         geo_transform,
         GridOrEmpty::from(grid),
-        CacheHint::default(),
+        CacheHint::unlimited(),
     );
 
     NeighborhoodAggregateAccu::new(input_tile, tile_info, pool, neighborhood)

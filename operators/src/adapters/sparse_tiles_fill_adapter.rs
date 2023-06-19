@@ -1,7 +1,7 @@
 use crate::util::Result;
 use futures::{ready, Stream};
 use geoengine_datatypes::{
-    primitives::{ttl::CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInterval},
+    primitives::{ttl::CacheExpiration, RasterQueryRectangle, SpatialPartitioned, TimeInterval},
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
         Pixel, RasterTile2D, TilingSpecification,
@@ -60,6 +60,7 @@ struct StateContainer<T> {
     grid_bounds: GridBoundingBox2D,
     global_geo_transform: GeoTransform,
     state: State,
+    cache_expiration: CacheExpiration,
 }
 
 impl<T: Pixel> StateContainer<T> {
@@ -70,7 +71,7 @@ impl<T: Pixel> StateContainer<T> {
             self.current_idx,
             self.global_geo_transform,
             self.no_data_grid.into(),
-            CacheHint::default(), // TODO: ???
+            self.cache_expiration.into(),
         )
     }
 
@@ -178,6 +179,7 @@ where
         tile_grid_bounds: GridBoundingBox2D,
         global_geo_transform: GeoTransform,
         tile_shape: GridShape2D,
+        cache_expiration: CacheExpiration, // Specifies the cache hint for the produced filler tiles. Set this to unlimited if the filler tiles will always be empty
     ) -> Self {
         SparseTilesFillAdapter {
             stream,
@@ -189,6 +191,7 @@ where
                 next_tile: None,
                 no_data_grid: EmptyGrid2D::new(tile_shape),
                 state: State::Initial,
+                cache_expiration,
             },
         }
     }
@@ -197,6 +200,7 @@ where
         stream: S,
         query_rect_to_answer: RasterQueryRectangle,
         tiling_spec: TilingSpecification,
+        cache_expiration: CacheExpiration,
     ) -> Self {
         debug_assert!(query_rect_to_answer.spatial_resolution.y > 0.);
 
@@ -211,6 +215,7 @@ where
             grid_bounds,
             tiling_strat.geo_transform,
             tiling_spec.tile_size_in_pixels,
+            cache_expiration,
         )
     }
 
@@ -543,6 +548,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
+            CacheExpiration::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -589,6 +595,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
+            CacheExpiration::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -668,6 +675,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
+            CacheExpiration::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -776,6 +784,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
+            CacheExpiration::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -859,6 +868,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
+            CacheExpiration::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -920,6 +930,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
+            CacheExpiration::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1030,6 +1041,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
+            CacheExpiration::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1091,6 +1103,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
+            CacheExpiration::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1139,6 +1152,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
+            CacheExpiration::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1238,6 +1252,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
+            CacheExpiration::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1304,6 +1319,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
+            CacheExpiration::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;

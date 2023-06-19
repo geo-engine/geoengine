@@ -1467,7 +1467,7 @@ mod tests {
         MultiPolygonCollection,
     };
     use geoengine_datatypes::dataset::{DataId, DatasetId};
-    use geoengine_datatypes::primitives::ttl::CacheHint;
+    use geoengine_datatypes::primitives::ttl::{CacheExpiration, CacheHint};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, Measurement, SpatialResolution, TimeGranularity,
     };
@@ -1562,7 +1562,8 @@ mod tests {
                 "forceOgrSpatialFilter": false,
                 "onError": "ignore",
                 "sqlQuery": null,
-                "attributeQuery": null
+                "attributeQuery": null,
+                "cacheTtl": null,
             })
         );
 
@@ -6406,6 +6407,96 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         assert_eq!(result[0].len(), 67);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_attaches_cache_hint() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
+            layer_name: "ne_10m_ports".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Yes,
+                }),
+                x: String::new(),
+                y: None,
+                float: vec!["natlscale".to_string()],
+                int: vec![],
+                text: vec!["name".to_string()],
+                bool: vec![],
+                datetime: vec![],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+            cache_ttl: CacheTtl::Unlimited,
+        };
+
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    (
+                        "natlscale".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    ),
+                    (
+                        "name".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless,
+                        },
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            Box::new(info),
+            vec![AttributeFilter {
+                attribute: "natlscale".to_owned(),
+                ranges: vec![StringOrNumberRange::Float(75.0..=76.0)],
+                keep_nulls: false,
+            }],
+        );
+
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<DataCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(result[0].cache_hint.expires(), CacheExpiration::Unlimited);
 
         Ok(())
     }
