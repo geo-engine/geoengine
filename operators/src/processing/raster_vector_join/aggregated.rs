@@ -31,7 +31,9 @@ pub struct RasterVectorAggregateJoinProcessor<G> {
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
     feature_aggregation: FeatureAggregationMethod,
+    feature_aggregation_ignore_no_data: bool,
     temporal_aggregation: TemporalAggregationMethod,
+    temporal_aggregation_ignore_no_data: bool,
 }
 
 impl<G> RasterVectorAggregateJoinProcessor<G>
@@ -44,28 +46,38 @@ where
         raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
         feature_aggregation: FeatureAggregationMethod,
+        feature_aggregation_ignore_no_data: bool,
         temporal_aggregation: TemporalAggregationMethod,
+        temporal_aggregation_ignore_no_data: bool,
     ) -> Self {
         Self {
             collection,
             raster_processors,
             column_names,
             feature_aggregation,
+            feature_aggregation_ignore_no_data,
             temporal_aggregation,
+            temporal_aggregation_ignore_no_data,
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // TODO: refactor to reduce arguments
     async fn extract_raster_values<P: Pixel>(
         collection: &FeatureCollection<G>,
         raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &str,
         feature_aggreation: FeatureAggregationMethod,
+        feature_aggregation_ignore_no_data: bool,
         temporal_aggregation: TemporalAggregationMethod,
+        temporal_aggregation_ignore_no_data: bool,
         query: VectorQueryRectangle,
         ctx: &dyn QueryContext,
     ) -> Result<FeatureCollection<G>> {
-        let mut temporal_aggregator =
-            Self::create_aggregator::<P>(collection.len(), temporal_aggregation);
+        let mut temporal_aggregator = Self::create_aggregator::<P>(
+            collection.len(),
+            temporal_aggregation,
+            temporal_aggregation_ignore_no_data,
+        );
 
         let collection = collection.sort_by_time_asc()?;
 
@@ -85,8 +97,11 @@ where
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
-            let mut feature_aggregator =
-                create_feature_aggregator::<P>(collection.len(), feature_aggreation);
+            let mut feature_aggregator = create_feature_aggregator::<P>(
+                collection.len(),
+                feature_aggreation,
+                feature_aggregation_ignore_no_data,
+            );
 
             let mut time_end = None;
 
@@ -101,8 +116,11 @@ where
                             time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
                         )?;
 
-                        feature_aggregator =
-                            create_feature_aggregator::<P>(collection.len(), feature_aggreation);
+                        feature_aggregator = create_feature_aggregator::<P>(
+                            collection.len(),
+                            feature_aggreation,
+                            feature_aggregation_ignore_no_data,
+                        );
 
                         if temporal_aggregator.is_satisfied() {
                             break;
@@ -156,6 +174,7 @@ where
     fn create_aggregator<P: Pixel>(
         number_of_features: usize,
         aggregation: TemporalAggregationMethod,
+        ignore_no_data: bool,
     ) -> TypedAggregator {
         match aggregation {
             TemporalAggregationMethod::First => match P::TYPE {
@@ -167,14 +186,14 @@ where
                 | RasterDataType::I16
                 | RasterDataType::I32
                 | RasterDataType::I64 => {
-                    FirstValueIntAggregator::new(number_of_features).into_typed()
+                    FirstValueIntAggregator::new(number_of_features, ignore_no_data).into_typed()
                 }
                 RasterDataType::F32 | RasterDataType::F64 => {
-                    FirstValueFloatAggregator::new(number_of_features).into_typed()
+                    FirstValueFloatAggregator::new(number_of_features, ignore_no_data).into_typed()
                 }
             },
             TemporalAggregationMethod::Mean => {
-                MeanValueAggregator::new(number_of_features).into_typed()
+                MeanValueAggregator::new(number_of_features, ignore_no_data).into_typed()
             }
             TemporalAggregationMethod::None => {
                 unreachable!("this type of aggregator does not lead to this kind of processor")
@@ -197,13 +216,26 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let stream = self.collection
-            .query(query, ctx).await?
+        let stream = self
+            .collection
+            .query(query, ctx)
+            .await?
             .and_then(move |mut collection| async move {
-
-                for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {
+                for (raster, new_column_name) in
+                    self.raster_processors.iter().zip(&self.column_names)
+                {
                     collection = call_on_generic_raster_processor!(raster, raster => {
-                        Self::extract_raster_values(&collection, raster, new_column_name, self.feature_aggregation, self.temporal_aggregation, query, ctx).await?
+                        Self::extract_raster_values(
+                            &collection,
+                            raster,
+                            new_column_name,
+                            self.feature_aggregation,
+                            self.feature_aggregation_ignore_no_data,
+                            self.temporal_aggregation,
+                            self.temporal_aggregation_ignore_no_data,
+                            query,
+                            ctx
+                        ).await?
                     });
                 }
 
@@ -294,7 +326,9 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             FeatureAggregationMethod::First,
+            false,
             TemporalAggregationMethod::First,
+            false,
             VectorQueryRectangle::with_bounds_and_resolution(
                 BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
                 Default::default(),
@@ -382,7 +416,9 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             FeatureAggregationMethod::First,
+            false,
             TemporalAggregationMethod::Mean,
+            false,
             VectorQueryRectangle::with_bounds_and_resolution(
                 BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
                 Default::default(),
@@ -493,7 +529,9 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             FeatureAggregationMethod::Mean,
+            false,
             TemporalAggregationMethod::Mean,
+            false,
             VectorQueryRectangle::with_bounds_and_resolution(
                 BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 Default::default(),
@@ -634,7 +672,9 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             FeatureAggregationMethod::Mean,
+            false,
             TemporalAggregationMethod::Mean,
+            false,
             VectorQueryRectangle::with_bounds_and_resolution(
                 BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 Default::default(),

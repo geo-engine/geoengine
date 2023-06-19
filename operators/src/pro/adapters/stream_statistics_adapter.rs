@@ -62,9 +62,8 @@ where
         let _enter = this.span.enter();
 
         tracing::trace!(
-            event = "poll_next",
+            event = %"poll_next",
             poll_next_count = *this.poll_next_count,
-            path = this.path.to_string()
         );
 
         let v = ready!(this.stream.as_mut().poll_next(cx));
@@ -72,22 +71,20 @@ where
             Some(_) => {
                 *this.element_count += 1;
                 tracing::debug!(
-                    event = "poll_next",
+                    event = %"poll_next",
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,
                     empty = false,
-                    path = this.path.to_string()
                 );
 
                 (*this.quota).work_unit_done();
             }
             None => {
                 tracing::debug!(
-                    event = "poll_next",
+                    event = %"poll_next",
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,
                     empty = true,
-                    path = this.path.to_string()
                 );
             }
         }

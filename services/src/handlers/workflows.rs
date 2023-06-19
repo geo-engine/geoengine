@@ -451,7 +451,7 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     info: web::Json<RasterDatasetFromWorkflow>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<TaskResponse>> {
     let ctx = Arc::new(app_ctx.session_context(session));
 
     let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
@@ -678,7 +678,6 @@ mod tests {
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::MultiPointCollection;
-    use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, FeatureData, Measurement, MultiPoint, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, TimeInterval,
@@ -1423,11 +1422,10 @@ mod tests {
             uploads: vec![response.upload],
         };
 
-        let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
         // query the newly created dataset
         let op = GdalSource {
             params: GdalSourceParameters {
-                data: NamedData::with_system_name(dataset_id.to_string()),
+                data: response.dataset.into(),
             },
         }
         .boxed();

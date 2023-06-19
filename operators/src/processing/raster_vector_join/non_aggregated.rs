@@ -34,6 +34,7 @@ pub struct RasterVectorJoinProcessor<G> {
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
     aggregation_method: FeatureAggregationMethod,
+    ignore_no_data: bool,
 }
 
 impl<G> RasterVectorJoinProcessor<G>
@@ -46,12 +47,14 @@ where
         raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
         aggregation_method: FeatureAggregationMethod,
+        ignore_no_data: bool,
     ) -> Self {
         Self {
             collection,
             raster_processors,
             column_names,
             aggregation_method,
+            ignore_no_data,
         }
     }
 
@@ -62,6 +65,7 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
         aggregation_method: FeatureAggregationMethod,
+        ignore_no_data: bool,
     ) -> BoxStream<'a, Result<FeatureCollection<G>>> {
         let stream = collection.and_then(move |collection| {
             Self::process_collection_chunk(
@@ -71,6 +75,7 @@ where
                 query,
                 ctx,
                 aggregation_method,
+                ignore_no_data,
             )
         });
 
@@ -87,9 +92,10 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
         aggregation_method: FeatureAggregationMethod,
+        ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
         call_on_generic_raster_processor!(raster_processor, raster_processor => {
-            Self::process_typed_collection_chunk(collection, raster_processor, new_column_name, query, ctx, aggregation_method).await
+            Self::process_typed_collection_chunk(collection, raster_processor, new_column_name, query, ctx, aggregation_method, ignore_no_data).await
         })
     }
 
@@ -100,6 +106,7 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
         aggregation_method: FeatureAggregationMethod,
+        ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
         // make qrect smaller wrt. points
         let query = VectorQueryRectangle::with_bounds_and_resolution(
@@ -125,7 +132,7 @@ where
 
         let collection_stream = raster_query
             .time_multi_fold(
-                move || Ok(VectorRasterJoiner::new(aggregation_method)),
+                move || Ok(VectorRasterJoiner::new(aggregation_method, ignore_no_data)),
                 move |accum, raster| {
                     let collection = collection.clone();
                     async move {
@@ -150,6 +157,7 @@ struct JoinerState<G, C> {
 struct VectorRasterJoiner<G, C> {
     state: Option<JoinerState<G, C>>,
     aggregation_method: FeatureAggregationMethod,
+    ignore_no_data: bool,
 }
 
 impl<G, C> VectorRasterJoiner<G, C>
@@ -158,12 +166,13 @@ where
     C: CoveredPixels<G>,
     FeatureCollection<G>: PixelCoverCreator<G, C = C>,
 {
-    fn new(aggregation_method: FeatureAggregationMethod) -> Self {
+    fn new(aggregation_method: FeatureAggregationMethod, ignore_no_data: bool) -> Self {
         // TODO: is it possible to do the initialization here?
 
         Self {
             state: None,
             aggregation_method,
+            ignore_no_data,
         }
     }
 
@@ -193,7 +202,11 @@ where
         let collection = collection.replace_time(&time_intervals)?;
 
         self.state = Some(JoinerState::<G, C> {
-            aggregator: create_feature_aggregator::<P>(collection.len(), self.aggregation_method),
+            aggregator: create_feature_aggregator::<P>(
+                collection.len(),
+                self.aggregation_method,
+                self.ignore_no_data,
+            ),
             covered_pixels: collection.create_covered_pixels(),
             g: Default::default(),
         });
@@ -272,6 +285,7 @@ where
                 query,
                 ctx,
                 self.aggregation_method,
+                self.ignore_no_data,
             );
         }
 
@@ -352,6 +366,7 @@ mod tests {
             vec![rasters],
             vec!["ndvi".to_owned()],
             FeatureAggregationMethod::First,
+            false,
         );
 
         let mut result = processor
@@ -440,6 +455,7 @@ mod tests {
             vec![rasters],
             vec!["ndvi".to_owned()],
             FeatureAggregationMethod::First,
+            false,
         );
 
         let mut result = processor
@@ -538,6 +554,7 @@ mod tests {
             vec![rasters],
             vec!["ndvi".to_owned()],
             FeatureAggregationMethod::First,
+            false,
         );
 
         let mut result = processor
@@ -637,6 +654,7 @@ mod tests {
             vec![rasters],
             vec!["ndvi".to_owned()],
             FeatureAggregationMethod::First,
+            false,
         );
 
         let mut result = processor
@@ -804,6 +822,7 @@ mod tests {
             vec![raster],
             vec!["foo".to_owned()],
             FeatureAggregationMethod::Mean,
+            false,
         );
 
         let mut result = processor
@@ -987,6 +1006,7 @@ mod tests {
             vec![raster],
             vec!["foo".to_owned()],
             FeatureAggregationMethod::Mean,
+            false,
         );
 
         let mut result = processor

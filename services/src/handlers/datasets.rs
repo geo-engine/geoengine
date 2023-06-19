@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::{
-    api::model::datatypes::DatasetId,
-    api::model::responses::datasets::errors::*,
+    api::model::datatypes::DatasetName,
+    api::model::responses::datasets::{errors::*, DatasetNameResponse},
     api::model::services::{
         AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
         MetaDataSuggestion,
@@ -21,7 +21,7 @@ use crate::{
     util::{
         config::{get_config_element, Data},
         extractors::{ValidatedJson, ValidatedQuery},
-        path_with_base_path, IdResponse,
+        path_with_base_path,
     },
 };
 use actix_web::{web, FromRequest, HttpResponse, Responder};
@@ -143,7 +143,7 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     Ok(web::Json(list))
 }
 
-/// Retrieves details about a dataset using the internal id.
+/// Retrieves details about a dataset using the internal name.
 #[utoipa::path(
     tag = "Datasets",
     get,
@@ -169,29 +169,34 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Referenced an unknown dataset" = (value = json!({
                 "error": "CannotLoadDataset",
-                "message": "CannotLoadDataset: UnknownDatasetId"
+                "message": "CannotLoadDataset: UnknownDatasetName"
             })))
         )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
-        ("dataset" = DatasetId, description = "Dataset id")
+        ("dataset" = DatasetName, description = "Dataset Name")
     ),
     security(
         ("session_token" = [])
     )
 )]
 pub async fn get_dataset_handler<C: ApplicationContext>(
-    dataset: web::Path<DatasetId>,
+    dataset: web::Path<DatasetName>,
     session: C::Session,
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder, GetDatasetError> {
-    let dataset = app_ctx
-        .session_context(session)
-        .db()
-        .load_dataset(&dataset.into_inner())
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&dataset.into_inner())
         .await
         .context(CannotLoadDataset)?;
+    let dataset = session_ctx
+        .load_dataset(&dataset_id)
+        .await
+        .context(CannotLoadDataset)?;
+
     Ok(web::Json(dataset))
 }
 
@@ -288,7 +293,7 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
         }))))
     ),
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse),
+        (status = 200, response = DatasetNameResponse),
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Body is invalid json" = (value = json!({
                 "error": "BodyDeserializeError",
@@ -341,7 +346,7 @@ pub async fn create_dataset_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
     let create = create.into_inner();
     match create {
         CreateDataset {
@@ -360,7 +365,7 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     upload_id: UploadId,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
     let db = app_ctx.session_context(session).db();
     let upload = db.load_upload(upload_id).await.context(UploadNotFound)?;
 
@@ -368,12 +373,12 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
         .context(CannotResolveUploadFilePath)?;
 
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
-    let id = db
+    let result = db
         .add_dataset(definition.properties, meta_data)
         .await
         .context(DatabaseAccess)?;
 
-    Ok(web::Json(IdResponse::from(id)))
+    Ok(web::Json(result.name.into()))
 }
 
 async fn create_volume_dataset<C: ApplicationContext>(
@@ -381,7 +386,7 @@ async fn create_volume_dataset<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
     let volumes = get_config_element::<Data>()
         .context(CannotAccessConfig)?
         .volumes;
@@ -399,12 +404,12 @@ async fn create_volume_dataset<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
-    let id = db
+    let result = db
         .add_dataset(definition.properties, meta_data)
         .await
         .context(DatabaseAccess)?;
 
-    Ok(web::Json(IdResponse::from(id)))
+    Ok(web::Json(result.name.into()))
 }
 
 pub fn adjust_meta_data_path<A: AdjustFilePath>(
@@ -444,7 +449,7 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
     path = "/dataset/auto",
     request_body = AutoCreateDataset,
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse),
+        (status = 200, response = DatasetNameResponse),
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Body is invalid json" = (value = json!({
                 "error": "BodyDeserializeError",
@@ -487,7 +492,7 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: ValidatedJson<AutoCreateDataset>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<DatasetNameResponse>> {
     let db = app_ctx.session_context(session).db();
     let upload = db.load_upload(create.upload).await?;
 
@@ -507,9 +512,9 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     };
 
     let meta_data = db.wrap_meta_data(meta_data);
-    let id = db.add_dataset(properties, meta_data).await?;
+    let result = db.add_dataset(properties, meta_data).await?;
 
-    Ok(web::Json(IdResponse::from(id)))
+    Ok(web::Json(result.name.into()))
 }
 
 /// Inspects an upload and suggests metadata that can be used when creating a new dataset based on it.
@@ -1032,8 +1037,8 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
         (status = 200, description = "OK"),
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Referenced an unknown dataset" = (value = json!({
-                "error": "UnknownDatasetId",
-                "message": "UnknownDatasetId"
+                "error": "UnknownDatasetName",
+                "message": "UnknownDatasetName"
             }))),
             ("Given dataset can only be deleted by owner" = (value = json!({
                 "error": "OperationRequiresOwnerPermission",
@@ -1043,22 +1048,24 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
-        ("dataset" = DatasetId, description = "Dataset id")
+        ("dataset" = DatasetName, description = "Dataset id")
     ),
     security(
         ("session_token" = [])
     )
 )]
 pub async fn delete_dataset_handler<C: ApplicationContext>(
-    dataset: web::Path<DatasetId>,
+    dataset: web::Path<DatasetName>,
     session: C::Session,
     app_ctx: web::Data<C>,
 ) -> Result<HttpResponse> {
-    app_ctx
-        .session_context(session)
-        .db()
-        .delete_dataset(dataset.into_inner())
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&dataset.into_inner())
         .await?;
+
+    session_ctx.delete_dataset(dataset_id).await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -1066,7 +1073,8 @@ pub async fn delete_dataset_handler<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::{DatasetId, DatasetName, NamedData};
+    use crate::api::model::datatypes::{DatasetName, NamedData};
+    use crate::api::model::responses::datasets::{DatasetIdAndName, DatasetNameResponse};
     use crate::api::model::services::DatasetDefinition;
     use crate::contexts::{
         ApplicationContext, InMemoryContext, Session, SessionId, SimpleApplicationContext,
@@ -1079,6 +1087,7 @@ mod tests {
     use crate::util::tests::{
         read_body_json, read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
     };
+    use crate::util::IdResponse;
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -1145,7 +1154,7 @@ mod tests {
         };
 
         let db = ctx.db();
-        let id1 = db.add_dataset(ds, Box::new(meta)).await?;
+        let DatasetIdAndName { id: id1, name: _ } = db.add_dataset(ds, Box::new(meta)).await?;
 
         let ds = AddDataset {
             name: Some(DatasetName::new(None, "My_Dataset2")),
@@ -1174,7 +1183,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id2 = db.add_dataset(ds, Box::new(meta)).await?;
+        let DatasetIdAndName { id: id2, name: _ } = db.add_dataset(ds, Box::new(meta)).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
@@ -1287,7 +1296,7 @@ mod tests {
         app_ctx: C,
         upload_id: UploadId,
         session_id: SessionId,
-    ) -> DatasetId {
+    ) -> DatasetName {
         let s = json!({
             "dataPath": {
                 "upload": upload_id
@@ -1370,8 +1379,8 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200, "{res:?}");
 
-        let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-        dataset.id
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        dataset_name
     }
 
     async fn make_ogr_source<C: ExecutionContext>(
@@ -1506,12 +1515,11 @@ mod tests {
         let res = send_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
-        let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-        let dataset_id = dataset_id.id;
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
 
         // assert dataset is accessible via regular session
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/{dataset_id}"))
+            .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
@@ -2047,7 +2055,10 @@ mod tests {
         };
 
         let db = ctx.db();
-        let id = db.add_dataset(ds, Box::new(meta)).await?;
+        let DatasetIdAndName {
+            id,
+            name: dataset_name,
+        } = db.add_dataset(ds, Box::new(meta)).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{id}"))
@@ -2062,7 +2073,7 @@ mod tests {
         assert_eq!(
             res_body,
             json!({
-                "name": id.to_string(),
+                "name": dataset_name,
                 "id": id,
                 "displayName": "OgrDataset",
                 "description": "My Ogr dataset",
@@ -2235,14 +2246,15 @@ mod tests {
         let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
 
-        let dataset_id =
+        let dataset_name =
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
 
         let db = ctx.db();
+        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
-            .uri(&format!("/dataset/{dataset_id}"))
+            .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
@@ -2294,14 +2306,14 @@ mod tests {
             .set_payload(serde_json::to_string(&create)?);
         let res = send_test_request(req, app_ctx.clone()).await;
 
-        let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-        let dataset_id = dataset_id.id;
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
 
         let db = ctx.db();
+        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
-            .uri(&format!("/dataset/{dataset_id}"))
+            .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));

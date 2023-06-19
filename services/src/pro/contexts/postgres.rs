@@ -756,6 +756,7 @@ mod tests {
 
     use super::*;
     use crate::api::model::datatypes::{DataProviderId, DatasetName, LayerId};
+    use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -1414,7 +1415,10 @@ let ctx = app_ctx.session_context(session);
 
             let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
-            let dataset_id = db
+            let DatasetIdAndName {
+                id: dataset_id,
+                name: dataset_name,
+            } = db
                 .add_dataset(
                     AddDataset {
                         name: Some(dataset_name.clone()),
@@ -1773,7 +1777,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1.add_dataset(ds, meta).await.unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap().id;
 
             assert!(db1.load_provenance(&id).await.is_ok());
 
@@ -1828,7 +1832,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1.add_dataset(ds, meta).await.unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap().id;
 
             assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1889,7 +1893,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1.add_dataset(ds, meta).await.unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap().id;
 
             assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1950,7 +1954,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db1.add_dataset(ds, meta).await.unwrap();
+            let id = db1.add_dataset(ds, meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -2059,7 +2063,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
 
-            let id = db.add_dataset(vector_ds, meta).await.unwrap();
+            let id = db.add_dataset(vector_ds, meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -2080,7 +2084,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataRegular(meta));
 
-            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -2096,7 +2100,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalStatic(meta));
 
-            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -2111,7 +2115,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataList(meta));
 
-            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -2133,7 +2137,7 @@ let ctx = app_ctx.session_context(session);
 
             let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetadataNetCdfCf(meta));
 
-            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap();
+            let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
 
             let meta: geoengine_operators::util::Result<
                 Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -2987,7 +2991,8 @@ let ctx = app_ctx.session_context(session);
                     wrap,
                 )
                 .await
-                .unwrap();
+                .unwrap()
+                .id;
 
             assert!(db.load_dataset(&dataset_id).await.is_ok());
 
@@ -3079,7 +3084,8 @@ let ctx = app_ctx.session_context(session);
                     wrap,
                 )
                 .await
-                .unwrap();
+                .unwrap()
+                .id;
 
             assert!(db.load_dataset(&dataset_id).await.is_ok());
 
@@ -3678,6 +3684,126 @@ let ctx = app_ctx.session_context(session);
 
             assert!(r0.is_ok());
             assert!(r1.is_ok());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_resolves_dataset_names_to_ids() {
+        with_temp_context(|app_ctx, _| async move {
+            let admin_session = UserSession::admin_session();
+            let db = app_ctx.session_context(admin_session.clone()).db();
+
+            let loading_info = OgrSourceDataset {
+                file_name: PathBuf::from("test.csv"),
+                layer_name: "test.csv".to_owned(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_owned(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_owned(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: vec![],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+            };
+
+            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                OgrSourceDataset,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: loading_info.clone(),
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+                },
+                phantom: Default::default(),
+            });
+
+            let DatasetIdAndName {
+                id: dataset_id1,
+                name: dataset_name1,
+            } = db
+                .add_dataset(
+                    AddDataset {
+                        name: Some(DatasetName::new(None, "my_dataset".to_owned())),
+                        display_name: "Ogr Test".to_owned(),
+                        description: "desc".to_owned(),
+                        source_operator: "OgrSource".to_owned(),
+                        symbology: None,
+                        provenance: Some(vec![Provenance {
+                            citation: "citation".to_owned(),
+                            license: "license".to_owned(),
+                            uri: "uri".to_owned(),
+                        }]),
+                    },
+                    db.wrap_meta_data(meta_data.clone()),
+                )
+                .await
+                .unwrap();
+
+            let DatasetIdAndName {
+                id: dataset_id2,
+                name: dataset_name2,
+            } = db
+                .add_dataset(
+                    AddDataset {
+                        name: Some(DatasetName::new(
+                            Some(admin_session.user.id.to_string()),
+                            "my_dataset".to_owned(),
+                        )),
+                        display_name: "Ogr Test".to_owned(),
+                        description: "desc".to_owned(),
+                        source_operator: "OgrSource".to_owned(),
+                        symbology: None,
+                        provenance: Some(vec![Provenance {
+                            citation: "citation".to_owned(),
+                            license: "license".to_owned(),
+                            uri: "uri".to_owned(),
+                        }]),
+                    },
+                    db.wrap_meta_data(meta_data),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                db.resolve_dataset_name_to_id(&dataset_name1).await.unwrap(),
+                dataset_id1
+            );
+            assert_eq!(
+                db.resolve_dataset_name_to_id(&dataset_name2).await.unwrap(),
+                dataset_id2
+            );
         })
         .await;
     }

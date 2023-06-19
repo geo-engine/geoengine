@@ -1153,6 +1153,7 @@ x;y
         db.add_dataset(def.properties, Box::new(def.meta_data))
             .await
             .unwrap()
+            .id
     }
 
     #[tokio::test]
