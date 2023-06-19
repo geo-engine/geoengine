@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::util::Result;
+use crate::util::{ByteSize, Result};
 
 use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,24 @@ pub struct RasterProperties {
     // serialize as a list of tuples because `RasterPropertiesKey` cannot be used as a key in a JSON dict
     #[serde_as(as = "Vec<(_, _)>")]
     properties_map: HashMap<RasterPropertiesKey, RasterPropertiesEntry>,
+}
+
+impl ByteSize for RasterProperties {
+    fn byte_size(&self) -> usize {
+        // let bytes_self = std::mem::size_of::<Self>();
+        // let description_bytes = self.description.as_ref().map_or(0, String::capacity);
+        // let properties_map_bytes = self
+        //     .properties_map
+        //     .iter()
+        //     .map(|(k, v)| k.byte_size() + v.byte_size())
+        //     .sum::<usize>();
+        // bytes_self + description_bytes + properties_map_bytes
+
+        self.scale.byte_size()
+            + self.offset.byte_size()
+            + self.description.byte_size()
+            + self.properties_map.byte_size()
+    }
 }
 
 impl RasterProperties {
@@ -118,6 +136,12 @@ pub struct RasterPropertiesKey {
     pub key: String,
 }
 
+impl ByteSize for RasterPropertiesKey {
+    fn byte_size(&self) -> usize {
+        self.domain.byte_size() + self.key.byte_size()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", content = "value")]
 pub enum RasterPropertiesEntry {
@@ -129,6 +153,15 @@ pub enum RasterPropertiesEntry {
 pub enum RasterPropertiesEntryType {
     Number,
     String,
+}
+
+impl ByteSize for RasterPropertiesEntry {
+    fn byte_size(&self) -> usize {
+        match self {
+            RasterPropertiesEntry::Number(_) => std::mem::size_of::<Self>(),
+            RasterPropertiesEntry::String(s) => s.byte_size(),
+        }
+    }
 }
 
 impl From<RasterPropertiesEntry> for String {
@@ -171,6 +204,8 @@ impl Display for RasterPropertiesEntry {
 
 #[cfg(test)]
 mod tests {
+
+    use super::*;
     use crate::error::Error;
     use crate::raster::{RasterProperties, RasterPropertiesEntry, RasterPropertiesKey};
 
@@ -254,5 +289,84 @@ mod tests {
             Ok(v) => assert_eq!("test", v),
             _ => panic!("Expected valid property entry."),
         }
+    }
+
+    #[test]
+    fn byte_size() {
+        // 24 + 4 (domain) + 24 + 3 = 55
+        assert_eq!(
+            RasterPropertiesKey {
+                domain: Some("test".into()),
+                key: "key".into(),
+            }
+            .byte_size(),
+            55
+        );
+        // 24 + 4 = 28
+        assert_eq!(RasterPropertiesEntry::String("test".into()).byte_size(), 28);
+
+        assert_eq!(
+            HashMap::from_iter([(
+                RasterPropertiesKey {
+                    domain: Some("test".into()),
+                    key: "key".into(),
+                },
+                RasterPropertiesEntry::String("test".into())
+            )])
+            .byte_size(),
+            131 // 48 + 55 + 28
+        );
+        assert_eq!(
+            HashMap::from_iter([
+                (
+                    RasterPropertiesKey {
+                        domain: Some("test".into()),
+                        key: "key".into(),
+                    },
+                    RasterPropertiesEntry::String("test".into())
+                ),
+                (
+                    RasterPropertiesKey {
+                        domain: Some("test".into()),
+                        key: "yek".into(),
+                    },
+                    RasterPropertiesEntry::String("tset".into())
+                )
+            ])
+            .byte_size(),
+            131 + 83 // 48 + 2 x (55 + 28)
+        );
+
+        let mut props = RasterProperties::default();
+
+        props.properties_map.insert(
+            RasterPropertiesKey {
+                domain: Some("test".into()),
+                key: "key".into(),
+            },
+            RasterPropertiesEntry::String("test".into()),
+        );
+
+        // scale = 8 + 8 = 16
+        // offset = 8 + 8 = 16
+        // description = 24
+        // properties_map = (HashMap) + (Key) + (Value)
+        //                  HashMap = 48
+        //                  Key = 24 + 4 (domain) + 24 + 3 (key) = 55
+        //                  Value = 24 + 4 (value) = 28
+        //                  48 + 55 + 28 = 131
+        // total = 16 + 16 + 24 + 131 = 187
+
+        assert_eq!(props.byte_size(), 187);
+
+        props.properties_map.insert(
+            RasterPropertiesKey {
+                domain: Some("test".into()),
+                key: "yek".into(),
+            },
+            RasterPropertiesEntry::String("tset".into()),
+        );
+
+        assert_eq!(props.byte_size(), 187 + 83);
     }
 }

@@ -3,12 +3,15 @@ use std::ops::Add;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-use crate::{error, util::Result};
+use crate::{
+    error,
+    util::{ByteSize, Result},
+};
 
 use super::{
     ChangeGridBounds, EmptyGrid, Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess,
     GridIndexAccessMut, GridShape, GridShape1D, GridShape2D, GridShape3D, GridShapeAccess,
-    GridSize, GridSpaceToLinearSpace,
+    GridSize, GridSpaceToLinearSpace, Pixel,
 };
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -290,5 +293,14 @@ where
             inner_grid: self.inner_grid.set_grid_bounds(bounds.clone())?,
             validity_mask: self.validity_mask.set_grid_bounds(bounds)?,
         })
+    }
+}
+
+impl<D, P> ByteSize for MaskedGrid<D, P>
+where
+    P: Pixel,
+{
+    fn byte_size(&self) -> usize {
+        self.inner_grid.byte_size() + self.validity_mask.byte_size()
     }
 }

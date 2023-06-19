@@ -5,7 +5,7 @@ use geoengine_datatypes::{
     identifier,
     primitives::{RasterQueryRectangle, SpatialPartitioned},
     raster::{Pixel, RasterTile2D},
-    util::{test::TestDefault, Identifier},
+    util::{test::TestDefault, ByteSize, Identifier},
 };
 use lru::LruCache;
 use pin_project::pin_project;
@@ -149,20 +149,20 @@ pub enum CachedTiles {
     F64(Arc<Vec<RasterTile2D<f64>>>),
 }
 
-impl CachedTiles {
+impl ByteSize for CachedTiles {
     fn byte_size(&self) -> usize {
-        std::mem::size_of::<CachedTiles>()
+        std::mem::size_of::<CachedTiles>() // enum tag + Arc
             + match self {
-                CachedTiles::U8(v) => v.len() * std::mem::size_of::<RasterTile2D<u8>>(),
-                CachedTiles::U16(v) => v.len() * std::mem::size_of::<RasterTile2D<u16>>(),
-                CachedTiles::U32(v) => v.len() * std::mem::size_of::<RasterTile2D<u32>>(),
-                CachedTiles::U64(v) => v.len() * std::mem::size_of::<RasterTile2D<u64>>(),
-                CachedTiles::I8(v) => v.len() * std::mem::size_of::<RasterTile2D<i8>>(),
-                CachedTiles::I16(v) => v.len() * std::mem::size_of::<RasterTile2D<i16>>(),
-                CachedTiles::I32(v) => v.len() * std::mem::size_of::<RasterTile2D<i32>>(),
-                CachedTiles::I64(v) => v.len() * std::mem::size_of::<RasterTile2D<i64>>(),
-                CachedTiles::F32(v) => v.len() * std::mem::size_of::<RasterTile2D<f32>>(),
-                CachedTiles::F64(v) => v.len() * std::mem::size_of::<RasterTile2D<f64>>(),
+                CachedTiles::U8(tiles) => std::mem::size_of::<Vec<RasterTile2D<u8>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
+                CachedTiles::U16(tiles) => std::mem::size_of::<Vec<RasterTile2D<u16>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
+                CachedTiles::U32(tiles) => std::mem::size_of::<Vec<RasterTile2D<u32>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
+                CachedTiles::U64(tiles) => std::mem::size_of::<Vec<RasterTile2D<u64>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
+                CachedTiles::I8(tiles) =>  std::mem::size_of::<Vec<RasterTile2D<i8>>>() + tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
+                CachedTiles::I16(tiles) => std::mem::size_of::<Vec<RasterTile2D<i16>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
+                CachedTiles::I32(tiles) => std::mem::size_of::<Vec<RasterTile2D<i32>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
+                CachedTiles::I64(tiles) => std::mem::size_of::<Vec<RasterTile2D<i64>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
+                CachedTiles::F32(tiles) => std::mem::size_of::<Vec<RasterTile2D<f32>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
+                CachedTiles::F64(tiles) => std::mem::size_of::<Vec<RasterTile2D<f64>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
             }
     }
 }
@@ -665,5 +665,18 @@ mod tests {
                 .await
                 .is_some());
         }
+    }
+
+    #[test]
+    fn cache_byte_size() {
+        assert_eq!(create_tile().byte_size(), 260);
+        assert_eq!(
+            CachedTiles::U8(Arc::new(vec![create_tile()])).byte_size(),
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 260
+        );
+        assert_eq!(
+            CachedTiles::U8(Arc::new(vec![create_tile(), create_tile()])).byte_size(),
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 2 * 260
+        );
     }
 }

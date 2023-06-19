@@ -10,7 +10,7 @@ use crate::primitives::{
     TimeInterval,
 };
 use crate::raster::Pixel;
-use crate::util::Result;
+use crate::util::{ByteSize, Result};
 use serde::{Deserialize, Serialize};
 
 /// A `RasterTile` is a `BaseTile` of raster data where the data is represented by `GridOrEmpty`.
@@ -84,6 +84,19 @@ where
 
     pub fn spatial_resolution(&self) -> SpatialResolution {
         self.global_geo_transform.spatial_resolution()
+    }
+}
+
+impl<G> ByteSize for BaseTile<G>
+where
+    G: ByteSize,
+{
+    fn byte_size(&self) -> usize {
+        std::mem::size_of::<TimeInterval>()
+            + std::mem::size_of::<GridIdx2D>()
+            + std::mem::size_of::<GeoTransform>()
+            + self.grid_array.byte_size()
+            + self.properties.byte_size()
     }
 }
 

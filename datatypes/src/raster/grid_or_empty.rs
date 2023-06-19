@@ -5,10 +5,10 @@ use super::{
     grid_traits::{ChangeGridBounds, GridShapeAccess},
     masked_grid::MaskedGrid,
     Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
-    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace,
+    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, Pixel,
 };
 
-use crate::util::Result;
+use crate::util::{ByteSize, Result};
 use serde::{Deserialize, Serialize};
 
 pub type GridOrEmpty1D<T> = GridOrEmpty<GridShape1D, T>;
@@ -99,6 +99,18 @@ where
 
     fn number_of_elements(&self) -> usize {
         self.shape_ref().number_of_elements()
+    }
+}
+
+impl<D, P> ByteSize for GridOrEmpty<D, P>
+where
+    P: Pixel,
+{
+    fn byte_size(&self) -> usize {
+        match self {
+            GridOrEmpty::Grid(g) => g.byte_size(),
+            GridOrEmpty::Empty(n) => n.byte_size(),
+        }
     }
 }
 

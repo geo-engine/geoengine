@@ -3,7 +3,7 @@ use super::{
     GridBoundingBox, GridBounds, GridIdx, GridShape, GridShape1D, GridShape2D, GridShape3D,
     GridSize, GridSpaceToLinearSpace,
 };
-use crate::util::Result;
+use crate::util::{ByteSize, Result};
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, ops::Add};
 
@@ -101,6 +101,13 @@ where
 
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
         Ok(EmptyGrid::new(bounds))
+    }
+}
+
+impl<D, T> ByteSize for EmptyGrid<D, T> {
+    fn byte_size(&self) -> usize {
+        // there is no heap-allocated memory
+        std::mem::size_of::<Self>()
     }
 }
 
