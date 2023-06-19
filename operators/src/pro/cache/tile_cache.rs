@@ -150,20 +150,20 @@ pub enum CachedTiles {
 }
 
 impl ByteSize for CachedTiles {
-    fn byte_size(&self) -> usize {
-        std::mem::size_of::<CachedTiles>() // enum tag + Arc
-            + match self {
-                CachedTiles::U8(tiles) => std::mem::size_of::<Vec<RasterTile2D<u8>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
-                CachedTiles::U16(tiles) => std::mem::size_of::<Vec<RasterTile2D<u16>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
-                CachedTiles::U32(tiles) => std::mem::size_of::<Vec<RasterTile2D<u32>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
-                CachedTiles::U64(tiles) => std::mem::size_of::<Vec<RasterTile2D<u64>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
-                CachedTiles::I8(tiles) =>  std::mem::size_of::<Vec<RasterTile2D<i8>>>() + tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
-                CachedTiles::I16(tiles) => std::mem::size_of::<Vec<RasterTile2D<i16>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
-                CachedTiles::I32(tiles) => std::mem::size_of::<Vec<RasterTile2D<i32>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
-                CachedTiles::I64(tiles) => std::mem::size_of::<Vec<RasterTile2D<i64>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
-                CachedTiles::F32(tiles) => std::mem::size_of::<Vec<RasterTile2D<f32>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
-                CachedTiles::F64(tiles) => std::mem::size_of::<Vec<RasterTile2D<f64>>>() +  tiles.iter().map(ByteSize::byte_size).sum::<usize>(),
-            }
+    fn heap_byte_size(&self) -> usize {
+        // we need to use `byte_size` instead of `heap_byte_size` here, because `Arc` stores its data on the heap
+        match self {
+            CachedTiles::U8(tiles) => tiles.byte_size(),
+            CachedTiles::U16(tiles) => tiles.byte_size(),
+            CachedTiles::U32(tiles) => tiles.byte_size(),
+            CachedTiles::U64(tiles) => tiles.byte_size(),
+            CachedTiles::I8(tiles) => tiles.byte_size(),
+            CachedTiles::I16(tiles) => tiles.byte_size(),
+            CachedTiles::I32(tiles) => tiles.byte_size(),
+            CachedTiles::I64(tiles) => tiles.byte_size(),
+            CachedTiles::F32(tiles) => tiles.byte_size(),
+            CachedTiles::F64(tiles) => tiles.byte_size(),
+        }
     }
 }
 

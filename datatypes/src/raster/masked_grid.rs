@@ -300,7 +300,7 @@ impl<D, P> ByteSize for MaskedGrid<D, P>
 where
     P: Pixel,
 {
-    fn byte_size(&self) -> usize {
-        self.inner_grid.byte_size() + self.validity_mask.byte_size()
+    fn heap_byte_size(&self) -> usize {
+        self.inner_grid.heap_byte_size() + self.validity_mask.heap_byte_size()
     }
 }

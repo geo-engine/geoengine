@@ -104,12 +104,7 @@ where
     }
 }
 
-impl<D, T> ByteSize for EmptyGrid<D, T> {
-    fn byte_size(&self) -> usize {
-        // there is no heap-allocated memory
-        std::mem::size_of::<Self>()
-    }
-}
+impl<D, T> ByteSize for EmptyGrid<D, T> {}
 
 #[cfg(test)]
 mod tests {

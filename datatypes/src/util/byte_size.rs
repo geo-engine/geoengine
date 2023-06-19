@@ -3,21 +3,33 @@ use std::collections::{hash_map::RandomState, HashMap};
 
 /// A trait for types that have a size in bytes
 /// that it takes up in memory
-pub trait ByteSize {
+pub trait ByteSize: Sized {
+    /// The memory size in bytes, which is allocated on the stack and known at compile time.
+    fn stack_byte_size() -> usize {
+        std::mem::size_of::<Self>()
+    }
+
+    /// The heap memory size in bytes.
+    /// Must be implemented for types that allocate data on the heap.
+    fn heap_byte_size(&self) -> usize {
+        0
+    }
+
     /// The memory size in bytes
-    fn byte_size(&self) -> usize;
+    fn byte_size(&self) -> usize {
+        Self::stack_byte_size() + self.heap_byte_size()
+    }
 }
 
 impl ByteSize for String {
-    fn byte_size(&self) -> usize {
-        std::mem::size_of::<Self>() + self.capacity()
+    fn heap_byte_size(&self) -> usize {
+        self.capacity()
     }
 }
 
 impl ByteSize for Option<String> {
-    fn byte_size(&self) -> usize {
-        self.as_ref()
-            .map_or(std::mem::size_of::<Self>(), ByteSize::byte_size)
+    fn heap_byte_size(&self) -> usize {
+        self.as_ref().map_or(0, ByteSize::heap_byte_size)
     }
 }
 
@@ -25,14 +37,14 @@ impl<T> ByteSize for Vec<T>
 where
     T: ByteSize,
 {
-    fn byte_size(&self) -> usize {
-        24 + self.iter().map(ByteSize::byte_size).sum::<usize>()
+    fn heap_byte_size(&self) -> usize {
+        self.iter().map(ByteSize::byte_size).sum::<usize>()
     }
 }
 
 impl ByteSize for Vec<bool> {
-    fn byte_size(&self) -> usize {
-        24 + self.capacity() * std::mem::size_of::<bool>()
+    fn heap_byte_size(&self) -> usize {
+        self.capacity() * std::mem::size_of::<bool>()
     }
 }
 
@@ -41,33 +53,16 @@ where
     K: ByteSize,
     V: ByteSize,
 {
-    fn byte_size(&self) -> usize {
-        48 + self
-            .iter()
+    fn heap_byte_size(&self) -> usize {
+        self.iter()
             .map(|(k, v)| k.byte_size() + v.byte_size())
             .sum::<usize>()
     }
 }
 
-impl<P> ByteSize for P
-where
-    P: Pixel,
-{
-    fn byte_size(&self) -> usize {
-        // there is no heap-allocated memory
-        std::mem::size_of::<P>()
-    }
-}
+impl<P> ByteSize for P where P: Pixel {}
 
-impl<P> ByteSize for Option<P>
-where
-    P: Pixel,
-{
-    fn byte_size(&self) -> usize {
-        // there is no heap-allocated memory
-        std::mem::size_of::<Option<P>>()
-    }
-}
+impl<P> ByteSize for Option<P> where P: Pixel {}
 
 #[cfg(test)]
 mod tests {

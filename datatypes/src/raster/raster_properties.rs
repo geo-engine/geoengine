@@ -24,20 +24,8 @@ pub struct RasterProperties {
 }
 
 impl ByteSize for RasterProperties {
-    fn byte_size(&self) -> usize {
-        // let bytes_self = std::mem::size_of::<Self>();
-        // let description_bytes = self.description.as_ref().map_or(0, String::capacity);
-        // let properties_map_bytes = self
-        //     .properties_map
-        //     .iter()
-        //     .map(|(k, v)| k.byte_size() + v.byte_size())
-        //     .sum::<usize>();
-        // bytes_self + description_bytes + properties_map_bytes
-
-        self.scale.byte_size()
-            + self.offset.byte_size()
-            + self.description.byte_size()
-            + self.properties_map.byte_size()
+    fn heap_byte_size(&self) -> usize {
+        self.description.heap_byte_size() + self.properties_map.heap_byte_size()
     }
 }
 
@@ -137,8 +125,8 @@ pub struct RasterPropertiesKey {
 }
 
 impl ByteSize for RasterPropertiesKey {
-    fn byte_size(&self) -> usize {
-        self.domain.byte_size() + self.key.byte_size()
+    fn heap_byte_size(&self) -> usize {
+        self.domain.heap_byte_size() + self.key.heap_byte_size()
     }
 }
 
@@ -156,10 +144,10 @@ pub enum RasterPropertiesEntryType {
 }
 
 impl ByteSize for RasterPropertiesEntry {
-    fn byte_size(&self) -> usize {
+    fn heap_byte_size(&self) -> usize {
         match self {
-            RasterPropertiesEntry::Number(_) => std::mem::size_of::<Self>(),
-            RasterPropertiesEntry::String(s) => s.byte_size(),
+            RasterPropertiesEntry::Number(_) => 0,
+            RasterPropertiesEntry::String(s) => s.heap_byte_size(),
         }
     }
 }

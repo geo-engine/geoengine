@@ -106,10 +106,10 @@ impl<D, P> ByteSize for GridOrEmpty<D, P>
 where
     P: Pixel,
 {
-    fn byte_size(&self) -> usize {
+    fn heap_byte_size(&self) -> usize {
         match self {
-            GridOrEmpty::Grid(g) => g.byte_size(),
-            GridOrEmpty::Empty(n) => n.byte_size(),
+            GridOrEmpty::Grid(g) => g.heap_byte_size(),
+            GridOrEmpty::Empty(n) => n.heap_byte_size(),
         }
     }
 }

@@ -91,12 +91,8 @@ impl<G> ByteSize for BaseTile<G>
 where
     G: ByteSize,
 {
-    fn byte_size(&self) -> usize {
-        std::mem::size_of::<TimeInterval>()
-            + std::mem::size_of::<GridIdx2D>()
-            + std::mem::size_of::<GeoTransform>()
-            + self.grid_array.byte_size()
-            + self.properties.byte_size()
+    fn heap_byte_size(&self) -> usize {
+        self.grid_array.heap_byte_size() + self.properties.heap_byte_size()
     }
 }
 

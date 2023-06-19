@@ -509,14 +509,14 @@ impl<D, P> ByteSize for Grid<D, P>
 where
     P: Pixel,
 {
-    fn byte_size(&self) -> usize {
-        std::mem::size_of::<D>() + self.data.byte_size()
+    fn heap_byte_size(&self) -> usize {
+        self.data.heap_byte_size()
     }
 }
 
 impl<D> ByteSize for Grid<D, bool> {
-    fn byte_size(&self) -> usize {
-        std::mem::size_of::<D>() + self.data.byte_size()
+    fn heap_byte_size(&self) -> usize {
+        self.data.heap_byte_size()
     }
 }
 
