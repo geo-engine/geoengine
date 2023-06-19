@@ -11,7 +11,9 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, QueryRectangle, SpatialBounded, SpatialQuery,
+};
 use tracing::{span, Level};
 
 // A wrapper around an initialized operator that adds statistics and quota tracking
@@ -153,7 +155,7 @@ where
 impl<Q, T, S> QueryProcessor for QueryProcessorWrapper<Q, T>
 where
     Q: QueryProcessor<Output = T, SpatialQuery = S>,
-    S: SpatialQuery + Send + Sync + 'static,
+    S: SpatialQuery + SpatialBounded + Send + Sync + 'static,
     T: Send,
 {
     type Output = T;
@@ -198,14 +200,15 @@ where
 
         let _enter = span.enter();
 
+        let spbox = query.spatial_bounds.spatial_bounds();
         tracing::trace!(
             event = %"query_start",
             path = %self.path,
             bbox = %format!("[{},{},{},{}]",
-                query.spatial_bounds.lower_left().x,
-                query.spatial_bounds.lower_left().y,
-                query.spatial_bounds.upper_right().x,
-                query.spatial_bounds.upper_right().y
+                spbox.lower_left().x,
+                spbox.lower_left().y,
+                spbox.upper_right().x,
+                spbox.upper_right().y
             ),
             time = %format!("[{},{}]",
                 query.time_interval.start().inner(),
