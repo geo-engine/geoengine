@@ -553,7 +553,7 @@ pub fn identity_accu<T: Pixel>(
             query_rect.time_interval,
             tile_info,
             output_raster,
-            CacheHint::default(),
+            CacheHint::unlimited(),
         );
         RasterTileAccu2D::new(output_tile, pool)
     })

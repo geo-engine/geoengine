@@ -2073,7 +2073,7 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
-                    CacheHint::default(),
+                    CacheHint::default(), // TODO: make configurable in data provider(?)
                 )
                 .unwrap();
 

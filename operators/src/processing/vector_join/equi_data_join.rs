@@ -299,7 +299,7 @@ where
             self.has_ended = true;
         }
 
-        // TODO: incorporate both cache_hints here
+        builder.cache_hint(self.left.cache_hint.merged(&self.right.cache_hint));
 
         builder.build().map_err(Into::into)
     }

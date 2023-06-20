@@ -82,6 +82,8 @@ pub struct CacheHint {
 }
 
 impl Default for CacheHint {
+    // TODO: maybe remove this method and explicitly use CacheHint::no_cache() instead
+    //       or: distinguish between default() -> no cache and test_default() unlimited cache?
     fn default() -> Self {
         Self {
             created: DateTime::now(),

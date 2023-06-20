@@ -143,7 +143,7 @@ fn build_accu<T: Pixel>(
                 query_rect.time_interval,
                 tile_info,
                 output_raster.into(),
-                CacheHint::default(),
+                CacheHint::unlimited(),
             ),
             coords: projected_coords,
             pool,

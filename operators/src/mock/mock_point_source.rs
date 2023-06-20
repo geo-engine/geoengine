@@ -44,7 +44,7 @@ impl VectorQueryProcessor for MockPointSourceProcessor {
                     chunk.iter().copied().map(Into::into).collect(),
                     vec![TimeInterval::default(); chunk.len()],
                     HashMap::new(),
-                    CacheHint::default(),
+                    CacheHint::unlimited(),
                 )?)
             })
             .boxed())

@@ -247,6 +247,10 @@ where
         let global_geo_transform = tile.global_geo_transform;
         let ndv = self.no_data_value;
 
+        let cache_hint = bands_of_tile
+            .iter()
+            .fold(CacheHint::unlimited(), |acc, bt| acc.merged(&bt.cache_hint));
+
         let predicted_grid = crate::util::spawn_blocking(move || {
             process_tile(
                 bands_of_tile,
@@ -267,7 +271,7 @@ where
                 global_geo_transform,
                 predicted_grid.into(),
                 props.clone(),
-                CacheHint::default(), // TODO ???
+                cache_hint,
             );
 
         Ok(rt)

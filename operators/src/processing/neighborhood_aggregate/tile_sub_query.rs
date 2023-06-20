@@ -197,7 +197,7 @@ where
             input.time,
             *info_out,
             EmptyGrid::new(info_out.tile_size_in_pixels).into(),
-            CacheHint::default(),
+            CacheHint::unlimited(),
         );
     }
 
@@ -231,7 +231,7 @@ where
         info_out.global_tile_position,
         info_out.global_geo_transform,
         out_data,
-        CacheHint::default(),
+        input.cache_hint,
     )
 }
 

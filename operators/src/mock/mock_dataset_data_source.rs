@@ -99,7 +99,7 @@ impl VectorQueryProcessor for MockDatasetDataSourceProcessor {
                 loading_info.points.iter().map(Into::into).collect(),
                 vec![TimeInterval::default(); loading_info.points.len()],
                 HashMap::new(),
-                CacheHint::default(),
+                CacheHint::unlimited(),
             )?)
         })
         .boxed())

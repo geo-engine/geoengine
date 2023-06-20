@@ -858,7 +858,8 @@ mod tests {
                 ("/DataSets/DataSet/Units/Unit/UnitID".to_owned(),FeatureData::NullableText(vec![Some("Unit ID".to_owned()); 2]))]
                 .iter()
                 .cloned()
-                .collect(),CacheHint::default()
+                .collect(),
+                CacheHint::default(), // TODO: make configurable in data provider(?)
             )
             .unwrap();
 

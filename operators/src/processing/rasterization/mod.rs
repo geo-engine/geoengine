@@ -309,9 +309,14 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
 
                 let mut chunks = points_processor.query(vector_query, ctx).await?;
 
+                let mut cache_hint = CacheHint::unlimited();
+
                 let mut grid_data = vec![0.; grid_size_x * grid_size_y];
                 while let Some(chunk) = chunks.next().await {
                     let chunk = chunk?;
+
+                    cache_hint.merge_with(&chunk.cache_hint);
+
                     grid_data = spawn_blocking(move || {
                         for &coord in chunk.coordinates() {
                             if !grid_spatial_bounds.contains_coordinate(&coord) {
@@ -356,7 +361,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
                     query.time_interval,
                     tile_info,
                     GridOrEmpty::Grid(tile_grid.into()),
-                    CacheHint::default(), // TODO: use cache_hint from vector input
+                    cache_hint,
                 ))
             });
             Ok(tiles.boxed())
@@ -499,7 +504,7 @@ fn generate_zeroed_tiles<'a>(
                     query.time_interval,
                     tile_info,
                     GridOrEmpty::Grid(tile_grid.into()),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 ))
             }),
     )
