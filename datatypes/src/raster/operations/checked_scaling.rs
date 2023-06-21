@@ -182,7 +182,7 @@ where
             properties: self.properties,
             tile_position: self.tile_position,
             time: self.time,
-            cache_hint: self.cache_hint,
+            cache_hint: self.cache_hint, // TODO: update created date?
         }
     }
 }

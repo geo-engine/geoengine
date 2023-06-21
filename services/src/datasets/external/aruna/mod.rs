@@ -488,7 +488,7 @@ impl ArunaDataProvider {
                 allow_alphaband_as_mask: true,
                 retry: None,
             }),
-            cache_ttl: CacheTtl::Seconds(15 * 60),
+            cache_ttl: CacheTtl::Seconds(15 * 60), // the download-link validity
         };
 
         GdalLoadingInfo {

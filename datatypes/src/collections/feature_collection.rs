@@ -1268,7 +1268,7 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
             table: self.table.clone(),
             types: self.types.clone(),
             collection_type: Default::default(),
-            cache_hint: self.cache_hint,
+            cache_hint: self.cache_hint, // TODO: update created date?
         }
     }
 }

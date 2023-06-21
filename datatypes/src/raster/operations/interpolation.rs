@@ -33,7 +33,7 @@ where
                 input.time,
                 *info_out,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
-                input.cache_hint,
+                input.cache_hint, // TODO: update created date?
             ));
         }
 
@@ -62,7 +62,7 @@ where
             info_out.global_tile_position,
             info_out.global_geo_transform,
             out_data,
-            input.cache_hint,
+            input.cache_hint, // TODO: update created date?
         );
 
         Ok(out_tile)
@@ -111,7 +111,7 @@ where
                 input.time,
                 *info_out,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
-                input.cache_hint,
+                input.cache_hint, // TODO: update created date?
             ));
         }
 
@@ -173,7 +173,7 @@ where
             info_out.global_tile_position,
             info_out.global_geo_transform,
             out_data,
-            input.cache_hint,
+            input.cache_hint, // TODO: update created date?
         );
 
         Ok(out_tile)

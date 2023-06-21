@@ -55,7 +55,7 @@ where
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             tile_position: self.tile_position,
-            cache_hint: self.cache_hint,
+            cache_hint: self.cache_hint, // TODO: update created date?
         }
     }
 }
@@ -126,7 +126,7 @@ where
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             tile_position: self.tile_position,
-            cache_hint: self.cache_hint,
+            cache_hint: self.cache_hint, // TODO: update created date?
         }
     }
 }
