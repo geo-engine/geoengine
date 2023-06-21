@@ -158,7 +158,11 @@ where
     }
 
     /// Wrap the `RasterSubQueryAdapter` with a filter and a `SparseTilesFillAdapter` to produce a `Stream` compatible with `RasterQueryProcessor`.
-    pub fn filter_and_fill(self) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
+    /// Set the `cache_expiration` to unlimited, if the filler tiles will alway be empty.
+    pub fn filter_and_fill(
+        self,
+        cache_expiration: CacheExpiration,
+    ) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
     where
         Self: Stream<Item = Result<Option<RasterTile2D<PixelType>>>> + 'a,
     {
@@ -179,7 +183,7 @@ where
             grid_bounds,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::NoCache, // TODO: can we derive this?
+            cache_expiration,
         );
         s_filled.boxed()
     }

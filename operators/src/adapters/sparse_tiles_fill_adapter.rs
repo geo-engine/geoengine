@@ -179,7 +179,7 @@ where
         tile_grid_bounds: GridBoundingBox2D,
         global_geo_transform: GeoTransform,
         tile_shape: GridShape2D,
-        cache_expiration: CacheExpiration, // Specifies the cache hint for the produced filler tiles. Set this to unlimited if the filler tiles will always be empty
+        cache_expiration: CacheExpiration, // Specifies the cache expiration for the produced filler tiles. Set this to unlimited if the filler tiles will always be empty
     ) -> Self {
         SparseTilesFillAdapter {
             stream,

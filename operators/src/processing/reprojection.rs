@@ -555,7 +555,7 @@ where
                 ctx,
                 sub_query_spec,
             )
-            .filter_and_fill())
+            .filter_and_fill(CacheExpiration::NoCache)) // TODO: if we were sure that gaps only occur where the projection is not defined in the input, we could cache this forever
         } else {
             log::debug!("No intersection between source data / srs and target srs");
 
@@ -569,7 +569,7 @@ where
                 grid_bounds,
                 tiling_strat.geo_transform,
                 self.tiling_spec.tile_size_in_pixels,
-                CacheExpiration::Unlimited, // gaps only occur where the projection is not defined, so it's safe to cache this forever
+                CacheExpiration::NoCache, // TODO: if we were sure that gaps only occur where the projection is not defined in the input, we could cache this forever
             )))
         }
     }

@@ -716,4 +716,54 @@ mod tests {
             test::read_body(res).await.as_ref()
         );
     }
+
+    #[tokio::test]
+    async fn it_sets_cache_control_header() {
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let app_ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+
+        let params = &[
+            ("service", "WCS"),
+            ("request", "GetCoverage"),
+            ("version", "1.1.1"),
+            ("identifier", &id.to_string()),
+            ("boundingbox", "20,-10,80,50,urn:ogc:def:crs:EPSG::4326"),
+            ("format", "image/tiff"),
+            ("gridbasecrs", "urn:ogc:def:crs:EPSG::4326"),
+            ("gridcs", "urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS"),
+            ("gridtype", "urn:ogc:def:method:WCS:1.1:2dSimpleGrid"),
+            ("gridorigin", "80,-10"),
+            ("gridoffsets", "0.1,0.1"),
+            ("time", "2014-01-01T00:00:00.0Z"),
+            ("nodatavalue", "0.0"),
+        ];
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/wcs/{}?{}",
+                &id.to_string(),
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+        assert_eq!(
+            res.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-cache"
+        );
+    }
 }

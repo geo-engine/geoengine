@@ -1276,4 +1276,15 @@ x;y
             })
         );
     }
+
+    #[tokio::test]
+    async fn it_sets_cache_control_header() {
+        let res = get_feature_json_test_helper(Method::GET).await;
+
+        assert_eq!(res.status(), 200);
+        assert_eq!(
+            res.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-cache"
+        );
+    }
 }

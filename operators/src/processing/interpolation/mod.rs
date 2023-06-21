@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::ttl::{CacheExpiration, CacheHint};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
     SpatialPartitioned, SpatialResolution, TimeInstance, TimeInterval,
@@ -225,7 +225,7 @@ where
             ctx,
             sub_query,
         )
-        .filter_and_fill())
+        .filter_and_fill(CacheExpiration::NoCache)) // Filler tiles may be produced by gaps in the input data and we cannot be sure if the gaps are permanent or not. Thus, we do not cache them.
     }
 }
 

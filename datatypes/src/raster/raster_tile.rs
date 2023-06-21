@@ -50,7 +50,7 @@ pub struct BaseTile<G> {
 }
 
 // Manual implementation of equality because the cache hint field contains the creation time of the tile and shall not be considered for equality.
-// TODO: find a different solution for this, e.g. not inclduing the creation time, or by implementing PartialEq on CacheHint using only the expiration date.
+// TODO: find a different solution for this(?), e.g. not inclduing the creation time, or by implementing PartialEq on CacheHint using only the expiration date.
 impl<G> PartialEq for BaseTile<G>
 where
     G: PartialEq,

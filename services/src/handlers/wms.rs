@@ -990,4 +990,29 @@ mod tests {
 
         ErrorResponse::assert(res, 200, "Operator", "Operator: DataTypeError: No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
     }
+
+    #[tokio::test]
+    async fn it_sets_cache_control_header() {
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+
+        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx).await;
+
+        assert_eq!(
+            response.status(),
+            200,
+            "{:?}",
+            actix_web::test::read_body(response).await
+        );
+
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-cache"
+        );
+    }
 }

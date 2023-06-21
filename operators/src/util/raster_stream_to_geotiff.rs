@@ -65,11 +65,11 @@ where
         gdal_tiff_metadata,
     )?;
 
-    let mut cache_hint = CacheHint::unlimited();
-
-    spawn_blocking(move || {
+    let cache_hint = spawn_blocking(move || {
         let mut band_idx = 1;
         let mut time = initial_tile_time;
+
+        let mut cache_hint = CacheHint::unlimited();
 
         for tile in tiles {
             if tile.time != time {
@@ -96,7 +96,7 @@ where
             writer.write_tile_into_band(tile, dataset.rasterband(band_idx)?)?;
         }
 
-        Result::<(), Error>::Ok(())
+        Result::<CacheHint, Error>::Ok(cache_hint)
     })
     .await??;
 

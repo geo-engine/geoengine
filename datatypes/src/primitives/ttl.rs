@@ -4,12 +4,11 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use super::DateTime;
 
 /// Config parameter to indicate how long a value may be cached
-/// TODO: json deserialization
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum CacheTtl {
-    #[default]
+    #[default] // TODO: make the default globally configurable in Settings.toml?
     NoCache,
-    Seconds(u32), // NonZeroU32(?) or merge types as Seconds(0)
+    Seconds(u32),
     Unlimited,
 }
 
@@ -237,6 +236,23 @@ mod tests {
         assert_eq!(
             serde_json::to_value(CacheTtl::NoCache).unwrap(),
             serde_json::Value::Null
+        );
+    }
+
+    #[test]
+    fn it_merges_expiration() {
+        let expiration = DateTime::now();
+
+        assert_eq!(
+            CacheExpiration::Unlimited.merged(&CacheExpiration::Expires(expiration)),
+            CacheExpiration::Expires(expiration)
+        );
+
+        let expiration2 = DateTime::now();
+
+        assert_eq!(
+            CacheExpiration::Expires(expiration).merged(&CacheExpiration::Expires(expiration2)),
+            CacheExpiration::Expires(expiration)
         );
     }
 }

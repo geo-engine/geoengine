@@ -12,6 +12,7 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
+use geoengine_datatypes::primitives::ttl::CacheExpiration;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{
     Grid2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
@@ -254,14 +255,16 @@ where
             self.tiling_specification,
         );
 
-        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
-            &self.source,
-            query,
-            self.tiling_specification,
-            ctx,
-            sub_query,
+        Ok(
+            RasterSubQueryAdapter::<'a, P, _, _>::new(
+                &self.source,
+                query,
+                self.tiling_specification,
+                ctx,
+                sub_query,
+            )
+            .filter_and_fill(CacheExpiration::NoCache), // Filler tiles may be produced by gaps in the input data and we cannot be sure if the gaps are permanent or not. Thus, we do not cache them.
         )
-        .filter_and_fill())
     }
 }
 
