@@ -591,7 +591,7 @@ mod tests {
 
     fn create_tile() -> RasterTile2D<u8> {
         RasterTile2D::<u8> {
-            time: TimeInterval::new_unchecked(1, 1),
+            time: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
             tile_position: [-1, 0].into(),
             global_geo_transform: TestDefault::test_default(),
             grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
