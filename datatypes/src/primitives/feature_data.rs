@@ -1177,10 +1177,15 @@ impl FeatureData {
 impl From<RasterDataType> for FeatureDataType {
     fn from(value: RasterDataType) -> Self {
         match value {
-            RasterDataType::U8 | RasterDataType::U16 | RasterDataType::U32 => Self::Int,
-            RasterDataType::I8 | RasterDataType::I16 | RasterDataType::I32 => Self::Int,
+            RasterDataType::U8
+            | RasterDataType::U16
+            | RasterDataType::U32
+            | RasterDataType::I8
+            | RasterDataType::I16
+            | RasterDataType::I32
+            | RasterDataType::U64
+            | RasterDataType::I64 => Self::Int,
             RasterDataType::F32 | RasterDataType::F64 => Self::Float,
-            RasterDataType::U64 | RasterDataType::I64 => Self::Int,
         }
     }
 }

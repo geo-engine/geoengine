@@ -415,7 +415,7 @@ impl ArrowTyped for TimeInterval {
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
-        builder.values().len() as usize * std::mem::size_of::<i64>()
+        builder.values().len() * std::mem::size_of::<i64>()
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
