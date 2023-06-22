@@ -415,7 +415,7 @@ impl ArrowTyped for TimeInterval {
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
-        builder.values().len() * std::mem::size_of::<i64>()
+        builder.values().len() as usize * std::mem::size_of::<i64>()
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
@@ -721,6 +721,22 @@ mod tests {
         assert_eq!(
             time_interval_extent([None, Some(TimeInterval::new(5, 6).unwrap())].into_iter()),
             None
+        );
+    }
+
+    #[test]
+    fn arrow_builder_size() {
+        let mut builder = TimeInterval::arrow_builder(2);
+        let v = builder.values();
+        v.append_values(&[1, 2], &[true, true]);
+        v.append_values(&[3, 4], &[true, true]);
+
+        assert_eq!(builder.value_length(), 2);
+        assert_eq!(builder.values().len(), 4);
+
+        assert_eq!(
+            TimeInterval::builder_byte_size(&mut builder),
+            4 * std::mem::size_of::<i64>()
         );
     }
 }

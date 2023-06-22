@@ -1,5 +1,6 @@
 use crate::error;
 use crate::primitives::TimeInstance;
+use crate::raster::RasterDataType;
 use crate::util::Result;
 use arrow::buffer::NullBuffer;
 use gdal::vector::OGRFieldType;
@@ -1026,6 +1027,17 @@ impl FeatureDataType {
         true
     }
 
+    pub fn null_feature_data(self, len: usize) -> FeatureData {
+        match self {
+            Self::Text => FeatureData::NullableText(vec![None; len]),
+            Self::Float => FeatureData::NullableFloat(vec![None; len]),
+            Self::Int => FeatureData::NullableInt(vec![None; len]),
+            Self::Category => FeatureData::NullableCategory(vec![None; len]),
+            Self::Bool => FeatureData::NullableBool(vec![None; len]),
+            Self::DateTime => FeatureData::NullableDateTime(vec![None; len]),
+        }
+    }
+
     pub fn arrow_builder(self, len: usize) -> Box<dyn arrow::array::ArrayBuilder> {
         match self {
             Self::Text => Box::new(arrow::array::StringBuilder::with_capacity(len, 0)),
@@ -1158,6 +1170,17 @@ impl FeatureData {
                 }
                 Box::new(builder)
             }
+        }
+    }
+}
+
+impl From<RasterDataType> for FeatureDataType {
+    fn from(value: RasterDataType) -> Self {
+        match value {
+            RasterDataType::U8 | RasterDataType::U16 | RasterDataType::U32 => Self::Int,
+            RasterDataType::I8 | RasterDataType::I16 | RasterDataType::I32 => Self::Int,
+            RasterDataType::F32 | RasterDataType::F64 => Self::Float,
+            RasterDataType::U64 | RasterDataType::I64 => Self::Int,
         }
     }
 }

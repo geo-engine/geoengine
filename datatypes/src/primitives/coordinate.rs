@@ -463,4 +463,21 @@ mod test {
                 .unwrap()
         );
     }
+
+    #[test]
+    fn arrow_builder_size() {
+        let mut builder = Coordinate2D::arrow_builder(2);
+        let v = builder.values();
+        v.append_values(&[1., 2.], &[true, true]);
+        v.append_values(&[3., 4.], &[true, true]);
+        v.append_values(&[5., 6.], &[true, true]);
+
+        assert_eq!(builder.value_length(), 2);
+        assert_eq!(builder.values().len(), 6);
+
+        assert_eq!(
+            Coordinate2D::builder_byte_size(&mut builder),
+            6 * std::mem::size_of::<f64>()
+        );
+    }
 }
