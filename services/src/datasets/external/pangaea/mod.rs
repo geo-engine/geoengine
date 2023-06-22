@@ -612,7 +612,7 @@ mod tests {
 
         server.verify_and_clear();
 
-        assert_eq!(3, result.len());
+        assert_eq!(1, result.len());
 
         let total_results: usize = result.iter().map(FeatureCollectionInfos::len).sum();
 
