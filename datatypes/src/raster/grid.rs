@@ -1,7 +1,7 @@
 use super::{
     grid_traits::{ChangeGridBounds, GridShapeAccess},
     GridBoundingBox, GridBounds, GridContains, GridIdx, GridIdx2D, GridIndexAccess,
-    GridIndexAccessMut, GridSize, GridSpaceToLinearSpace, Pixel,
+    GridIndexAccessMut, GridSize, GridSpaceToLinearSpace,
 };
 use crate::util::Result;
 use crate::{error, util::ByteSize};
@@ -507,14 +507,8 @@ where
 
 impl<D, P> ByteSize for Grid<D, P>
 where
-    P: Pixel,
+    Vec<P>: ByteSize,
 {
-    fn heap_byte_size(&self) -> usize {
-        self.data.heap_byte_size()
-    }
-}
-
-impl<D> ByteSize for Grid<D, bool> {
     fn heap_byte_size(&self) -> usize {
         self.data.heap_byte_size()
     }
