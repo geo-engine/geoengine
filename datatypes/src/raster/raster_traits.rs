@@ -59,7 +59,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        primitives::{ttl::CacheHint, TimeInterval},
+        primitives::{CacheHint, TimeInterval},
         raster::{Grid2D, RasterTile2D, TileInformation},
         util::test::TestDefault,
     };

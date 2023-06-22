@@ -660,10 +660,10 @@ mod tests {
     };
     use crate::test_data;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
-    use geoengine_datatypes::primitives::ttl::{CacheHint, CacheTtl};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtl};
     use geoengine_datatypes::raster::{
         EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };

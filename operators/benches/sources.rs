@@ -2,7 +2,7 @@ use std::time::Instant;
 use std::{hint::black_box, marker::PhantomData};
 
 use futures::StreamExt;
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::{

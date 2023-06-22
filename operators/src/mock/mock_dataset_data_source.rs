@@ -10,7 +10,7 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::{MultiPointCollection, VectorDataType};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};

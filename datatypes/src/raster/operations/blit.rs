@@ -114,7 +114,7 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for RasterTile2D<T> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        primitives::{ttl::CacheHint, TimeInterval},
+        primitives::{CacheHint, TimeInterval},
         raster::{Blit, GeoTransform, Grid2D, RasterTile2D},
     };
 

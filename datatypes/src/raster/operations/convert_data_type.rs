@@ -150,7 +150,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        primitives::{ttl::CacheHint, TimeInterval},
+        primitives::{CacheHint, TimeInterval},
         raster::{EmptyGrid2D, GeoTransform, Grid2D, GridOrEmpty2D, RasterTile2D},
     };
 

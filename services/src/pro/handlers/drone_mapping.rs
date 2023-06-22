@@ -14,7 +14,7 @@ use crate::util::config::get_config_element;
 use crate::util::IdResponse;
 use actix_web::{web, FromRequest, Responder};
 use futures_util::StreamExt;
-use geoengine_datatypes::primitives::ttl::CacheTtl;
+use geoengine_datatypes::primitives::CacheTtl;
 use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;

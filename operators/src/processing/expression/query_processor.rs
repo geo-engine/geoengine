@@ -3,7 +3,7 @@ use std::{marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
-    primitives::{ttl::CacheHint, RasterQueryRectangle, SpatialPartition2D, TimeInterval},
+    primitives::{CacheHint, RasterQueryRectangle, SpatialPartition2D, TimeInterval},
     raster::{
         ConvertDataType, FromIndexFnParallel, GeoTransform, GridIdx2D, GridIndexAccess,
         GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel, Pixel,

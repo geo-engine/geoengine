@@ -277,7 +277,7 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::primitives::ttl::CacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::MultiPointCollection,

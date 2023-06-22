@@ -4,7 +4,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{FutureExt, TryFutureExt};
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     Blit, EmptyGrid, EmptyGrid2D, FromIndexFnParallel, GeoTransform, GridIdx, GridIdx2D,

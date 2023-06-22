@@ -31,7 +31,7 @@ use gdal::{
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
-    primitives::{ttl::CacheTtl, FeatureDataType, Measurement, VectorQueryRectangle},
+    primitives::{CacheTtl, FeatureDataType, Measurement, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{

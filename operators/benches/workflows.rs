@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use futures::TryStreamExt;
 use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     Measurement, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
 };

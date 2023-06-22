@@ -165,7 +165,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        primitives::{ttl::CacheHint, TimeInterval},
+        primitives::{CacheHint, TimeInterval},
         raster::{EmptyGrid2D, GridIndexAccessMut, MaskedGrid2D, TileInformation},
         spatial_reference::SpatialReference,
         util::test::TestDefault,

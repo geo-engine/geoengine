@@ -7,7 +7,7 @@ use std::sync::Arc;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -340,7 +340,7 @@ mod tests {
     use super::*;
     use std::str::FromStr;
 
-    use geoengine_datatypes::primitives::ttl::CacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };

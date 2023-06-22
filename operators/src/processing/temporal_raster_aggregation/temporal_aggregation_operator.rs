@@ -397,7 +397,7 @@ where
 mod tests {
     use futures::stream::StreamExt;
     use geoengine_datatypes::{
-        primitives::{ttl::CacheHint, Measurement, SpatialResolution, TimeInterval},
+        primitives::{CacheHint, Measurement, SpatialResolution, TimeInterval},
         raster::{
             EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType,
             TileInformation,

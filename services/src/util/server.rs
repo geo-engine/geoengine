@@ -11,8 +11,8 @@ use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, HttpRequest, HttpResponse};
 use futures::future::BoxFuture;
-use geoengine_datatypes::primitives::ttl::{CacheExpiration, CacheHint};
 use geoengine_datatypes::primitives::DateTime;
+use geoengine_datatypes::primitives::{CacheExpiration, CacheHint};
 use log::debug;
 
 use std::any::Any;

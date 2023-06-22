@@ -345,7 +345,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::primitives::{ttl::CacheHint, MultiPolygon};
+    use geoengine_datatypes::primitives::{CacheHint, MultiPolygon};
 
     #[test]
     fn point_in_polygon_tester() {

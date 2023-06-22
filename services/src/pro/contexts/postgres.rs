@@ -791,7 +791,7 @@ mod tests {
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::{join, Future};
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::primitives::ttl::CacheTtl;
+    use geoengine_datatypes::primitives::CacheTtl;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
         RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,

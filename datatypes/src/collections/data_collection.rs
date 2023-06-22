@@ -31,7 +31,7 @@ mod tests {
 
     use crate::collections::BuilderProvider;
     use crate::collections::FeatureCollectionModifications;
-    use crate::primitives::ttl::CacheHint;
+    use crate::primitives::CacheHint;
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, TimeInterval,
     };

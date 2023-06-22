@@ -205,7 +205,7 @@ mod tests {
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         primitives::{
-            ttl::CacheHint, BoundingBox2D, DateTime, FeatureData, MultiPoint, SpatialResolution,
+            BoundingBox2D, CacheHint, DateTime, FeatureData, MultiPoint, SpatialResolution,
             TimeInterval,
         },
         util::{arrow::arrow_ipc_file_to_record_batches, test::TestDefault},

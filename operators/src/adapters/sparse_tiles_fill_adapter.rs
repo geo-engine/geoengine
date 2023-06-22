@@ -1,7 +1,7 @@
 use crate::util::Result;
 use futures::{ready, Stream};
 use geoengine_datatypes::{
-    primitives::{ttl::CacheExpiration, RasterQueryRectangle, SpatialPartitioned, TimeInterval},
+    primitives::{CacheExpiration, RasterQueryRectangle, SpatialPartitioned, TimeInterval},
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
         Pixel, RasterTile2D, TilingSpecification,
@@ -484,7 +484,7 @@ where
 mod tests {
     use futures::{stream, StreamExt};
     use geoengine_datatypes::{
-        primitives::{ttl::CacheHint, TimeInterval},
+        primitives::{CacheHint, TimeInterval},
         raster::Grid,
         util::test::TestDefault,
     };

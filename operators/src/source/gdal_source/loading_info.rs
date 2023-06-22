@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{
-    ttl::CacheTtl, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
+    CacheTtl, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
 };
 use serde::{Deserialize, Serialize};
 

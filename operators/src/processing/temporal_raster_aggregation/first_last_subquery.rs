@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
     primitives::{
-        ttl::CacheHint, QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance,
+        CacheHint, QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance,
         TimeInterval, TimeStep,
     },
     raster::{EmptyGrid2D, Pixel, RasterTile2D, TileInformation},

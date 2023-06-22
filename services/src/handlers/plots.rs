@@ -218,7 +218,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::http::{header, Method};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::primitives::ttl::CacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{DateTime, Measurement};
     use geoengine_datatypes::raster::{
         Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,

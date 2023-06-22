@@ -39,7 +39,7 @@ mod test_util {
 
     use futures::StreamExt;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::ttl::{CacheHint, CacheTtl};
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtl};
     use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
 

@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use geo_rand::{GeoRand, GeoRandParameters};
 use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPolygonCollection};
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, MultiPoint, QueryRectangle, SpatialResolution,
 };

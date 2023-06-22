@@ -7,8 +7,7 @@ use async_trait::async_trait;
 use futures::TryFuture;
 use geoengine_datatypes::{
     primitives::{
-        ttl::CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval,
-        TimeStep,
+        CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep,
     },
     raster::{
         EmptyGrid2D, GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D,

@@ -12,7 +12,7 @@ use geoengine_datatypes::{
     dataset::{DataId, DatasetId, NamedData},
     hashmap,
     primitives::{
-        ttl::CacheTtl, BoundingBox2D, DateTimeParseFormat, FeatureDataType, Measurement,
+        BoundingBox2D, CacheTtl, DateTimeParseFormat, FeatureDataType, Measurement,
         SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
         TimeStep, VectorQueryRectangle,
     },

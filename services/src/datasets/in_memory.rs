@@ -533,7 +533,7 @@ mod tests {
     use crate::contexts::{InMemoryContext, SessionContext, SimpleApplicationContext};
     use crate::datasets::listing::OrderBy;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::primitives::ttl::CacheTtl;
+    use geoengine_datatypes::primitives::CacheTtl;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::MetaDataProvider;

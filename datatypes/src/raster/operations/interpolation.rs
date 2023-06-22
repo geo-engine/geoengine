@@ -186,7 +186,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        primitives::ttl::CacheHint,
+        primitives::CacheHint,
         raster::{GeoTransform, Grid2D, GridOrEmpty, MaskedGrid, RasterTile2D, TileInformation},
     };
 

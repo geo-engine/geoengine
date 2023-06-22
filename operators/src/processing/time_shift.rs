@@ -503,7 +503,7 @@ mod tests {
         collections::MultiPointCollection,
         dataset::NamedData,
         primitives::{
-            ttl::CacheHint, BoundingBox2D, DateTime, Measurement, MultiPoint, SpatialPartition2D,
+            BoundingBox2D, CacheHint, DateTime, Measurement, MultiPoint, SpatialPartition2D,
             SpatialResolution, TimeGranularity,
         },
         raster::{EmptyGrid2D, GridOrEmpty, RasterDataType, TileInformation, TilingSpecification},

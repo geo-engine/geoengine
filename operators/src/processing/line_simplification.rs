@@ -338,8 +338,7 @@ mod tests {
         },
         dataset::{DataId, DatasetId, NamedData},
         primitives::{
-            ttl::{CacheHint, CacheTtl},
-            FeatureData, MultiLineString, MultiPoint, TimeInterval,
+            FeatureData, MultiLineString, MultiPoint, TimeInterval, {CacheHint, CacheTtl},
         },
         spatial_reference::SpatialReference,
         test_data,

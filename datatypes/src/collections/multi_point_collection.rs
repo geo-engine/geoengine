@@ -326,7 +326,7 @@ mod tests {
 
     use crate::collections::{BuilderProvider, FeatureCollectionModifications, ToGeoJson};
     use crate::operations::reproject::Reproject;
-    use crate::primitives::ttl::CacheHint;
+    use crate::primitives::CacheHint;
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
         TimeInstance, TimeInterval,

@@ -47,7 +47,7 @@ mod tests {
 
     use geoengine_datatypes::{
         collections::FeatureCollectionInfos,
-        primitives::{ttl::CacheHint, MultiPolygon, TimeInterval},
+        primitives::{CacheHint, MultiPolygon, TimeInterval},
     };
 
     use super::*;

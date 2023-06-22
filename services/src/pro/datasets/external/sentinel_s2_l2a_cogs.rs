@@ -16,7 +16,7 @@ use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
-use geoengine_datatypes::primitives::ttl::CacheTtl;
+use geoengine_datatypes::primitives::CacheTtl;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, Measurement, RasterQueryRectangle,
     SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,

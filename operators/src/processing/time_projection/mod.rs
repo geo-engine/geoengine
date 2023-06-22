@@ -273,8 +273,8 @@ mod tests {
     use geoengine_datatypes::{
         collections::{MultiPointCollection, VectorDataType},
         primitives::{
-            ttl::CacheHint, BoundingBox2D, DateTime, MultiPoint, SpatialResolution,
-            TimeGranularity, TimeInterval,
+            BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialResolution, TimeGranularity,
+            TimeInterval,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,

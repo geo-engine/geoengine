@@ -10,7 +10,7 @@ use futures::{
 };
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
-use geoengine_datatypes::primitives::ttl::{CacheExpiration, CacheHint};
+use geoengine_datatypes::primitives::{CacheExpiration, CacheHint};
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };

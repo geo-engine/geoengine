@@ -18,7 +18,7 @@ use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{DateTimeParseFormat, TimeInstance, TimeInterval},
 };
-use geoengine_datatypes::{primitives::ttl::CacheTtl, util::canonicalize_subpath};
+use geoengine_datatypes::{primitives::CacheTtl, util::canonicalize_subpath};
 use geoengine_operators::{
     source::{
         GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,

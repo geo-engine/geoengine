@@ -1,6 +1,6 @@
 use crate::collections::{error, FeatureCollectionError, TypedFeatureCollection};
 use crate::collections::{FeatureCollection, VectorDataType};
-use crate::primitives::ttl::CacheHint;
+use crate::primitives::CacheHint;
 use crate::primitives::{
     Coordinate2D, FeatureDataType, Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
     TimeInterval,

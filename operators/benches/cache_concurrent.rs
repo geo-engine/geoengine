@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use futures::future::join_all;
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{DateTime, SpatialPartition2D, SpatialResolution};
 use geoengine_datatypes::raster::RasterProperties;
 use geoengine_datatypes::{

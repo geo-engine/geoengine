@@ -20,7 +20,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::{mem, slice};
 
-use crate::primitives::ttl::CacheHint;
+use crate::primitives::CacheHint;
 use crate::primitives::{BoolDataRef, Coordinate2D, DateTimeDataRef, TimeInstance};
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
@@ -1142,7 +1142,7 @@ where
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionInfos};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint, ttl::CacheHint};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint, CacheHint};
     /// use std::collections::HashMap;
     ///
     /// let pc = MultiPointCollection::from_data(

@@ -241,7 +241,7 @@ macro_rules! call_generic_raster_tile_2d_ext {
 #[cfg(test)]
 mod tests {
     use crate::{
-        primitives::{ttl::CacheHint, TimeInterval},
+        primitives::{CacheHint, TimeInterval},
         raster::{GeoTransform, Grid2D, GridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D},
         util::test::TestDefault,
     };

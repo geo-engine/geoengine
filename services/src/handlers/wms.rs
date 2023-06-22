@@ -1,5 +1,5 @@
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use reqwest::Url;
 use serde_json::json;

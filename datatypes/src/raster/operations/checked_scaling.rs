@@ -191,7 +191,7 @@ where
 mod tests {
 
     use crate::{
-        primitives::{ttl::CacheHint, TimeInterval},
+        primitives::{CacheHint, TimeInterval},
         raster::{GeoTransform, Grid2D, MaskedGrid2D},
         util::test::TestDefault,
     };

@@ -146,9 +146,7 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{
-            ttl::CacheHint, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
+        primitives::{CacheHint, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             Grid2D, GridOrEmpty2D, MaskedGrid2D, RasterDataType, TileInformation,
             TilingSpecification,

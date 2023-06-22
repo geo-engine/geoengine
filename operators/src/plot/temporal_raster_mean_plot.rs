@@ -254,7 +254,7 @@ mod tests {
         source::GdalSourceParameters,
     };
     use geoengine_datatypes::primitives::{
-        ttl::CacheHint, BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
+        BoundingBox2D, CacheHint, Measurement, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::{dataset::NamedData, plots::PlotMetaData, primitives::DateTime};
     use geoengine_datatypes::{raster::TilingSpecification, spatial_reference::SpatialReference};

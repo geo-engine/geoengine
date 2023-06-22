@@ -6,7 +6,7 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint,
     MultiPointAccess, VectorQueryRectangle,
@@ -478,7 +478,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::primitives::ttl::CacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::FeatureData;
     use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::TimeInterval;

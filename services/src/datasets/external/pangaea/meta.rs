@@ -4,7 +4,7 @@
 use crate::error::Error;
 use futures::StreamExt;
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::primitives::ttl::CacheTtl;
+use geoengine_datatypes::primitives::CacheTtl;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, MultiPoint,
     MultiPolygon, TypedGeometry, VectorQueryRectangle,

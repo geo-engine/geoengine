@@ -511,7 +511,7 @@ mod tests {
     use super::*;
 
     use crate::collections::{BuilderProvider, FeatureCollectionModifications};
-    use crate::primitives::ttl::CacheHint;
+    use crate::primitives::CacheHint;
     use crate::primitives::{FeatureData, FeatureDataRef, TimeInterval};
 
     #[test]

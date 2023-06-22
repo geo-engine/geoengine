@@ -26,7 +26,7 @@ use geoengine_datatypes::{
         CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
     primitives::{
-        ttl::CacheExpiration, BoundingBox2D, Geometry, RasterQueryRectangle, SpatialPartition2D,
+        BoundingBox2D, CacheExpiration, Geometry, RasterQueryRectangle, SpatialPartition2D,
         SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
     },
     raster::{Pixel, RasterTile2D, TilingSpecification},
@@ -595,10 +595,10 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::collections::IntoGeometryIterator;
     use geoengine_datatypes::dataset::NamedData;
-    use geoengine_datatypes::primitives::ttl::{CacheHint, CacheTtl};
     use geoengine_datatypes::primitives::{
         AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat,
     };
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtl};
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,

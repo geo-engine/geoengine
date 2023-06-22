@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
-use geoengine_datatypes::primitives::ttl::CacheTtl;
+use geoengine_datatypes::primitives::CacheTtl;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -513,7 +513,7 @@ mod tests {
 
     use geoengine_datatypes::{
         primitives::{
-            ttl::CacheTtl, Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution,
+            CacheTtl, Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution,
             TimeInterval,
         },
         raster::RasterDataType,

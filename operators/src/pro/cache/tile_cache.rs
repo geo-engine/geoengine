@@ -645,8 +645,8 @@ impl TileCache {
 mod tests {
     use geoengine_datatypes::{
         primitives::{
-            ttl::{CacheExpiration, CacheHint},
             DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
+            {CacheExpiration, CacheHint},
         },
         raster::{Grid, RasterProperties},
     };

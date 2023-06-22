@@ -5,7 +5,7 @@ use super::{
     TileInformation,
 };
 use super::{GridIndexAccessMut, RasterProperties};
-use crate::primitives::ttl::CacheHint;
+use crate::primitives::CacheHint;
 use crate::primitives::{
     SpatialBounded, SpatialPartition2D, SpatialPartitioned, SpatialResolution, TemporalBounded,
     TimeInterval,

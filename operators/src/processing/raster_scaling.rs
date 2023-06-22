@@ -252,7 +252,7 @@ where
 mod tests {
 
     use geoengine_datatypes::{
-        primitives::{ttl::CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             Grid2D, GridOrEmpty2D, GridShape, MaskedGrid2D, RasterDataType, RasterProperties,
             TileInformation, TilingSpecification,

@@ -12,7 +12,7 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::ttl::CacheExpiration;
+use geoengine_datatypes::primitives::CacheExpiration;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{
     Grid2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
@@ -284,7 +284,7 @@ mod tests {
         dataset::NamedData,
         operations::image::{Colorizer, DefaultColors, RgbaColor},
         primitives::{
-            ttl::CacheHint, DateTime, Measurement, RasterQueryRectangle, SpatialPartition2D,
+            CacheHint, DateTime, Measurement, RasterQueryRectangle, SpatialPartition2D,
             SpatialResolution, TimeInstance, TimeInterval,
         },
         raster::{

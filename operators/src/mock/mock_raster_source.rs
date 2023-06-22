@@ -8,7 +8,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::ttl::CacheExpiration;
+use geoengine_datatypes::primitives::CacheExpiration;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
@@ -283,7 +283,7 @@ where
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
-    use geoengine_datatypes::primitives::ttl::CacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D, SpatialResolution};
     use geoengine_datatypes::raster::{Grid, MaskedGrid, RasterDataType, RasterProperties};
     use geoengine_datatypes::util::test::TestDefault;

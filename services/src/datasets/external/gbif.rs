@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
-use geoengine_datatypes::primitives::ttl::CacheTtl;
+use geoengine_datatypes::primitives::CacheTtl;
 use postgres_types::ToSql;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -947,7 +947,7 @@ mod tests {
 
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::ttl::CacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use rand::RngCore;
     use tokio::runtime::Handle;
     use tokio_postgres::Config;

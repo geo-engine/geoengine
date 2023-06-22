@@ -144,7 +144,7 @@ mod tests {
     use super::*;
 
     use futures::stream::{self, StreamExt};
-    use geoengine_datatypes::primitives::ttl::CacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::TimeInterval;
     use geoengine_datatypes::raster::{Grid2D, TileInformation};
     use geoengine_datatypes::util::test::TestDefault;

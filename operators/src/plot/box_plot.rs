@@ -478,7 +478,7 @@ impl BoxPlotAccum {
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::primitives::ttl::CacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use serde_json::json;
 
     use geoengine_datatypes::primitives::{

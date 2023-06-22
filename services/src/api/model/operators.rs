@@ -4,7 +4,7 @@ use crate::api::model::datatypes::{
     TimeInstance, TimeStep, VectorQueryRectangle,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::ttl::CacheTtl;
+use geoengine_datatypes::primitives::CacheTtl;
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,

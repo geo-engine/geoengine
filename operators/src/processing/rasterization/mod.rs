@@ -6,7 +6,7 @@ use crate::engine::{
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
-use geoengine_datatypes::primitives::ttl::CacheHint;
+use geoengine_datatypes::primitives::CacheHint;
 
 use crate::error;
 use crate::processing::rasterization::GridOrDensity::Grid;

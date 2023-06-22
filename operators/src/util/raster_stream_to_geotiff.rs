@@ -12,11 +12,11 @@ use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
 use gdal::{Dataset, DriverManager, Metadata};
-use geoengine_datatypes::primitives::ttl::{CacheHint, CacheTtl};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, DateTimeParseFormat, QueryRectangle, RasterQueryRectangle,
     SpatialPartition2D, TimeInterval,
 };
+use geoengine_datatypes::primitives::{CacheHint, CacheTtl};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridIdx2D, GridSize,
     MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D, TilingSpecification,
@@ -1038,7 +1038,7 @@ mod tests {
     use std::marker::PhantomData;
     use std::ops::Add;
 
-    use geoengine_datatypes::primitives::ttl::CacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{DateTime, Duration};
     use geoengine_datatypes::raster::Grid;
     use geoengine_datatypes::{

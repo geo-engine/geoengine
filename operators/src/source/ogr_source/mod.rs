@@ -17,7 +17,7 @@ use futures::{ready, Stream, StreamExt};
 use futures::{Future, FutureExt};
 use gdal::vector::sql::ResultSet;
 use gdal::vector::{Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType};
-use geoengine_datatypes::primitives::ttl::CacheTtl;
+use geoengine_datatypes::primitives::CacheTtl;
 use log::debug;
 use pin_project::pin_project;
 use postgres_protocol::escape::{escape_identifier, escape_literal};
@@ -1467,10 +1467,10 @@ mod tests {
         MultiPolygonCollection,
     };
     use geoengine_datatypes::dataset::{DataId, DatasetId};
-    use geoengine_datatypes::primitives::ttl::{CacheExpiration, CacheHint};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, Measurement, SpatialResolution, TimeGranularity,
     };
+    use geoengine_datatypes::primitives::{CacheExpiration, CacheHint};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
