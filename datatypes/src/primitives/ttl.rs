@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use super::DateTime;
 
-const MAX_CACHE_TTL_SECONDS: u32 = 60 * 60 * 24 * 365 * 10; // 1 year
+const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
 
 /// Config parameter to indicate how long a value may be cached (0 = must not be cached)
 ///
