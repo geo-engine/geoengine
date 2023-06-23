@@ -46,7 +46,8 @@ jobs:
           haskell: true
           # we need clang + this takes some minutes
           large-packages: false
-          swap-storage: true
+          # maybe we need swap storage
+          swap-storage: false
       - name: Checkout code
         uses: actions/checkout@v3
       - name: APT update
