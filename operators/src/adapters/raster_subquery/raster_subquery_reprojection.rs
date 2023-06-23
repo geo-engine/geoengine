@@ -358,7 +358,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         primitives::Measurement,
-        raster::{Grid, GridShape, RasterDataType},
+        raster::{EqualsIgnoringCacheHint, Grid, GridShape, RasterDataType},
         util::test::TestDefault,
     };
 
@@ -469,6 +469,6 @@ mod tests {
             .map(Option::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
-        assert_eq!(data, res);
+        assert!(data.equals_ignoring_cache_hint(&res));
     }
 }

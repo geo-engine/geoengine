@@ -1175,7 +1175,9 @@ mod tests {
     use crate::util::Result;
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
-    use geoengine_datatypes::raster::{EmptyGrid2D, GridBounds, GridIdx2D};
+    use geoengine_datatypes::raster::{
+        EmptyGrid2D, EqualsIgnoringCacheHint, GridBounds, GridIdx2D,
+    };
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::util::gdal::hide_gdal_errors;
     use geoengine_datatypes::{primitives::SpatialResolution, raster::GridShape2D};
@@ -1801,7 +1803,7 @@ mod tests {
             CacheHint::default(),
         );
 
-        assert_eq!(tile.unwrap(), expected);
+        assert!(tile.unwrap().equals_ignoring_cache_hint(&expected));
     }
 
     #[test]
@@ -2473,6 +2475,6 @@ mod tests {
             CacheHint::seconds(1234),
         );
 
-        assert_eq!(tile.unwrap(), expected);
+        assert!(tile.unwrap().equals_ignoring_cache_hint(&expected));
     }
 }

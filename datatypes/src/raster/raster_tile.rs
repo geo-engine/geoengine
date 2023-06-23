@@ -30,7 +30,7 @@ pub type MaterializedRasterTile3D<T> = MaterializedRasterTile<GridShape3D, T>;
 
 /// A `BaseTile` is the main type used to iterate over tiles of raster data
 /// The data of the `RasterTile` is stored as `Grid` or `NoDataGrid`. The enum `GridOrEmpty` allows a combination of both.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BaseTile<G> {
     /// The `TimeInterval` where this tile is valid.
@@ -47,22 +47,6 @@ pub struct BaseTile<G> {
     pub properties: RasterProperties,
     /// Indicate how long the tile may be cached, if `None` the tile may be cached indefinitely.
     pub cache_hint: CacheHint,
-}
-
-// Manual implementation of equality because the cache hint field contains the creation time of the tile and shall not be considered for equality.
-// TODO: find a different solution for this(?), e.g. not inclduing the creation time, or by implementing PartialEq on CacheHint using only the expiration date.
-impl<G> PartialEq for BaseTile<G>
-where
-    G: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.time == other.time
-            && self.tile_position == other.tile_position
-            && self.global_geo_transform == other.global_geo_transform
-            && self.grid_array == other.grid_array
-            && self.properties == other.properties
-        // deliberately omitted: self.cache_hint == other.cache_hint
-    }
 }
 
 impl<G> BaseTile<G>
@@ -103,6 +87,72 @@ where
 
     pub fn spatial_resolution(&self) -> SpatialResolution {
         self.global_geo_transform.spatial_resolution()
+    }
+}
+
+/// A way to compare two `BaseTile` ignoring the `CacheHint` and only considering the actual data.
+pub trait EqualsIgnoringCacheHint<G: PartialEq> {
+    fn equals_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool;
+}
+
+/// Allow comparing Iterables of `BaseTile` ignoring the `CacheHint` and only considering the actual data.
+pub trait IterableBaseTile<G> {
+    fn iter_tiles(&self) -> Box<dyn Iterator<Item = &BaseTile<G>> + '_>;
+}
+
+struct SingleBaseTileIter<'a, G> {
+    tile: Option<&'a BaseTile<G>>,
+}
+
+impl<'a, G> Iterator for SingleBaseTileIter<'a, G> {
+    type Item = &'a BaseTile<G>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.tile.take()
+    }
+}
+
+impl<G: PartialEq> IterableBaseTile<G> for BaseTile<G> {
+    fn iter_tiles(&self) -> Box<dyn Iterator<Item = &BaseTile<G>> + '_> {
+        Box::new(SingleBaseTileIter { tile: Some(self) })
+    }
+}
+
+impl<G: PartialEq> IterableBaseTile<G> for Vec<BaseTile<G>> {
+    fn iter_tiles(&self) -> Box<dyn Iterator<Item = &BaseTile<G>> + '_> {
+        Box::new(self.iter())
+    }
+}
+
+impl<G: PartialEq, const N: usize> IterableBaseTile<G> for [BaseTile<G>; N] {
+    fn iter_tiles(&self) -> Box<dyn Iterator<Item = &BaseTile<G>> + '_> {
+        Box::new(self.iter())
+    }
+}
+
+impl<G: PartialEq, I: IterableBaseTile<G>> EqualsIgnoringCacheHint<G> for I {
+    fn equals_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool {
+        let mut iter_self = self.iter_tiles();
+        let mut iter_other = other.iter_tiles();
+
+        loop {
+            match (iter_self.next(), iter_other.next()) {
+                (Some(a), Some(b)) => {
+                    if a.time != b.time
+                        || a.tile_position != b.tile_position
+                        || a.global_geo_transform != b.global_geo_transform
+                        || a.grid_array != b.grid_array
+                        || a.properties != b.properties
+                    {
+                        return false;
+                    }
+                }
+                // both iterators are exhausted
+                (None, None) => return true,
+                // one iterator is exhausted, the other is not, so they are not equal
+                _ => return false,
+            }
+        }
     }
 }
 

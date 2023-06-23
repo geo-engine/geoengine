@@ -3,6 +3,7 @@ use std::sync::Arc;
 use futures::StreamExt;
 use geoengine_datatypes::{
     primitives::{QueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
+    raster::EqualsIgnoringCacheHint,
     util::test::TestDefault,
 };
 use geoengine_operators::{
@@ -110,5 +111,5 @@ async fn main() {
         .collect::<Result<Vec<_>>>()
         .unwrap();
 
-    assert_eq!(tiles, tiles_from_cache);
+    assert!(tiles.equals_ignoring_cache_hint(&tiles_from_cache));
 }

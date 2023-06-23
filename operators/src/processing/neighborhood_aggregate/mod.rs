@@ -288,7 +288,8 @@ mod tests {
             SpatialResolution, TimeInstance, TimeInterval,
         },
         raster::{
-            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+            EqualsIgnoringCacheHint, Grid2D, GridOrEmpty, RasterDataType, RasterTile2D,
+            TileInformation, TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -547,7 +548,7 @@ mod tests {
             ),
         ];
 
-        assert_eq!(result, raster_tiles);
+        assert!(result.equals_ignoring_cache_hint(&raster_tiles));
     }
 
     fn make_raster() -> Box<dyn RasterOperator> {

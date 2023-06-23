@@ -599,6 +599,7 @@ mod tests {
         AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat,
     };
     use geoengine_datatypes::primitives::{CacheHint, CacheTtl};
+    use geoengine_datatypes::raster::EqualsIgnoringCacheHint;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -952,7 +953,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
-        assert_eq!(data, res);
+        assert!(data.equals_ignoring_cache_hint(&res));
 
         Ok(())
     }

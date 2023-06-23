@@ -609,7 +609,7 @@ where
 mod tests {
     use geoengine_datatypes::{
         primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{Grid, GridShape, RasterDataType},
+        raster::{EqualsIgnoringCacheHint, Grid, GridShape, RasterDataType},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
@@ -714,6 +714,6 @@ mod tests {
             .map(Option::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
-        assert_eq!(data, res);
+        assert!(data.equals_ignoring_cache_hint(&res));
     }
 }
