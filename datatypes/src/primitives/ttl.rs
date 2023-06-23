@@ -10,7 +10,7 @@ const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
 ///
 /// We derive the Serializer here because it makes sense to output the concrete cache ttl.
 /// For the deserializer we have a custom implementation to allow "max" as a value.
-#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, PartialOrd)]
 pub struct CacheTtlSeconds(u32);
 
 impl CacheTtlSeconds {
@@ -135,6 +135,18 @@ impl CacheHint {
 
     pub fn expires(&self) -> CacheExpiration {
         self.expires
+    }
+
+    pub fn total_ttl_seconds(&self) -> CacheTtlSeconds {
+        CacheTtlSeconds::new((self.expires.0 - self.created).num_seconds() as u32)
+    }
+
+    #[must_use]
+    pub fn clone_with_current_datetime(&self) -> Self {
+        Self {
+            created: DateTime::now(),
+            expires: self.expires,
+        }
     }
 }
 

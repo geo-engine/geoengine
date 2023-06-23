@@ -533,7 +533,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
@@ -1199,7 +1199,11 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0].as_ref().unwrap().cache_hint, cache_hint);
+        assert!(
+            result[0].as_ref().unwrap().cache_hint.total_ttl_seconds() > CacheTtlSeconds::new(0)
+                && result[0].as_ref().unwrap().cache_hint.total_ttl_seconds()
+                    <= cache_hint.total_ttl_seconds()
+        );
     }
 
     #[tokio::test]

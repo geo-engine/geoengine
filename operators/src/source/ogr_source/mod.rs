@@ -1467,10 +1467,10 @@ mod tests {
         MultiPolygonCollection,
     };
     use geoengine_datatypes::dataset::{DataId, DatasetId};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, Measurement, SpatialResolution, TimeGranularity,
     };
-    use geoengine_datatypes::primitives::{CacheExpiration, CacheHint};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
@@ -1563,7 +1563,7 @@ mod tests {
                 "onError": "ignore",
                 "sqlQuery": null,
                 "attributeQuery": null,
-                "cacheTtl": null,
+                "cacheTtl": 0,
             })
         );
 
@@ -6496,7 +6496,10 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0].cache_hint.expires(), CacheExpiration::max());
+        assert_eq!(
+            result[0].cache_hint.total_ttl_seconds(),
+            CacheTtlSeconds::max()
+        );
 
         Ok(())
     }

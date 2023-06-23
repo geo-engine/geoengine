@@ -2213,7 +2213,7 @@ mod tests {
                   "onError": "ignore",
                   "sqlQuery": null,
                   "attributeQuery": null,
-                  "cacheTtl": null,
+                  "cacheTtl": 0,
                 },
                 "resultDescriptor": {
                   "dataType": "MultiPoint",

@@ -231,7 +231,7 @@ where
         info_out.global_tile_position,
         info_out.global_geo_transform,
         out_data,
-        input.cache_hint, // TODO: update created date?
+        input.cache_hint.clone_with_current_datetime(),
     )
 }
 

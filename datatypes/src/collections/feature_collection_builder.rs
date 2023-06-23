@@ -95,7 +95,7 @@ where
             rows: 0,
             string_bytes: 0,
             _collection_type: PhantomData,
-            cache_hint: self.cache_hint, // TODO: update created date?
+            cache_hint: self.cache_hint.clone_with_current_datetime(),
         }
     }
 
