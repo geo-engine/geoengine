@@ -309,7 +309,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
 
                 let mut chunks = points_processor.query(vector_query, ctx).await?;
 
-                let mut cache_hint = CacheHint::unlimited();
+                let mut cache_hint = CacheHint::max_duration();
 
                 let mut grid_data = vec![0.; grid_size_x * grid_size_y];
                 while let Some(chunk) = chunks.next().await {
@@ -429,7 +429,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
                 let mut tile_data = vec![0.; tile_size_x * tile_size_y];
 
-                let mut cache_hint = CacheHint::unlimited();
+                let mut cache_hint = CacheHint::max_duration();
 
                 while let Some(chunk) = chunks.next().await {
                     let chunk = chunk?;

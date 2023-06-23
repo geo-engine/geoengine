@@ -379,7 +379,7 @@ macro_rules! impl_expression_tuple_processor {
                     raster.tile_position,
                     raster.global_geo_transform,
                     raster.grid_shape(),
-                    tuple.iter().fold(CacheHint::unlimited(), |acc, r| acc.merged(&r.cache_hint)),
+                    tuple.iter().fold(CacheHint::max_duration(), |acc, r| acc.merged(&r.cache_hint)),
                 )
             }
 

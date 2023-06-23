@@ -197,7 +197,7 @@ where
             input.time,
             *info_out,
             EmptyGrid::new(info_out.tile_size_in_pixels).into(),
-            CacheHint::unlimited(),
+            CacheHint::max_duration(),
         );
     }
 
@@ -270,7 +270,7 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
         [0, 0].into(),
         geo_transform,
         GridOrEmpty::from(grid),
-        CacheHint::unlimited(),
+        CacheHint::max_duration(),
     );
 
     NeighborhoodAggregateAccu::new(input_tile, tile_info, pool, neighborhood)

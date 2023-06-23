@@ -644,10 +644,7 @@ impl TileCache {
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{
-            DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
-            {CacheExpiration, CacheHint},
-        },
+        primitives::{CacheHint, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{Grid, RasterProperties},
     };
     use serde_json::json;
@@ -680,7 +677,7 @@ mod tests {
                 .unwrap()
                 .into(),
             properties: RasterProperties::default(),
-            cache_hint: CacheHint::unlimited(),
+            cache_hint: CacheHint::max_duration(),
         }
     }
 
@@ -790,7 +787,7 @@ mod tests {
                     let mut expired_tiles = (**tiles).clone();
                     expired_tiles[0].cache_hint = CacheHint::with_created_and_expires(
                         DateTime::new_utc(0, 1, 1, 0, 0, 0),
-                        CacheExpiration::Expires(DateTime::new_utc(0, 1, 1, 0, 0, 1)),
+                        DateTime::new_utc(0, 1, 1, 0, 0, 1).into(),
                     );
                     *tiles = Arc::new(expired_tiles);
                 }

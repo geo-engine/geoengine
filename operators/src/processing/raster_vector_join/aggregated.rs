@@ -83,7 +83,7 @@ where
 
         let collection = covered_pixels.collection_ref();
 
-        let mut cache_hint = CacheHint::unlimited();
+        let mut cache_hint = CacheHint::max_duration();
 
         for time_span in FeatureTimeSpanIter::new(collection.time_intervals()) {
             let query = VectorQueryRectangle {

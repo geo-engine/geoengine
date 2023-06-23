@@ -20,7 +20,7 @@ use aruna_rust_api::api::storage::services::v1::{
     GetObjectGroupObjectsRequest, GetObjectGroupsRequest,
 };
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::primitives::CacheTtl;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, SpatialResolution, VectorQueryRectangle,
 };
@@ -462,7 +462,7 @@ impl ArunaDataProvider {
             on_error: OgrSourceErrorSpec::Abort,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtl::default(),
+            cache_ttl: CacheTtlSeconds::default(),
         }
     }
 
@@ -488,7 +488,7 @@ impl ArunaDataProvider {
                 allow_alphaband_as_mask: true,
                 retry: None,
             }),
-            cache_ttl: CacheTtl::Seconds(15 * 60), // the download-link validity
+            cache_ttl: CacheTtlSeconds::new(15 * 60), // the download-link validity
         };
 
         GdalLoadingInfo {

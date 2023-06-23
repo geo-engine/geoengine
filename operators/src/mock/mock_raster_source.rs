@@ -138,7 +138,7 @@ where
             tiling_strategy.tile_grid_box(query.spatial_partition()),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
-            CacheExpiration::Unlimited, // cache forever because we know all mock data
+            CacheExpiration::max(), // cache forever because we know all mock data
         )
         .boxed())
     }

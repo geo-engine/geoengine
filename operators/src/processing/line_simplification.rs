@@ -338,7 +338,7 @@ mod tests {
         },
         dataset::{DataId, DatasetId, NamedData},
         primitives::{
-            FeatureData, MultiLineString, MultiPoint, TimeInterval, {CacheHint, CacheTtl},
+            FeatureData, MultiLineString, MultiPoint, TimeInterval, {CacheHint, CacheTtlSeconds},
         },
         spatial_reference::SpatialReference,
         test_data,
@@ -564,7 +564,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtl::default(),
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPolygon,

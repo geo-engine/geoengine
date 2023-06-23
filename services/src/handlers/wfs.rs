@@ -608,7 +608,7 @@ where
         Box::pin(stream.fold(
             geoengine_operators::util::Result::<(Vec<serde_json::Value>, CacheHint)>::Ok((
                 features,
-                CacheHint::unlimited(),
+                CacheHint::max_duration(),
             )),
             |output, collection| async move {
                 match (output, collection) {

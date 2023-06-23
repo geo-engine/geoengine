@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
-use geoengine_datatypes::primitives::CacheTtl;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use postgres_types::ToSql;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -504,7 +504,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: Some(format!("{taxonrank} = '{canonicalname}'")),
-                cache_ttl: CacheTtl::default(),
+                cache_ttl: CacheTtlSeconds::default(),
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -1710,7 +1710,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: Some("species = 'Rhipidia willistoniana'".to_string()),
-                    cache_ttl: CacheTtl::default(),
+                    cache_ttl: CacheTtlSeconds::default(),
                 };
 
                 if loading_info != expected {

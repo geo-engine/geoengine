@@ -276,7 +276,7 @@ mod tests {
             temporal_bounds,
             geo_transform,
             r1,
-            CacheHint::unlimited(),
+            CacheHint::max_duration(),
         )
         .into_materialized_tile();
 

@@ -263,7 +263,7 @@ where
                 ctx,
                 sub_query,
             )
-            .filter_and_fill(CacheExpiration::NoCache), // Filler tiles may be produced by gaps in the input data and we cannot be sure if the gaps are permanent or not. Thus, we do not cache them.
+            .filter_and_fill(CacheExpiration::no_cache()), // Filler tiles may be produced by gaps in the input data and we cannot be sure if the gaps are permanent or not. Thus, we do not cache them.
         )
     }
 }

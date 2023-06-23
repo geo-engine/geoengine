@@ -533,7 +533,7 @@ mod tests {
     use crate::contexts::{InMemoryContext, SessionContext, SimpleApplicationContext};
     use crate::datasets::listing::OrderBy;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::primitives::CacheTtl;
+    use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::MetaDataProvider;
@@ -575,7 +575,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtl::default(),
+                cache_ttl: CacheTtlSeconds::default(),
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),

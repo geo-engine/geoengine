@@ -49,7 +49,7 @@ where
         time.unwrap_or_default(),
         query_geo_transform,
         GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
-        CacheHint::unlimited(),
+        CacheHint::max_duration(),
     ));
 
     let output_tile: BoxFuture<Result<RasterTile2D<T>>> =

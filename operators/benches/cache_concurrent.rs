@@ -42,7 +42,7 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
             .unwrap()
             .into(),
         properties: RasterProperties::default(),
-        cache_hint: CacheHint::unlimited(),
+        cache_hint: CacheHint::max_duration(),
     };
 
     let start = std::time::Instant::now();

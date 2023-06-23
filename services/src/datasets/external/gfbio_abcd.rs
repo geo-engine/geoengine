@@ -18,7 +18,7 @@ use bb8_postgres::bb8::{Pool, PooledConnection};
 use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::primitives::CacheTtl;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
@@ -394,7 +394,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: Some(GfbioAbcdDataProvider::build_attribute_query(surrogate_key)),
-                cache_ttl: CacheTtl::default(),
+                cache_ttl: CacheTtlSeconds::default(),
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -753,7 +753,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: Some("surrogate_key = 1".to_string()),
-                cache_ttl: CacheTtl::default(),
+                cache_ttl: CacheTtlSeconds::default(),
             };
 
             if loading_info != expected {

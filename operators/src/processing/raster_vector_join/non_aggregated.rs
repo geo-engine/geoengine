@@ -167,7 +167,7 @@ where
             state: None,
             aggregation_method,
             ignore_no_data,
-            cache_hint: CacheHint::unlimited(),
+            cache_hint: CacheHint::max_duration(),
         }
     }
 

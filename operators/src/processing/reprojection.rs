@@ -555,7 +555,7 @@ where
                 ctx,
                 sub_query_spec,
             )
-            .filter_and_fill(CacheExpiration::NoCache)) // TODO: if we were sure that gaps only occur where the projection is not defined in the input, we could cache this forever
+            .filter_and_fill(CacheExpiration::no_cache())) // TODO: if we were sure that gaps only occur where the projection is not defined in the input, we could cache this forever
         } else {
             log::debug!("No intersection between source data / srs and target srs");
 
@@ -569,7 +569,7 @@ where
                 grid_bounds,
                 tiling_strat.geo_transform,
                 self.tiling_spec.tile_size_in_pixels,
-                CacheExpiration::NoCache, // TODO: if we were sure that gaps only occur where the projection is not defined in the input, we could cache this forever
+                CacheExpiration::no_cache(), // TODO: if we were sure that gaps only occur where the projection is not defined in the input, we could cache this forever
             )))
         }
     }
@@ -598,7 +598,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat,
     };
-    use geoengine_datatypes::primitives::{CacheHint, CacheTtl};
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::raster::EqualsIgnoringCacheHint;
     use geoengine_datatypes::{
         collections::{
@@ -1118,7 +1118,7 @@ mod tests {
                 bbox: None,
                 resolution: None,
             },
-            cache_ttl: CacheTtl::default(),
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let id: DataId = DatasetId::new().into();
@@ -1251,7 +1251,7 @@ mod tests {
                 bbox: None,
                 resolution: None,
             },
-            cache_ttl: CacheTtl::default(),
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let id: DataId = DatasetId::new().into();

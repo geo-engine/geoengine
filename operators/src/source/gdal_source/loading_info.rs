@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{
-    CacheTtl, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
+    CacheTtlSeconds, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +21,7 @@ pub struct GdalMetaDataStatic {
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
     #[serde(default)]
-    pub cache_ttl: CacheTtl,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[async_trait]
@@ -71,7 +71,7 @@ pub struct GdalMetaDataRegular {
     pub data_time: TimeInterval,
     pub step: TimeStep,
     #[serde(default)]
-    pub cache_ttl: CacheTtl,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[async_trait]
@@ -120,7 +120,7 @@ pub struct GdalMetadataNetCdfCf {
     /// All other time steps are added to this offset.
     pub band_offset: usize,
     #[serde(default)]
-    pub cache_ttl: CacheTtl,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[async_trait]
@@ -230,7 +230,7 @@ pub struct DynamicGdalLoadingInfoPartIterator {
     query_time: TimeInterval,
     data_time: TimeInterval,
     state: DynamicGdalLoadingInfoPartIteratorState,
-    cache_ttl: CacheTtl,
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Debug, Clone)]
@@ -248,7 +248,7 @@ impl DynamicGdalLoadingInfoPartIterator {
         step: TimeStep,
         query_time: TimeInterval,
         data_time: TimeInterval,
-        cache_ttl: CacheTtl,
+        cache_ttl: CacheTtlSeconds,
     ) -> Result<Self> {
         // TODO: maybe fail on deserialization
         if time_placeholders.is_empty()
@@ -381,7 +381,7 @@ pub struct NetCdfCfGdalLoadingInfoPartIterator {
     dataset_time_start: TimeInstance,
     max_t2: TimeInstance,
     band_offset: usize,
-    cache_ttl: CacheTtl,
+    cache_ttl: CacheTtlSeconds,
 }
 
 impl NetCdfCfGdalLoadingInfoPartIterator {
@@ -392,7 +392,7 @@ impl NetCdfCfGdalLoadingInfoPartIterator {
         dataset_time_start: TimeInstance,
         max_t2: TimeInstance,
         band_offset: usize,
-        cache_ttl: CacheTtl,
+        cache_ttl: CacheTtlSeconds,
     ) -> Self {
         Self {
             time_step_iter,
@@ -490,7 +490,7 @@ pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
     #[serde(default)]
-    pub cache_ttl: CacheTtl,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[cfg(test)]
@@ -550,7 +550,7 @@ mod tests {
                 granularity: TimeGranularity::Millis,
                 step: 11,
             },
-            cache_ttl: CacheTtl::default(),
+            cache_ttl: CacheTtlSeconds::default(),
         }
     }
 
@@ -822,7 +822,7 @@ mod tests {
                         allow_alphaband_as_mask: true,
                         retry: None,
                     }),
-                    cache_ttl: CacheTtl::default(),
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(1, 5),
@@ -840,7 +840,7 @@ mod tests {
                         allow_alphaband_as_mask: true,
                         retry: None,
                     }),
-                    cache_ttl: CacheTtl::default(),
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(5, 6),
@@ -858,7 +858,7 @@ mod tests {
                         allow_alphaband_as_mask: true,
                         retry: None,
                     }),
-                    cache_ttl: CacheTtl::default(),
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
             ],
         };
@@ -941,7 +941,7 @@ mod tests {
             end: time_end,
             step: time_step,
             band_offset: 0,
-            cache_ttl: CacheTtl::default(),
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let query = RasterQueryRectangle {
@@ -1008,7 +1008,7 @@ mod tests {
             end: time_end,
             step: time_step,
             band_offset: 1,
-            cache_ttl: CacheTtl::default(),
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let query = RasterQueryRectangle {
@@ -1075,7 +1075,7 @@ mod tests {
             end: time_end,
             step: time_step,
             band_offset: 0,
-            cache_ttl: CacheTtl::default(),
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let query = RasterQueryRectangle {
@@ -1165,7 +1165,7 @@ mod tests {
             dataset_time_start: time_start,
             max_t2: time_end,
             band_offset: 0,
-            cache_ttl: CacheTtl::default(),
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let step_1 = iter.next().unwrap().unwrap();
@@ -1248,7 +1248,7 @@ mod tests {
                 dataset_time_start: TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
                 max_t2: TimeInstance::from(DateTime::new_utc(2022, 1, 1, 0, 0, 0)),
                 band_offset: 0,
-                cache_ttl: CacheTtl::default(),
+                cache_ttl: CacheTtlSeconds::default(),
             }
         }
 

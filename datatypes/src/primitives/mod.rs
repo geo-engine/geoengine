@@ -47,4 +47,4 @@ pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 pub use time_instance::TimeInstance;
 pub use time_interval::{time_interval_extent, TimeInterval};
 pub use time_step::{TimeGranularity, TimeStep, TimeStepIter};
-pub use ttl::{CacheExpiration, CacheHint, CacheTtl};
+pub use ttl::{CacheExpiration, CacheHint, CacheTtlSeconds};

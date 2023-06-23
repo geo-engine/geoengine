@@ -11,8 +11,7 @@ use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, HttpRequest, HttpResponse};
 use futures::future::BoxFuture;
-use geoengine_datatypes::primitives::DateTime;
-use geoengine_datatypes::primitives::{CacheExpiration, CacheHint};
+use geoengine_datatypes::primitives::CacheHint;
 use log::debug;
 
 use std::any::Any;
@@ -409,27 +408,16 @@ pub trait CacheControlHeader {
 
 impl CacheControlHeader for CacheHint {
     fn cache_control_header(&self) -> (HeaderName, HeaderValue) {
-        let value = match self.expires() {
-            CacheExpiration::Unlimited =>
+        let value = match self.expires().seconds_to_expiration() {
             // RFC 2616:
             // "To mark a response as "never expires," an origin server sends an Expires date approximately one year
             // from the time the response is sent. HTTP/1.1 servers SHOULD NOT send Expires dates more than one year in the future."
-            {
-                HeaderValue::from_str("private, max-age=31536000")
-                    .expect("should be a valid header value according to the HTTP standard")
-            }
-            CacheExpiration::Expires(expires) if !self.is_expired() => {
-                HeaderValue::from_str(&format!(
-                    "private, max-age={}",
-                    (expires - DateTime::now()).num_seconds()
-                ))
-                .expect("should be a valid header value according to the HTTP standard")
-            }
-
-            CacheExpiration::NoCache | CacheExpiration::Expires(_) => {
-                HeaderValue::from_str("no-cache")
-                    .expect("should be a valid header value according to the HTTP standard")
-            }
+            s if s > 31_536_000 => HeaderValue::from_str("private, max-age=31536000")
+                .expect("should be a valid header value according to the HTTP standard"),
+            s if s == 0 => HeaderValue::from_str("no-cache")
+                .expect("should be a valid header value according to the HTTP standard"),
+            s => HeaderValue::from_str(&format!("private, max-age={s}",))
+                .expect("should be a valid header value according to the HTTP standard"),
         };
 
         (actix_http::header::CACHE_CONTROL, value)

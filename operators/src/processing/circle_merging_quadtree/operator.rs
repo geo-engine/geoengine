@@ -384,7 +384,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
         let initial_grid_fold_state = Result::<GridFoldState>::Ok(GridFoldState {
             grid: Grid::new(query.spatial_bounds, scaled_radius_model),
             column_mapping: self.attribute_mapping.clone(),
-            cache_hint: CacheHint::unlimited(),
+            cache_hint: CacheHint::max_duration(),
         });
 
         let grid_future = self.source.query(query, ctx).await?.fold(

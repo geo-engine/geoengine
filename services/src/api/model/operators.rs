@@ -4,7 +4,7 @@ use crate::api::model::datatypes::{
     TimeInstance, TimeStep, VectorQueryRectangle,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::CacheTtl;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
@@ -450,7 +450,7 @@ pub struct GdalMetaDataStatic {
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
     #[serde(default)]
-    pub cache_ttl: CacheTtl,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl From<geoengine_operators::source::GdalMetaDataStatic> for GdalMetaDataStatic {
@@ -494,7 +494,7 @@ pub struct OgrSourceDataset {
     pub sql_query: Option<String>,
     pub attribute_query: Option<String>,
     #[serde(default)]
-    pub cache_ttl: CacheTtl,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl From<geoengine_operators::source::OgrSourceDataset> for OgrSourceDataset {
@@ -875,7 +875,7 @@ pub struct GdalMetaDataRegular {
     pub data_time: TimeInterval,
     pub step: TimeStep,
     #[serde(default)]
-    pub cache_ttl: CacheTtl,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl From<geoengine_operators::source::GdalMetaDataRegular> for GdalMetaDataRegular {
@@ -1130,7 +1130,7 @@ pub struct GdalMetadataNetCdfCf {
     /// All other time steps are added to this offset.
     pub band_offset: usize,
     #[serde(default)]
-    pub cache_ttl: CacheTtl,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl From<geoengine_operators::source::GdalMetadataNetCdfCf> for GdalMetadataNetCdfCf {
@@ -1193,7 +1193,7 @@ pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
     #[serde(default)]
-    pub cache_ttl: CacheTtl,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl From<geoengine_operators::source::GdalLoadingInfoTemporalSlice>

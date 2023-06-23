@@ -49,7 +49,7 @@ where
                 s,
                 query,
                 self.additional_data,
-                CacheExpiration::NoCache, // TODO: can we do better?
+                CacheExpiration::no_cache(), // TODO: can we do better?
             )
             .boxed())
         }

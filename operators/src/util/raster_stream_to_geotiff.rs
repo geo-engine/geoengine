@@ -16,7 +16,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, DateTimeParseFormat, QueryRectangle, RasterQueryRectangle,
     SpatialPartition2D, TimeInterval,
 };
-use geoengine_datatypes::primitives::{CacheHint, CacheTtl};
+use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridIdx2D, GridSize,
     MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D, TilingSpecification,
@@ -69,7 +69,7 @@ where
         let mut band_idx = 1;
         let mut time = initial_tile_time;
 
-        let mut cache_hint = CacheHint::unlimited();
+        let mut cache_hint = CacheHint::max_duration();
 
         for tile in tiles {
             if tile.time != time {
@@ -698,7 +698,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             self.result.push(GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: Some(dataset_parameters),
-                cache_ttl: CacheTtl::default(), // not relevant for writing tiffs
+                cache_ttl: CacheTtlSeconds::default(), // not relevant for writing tiffs
             });
             self.init_new_intermediate_dataset(
                 time_interval,

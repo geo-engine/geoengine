@@ -284,7 +284,7 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                         .fold(
                             Result::<(BooleanArray, CacheHint)>::Ok((
                                 initial_filter,
-                                CacheHint::unlimited(),
+                                CacheHint::max_duration(),
                             )),
                             |acc, polygons| async {
                                 let (filter, mut cache_hint) = acc?;

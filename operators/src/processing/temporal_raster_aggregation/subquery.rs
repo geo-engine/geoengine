@@ -171,7 +171,7 @@ where
             state_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
             prestine: true,
             pool: pool.clone(),
-            cache_hint: CacheHint::unlimited(),
+            cache_hint: CacheHint::max_duration(),
         };
 
         futures::future::ok(accu)

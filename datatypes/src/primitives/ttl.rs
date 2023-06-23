@@ -1,29 +1,33 @@
+use chrono::Utc;
 use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::DateTime;
 
-/// Config parameter to indicate how long a value may be cached
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
-pub enum CacheTtl {
-    #[default] // TODO: make the default globally configurable in Settings.toml?
-    NoCache,
-    Seconds(u32),
-    Unlimited,
+const MAX_CACHE_TTL_SECONDS: u32 = 60 * 60 * 24 * 365 * 10; // 1 year
+
+/// Config parameter to indicate how long a value may be cached (0 = must not be cached)
+///
+/// We derive the Serializer here because it makes sense to output the concrete cache ttl.
+/// For the deserializer we have a custom implementation to allow "max" as a value.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct CacheTtlSeconds(u32);
+
+impl CacheTtlSeconds {
+    pub fn new(seconds: u32) -> Self {
+        Self(seconds.min(MAX_CACHE_TTL_SECONDS))
+    }
+
+    pub fn max() -> Self {
+        Self(MAX_CACHE_TTL_SECONDS)
+    }
 }
 
-impl From<CacheTtl> for CacheHint {
-    fn from(value: CacheTtl) -> Self {
+impl From<CacheTtlSeconds> for CacheHint {
+    fn from(value: CacheTtlSeconds) -> Self {
         Self {
             created: DateTime::now(),
-            expires: match value {
-                CacheTtl::NoCache => CacheExpiration::NoCache,
-                CacheTtl::Seconds(seconds) if seconds == 0 => CacheExpiration::NoCache,
-                CacheTtl::Seconds(seconds) => CacheExpiration::Expires(
-                    (chrono::offset::Utc::now() + chrono::Duration::seconds(seconds.into())).into(),
-                ),
-                CacheTtl::Unlimited => CacheExpiration::Unlimited,
-            },
+            expires: CacheExpiration::seconds(value.0),
         }
     }
 }
@@ -32,10 +36,12 @@ impl From<CacheTtl> for CacheHint {
 ///
 /// "cacheTtl": 1234
 /// or
-/// "cacheTtl": "unlimited"
+/// "cacheTtl": "max"
 /// or if there should be no caching:
+/// "cacheTtl": 0
+/// or
 /// "cacheTtl": null
-impl<'de> Deserialize<'de> for CacheTtl {
+impl<'de> Deserialize<'de> for CacheTtlSeconds {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -45,30 +51,16 @@ impl<'de> Deserialize<'de> for CacheTtl {
         match val {
             serde_json::Value::Number(n) => {
                 if let Some(num) = n.as_u64() {
-                    Ok(CacheTtl::Seconds(num as u32))
+                    Ok(Self(num as u32))
                 } else {
                     Err(D::Error::custom("Invalid number for CacheTtl::Seconds"))
                 }
             }
-            serde_json::Value::String(s) if s.eq_ignore_ascii_case("unlimited") => {
-                Ok(CacheTtl::Unlimited)
+            serde_json::Value::String(s) if s.eq_ignore_ascii_case("max") => {
+                Ok(Self(MAX_CACHE_TTL_SECONDS))
             }
-            serde_json::Value::Null => Ok(CacheTtl::NoCache),
+            serde_json::Value::Null => Ok(Self(0)),
             _ => Err(D::Error::custom("Invalid value for CacheTtl")),
-        }
-    }
-}
-
-/// Corresponding serialize implementation
-impl Serialize for CacheTtl {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match *self {
-            CacheTtl::NoCache => serializer.serialize_none(),
-            CacheTtl::Seconds(num) => serializer.serialize_u32(num),
-            CacheTtl::Unlimited => serializer.serialize_str("unlimited"),
         }
     }
 }
@@ -81,13 +73,8 @@ pub struct CacheHint {
 }
 
 impl Default for CacheHint {
-    // TODO: maybe remove this method and explicitly use CacheHint::no_cache() instead
-    //       or: distinguish between default() -> no cache and test_default() unlimited cache?
     fn default() -> Self {
-        Self {
-            created: DateTime::now(),
-            expires: CacheExpiration::NoCache,
-        }
+        Self::no_cache()
     }
 }
 
@@ -106,23 +93,19 @@ impl CacheHint {
     pub fn no_cache() -> Self {
         Self {
             created: DateTime::now(),
-            expires: CacheExpiration::NoCache,
+            expires: DateTime::now().into(),
         }
     }
 
-    pub fn unlimited() -> Self {
-        Self {
-            created: DateTime::now(),
-            expires: CacheExpiration::Unlimited,
-        }
+    pub fn max_duration() -> Self {
+        Self::seconds(MAX_CACHE_TTL_SECONDS)
     }
 
     pub fn seconds(seconds: u32) -> Self {
         Self {
             created: DateTime::now(),
-            expires: CacheExpiration::Expires(
-                (chrono::offset::Utc::now() + chrono::Duration::seconds(seconds.into())).into(),
-            ),
+            expires: (chrono::offset::Utc::now() + chrono::Duration::seconds(seconds.into()))
+                .into(),
         }
     }
 
@@ -157,28 +140,36 @@ impl CacheHint {
 
 /// Type for storing the expiration data to avoid recomputing it from creation date time and ttl
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum CacheExpiration {
-    NoCache,   // TODO: rename: Always?
-    Unlimited, // TODO: rename: Never?
-    Expires(DateTime),
+pub struct CacheExpiration(DateTime);
+
+impl From<DateTime> for CacheExpiration {
+    fn from(datetime: DateTime) -> Self {
+        Self(datetime)
+    }
+}
+
+impl From<chrono::DateTime<Utc>> for CacheExpiration {
+    fn from(datetime: chrono::DateTime<Utc>) -> Self {
+        Self(datetime.into())
+    }
 }
 
 impl CacheExpiration {
+    pub fn seconds(seconds: u32) -> Self {
+        Self((chrono::offset::Utc::now() + chrono::Duration::seconds(seconds.into())).into())
+    }
+
+    pub fn max() -> Self {
+        Self::seconds(MAX_CACHE_TTL_SECONDS)
+    }
+
+    pub fn no_cache() -> Self {
+        Self::seconds(0)
+    }
+
     #[must_use]
     pub fn merged(&self, other: &CacheExpiration) -> CacheExpiration {
-        match (self, other) {
-            (CacheExpiration::NoCache, _) | (_, CacheExpiration::NoCache) => {
-                CacheExpiration::NoCache
-            }
-            (CacheExpiration::Expires(a), CacheExpiration::Unlimited)
-            | (CacheExpiration::Unlimited, CacheExpiration::Expires(a)) => {
-                CacheExpiration::Expires(*a)
-            }
-            (CacheExpiration::Expires(a), CacheExpiration::Expires(b)) => {
-                CacheExpiration::Expires(*a.min(b))
-            }
-            (CacheExpiration::Unlimited, CacheExpiration::Unlimited) => CacheExpiration::Unlimited,
-        }
+        CacheExpiration(self.0.min(other.0))
     }
 
     pub fn merge_with(&mut self, other: &CacheExpiration) {
@@ -186,11 +177,15 @@ impl CacheExpiration {
     }
 
     pub fn is_expired(&self) -> bool {
-        match self {
-            CacheExpiration::NoCache => true,
-            CacheExpiration::Unlimited => false,
-            CacheExpiration::Expires(expiration) => *expiration < DateTime::now(),
-        }
+        self.0 < DateTime::now()
+    }
+
+    pub fn datetime(&self) -> DateTime {
+        self.0
+    }
+
+    pub fn seconds_to_expiration(&self) -> u32 {
+        (self.0 - DateTime::now()).num_seconds().max(0) as u32
     }
 }
 
@@ -210,49 +205,26 @@ mod tests {
     #[test]
     fn it_deserializes_ttl() {
         assert_eq!(
-            serde_json::from_str::<CacheTtl>("1234").unwrap(),
-            CacheTtl::Seconds(1234)
+            serde_json::from_str::<CacheTtlSeconds>("1234").unwrap(),
+            CacheTtlSeconds(1234)
         );
         assert_eq!(
-            serde_json::from_str::<CacheTtl>("\"unlimited\"").unwrap(),
-            CacheTtl::Unlimited
+            serde_json::from_str::<CacheTtlSeconds>("\"max\"").unwrap(),
+            CacheTtlSeconds(MAX_CACHE_TTL_SECONDS)
         );
         assert_eq!(
-            serde_json::from_value::<CacheTtl>(serde_json::Value::Null).unwrap(),
-            CacheTtl::NoCache
-        );
-    }
-
-    #[test]
-    fn it_serializes_ttl() {
-        assert_eq!(
-            serde_json::to_string(&CacheTtl::Seconds(1234)).unwrap(),
-            "1234".to_string()
-        );
-        assert_eq!(
-            serde_json::to_string(&CacheTtl::Unlimited).unwrap(),
-            "\"unlimited\"".to_string()
-        );
-        assert_eq!(
-            serde_json::to_value(CacheTtl::NoCache).unwrap(),
-            serde_json::Value::Null
+            serde_json::from_value::<CacheTtlSeconds>(serde_json::Value::Null).unwrap(),
+            CacheTtlSeconds(0)
         );
     }
 
     #[test]
     fn it_merges_expiration() {
-        let expiration = DateTime::now();
+        let now = chrono::offset::Utc::now().into();
 
         assert_eq!(
-            CacheExpiration::Unlimited.merged(&CacheExpiration::Expires(expiration)),
-            CacheExpiration::Expires(expiration)
-        );
-
-        let expiration2 = DateTime::now();
-
-        assert_eq!(
-            CacheExpiration::Expires(expiration).merged(&CacheExpiration::Expires(expiration2)),
-            CacheExpiration::Expires(expiration)
+            CacheExpiration::max().merged(&CacheExpiration(now)),
+            CacheExpiration(now)
         );
     }
 }

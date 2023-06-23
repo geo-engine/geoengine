@@ -249,7 +249,9 @@ where
 
         let cache_hint = bands_of_tile
             .iter()
-            .fold(CacheHint::unlimited(), |acc, bt| acc.merged(&bt.cache_hint));
+            .fold(CacheHint::max_duration(), |acc, bt| {
+                acc.merged(&bt.cache_hint)
+            });
 
         let predicted_grid = crate::util::spawn_blocking(move || {
             process_tile(
