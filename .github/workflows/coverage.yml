@@ -44,7 +44,8 @@ jobs:
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          # we need clang + this takes some minutes
+          large-packages: false
           swap-storage: true
       - name: Checkout code
         uses: actions/checkout@v3
