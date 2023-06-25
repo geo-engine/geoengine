@@ -32,6 +32,22 @@ jobs:
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: true
+
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          # we need clang + this takes some minutes
+          large-packages: false
+          # maybe we need swap storage
+          swap-storage: false
       - name: Checkout code
         uses: actions/checkout@v3
       - name: APT update
