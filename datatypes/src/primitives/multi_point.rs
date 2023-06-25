@@ -1,6 +1,6 @@
 use std::convert::{TryFrom, TryInto};
 
-use arrow::array::{ArrayBuilder, BooleanArray};
+use arrow::array::{ArrayBuilder, BooleanArray, FixedSizeListArray, Float64Array};
 use arrow::error::ArrowError;
 use float_cmp::{ApproxEq, F64Margin};
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
 use crate::primitives::{Coordinate2D, Geometry};
-use crate::util::arrow::{downcast_array, ArrowTyped};
+use crate::util::arrow::{downcast_array, padded_buffer_size, ArrowTyped};
 use crate::util::Result;
 
 use super::SpatialBounded;
@@ -121,14 +121,15 @@ impl ArrowTyped for MultiPoint {
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
-        let multi_point_indices_size = builder.len() * std::mem::size_of::<i32>();
+        let size = std::mem::size_of::<Self::ArrowArray>()
+            + std::mem::size_of::<FixedSizeListArray>()
+            + std::mem::size_of::<Float64Array>();
 
-        let point_builder = builder.values();
-        let point_indices_size = point_builder.len() * std::mem::size_of::<i32>();
+        let buffer_bytes = builder.values().values().len() * (std::mem::size_of::<f64>());
 
-        let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
+        let offset_bytes = builder.offsets_slice().len() * (std::mem::size_of::<i32>());
 
-        multi_point_indices_size + point_indices_size + coordinates_size
+        size + padded_buffer_size(buffer_bytes, 64) + padded_buffer_size(offset_bytes, 64)
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
@@ -136,7 +137,7 @@ impl ArrowTyped for MultiPoint {
     }
 
     fn concat(a: &Self::ArrowArray, b: &Self::ArrowArray) -> Result<Self::ArrowArray, ArrowError> {
-        use arrow::array::{Array, FixedSizeListArray, Float64Array};
+        use arrow::array::Array;
 
         let mut new_multipoints = Self::arrow_builder(a.len() + b.len());
 
@@ -168,7 +169,7 @@ impl ArrowTyped for MultiPoint {
         features: &Self::ArrowArray,
         filter_array: &BooleanArray,
     ) -> Result<Self::ArrowArray, ArrowError> {
-        use arrow::array::{Array, FixedSizeListArray, Float64Array};
+        use arrow::array::Array;
 
         let mut new_features = Self::arrow_builder(0);
 
@@ -324,6 +325,7 @@ impl ApproxEq for &MultiPoint {
 
 #[cfg(test)]
 mod tests {
+    use arrow::array::Array;
     use float_cmp::approx_eq;
 
     use super::*;
@@ -430,5 +432,42 @@ mod tests {
             a_ref.wkt_string(),
             "MULTIPOINT((0.5 0.6),(0.7 0.8),(0.9 0.99))"
         );
+    }
+
+    #[test]
+    fn arrow_builder_size() {
+        for i in 0..512 {
+            let mut multi_points_builder = MultiPoint::arrow_builder(i);
+
+            for _ in 0..i {
+                multi_points_builder
+                    .values()
+                    .values()
+                    .append_values(&[1., 2.], &[true, true]);
+
+                multi_points_builder.values().append(true);
+
+                multi_points_builder.append(true);
+            }
+
+            //assert_eq!(multi_points_builder.values().value_length(), 2);
+            //assert_eq!(multi_points_builder.len(), i);
+
+            let builder_byte_size = MultiPoint::builder_byte_size(&mut multi_points_builder);
+
+            let array = multi_points_builder.finish();
+
+            //assert_eq!(builder_byte_size, array.get_array_memory_size(), "{}", i);
+            let array_byte_size = array.get_array_memory_size();
+
+            println!(
+                "{}: {} - {} = {} = {} /64",
+                i,
+                array_byte_size,
+                builder_byte_size,
+                array_byte_size - builder_byte_size,
+                (array_byte_size - builder_byte_size) as f64 / 64.
+            );
+        }
     }
 }
