@@ -1,5 +1,5 @@
-use crate::util::arrow::ArrowTyped;
-use arrow::array::{ArrayBuilder, BooleanArray, Float64Builder};
+use crate::util::arrow::{padded_buffer_size, ArrowTyped};
+use arrow::array::{ArrayBuilder, BooleanArray, Float64Array, Float64Builder};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
 use float_cmp::ApproxEq;
@@ -202,7 +202,10 @@ impl ArrowTyped for Coordinate2D {
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
-        builder.values().len() * std::mem::size_of::<f64>()
+        let size = std::mem::size_of::<Self::ArrowArray>() + std::mem::size_of::<Float64Array>();
+
+        let buffer_bytes = builder.values().len() * std::mem::size_of::<f64>();
+        size + padded_buffer_size(buffer_bytes, 64)
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
@@ -350,6 +353,8 @@ impl From<&Coordinate2D> for wkt::types::Coord<f64> {
 
 #[cfg(test)]
 mod test {
+    use arrow::array::Array;
+
     use super::*;
     use std::mem;
 
@@ -462,5 +467,26 @@ mod test {
             Coordinate2D::from_vec(vec![Coordinate2D::new(0., 0.), Coordinate2D::new(2., 2.),])
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn arrow_builder_size() {
+        for i in 0..10 {
+            let mut builder = Coordinate2D::arrow_builder(i);
+
+            for _ in 0..i {
+                builder.values().append_values(&[1., 2.], &[true, true]);
+                builder.append(true);
+            }
+
+            assert_eq!(builder.value_length(), 2);
+            assert_eq!(builder.len(), i);
+
+            let builder_byte_size = Coordinate2D::builder_byte_size(&mut builder);
+
+            let array = builder.finish();
+
+            assert_eq!(builder_byte_size, array.get_array_memory_size(), "{}", i);
+        }
     }
 }
