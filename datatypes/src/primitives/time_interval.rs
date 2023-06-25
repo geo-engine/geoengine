@@ -1,8 +1,8 @@
 use crate::primitives::TimeInstance;
-use crate::util::arrow::{downcast_array, ArrowTyped};
+use crate::util::arrow::{downcast_array, padded_buffer_size, ArrowTyped};
 use crate::util::Result;
 use crate::{error, util::ranges::value_in_range};
-use arrow::array::{Array, ArrayBuilder, BooleanArray};
+use arrow::array::{Array, ArrayBuilder, BooleanArray, Int64Array};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
 #[cfg(feature = "postgres")]
@@ -415,7 +415,10 @@ impl ArrowTyped for TimeInterval {
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
-        builder.values().len() * std::mem::size_of::<i64>()
+        let size = std::mem::size_of::<Self::ArrowArray>() + std::mem::size_of::<Int64Array>();
+
+        let buffer_bytes = builder.values().len() * std::mem::size_of::<i64>();
+        size + padded_buffer_size(buffer_bytes, 64)
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
@@ -435,7 +438,6 @@ impl ArrowTyped for TimeInterval {
         {
             // TODO: use date if dates out-of-range is fixed for us
             // use arrow::array::Date64Array;
-            use arrow::array::Int64Array;
 
             let int_builder = new_time_intervals.values();
 
@@ -462,7 +464,6 @@ impl ArrowTyped for TimeInterval {
     ) -> Result<Self::ArrowArray, ArrowError> {
         // TODO: use date if dates out-of-range is fixed for us
         // use arrow::array::Date64Array;
-        use arrow::array::Int64Array;
 
         let mut new_time_intervals = Self::arrow_builder(0);
 
@@ -722,5 +723,26 @@ mod tests {
             time_interval_extent([None, Some(TimeInterval::new(5, 6).unwrap())].into_iter()),
             None
         );
+    }
+
+    #[test]
+    fn arrow_builder_size() {
+        for i in 0..10 {
+            let mut builder = TimeInterval::arrow_builder(i);
+
+            for _ in 0..i {
+                builder.values().append_values(&[1, 2], &[true, true]);
+                builder.append(true);
+            }
+
+            assert_eq!(builder.value_length(), 2);
+            assert_eq!(builder.len(), i);
+
+            let builder_byte_size = TimeInterval::builder_byte_size(&mut builder);
+
+            let array = builder.finish();
+
+            assert_eq!(builder_byte_size, array.get_array_memory_size(), "{}", i);
+        }
     }
 }
