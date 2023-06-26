@@ -1658,9 +1658,8 @@ mod tests {
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
 
-        // FIXME: this should be an empty collection. The ChunkMerger does not forward a single empty collection
-        assert_eq!(result.len(), 0); // was 1
-                                     // assert!(result[0].is_empty());
+        assert_eq!(result.len(), 1);
+        assert!(result[0].is_empty());
 
         Ok(())
     }
@@ -4073,8 +4072,8 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
 
         // FIXME: this should be an empty collection. The ChunkMerger does not forward a single empty collection
-        assert_eq!(result.len(), 0); // was 1
-                                     // assert!(result[0].is_empty());
+        assert_eq!(result.len(), 1);
+        assert!(result[0].is_empty());
     }
 
     #[tokio::test]
