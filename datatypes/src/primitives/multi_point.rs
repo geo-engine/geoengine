@@ -126,12 +126,11 @@ impl ArrowTyped for MultiPoint {
         let coords_size = Coordinate2D::builder_byte_size(builder.values());
 
         let offset_bytes = builder.offsets_slice();
-        let offset_len = offset_bytes.len();
-        let offset_bytes = offset_len * (std::mem::size_of::<i32>());
+        let offset_bytes_size = std::mem::size_of_val(offset_bytes);
 
-        let offset_fac: u32 = usize::BITS - usize::leading_zeros(offset_len) + 1;
+        let offset_fac: u32 = usize::BITS - usize::leading_zeros(offset_bytes.len()) + 1;
         let pad = 64.max(2u32.pow(offset_fac) as usize);
-        let padded_o_size = padded_buffer_size(offset_bytes, pad);
+        let padded_o_size = padded_buffer_size(offset_bytes_size, pad);
 
         static_size + coords_size + padded_o_size
     }

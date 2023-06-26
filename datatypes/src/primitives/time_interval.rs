@@ -742,7 +742,7 @@ mod tests {
 
             let array = builder.finish();
 
-            assert_eq!(builder_byte_size, array.get_array_memory_size(), "{}", i);
+            assert_eq!(builder_byte_size, array.get_array_memory_size(), "{i}");
         }
     }
 }
