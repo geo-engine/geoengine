@@ -1,4 +1,4 @@
-use crate::adapters::SparseTilesFillAdapter;
+use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
 };
@@ -27,11 +27,11 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
     SpatialPartition2D, SpatialPartitioned,
 };
-use geoengine_datatypes::primitives::{CacheExpiration, CacheHint};
 use geoengine_datatypes::raster::TileInformation;
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
@@ -734,7 +734,7 @@ where
             tiling_strategy.tile_grid_box(query.spatial_partition()),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
-            CacheExpiration::no_cache(), // TODO: can we do better here? We should be able to use the Ttl of the data set definition?!
+            FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
         );
         Ok(filled_stream.boxed())
     }

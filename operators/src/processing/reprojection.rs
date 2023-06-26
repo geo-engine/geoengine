@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{
-        fold_by_coordinate_lookup_future, RasterSubQueryAdapter, SparseTilesFillAdapter,
-        TileReprojectionSubQuery,
+        fold_by_coordinate_lookup_future, FillerTileCacheExpirationStrategy, RasterSubQueryAdapter,
+        SparseTilesFillAdapter, TileReprojectionSubQuery,
     },
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
@@ -26,8 +26,8 @@ use geoengine_datatypes::{
         CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
     primitives::{
-        BoundingBox2D, CacheExpiration, Geometry, RasterQueryRectangle, SpatialPartition2D,
-        SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
+        BoundingBox2D, Geometry, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+        SpatialResolution, VectorQueryRectangle,
     },
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
@@ -555,7 +555,7 @@ where
                 ctx,
                 sub_query_spec,
             )
-            .filter_and_fill(CacheExpiration::no_cache())) // TODO: if we were sure that gaps only occur where the projection is not defined in the input, we could cache this forever
+            .filter_and_fill(FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles))
         } else {
             log::debug!("No intersection between source data / srs and target srs");
 
@@ -569,7 +569,7 @@ where
                 grid_bounds,
                 tiling_strat.geo_transform,
                 self.tiling_spec.tile_size_in_pixels,
-                CacheExpiration::no_cache(), // TODO: if we were sure that gaps only occur where the projection is not defined in the input, we could cache this forever
+                FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
             )))
         }
     }

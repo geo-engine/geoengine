@@ -1,7 +1,9 @@
 use crate::util::Result;
 use futures::{ready, Stream};
 use geoengine_datatypes::{
-    primitives::{CacheExpiration, RasterQueryRectangle, SpatialPartitioned, TimeInterval},
+    primitives::{
+        CacheExpiration, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInterval,
+    },
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
         Pixel, RasterTile2D, TilingSpecification,
@@ -60,7 +62,7 @@ struct StateContainer<T> {
     grid_bounds: GridBoundingBox2D,
     global_geo_transform: GeoTransform,
     state: State,
-    cache_expiration: CacheExpiration,
+    cache_hint: FillerTileCacheHintProvider,
 }
 
 impl<T: Pixel> StateContainer<T> {
@@ -71,7 +73,7 @@ impl<T: Pixel> StateContainer<T> {
             self.current_idx,
             self.global_geo_transform,
             self.no_data_grid.into(),
-            self.cache_expiration.into(),
+            self.cache_hint.next_hint(),
         )
     }
 
@@ -179,7 +181,7 @@ where
         tile_grid_bounds: GridBoundingBox2D,
         global_geo_transform: GeoTransform,
         tile_shape: GridShape2D,
-        cache_expiration: CacheExpiration, // Specifies the cache expiration for the produced filler tiles. Set this to unlimited if the filler tiles will always be empty
+        cache_expiration: FillerTileCacheExpirationStrategy, // Specifies the cache expiration for the produced filler tiles. Set this to unlimited if the filler tiles will always be empty
     ) -> Self {
         SparseTilesFillAdapter {
             stream,
@@ -191,7 +193,7 @@ where
                 next_tile: None,
                 no_data_grid: EmptyGrid2D::new(tile_shape),
                 state: State::Initial,
-                cache_expiration,
+                cache_hint: cache_expiration.into(),
             },
         }
     }
@@ -200,7 +202,7 @@ where
         stream: S,
         query_rect_to_answer: RasterQueryRectangle,
         tiling_spec: TilingSpecification,
-        cache_expiration: CacheExpiration,
+        cache_expiration: FillerTileCacheExpirationStrategy,
     ) -> Self {
         debug_assert!(query_rect_to_answer.spatial_resolution.y > 0.);
 
@@ -241,6 +243,10 @@ where
                         // this is a the first tile ever
                         // in any case the tiles time is the first time interval /  instant we can produce
                         this.sc.current_time = tile.time;
+
+                        this.sc
+                            .cache_hint
+                            .update_cache_expiration(tile.cache_hint.expires()); // save the expiration date to be used for the filler tiles, depending on the expiration strategy
 
                         if this.sc.grid_idx_is_the_next_to_produce(tile.tile_position) {
                             this.sc.state = State::PollingForNextTile; // return the received tile and set state to polling for the next tile
@@ -293,7 +299,7 @@ where
                             .into(),
                         )));
                         }
-                        // 2. a) The received TimeInterval with start EQUAL to the current TimeInterval MUST NOT have a differend duration / end.
+                        // 2. a) The received TimeInterval with start EQUAL to the current TimeInterval MUST NOT have a different duration / end.
                         if this.sc.time_starts_equals_current_state(tile.time)
                             && !this.sc.time_duration_equals_current_state(tile.time)
                         {
@@ -306,6 +312,10 @@ where
                                 .into(),
                             )));
                         };
+
+                        this.sc
+                            .cache_hint
+                            .update_cache_expiration(tile.cache_hint.expires()); // save the expiration date to be used for the filler tiles, depending on the expiration strategy
 
                         // 2 b) The received TimeInterval with start EQUAL to the current TimeInterval MUST NOT have a different duration / end.
                         let next_tile = if this.sc.time_equals_current_state(tile.time) {
@@ -338,7 +348,7 @@ where
                                     this.sc.current_no_data_tile()
                                 }
                             } else {
-                                // the revieved tile is in a new TimeInterval but we still need to finish the current one. Store tile and go to fill mode.
+                                // the received tile is in a new TimeInterval but we still need to finish the current one. Store tile and go to fill mode.
                                 this.sc.next_tile = Some(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
@@ -444,7 +454,7 @@ where
 
                 Poll::Ready(Some(Ok(no_data_tile)))
             }
-            // this is  the last tile to produce ever
+            // this is the last tile to produce ever
             State::FillToEnd if this.sc.current_idx_is_last_in_grid_run() => {
                 this.sc.state = State::Ended;
                 Poll::Ready(Some(Ok(this.sc.current_no_data_tile())))
@@ -477,6 +487,87 @@ where
         }
 
         self.next_step(cx)
+    }
+}
+
+/// The strategy determines how to set the cache expiration for filler tiles produced by the adapter.
+///
+/// It can either be a fixed value for all produced tiles, or it can be derived from the surrounding tiles that are not produced by the adapter.
+/// In the latter case it will use the cache expiration of the preceeding tile if it is available, otherwise it will use the cache expiration of the following tile.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FillerTileCacheExpirationStrategy {
+    NoCache,
+    FixedValue(CacheExpiration),
+    DerivedFromSurroundingTiles,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct FillerTileCacheHintProvider {
+    strategy: FillerTileCacheExpirationStrategy,
+    state: FillerTileCacheHintState,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum FillerTileCacheHintState {
+    Initial,
+    FirstTile(CacheExpiration),
+    OtherTile {
+        current_cache_expiration: CacheExpiration,
+        next_cache_expiration: CacheExpiration,
+    },
+}
+
+impl FillerTileCacheHintState {
+    fn cache_expiration(&self) -> Option<CacheExpiration> {
+        match self {
+            FillerTileCacheHintState::Initial => None,
+            FillerTileCacheHintState::FirstTile(expiration) => Some(*expiration),
+            FillerTileCacheHintState::OtherTile {
+                current_cache_expiration,
+                next_cache_expiration: _,
+            } => Some(*current_cache_expiration),
+        }
+    }
+}
+
+impl FillerTileCacheHintProvider {
+    fn update_cache_expiration(&mut self, expiration: CacheExpiration) {
+        self.state = match self.state {
+            FillerTileCacheHintState::Initial => FillerTileCacheHintState::FirstTile(expiration),
+            FillerTileCacheHintState::FirstTile(current_cache_expiration) => {
+                FillerTileCacheHintState::OtherTile {
+                    current_cache_expiration,
+                    next_cache_expiration: expiration,
+                }
+            }
+            FillerTileCacheHintState::OtherTile {
+                current_cache_expiration: _,
+                next_cache_expiration,
+            } => FillerTileCacheHintState::OtherTile {
+                current_cache_expiration: next_cache_expiration,
+                next_cache_expiration: expiration,
+            },
+        };
+    }
+
+    fn next_hint(&self) -> CacheHint {
+        match self.strategy {
+            FillerTileCacheExpirationStrategy::NoCache => CacheHint::no_cache(),
+            FillerTileCacheExpirationStrategy::FixedValue(expiration) => expiration.into(),
+            FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles => self
+                .state
+                .cache_expiration()
+                .map_or(CacheHint::no_cache(), Into::into),
+        }
+    }
+}
+
+impl From<FillerTileCacheExpirationStrategy> for FillerTileCacheHintProvider {
+    fn from(value: FillerTileCacheExpirationStrategy) -> Self {
+        Self {
+            strategy: value,
+            state: FillerTileCacheHintState::Initial,
+        }
     }
 }
 
@@ -548,7 +639,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::no_cache(),
+            FillerTileCacheExpirationStrategy::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -595,7 +686,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::no_cache(),
+            FillerTileCacheExpirationStrategy::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -675,7 +766,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::no_cache(),
+            FillerTileCacheExpirationStrategy::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -784,7 +875,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::no_cache(),
+            FillerTileCacheExpirationStrategy::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -868,7 +959,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::no_cache(),
+            FillerTileCacheExpirationStrategy::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -930,7 +1021,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::no_cache(),
+            FillerTileCacheExpirationStrategy::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1041,7 +1132,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::no_cache(),
+            FillerTileCacheExpirationStrategy::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1103,7 +1194,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::no_cache(),
+            FillerTileCacheExpirationStrategy::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1152,7 +1243,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::no_cache(),
+            FillerTileCacheExpirationStrategy::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1252,7 +1343,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::no_cache(),
+            FillerTileCacheExpirationStrategy::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1319,7 +1410,7 @@ mod tests {
             grid_bounding_box,
             global_geo_transform,
             tile_shape,
-            CacheExpiration::no_cache(),
+            FillerTileCacheExpirationStrategy::NoCache,
         );
 
         let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
@@ -1348,5 +1439,179 @@ mod tests {
         ];
 
         assert_eq!(tile_time_positions, expected_positions);
+    }
+
+    #[tokio::test]
+    async fn it_sets_no_cache() {
+        let cache_hint1 = CacheHint::seconds(0);
+        let cache_hint2 = CacheHint::seconds(60 * 60 * 24);
+
+        let data = vec![
+            // GAP
+            // GAP
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: cache_hint1,
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: cache_hint2,
+            },
+            // GAP
+            // GAP
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [0, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: cache_hint1,
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [0, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: cache_hint1,
+            },
+        ];
+
+        let result_data = data.into_iter().map(Ok);
+
+        let in_stream = stream::iter(result_data);
+        let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
+        let global_geo_transform = GeoTransform::test_default();
+        let tile_shape = [2, 2].into();
+
+        let adapter = SparseTilesFillAdapter::new(
+            in_stream,
+            grid_bounding_box,
+            global_geo_transform,
+            tile_shape,
+            FillerTileCacheExpirationStrategy::NoCache,
+        );
+
+        let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
+
+        let cache_expirations: Vec<bool> = tiles
+            .into_iter()
+            .map(|t| {
+                let g = t.unwrap();
+                g.cache_hint.is_expired()
+            })
+            .collect();
+
+        let expected_positions = vec![
+            true,                     // GAP
+            true,                     // GAP
+            cache_hint1.is_expired(), // data
+            cache_hint2.is_expired(), // data
+            true,                     // GAP
+            true,                     // GAP
+            cache_hint1.is_expired(), // data
+            cache_hint1.is_expired(), // data
+        ];
+
+        assert_eq!(cache_expirations, expected_positions);
+    }
+
+    #[tokio::test]
+    async fn it_derives_cache_hint_from_surrounding_tiles() {
+        let cache_hint1 = CacheHint::seconds(60);
+        let cache_hint2 = CacheHint::seconds(60 * 60 * 24);
+
+        let data = vec![
+            // GAP
+            // GAP
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: cache_hint1,
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: cache_hint2,
+            },
+            // GAP
+            // GAP
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [0, 0].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: cache_hint1,
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [0, 1].into(),
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: cache_hint1,
+            },
+        ];
+
+        let result_data = data.into_iter().map(Ok);
+
+        let in_stream = stream::iter(result_data);
+        let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
+        let global_geo_transform = GeoTransform::test_default();
+        let tile_shape = [2, 2].into();
+
+        let adapter = SparseTilesFillAdapter::new(
+            in_stream,
+            grid_bounding_box,
+            global_geo_transform,
+            tile_shape,
+            FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+        );
+
+        let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
+
+        let cache_expirations: Vec<CacheExpiration> = tiles
+            .into_iter()
+            .map(|t| {
+                let g = t.unwrap();
+                g.cache_hint.expires()
+            })
+            .collect();
+
+        let expected_positions = vec![
+            cache_hint1.expires(), // GAP (use first real tile)
+            cache_hint1.expires(), // GAP (use first real tile)
+            cache_hint1.expires(), // data
+            cache_hint2.expires(), // data
+            cache_hint2.expires(), // GAP (use previous tile)
+            cache_hint2.expires(), // GAP (use previous tile)
+            cache_hint1.expires(), // data
+            cache_hint1.expires(), // data
+        ];
+
+        assert_eq!(cache_expirations, expected_positions);
     }
 }

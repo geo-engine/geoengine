@@ -1,10 +1,9 @@
-use crate::adapters::SparseTilesFillAdapter;
+use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
 use crate::engine::{QueryContext, RasterQueryProcessor, VectorQueryProcessor};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::CacheExpiration;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::{RasterTile2D, TilingSpecification};
 
@@ -49,7 +48,7 @@ where
                 s,
                 query,
                 self.additional_data,
-                CacheExpiration::no_cache(), // TODO: can we do better?
+                FillerTileCacheExpirationStrategy::NoCache, // TODO: can we do better?
             )
             .boxed())
         }

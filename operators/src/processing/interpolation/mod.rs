@@ -14,11 +14,11 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
     SpatialPartitioned, SpatialResolution, TimeInstance, TimeInterval,
 };
-use geoengine_datatypes::primitives::{CacheExpiration, CacheHint};
 use geoengine_datatypes::raster::{
     Bilinear, Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, GridSize, InterpolationAlgorithm,
     NearestNeighbor, Pixel, RasterTile2D, TileInformation, TilingSpecification,
@@ -225,7 +225,9 @@ where
             ctx,
             sub_query,
         )
-        .filter_and_fill(CacheExpiration::no_cache())) // Filler tiles may be produced by gaps in the input data and we cannot be sure if the gaps are permanent or not. Thus, we do not cache them.
+        .filter_and_fill(
+            crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+        ))
     }
 }
 

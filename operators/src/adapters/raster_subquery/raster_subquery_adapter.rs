@@ -1,3 +1,4 @@
+use crate::adapters::sparse_tiles_fill_adapter::FillerTileCacheExpirationStrategy;
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor};
 use crate::error;
@@ -10,7 +11,7 @@ use futures::{
 };
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
-use geoengine_datatypes::primitives::{CacheExpiration, CacheHint};
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
@@ -161,7 +162,7 @@ where
     /// Set the `cache_expiration` to unlimited, if the filler tiles will alway be empty.
     pub fn filter_and_fill(
         self,
-        cache_expiration: CacheExpiration,
+        cache_expiration: FillerTileCacheExpirationStrategy,
     ) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
     where
         Self: Stream<Item = Result<Option<RasterTile2D<PixelType>>>> + 'a,
