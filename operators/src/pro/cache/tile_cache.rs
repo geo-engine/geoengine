@@ -477,7 +477,6 @@ impl TileCache {
             .get_mut(&query_id)
             .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?;
 
-        // TODO: rollback if one fails?
         entry.query.spatial_bounds = entry.query.spatial_bounds.extend(&tile.spatial_partition()); // since the source should only produce tiles that intersect with the query, we can extend the query bounds
         entry.query.time_interval = entry
             .query
