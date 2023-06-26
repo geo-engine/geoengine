@@ -1,6 +1,6 @@
 use std::convert::{TryFrom, TryInto};
 
-use arrow::array::{ArrayBuilder, BooleanArray, FixedSizeListArray, Float64Array};
+use arrow::array::{BooleanArray, FixedSizeListArray, Float64Array};
 use arrow::error::ArrowError;
 use float_cmp::{ApproxEq, F64Margin};
 use serde::{Deserialize, Serialize};
@@ -121,15 +121,19 @@ impl ArrowTyped for MultiPoint {
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
-        let size = std::mem::size_of::<Self::ArrowArray>()
-            + std::mem::size_of::<FixedSizeListArray>()
-            + std::mem::size_of::<Float64Array>();
+        let static_size = std::mem::size_of::<Self::ArrowArray>();
 
-        let buffer_bytes = builder.values().values().len() * (std::mem::size_of::<f64>());
+        let coords_size = Coordinate2D::builder_byte_size(builder.values());
 
-        let offset_bytes = builder.offsets_slice().len() * (std::mem::size_of::<i32>());
+        let offset_bytes = builder.offsets_slice();
+        let offset_len = offset_bytes.len();
+        let offset_bytes = offset_len * (std::mem::size_of::<i32>());
 
-        size + padded_buffer_size(buffer_bytes, 64) + padded_buffer_size(offset_bytes, 64)
+        let offset_fac: u32 = usize::BITS - usize::leading_zeros(offset_len) + 1;
+        let pad = 64.max(2u32.pow(offset_fac) as usize);
+        let padded_o_size = padded_buffer_size(offset_bytes, pad);
+
+        static_size + coords_size + padded_o_size
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
@@ -325,7 +329,7 @@ impl ApproxEq for &MultiPoint {
 
 #[cfg(test)]
 mod tests {
-    use arrow::array::Array;
+    use arrow::array::{Array, ArrayBuilder};
     use float_cmp::approx_eq;
 
     use super::*;
@@ -436,7 +440,7 @@ mod tests {
 
     #[test]
     fn arrow_builder_size() {
-        for i in 0..512 {
+        for i in 0..514 {
             let mut multi_points_builder = MultiPoint::arrow_builder(i);
 
             for _ in 0..i {
@@ -450,24 +454,13 @@ mod tests {
                 multi_points_builder.append(true);
             }
 
-            //assert_eq!(multi_points_builder.values().value_length(), 2);
-            //assert_eq!(multi_points_builder.len(), i);
+            assert_eq!(multi_points_builder.len(), i);
 
             let builder_byte_size = MultiPoint::builder_byte_size(&mut multi_points_builder);
 
             let array = multi_points_builder.finish();
 
-            //assert_eq!(builder_byte_size, array.get_array_memory_size(), "{}", i);
-            let array_byte_size = array.get_array_memory_size();
-
-            println!(
-                "{}: {} - {} = {} = {} /64",
-                i,
-                array_byte_size,
-                builder_byte_size,
-                array_byte_size - builder_byte_size,
-                (array_byte_size - builder_byte_size) as f64 / 64.
-            );
+            assert_eq!(builder_byte_size, array.get_array_memory_size(), "{}", i);
         }
     }
 }

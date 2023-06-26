@@ -353,6 +353,7 @@ impl From<&Coordinate2D> for wkt::types::Coord<f64> {
 
 #[cfg(test)]
 mod test {
+
     use arrow::array::Array;
 
     use super::*;
