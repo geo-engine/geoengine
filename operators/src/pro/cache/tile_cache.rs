@@ -5,7 +5,7 @@ use geoengine_datatypes::{
     identifier,
     primitives::{RasterQueryRectangle, SpatialPartitioned},
     raster::{Pixel, RasterTile2D},
-    util::{test::TestDefault, Identifier},
+    util::{test::TestDefault, ByteSize, Identifier},
 };
 use lru::LruCache;
 use pin_project::pin_project;
@@ -149,21 +149,21 @@ pub enum CachedTiles {
     F64(Arc<Vec<RasterTile2D<f64>>>),
 }
 
-impl CachedTiles {
-    fn byte_size(&self) -> usize {
-        std::mem::size_of::<CachedTiles>()
-            + match self {
-                CachedTiles::U8(v) => v.len() * std::mem::size_of::<RasterTile2D<u8>>(),
-                CachedTiles::U16(v) => v.len() * std::mem::size_of::<RasterTile2D<u16>>(),
-                CachedTiles::U32(v) => v.len() * std::mem::size_of::<RasterTile2D<u32>>(),
-                CachedTiles::U64(v) => v.len() * std::mem::size_of::<RasterTile2D<u64>>(),
-                CachedTiles::I8(v) => v.len() * std::mem::size_of::<RasterTile2D<i8>>(),
-                CachedTiles::I16(v) => v.len() * std::mem::size_of::<RasterTile2D<i16>>(),
-                CachedTiles::I32(v) => v.len() * std::mem::size_of::<RasterTile2D<i32>>(),
-                CachedTiles::I64(v) => v.len() * std::mem::size_of::<RasterTile2D<i64>>(),
-                CachedTiles::F32(v) => v.len() * std::mem::size_of::<RasterTile2D<f32>>(),
-                CachedTiles::F64(v) => v.len() * std::mem::size_of::<RasterTile2D<f64>>(),
-            }
+impl ByteSize for CachedTiles {
+    fn heap_byte_size(&self) -> usize {
+        // we need to use `byte_size` instead of `heap_byte_size` here, because `Arc` stores its data on the heap
+        match self {
+            CachedTiles::U8(tiles) => tiles.byte_size(),
+            CachedTiles::U16(tiles) => tiles.byte_size(),
+            CachedTiles::U32(tiles) => tiles.byte_size(),
+            CachedTiles::U64(tiles) => tiles.byte_size(),
+            CachedTiles::I8(tiles) => tiles.byte_size(),
+            CachedTiles::I16(tiles) => tiles.byte_size(),
+            CachedTiles::I32(tiles) => tiles.byte_size(),
+            CachedTiles::I64(tiles) => tiles.byte_size(),
+            CachedTiles::F32(tiles) => tiles.byte_size(),
+            CachedTiles::F64(tiles) => tiles.byte_size(),
+        }
     }
 }
 
@@ -665,5 +665,18 @@ mod tests {
                 .await
                 .is_some());
         }
+    }
+
+    #[test]
+    fn cache_byte_size() {
+        assert_eq!(create_tile().byte_size(), 260);
+        assert_eq!(
+            CachedTiles::U8(Arc::new(vec![create_tile()])).byte_size(),
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 260
+        );
+        assert_eq!(
+            CachedTiles::U8(Arc::new(vec![create_tile(), create_tile()])).byte_size(),
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 2 * 260
+        );
     }
 }
