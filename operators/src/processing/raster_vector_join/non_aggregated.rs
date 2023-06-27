@@ -305,7 +305,9 @@ mod tests {
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
-    use geoengine_datatypes::collections::{MultiPointCollection, MultiPolygonCollection};
+    use geoengine_datatypes::collections::{
+        ChunksEqualIgnoringCacheHint, MultiPointCollection, MultiPolygonCollection,
+    };
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{BoundingBox2D, DateTime, FeatureData, MultiPolygon};
     use geoengine_datatypes::primitives::{Measurement, SpatialResolution};
@@ -392,9 +394,8 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert_eq!(
-            result,
-            MultiPointCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
                     vec![(-13.95, 20.05)],
                     vec![(-14.05, 20.05)],
@@ -408,7 +409,7 @@ mod tests {
                 &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55, 51]))],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -487,9 +488,8 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert_eq!(
-            result,
-            MultiPointCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
                     (-13.95, 20.05),
                     (-14.05, 20.05),
@@ -502,7 +502,7 @@ mod tests {
                 &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -587,9 +587,8 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert_eq!(
-            result,
-            MultiPointCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
                     (-13.95, 20.05),
                     (-14.05, 20.05),
@@ -606,7 +605,7 @@ mod tests {
                 &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[allow(clippy::too_many_lines)]
@@ -703,9 +702,8 @@ mod tests {
             DateTime::new_utc(2014, 3, 1, 0, 0, 0),
         )
         .unwrap();
-        assert_eq!(
-            result,
-            MultiPointCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
                     (-13.95, 20.05),
                     (-14.05, 20.05),
@@ -725,7 +723,7 @@ mod tests {
                 )],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -866,9 +864,8 @@ mod tests {
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
 
-        assert_eq!(
-            result,
-            MultiPointCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
                     vec![(0.0, 0.0), (2.0, 0.0)],
                     vec![(1.0, 0.0), (3.0, 0.0)],
@@ -888,7 +885,7 @@ mod tests {
                 )],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -1058,9 +1055,8 @@ mod tests {
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
 
-        assert_eq!(
-            result,
-            MultiPolygonCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPolygonCollection::from_slices(
                 &[
                     MultiPolygon::new(vec![vec![vec![
                         (0.5, -0.5).into(),
@@ -1087,6 +1083,6 @@ mod tests {
                 )],
             )
             .unwrap()
-        );
+        ));
     }
 }

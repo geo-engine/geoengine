@@ -333,8 +333,8 @@ mod tests {
     };
     use geoengine_datatypes::{
         collections::{
-            FeatureCollectionInfos, GeometryCollection, MultiLineStringCollection,
-            MultiPointCollection, MultiPolygonCollection,
+            ChunksEqualIgnoringCacheHint, FeatureCollectionInfos, GeometryCollection,
+            MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection,
         },
         dataset::{DataId, DatasetId, NamedData},
         primitives::{
@@ -530,7 +530,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(collections[0], expected);
+        assert!(collections[0].chunks_equal_ignoring_cache_hint(&expected));
     }
 
     #[tokio::test]

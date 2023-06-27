@@ -463,7 +463,7 @@ mod tests {
     use crate::api::model::datatypes::{ExternalDataId, LayerId};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
-    use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
@@ -863,7 +863,7 @@ mod tests {
             )
             .unwrap();
 
-            if result != &expected {
+            if !result.chunks_equal_ignoring_cache_hint(&expected) {
                 return Err(format!("{result:?} != {expected:?}"));
             }
 

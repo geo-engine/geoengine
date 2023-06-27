@@ -952,9 +952,9 @@ mod tests {
     use tokio::runtime::Handle;
     use tokio_postgres::Config;
 
-    use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, CacheHint, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
@@ -2077,7 +2077,7 @@ mod tests {
                 )
                 .unwrap();
 
-                if result != &expected {
+                if !result.chunks_equal_ignoring_cache_hint(&expected) {
                     return Err(format!("{result:?} != {expected:?}"));
                 }
 

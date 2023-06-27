@@ -1463,8 +1463,8 @@ mod tests {
     use crate::test_data;
     use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::collections::{
-        DataCollection, FeatureCollectionInfos, GeometryCollection, MultiPointCollection,
-        MultiPolygonCollection,
+        ChunksEqualIgnoringCacheHint, DataCollection, FeatureCollectionInfos, GeometryCollection,
+        MultiPointCollection, MultiPolygonCollection,
     };
     use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::primitives::CacheHint;
@@ -1814,14 +1814,13 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 MultiPoint::many(vec![vec![(0.0, 0.1)], vec![(1.0, 1.1), (2.0, 2.1)]])?,
                 vec![Default::default(); 2],
                 HashMap::new(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -1914,14 +1913,13 @@ mod tests {
             (4.292_873_969, 51.927_222_22),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -2014,14 +2012,13 @@ mod tests {
             (4.292_873_969, 51.927_222_22),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -2117,14 +2114,13 @@ mod tests {
             (4.651_413_428, 51.805_833_33),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -2336,9 +2332,8 @@ mod tests {
             .collect(),
         );
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 [
@@ -2351,8 +2346,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheHint::default()
-            )?
+                CacheHint::default(),
+            )?),
         );
 
         Ok(())
@@ -3520,14 +3515,13 @@ mod tests {
             (-87.6, 41.88),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 1081],
                 HashMap::new(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -3619,9 +3613,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 2],
                 [
@@ -3645,7 +3638,7 @@ mod tests {
                 .cloned()
                 .collect(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -3739,9 +3732,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 MultiPoint::many(vec![vec![(1.0, 2.0)], vec![(1.0, 2.0)]]).unwrap(),
                 vec![Default::default(); 2],
                 [
@@ -3765,7 +3757,7 @@ mod tests {
                 .cloned()
                 .collect(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -3953,14 +3945,13 @@ mod tests {
             result.iter().zip(expected_multipoints.iter().cloned())
         {
             assert_eq!(collection.len(), 1);
-            assert_eq!(
-                collection,
-                &MultiPointCollection::from_data(
+            assert!(
+                collection.chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                     vec![expected_multi_point],
                     vec![Default::default(); 1],
                     Default::default(),
                     CacheHint::default()
-                )?
+                )?)
             );
         }
 
@@ -3988,41 +3979,37 @@ mod tests {
         assert_eq!(result[2].len(), 25);
         assert_eq!(result[3].len(), 24);
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[0..25].to_vec(),
                 vec![Default::default(); result[0].len()],
                 Default::default(),
                 CacheHint::default()
-            )?
+            )?)
         );
-        assert_eq!(
-            result[1],
-            MultiPointCollection::from_data(
+        assert!(
+            result[1].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[25..50].to_vec(),
                 vec![Default::default(); result[1].len()],
                 Default::default(),
                 CacheHint::default()
-            )?
+            )?)
         );
-        assert_eq!(
-            result[2],
-            MultiPointCollection::from_data(
+        assert!(
+            result[2].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[50..75].to_vec(),
                 vec![Default::default(); result[2].len()],
                 Default::default(),
                 CacheHint::default()
-            )?
+            )?)
         );
-        assert_eq!(
-            result[3],
-            MultiPointCollection::from_data(
+        assert!(
+            result[3].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[75..99].to_vec(),
                 vec![Default::default(); result[3].len()],
                 Default::default(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -4331,7 +4318,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -4454,7 +4441,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -4579,7 +4566,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -4704,7 +4691,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -4825,7 +4812,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -4965,7 +4952,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -5083,7 +5070,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -5177,9 +5164,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 2],
                 [
@@ -5203,7 +5189,7 @@ mod tests {
                 .cloned()
                 .collect(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -5304,9 +5290,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5321,7 +5306,7 @@ mod tests {
                 .cloned()
                 .collect(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -5420,9 +5405,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5437,7 +5421,7 @@ mod tests {
                 .cloned()
                 .collect(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -5536,9 +5520,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5553,7 +5536,7 @@ mod tests {
                 .cloned()
                 .collect(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -5656,9 +5639,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5673,7 +5655,7 @@ mod tests {
                 .cloned()
                 .collect(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -5775,9 +5757,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 2],
                 [
@@ -5801,7 +5782,7 @@ mod tests {
                 .cloned()
                 .collect(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -5909,9 +5890,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5926,7 +5906,7 @@ mod tests {
                 .cloned()
                 .collect(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())
@@ -6025,9 +6005,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -6042,7 +6021,7 @@ mod tests {
                 .cloned()
                 .collect(),
                 CacheHint::default()
-            )?
+            )?)
         );
 
         Ok(())

@@ -1260,24 +1260,8 @@ where
     pub(super) fn is_reserved_name(name: &str) -> bool {
         name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
     }
-}
 
-impl<CollectionType> Clone for FeatureCollection<CollectionType> {
-    fn clone(&self) -> Self {
-        Self {
-            table: self.table.clone(),
-            types: self.types.clone(),
-            collection_type: Default::default(),
-            cache_hint: self.cache_hint.clone_with_current_datetime(),
-        }
-    }
-}
-
-impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
-where
-    CollectionType: Geometry + ArrowTyped,
-{
-    fn eq(&self, other: &Self) -> bool {
+    fn equals_ignoring_cache_hint(&self, other: &Self) -> bool {
         if self.types != other.types {
             return false;
         }
@@ -1304,6 +1288,26 @@ where
         }
 
         true
+    }
+}
+
+impl<CollectionType> Clone for FeatureCollection<CollectionType> {
+    fn clone(&self) -> Self {
+        Self {
+            table: self.table.clone(),
+            types: self.types.clone(),
+            collection_type: Default::default(),
+            cache_hint: self.cache_hint.clone_with_current_datetime(),
+        }
+    }
+}
+
+impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.equals_ignoring_cache_hint(other) && self.cache_hint == other.cache_hint
     }
 }
 
@@ -1418,6 +1422,70 @@ where
     }
 
     Ok(())
+}
+
+/// A way to compare two `FeatureCollection`s ignoring the `CacheHint` and only considering the actual data.
+pub trait ChunksEqualIgnoringCacheHint<C> {
+    fn chunks_equal_ignoring_cache_hint(&self, other: &dyn IterableFeatureCollection<C>) -> bool;
+}
+
+/// Allow comparing Iterables of `BaseTile` ignoring the `CacheHint` and only considering the actual data.
+pub trait IterableFeatureCollection<C> {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_>;
+}
+
+struct SingleChunkIter<'a, C> {
+    chunk: Option<&'a FeatureCollection<C>>,
+}
+
+impl<'a, C> Iterator for SingleChunkIter<'a, C> {
+    type Item = &'a FeatureCollection<C>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.chunk.take()
+    }
+}
+
+impl<C> IterableFeatureCollection<C> for FeatureCollection<C> {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_> {
+        Box::new(SingleChunkIter { chunk: Some(self) })
+    }
+}
+
+impl<C> IterableFeatureCollection<C> for Vec<FeatureCollection<C>> {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_> {
+        Box::new(self.iter())
+    }
+}
+
+impl<C, const N: usize> IterableFeatureCollection<C> for [FeatureCollection<C>; N] {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_> {
+        Box::new(self.iter())
+    }
+}
+
+impl<C, I: IterableFeatureCollection<C>> ChunksEqualIgnoringCacheHint<C> for I
+where
+    C: Geometry + ArrowTyped,
+{
+    fn chunks_equal_ignoring_cache_hint(&self, other: &dyn IterableFeatureCollection<C>) -> bool {
+        let mut iter_self = self.iter_chunks();
+        let mut iter_other = other.iter_chunks();
+
+        loop {
+            match (iter_self.next(), iter_other.next()) {
+                (Some(a), Some(b)) => {
+                    if !a.equals_ignoring_cache_hint(b) {
+                        return false;
+                    }
+                }
+                // both iterators are exhausted
+                (None, None) => return true,
+                // one iterator is exhausted, the other is not, so they are not equal
+                _ => return false,
+            }
+        }
+    }
 }
 
 /// Custom serializer for Arrow's `StructArray`

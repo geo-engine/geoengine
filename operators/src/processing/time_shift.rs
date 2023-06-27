@@ -500,7 +500,7 @@ mod tests {
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
-        collections::MultiPointCollection,
+        collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection},
         dataset::NamedData,
         primitives::{
             BoundingBox2D, CacheHint, DateTime, Measurement, MultiPoint, SpatialPartition2D,
@@ -693,7 +693,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result[0], expected);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&expected));
     }
 
     #[tokio::test]
@@ -788,7 +788,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result[0], expected);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&expected));
     }
 
     #[tokio::test]

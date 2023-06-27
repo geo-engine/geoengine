@@ -91,8 +91,8 @@ where
 }
 
 /// A way to compare two `BaseTile` ignoring the `CacheHint` and only considering the actual data.
-pub trait EqualsIgnoringCacheHint<G: PartialEq> {
-    fn equals_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool;
+pub trait TilesEqualIgnoringCacheHint<G: PartialEq> {
+    fn tiles_equal_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool;
 }
 
 /// Allow comparing Iterables of `BaseTile` ignoring the `CacheHint` and only considering the actual data.
@@ -130,8 +130,8 @@ impl<G: PartialEq, const N: usize> IterableBaseTile<G> for [BaseTile<G>; N] {
     }
 }
 
-impl<G: PartialEq, I: IterableBaseTile<G>> EqualsIgnoringCacheHint<G> for I {
-    fn equals_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool {
+impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I {
+    fn tiles_equal_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool {
         let mut iter_self = self.iter_tiles();
         let mut iter_other = other.iter_tiles();
 

@@ -398,7 +398,7 @@ where
 mod tests {
     use futures::executor::block_on_stream;
 
-    use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
@@ -506,7 +506,7 @@ mod tests {
         let result = join_mock_collections(left, right, "foo", "bar", "").await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0], expected_result);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&expected_result));
     }
 
     #[tokio::test]
@@ -556,7 +556,7 @@ mod tests {
         let result = join_mock_collections(left, right, "foo", "bar", "").await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0], expected_result);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&expected_result));
     }
 
     #[tokio::test]
@@ -600,7 +600,7 @@ mod tests {
         let result = join_mock_collections(left, right, "foo", "foo", "2").await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0], expected_result);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&expected_result));
     }
 
     #[tokio::test]
@@ -673,7 +673,7 @@ mod tests {
         let result = join_mock_collections(left, right, "foo", "bar", "").await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0], expected_result);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&expected_result));
     }
 
     #[tokio::test]

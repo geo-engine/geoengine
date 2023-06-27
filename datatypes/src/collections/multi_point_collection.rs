@@ -324,6 +324,7 @@ impl ReplaceRawArrayCoords for MultiPointCollection {
 mod tests {
     use super::*;
 
+    use crate::collections::feature_collection::ChunksEqualIgnoringCacheHint;
     use crate::collections::{BuilderProvider, FeatureCollectionModifications, ToGeoJson};
     use crate::operations::reproject::Reproject;
     use crate::primitives::CacheHint;
@@ -746,7 +747,7 @@ mod tests {
         let cloned = pc.clone();
 
         assert_eq!(pc.len(), cloned.len());
-        assert_eq!(pc, cloned);
+        assert!(pc.chunks_equal_ignoring_cache_hint(&cloned));
     }
 
     #[test]
@@ -794,7 +795,7 @@ mod tests {
         };
 
         assert_eq!(a.len(), b.len());
-        assert_eq!(a, b);
+        assert!(a.chunks_equal_ignoring_cache_hint(&b));
     }
 
     #[test]
@@ -1131,7 +1132,7 @@ mod tests {
         let serialized = serde_json::to_string(&collection).unwrap();
         let deserialized: MultiPointCollection = serde_json::from_str(&serialized).unwrap();
 
-        assert_eq!(collection, deserialized);
+        assert!(collection.chunks_equal_ignoring_cache_hint(&deserialized));
     }
 
     #[test]
@@ -1232,7 +1233,7 @@ mod tests {
 
         let sorted_collection = collection.sort_by_time_asc().unwrap();
 
-        assert_eq!(sorted_collection, expected_collection);
+        assert!(sorted_collection.chunks_equal_ignoring_cache_hint(&expected_collection));
     }
 
     #[test]

@@ -478,6 +478,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::FeatureData;
     use geoengine_datatypes::primitives::SpatialResolution;
@@ -544,9 +545,8 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_slices(
+        assert!(result[0].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
                 &[TimeInterval::default(); 2],
                 &[
@@ -558,7 +558,7 @@ mod tests {
                 ],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -626,9 +626,8 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_slices(
+        assert!(result[0].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
                 &[TimeInterval::default(); 2],
                 &[
@@ -641,7 +640,7 @@ mod tests {
                 ],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -709,9 +708,8 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_slices(
+        assert!(result[0].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &[(0.0, 0.1), (50.0, 50.1)],
                 &[TimeInterval::default(); 2],
                 &[
@@ -724,7 +722,7 @@ mod tests {
                 ],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -800,9 +798,8 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_slices(
+        assert!(result[0].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &[(0.0, 0.1), (50.0, 50.1), (25.0, 25.1)],
                 &[TimeInterval::default(); 3],
                 &[
@@ -826,7 +823,7 @@ mod tests {
                 ],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]

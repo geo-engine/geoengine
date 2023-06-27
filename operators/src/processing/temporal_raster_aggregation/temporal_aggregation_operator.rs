@@ -399,8 +399,8 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{CacheHint, Measurement, SpatialResolution, TimeInterval},
         raster::{
-            EmptyGrid, EmptyGrid2D, EqualsIgnoringCacheHint, Grid2D, GridOrEmpty, MaskedGrid2D,
-            RasterDataType, TileInformation,
+            EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType,
+            TileInformation, TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -479,7 +479,7 @@ mod tests {
 
         assert_eq!(result.len(), 4);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -492,7 +492,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -505,7 +505,7 @@ mod tests {
             )
         ));
 
-        assert!(result[2].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[2].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
@@ -518,7 +518,7 @@ mod tests {
             )
         ));
 
-        assert!(result[3].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[3].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
@@ -597,7 +597,7 @@ mod tests {
 
         assert_eq!(result.len(), 4);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -610,7 +610,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -623,7 +623,7 @@ mod tests {
             )
         ));
 
-        assert!(result[2].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[2].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
@@ -636,7 +636,7 @@ mod tests {
             )
         ));
 
-        assert!(result[3].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[3].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
@@ -715,7 +715,7 @@ mod tests {
 
         assert_eq!(result.len(), 4);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -728,7 +728,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -741,7 +741,7 @@ mod tests {
             )
         ));
 
-        assert!(result[2].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[2].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
@@ -754,7 +754,7 @@ mod tests {
             )
         ));
 
-        assert!(result[3].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[3].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
@@ -833,7 +833,7 @@ mod tests {
 
         assert_eq!(result.len(), 4);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -846,7 +846,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -859,7 +859,7 @@ mod tests {
             )
         ));
 
-        assert!(result[2].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[2].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
@@ -872,7 +872,7 @@ mod tests {
             )
         ));
 
-        assert!(result[3].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[3].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
@@ -958,7 +958,7 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -1036,7 +1036,7 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1049,7 +1049,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1134,7 +1134,7 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1147,7 +1147,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1232,7 +1232,7 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1252,7 +1252,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1330,7 +1330,7 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1343,7 +1343,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1428,7 +1428,7 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1441,7 +1441,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1526,7 +1526,7 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1539,7 +1539,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1622,7 +1622,7 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert!(result.equals_ignoring_cache_hint(&[
+        assert!(result.tiles_equal_ignoring_cache_hint(&[
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -1738,7 +1738,7 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1751,7 +1751,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1836,7 +1836,7 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1849,7 +1849,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -1943,7 +1943,7 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert!(result.equals_ignoring_cache_hint(&[
+        assert!(result.tiles_equal_ignoring_cache_hint(&[
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -2069,7 +2069,7 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert!(result.equals_ignoring_cache_hint(&[
+        assert!(result.tiles_equal_ignoring_cache_hint(&[
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
@@ -2185,7 +2185,7 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -2198,7 +2198,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -2283,7 +2283,7 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -2296,7 +2296,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -2380,7 +2380,7 @@ mod tests {
             .await;
 
         assert_eq!(result.len(), 2);
-        assert!(result[0].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
@@ -2393,7 +2393,7 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().equals_ignoring_cache_hint(
+        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {

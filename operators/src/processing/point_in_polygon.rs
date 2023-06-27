@@ -340,6 +340,7 @@ mod tests {
     use super::*;
     use std::str::FromStr;
 
+    use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
@@ -465,7 +466,7 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0], points);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&points));
 
         Ok(())
     }
@@ -589,7 +590,9 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0], points.filter(vec![true, false, true])?);
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&points.filter(vec![true, false, true])?)
+        );
 
         Ok(())
     }
@@ -681,8 +684,8 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert_eq!(result[0], points1.filter(vec![true, false])?);
-        assert_eq!(result[1], points2);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&points1.filter(vec![true, false])?));
+        assert!(result[1].chunks_equal_ignoring_cache_hint(&points2));
 
         let query = query_processor
             .query(query_rectangle, &ctx_one_chunk)
@@ -696,10 +699,9 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            points1.filter(vec![true, false])?.append(&points2)?
-        );
+        assert!(result[0].chunks_equal_ignoring_cache_hint(
+            &points1.filter(vec![true, false])?.append(&points2)?
+        ));
 
         Ok(())
     }

@@ -238,6 +238,7 @@ mod tests {
     use crate::engine::QueryProcessor;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
+    use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
     use geoengine_datatypes::util::test::TestDefault;
@@ -389,6 +390,6 @@ mod tests {
 
         assert_eq!(collections.len(), 1);
 
-        assert_eq!(collections[0], collection);
+        assert!(collections[0].chunks_equal_ignoring_cache_hint(&collection));
     }
 }
