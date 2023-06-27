@@ -477,6 +477,13 @@ impl TileCache {
             .get_mut(&query_id)
             .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?;
 
+        entry.query.spatial_bounds = entry.query.spatial_bounds.extend(&tile.spatial_partition()); // since the source should only produce tiles that intersect with the query, we can extend the query bounds
+        entry.query.time_interval = entry
+            .query
+            .time_interval
+            .union(&tile.time)
+            .expect("time of tile must overlap with query");
+
         T::insert_tile(&mut entry.tiles, tile)?;
 
         backend.landing_zone_byte_size_used += entry.byte_size();
@@ -583,7 +590,7 @@ mod tests {
 
     fn create_tile() -> RasterTile2D<u8> {
         RasterTile2D::<u8> {
-            time: TimeInterval::new_unchecked(1, 1),
+            time: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
             tile_position: [-1, 0].into(),
             global_geo_transform: TestDefault::test_default(),
             grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
