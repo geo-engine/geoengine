@@ -702,7 +702,7 @@ mod tests {
 
         let result = join_mock_collections(left, right, "foo", "bar", "").await;
 
-        // TODO: do we need an empty collection here? (cf. `FeatureCollectionChunkMerger`)
-        assert_eq!(result.len(), 0);
+        assert_eq!(result.len(), 1);
+        assert!(result[0].is_empty());
     }
 }

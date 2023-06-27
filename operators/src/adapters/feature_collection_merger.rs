@@ -12,7 +12,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 /// Merges a stream of `FeatureCollection` so that they are at least `chunk_byte_size` large.
-/// TODO: This merger outputs an empty stream if all collections are empty
+///     This merger outputs an empty collection if all collections are empty
 ///     Do we need an empty collection with column info as output instead?
 ///     Do we put the columns to the stream's `VectorQueryContext` instead?
 #[pin_project(project = FeatureCollectionChunkMergerProjection)]
@@ -25,6 +25,7 @@ where
     stream: St,
     accum: Option<FeatureCollection<G>>,
     chunk_size_bytes: usize,
+    chunks_emitted: usize,
 }
 
 impl<St, G> FeatureCollectionChunkMerger<St, G>
@@ -37,6 +38,7 @@ where
             stream,
             accum: None,
             chunk_size_bytes,
+            chunks_emitted: 0,
         }
     }
 
@@ -73,9 +75,14 @@ where
         }
     }
 
-    fn output_remaining_chunk(accum: &mut Option<FeatureCollection<G>>) -> Poll<Option<St::Item>> {
+    fn output_remaining_chunk(
+        accum: &mut Option<FeatureCollection<G>>,
+        allow_empty: bool,
+    ) -> Poll<Option<St::Item>> {
         match accum.take() {
-            Some(last_chunk) if !last_chunk.is_empty() => Poll::Ready(Some(Ok(last_chunk))),
+            Some(last_chunk) if allow_empty || !last_chunk.is_empty() => {
+                Poll::Ready(Some(Ok(last_chunk)))
+            }
             _ => Poll::Ready(None),
         }
     }
@@ -93,13 +100,14 @@ where
             mut stream,
             accum,
             chunk_size_bytes,
+            chunks_emitted,
         } = self.as_mut().project();
 
         let mut output: Option<Poll<Option<St::Item>>> = None;
 
         while output.is_none() {
             if stream.is_terminated() {
-                return Self::output_remaining_chunk(accum);
+                return Self::output_remaining_chunk(accum, *chunks_emitted == 0);
             }
 
             let next = ready!(stream.as_mut().poll_next(cx));
@@ -107,9 +115,11 @@ where
             output = if let Some(collection) = next {
                 Self::merge_and_proceed(accum, *chunk_size_bytes, collection)
             } else {
-                Some(Self::output_remaining_chunk(accum))
+                Some(Self::output_remaining_chunk(accum, *chunks_emitted == 0))
             }
         }
+
+        *chunks_emitted += 1;
 
         output.expect("checked")
     }
@@ -254,7 +264,9 @@ mod tests {
                 .collect::<Vec<Result<DataCollection>>>()
                 .await;
 
-        assert_eq!(collections.len(), 0);
+        assert_eq!(collections.len(), 1);
+        assert!(collections[0].is_ok());
+        assert!(collections[0].as_ref().unwrap().is_empty());
     }
 
     #[tokio::test]

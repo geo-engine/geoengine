@@ -723,4 +723,20 @@ mod tests {
             None
         );
     }
+
+    #[test]
+    fn arrow_builder_size() {
+        let mut builder = TimeInterval::arrow_builder(2);
+        let v = builder.values();
+        v.append_values(&[1, 2], &[true, true]);
+        v.append_values(&[3, 4], &[true, true]);
+
+        assert_eq!(builder.value_length(), 2);
+        assert_eq!(builder.values().len(), 4);
+
+        assert_eq!(
+            TimeInterval::builder_byte_size(&mut builder),
+            4 * std::mem::size_of::<i64>()
+        );
+    }
 }

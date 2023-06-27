@@ -1,9 +1,10 @@
 use crate::adapters::FeatureCollectionStreamExt;
 use crate::processing::raster_vector_join::create_feature_aggregator;
-use futures::stream::BoxStream;
+use futures::stream::{once as once_stream, BoxStream};
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::CacheHint;
-use geoengine_datatypes::primitives::{BoundingBox2D, Geometry, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, CacheHint, FeatureDataType, Geometry, VectorQueryRectangle,
+};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -107,37 +108,46 @@ where
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
         // make qrect smaller wrt. points
-        let query = VectorQueryRectangle {
-            spatial_bounds: collection
-                .bbox()
-                .and_then(|bbox| bbox.intersection(&query.spatial_bounds))
-                .unwrap_or(query.spatial_bounds),
-            time_interval: collection
-                .time_bounds()
-                .and_then(|time| time.intersect(&query.time_interval))
-                .unwrap_or(query.time_interval),
-            spatial_resolution: query.spatial_resolution,
-        };
+        let bbox = collection
+            .bbox()
+            .and_then(|bbox| bbox.intersection(&query.spatial_bounds));
 
-        let raster_query = raster_processor.raster_query(query.into(), ctx).await?;
+        let time = collection
+            .time_bounds()
+            .and_then(|time| time.intersect(&query.time_interval));
 
-        let collection = Arc::new(collection);
+        if let (Some(q_bbox), Some(q_time)) = (bbox, time) {
+            let query = VectorQueryRectangle {
+                spatial_bounds: q_bbox,
+                time_interval: q_time,
+                spatial_resolution: query.spatial_resolution,
+            };
 
-        let collection_stream = raster_query
-            .time_multi_fold(
-                move || Ok(VectorRasterJoiner::new(aggregation_method, ignore_no_data)),
-                move |accum, raster| {
-                    let collection = collection.clone();
-                    async move {
-                        let accum = accum?;
-                        let raster = raster?;
-                        accum.extract_raster_values(&collection, &raster)
-                    }
-                },
-            )
-            .map(move |accum| accum?.into_collection(new_column_name));
+            let raster_query = raster_processor.raster_query(query.into(), ctx).await?;
 
-        Ok(collection_stream.boxed())
+            let collection = Arc::new(collection);
+
+            let collection_stream = raster_query
+                .time_multi_fold(
+                    move || Ok(VectorRasterJoiner::new(aggregation_method, ignore_no_data)),
+                    move |accum, raster| {
+                        let collection = collection.clone();
+                        async move {
+                            let accum = accum?;
+                            let raster = raster?;
+                            accum.extract_raster_values(&collection, &raster)
+                        }
+                    },
+                )
+                .map(move |accum| accum?.into_collection(new_column_name));
+
+            return Ok(collection_stream.boxed());
+        }
+
+        let data = FeatureDataType::from(P::TYPE).null_feature_data(collection.len());
+        let collection = collection.add_column(new_column_name, data)?;
+        let collection_stream = once_stream(async move { Ok(collection) }).boxed();
+        Ok(collection_stream)
     }
 }
 

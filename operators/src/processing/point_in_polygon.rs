@@ -472,7 +472,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn none() -> Result<()> {
+    async fn empty() -> Result<()> {
         let points = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
@@ -521,7 +521,8 @@ mod tests {
             .collect::<Vec<MultiPointCollection>>()
             .await;
 
-        assert_eq!(result.len(), 0);
+        assert_eq!(result.len(), 1);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::empty()));
 
         Ok(())
     }
@@ -766,7 +767,8 @@ mod tests {
             .collect::<Vec<MultiPointCollection>>()
             .await;
 
-        assert_eq!(result.len(), 0);
+        assert_eq!(result.len(), 1);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::empty()));
     }
 
     #[tokio::test]

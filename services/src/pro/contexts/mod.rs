@@ -103,11 +103,15 @@ where
         span: CreateSpan,
         path: WorkflowOperatorPath,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
-        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span, path.clone()))
+        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span, path))
             as Box<dyn geoengine_operators::engine::InitializedRasterOperator>;
 
-        if path.is_root() && get_config_element::<Cache>().expect("Cache config should be present because it is part of the Settings-default.toml").enabled {
-            // we only cache end results of workflows for now
+        if get_config_element::<Cache>()
+            .expect(
+                "Cache config should be present because it is part of the Settings-default.toml",
+            )
+            .enabled
+        {
             return Box::new(InitializedCacheOperator::new(wrapped));
         }
 

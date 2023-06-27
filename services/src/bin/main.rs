@@ -6,6 +6,9 @@ use geoengine_services::util::config::get_config_element;
 use std::str::FromStr;
 use tracing::metadata::LevelFilter;
 use tracing::Subscriber;
+use tracing_subscriber::field::RecordFields;
+use tracing_subscriber::fmt::format::{DefaultFields, Writer};
+use tracing_subscriber::fmt::FormatFields;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::Layer;
@@ -121,6 +124,19 @@ where
         .with_writer(std::io::stderr)
 }
 
+// we use a custom formatter because there are still format flags within spans even when `with_ansi` is false due to bug: https://github.com/tokio-rs/tracing/issues/1817
+struct FileFormatterWorkaround(DefaultFields);
+
+impl<'writer> FormatFields<'writer> for FileFormatterWorkaround {
+    fn format_fields<R: RecordFields>(
+        &self,
+        writer: Writer<'writer>,
+        fields: R,
+    ) -> core::fmt::Result {
+        self.0.format_fields(writer, fields)
+    }
+}
+
 fn file_layer<S>(filename_prefix: &str, log_directory: Option<&str>) -> impl Layer<S>
 where
     S: Subscriber,
@@ -152,7 +168,8 @@ where
     tracing_subscriber::fmt::layer()
         .with_file(false)
         .with_target(true)
-        // TODO: there are still format flags within spans due to bug: https://github.com/tokio-rs/tracing/issues/1817
+        // we use a custom formatter because there are still format flags within spans even when `with_ansi` is false due to bug: https://github.com/tokio-rs/tracing/issues/1817
+        .fmt_fields(FileFormatterWorkaround(DefaultFields::default()))
         .with_ansi(false)
         .with_writer(move || file_writer.clone())
 }
