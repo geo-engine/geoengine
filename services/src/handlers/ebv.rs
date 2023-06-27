@@ -616,6 +616,7 @@ mod tests {
                 name: "test".to_string(),
                 path: test_data!("netcdf4d").to_path_buf(),
                 overviews: overview_folder.path().to_path_buf(),
+                cache_ttl: Default::default(),
             }))
             .await
             .unwrap();
@@ -707,6 +708,7 @@ mod tests {
                 name: "test".to_string(),
                 path: test_data!("netcdf4d").to_path_buf(),
                 overviews: overview_folder.path().to_path_buf(),
+                cache_ttl: Default::default(),
             }))
             .await
             .unwrap();
@@ -763,6 +765,7 @@ mod tests {
                 name: "test".to_string(),
                 path: test_data!("netcdf4d").to_path_buf(),
                 overviews: overview_folder.path().to_path_buf(),
+                cache_ttl: Default::default(),
             }))
             .await
             .unwrap();

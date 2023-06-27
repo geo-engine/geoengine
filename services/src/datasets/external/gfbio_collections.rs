@@ -58,6 +58,8 @@ pub struct GfbioCollectionsDataProviderDefinition {
     collection_api_auth_token: String,
     abcd_db_config: DatabaseConnectionConfig,
     pangaea_url: Url,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[typetag::serde]
@@ -70,6 +72,7 @@ impl DataProviderDefinition for GfbioCollectionsDataProviderDefinition {
                 self.collection_api_auth_token,
                 self.abcd_db_config,
                 self.pangaea_url,
+                self.cache_ttl,
             )
             .await?,
         ))
@@ -95,6 +98,7 @@ pub struct GfbioCollectionsDataProvider {
     abcd_db_config: DatabaseConnectionConfig,
     pangaea_url: Url,
     pool: Pool<PostgresConnectionManager<NoTls>>,
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Debug, Deserialize)]
@@ -264,6 +268,7 @@ impl GfbioCollectionsDataProvider {
         auth_token: String,
         db_config: DatabaseConnectionConfig,
         pangaea_url: Url,
+        cache_ttl: CacheTtlSeconds,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -274,6 +279,7 @@ impl GfbioCollectionsDataProvider {
             abcd_db_config: db_config,
             pangaea_url,
             pool,
+            cache_ttl,
         })
     }
 
@@ -484,7 +490,7 @@ impl GfbioCollectionsDataProvider {
                     abcd_unit_id,
                     &column_name_to_hash,
                 )?),
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: self.cache_ttl,
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -928,6 +934,7 @@ mod tests {
                     password: db_config.password.clone(),
                 },
                 "https://doi.pangaea.de".parse().unwrap(),
+                Default::default(),
             )
             .await
             .unwrap();
@@ -1027,6 +1034,7 @@ mod tests {
                 gfbio_collections_server_token.to_string(),
                 provider_db_config,
                 "https://doi.pangaea.de".parse().unwrap(),
+                Default::default(),
             )
             .await
             .unwrap();
@@ -1213,6 +1221,7 @@ mod tests {
                 gfbio_collections_server_token.to_string(),
                 provider_db_config,
                 "https://doi.pangaea.de".parse().unwrap(),
+                Default::default(),
             )
             .await
             .unwrap();

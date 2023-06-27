@@ -55,6 +55,8 @@ pub struct Nature40DataProviderDefinition {
     password: String,
     #[serde(default)]
     request_retries: RequestRetries,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -86,6 +88,7 @@ impl DataProviderDefinition for Nature40DataProviderDefinition {
             user: self.user,
             password: self.password,
             request_retries: self.request_retries,
+            cache_ttl: self.cache_ttl,
         }))
     }
 
@@ -109,6 +112,7 @@ pub struct Nature40DataProvider {
     user: String,
     password: String,
     request_retries: RequestRetries,
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Deserialize, Debug)]
@@ -465,7 +469,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 Some(self.auth().to_vec()),
             )?,
             result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize)?,
-            cache_ttl: CacheTtlSeconds::new(15 * 60),
+            cache_ttl: self.cache_ttl,
         }))
     }
 }
@@ -794,6 +798,7 @@ mod tests {
             user: "geoengine".to_owned(),
             password: "pwd".to_owned(),
             request_retries: Default::default(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -890,6 +895,7 @@ mod tests {
             user: "geoengine".to_owned(),
             password: "pwd".to_owned(),
             request_retries: Default::default(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -963,7 +969,7 @@ mod tests {
                         allow_alphaband_as_mask: true,
                         retry: None,
                     }),
-                    cache_ttl: CacheTtlSeconds::new(15 * 60),
+                    cache_ttl: CacheTtlSeconds::default(),
                 }
             );
 

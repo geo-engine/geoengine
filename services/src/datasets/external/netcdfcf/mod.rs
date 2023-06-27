@@ -77,6 +77,7 @@ pub struct NetCdfCfDataProviderDefinition {
     pub name: String,
     pub path: PathBuf,
     pub overviews: PathBuf,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Debug)]
@@ -84,6 +85,7 @@ pub struct NetCdfCfDataProvider {
     pub name: String,
     pub path: PathBuf,
     pub overviews: PathBuf,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[typetag::serde]
@@ -94,6 +96,7 @@ impl DataProviderDefinition for NetCdfCfDataProviderDefinition {
             name: self.name,
             path: self.path,
             overviews: self.overviews,
+            cache_ttl: self.cache_ttl,
         }))
     }
 
@@ -372,6 +375,7 @@ impl NetCdfCfDataProvider {
         path: &Path,
         overviews: &Path,
         id: &DataId,
+        cache_ttl: CacheTtlSeconds,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
         const LON_DIMENSION_INDEX: usize = 3;
@@ -515,7 +519,7 @@ impl NetCdfCfDataProvider {
                 end, // TODO: Use this or time dimension size (number of steps)?
                 step,
                 band_offset: dataset_id.entity * dimensions_time,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl,
             }),
             TimeCoverage::List { time_stamps } => {
                 let mut params_list = Vec::with_capacity(time_stamps.len());
@@ -1468,8 +1472,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         let dataset = id.clone().into();
         let path = self.path.clone();
         let overviews = self.overviews.clone();
+        let cache_ttl = self.cache_ttl;
         crate::util::spawn_blocking(move || {
-            Self::meta_data(&path, &overviews, &dataset).map_err(|error| {
+            Self::meta_data(&path, &overviews, &dataset, cache_ttl).map_err(|error| {
                 geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(error),
                 }
@@ -1713,6 +1718,7 @@ mod tests {
             name: "NetCdfCfDataProvider".to_string(),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -1781,6 +1787,7 @@ mod tests {
             name: "NetCdfCfDataProvider".to_string(),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -1837,6 +1844,7 @@ mod tests {
             name: "NetCdfCfDataProvider".to_string(),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -1917,6 +1925,7 @@ mod tests {
             name: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
+            cache_ttl: Default::default(),
         };
 
         let metadata = provider
@@ -2015,6 +2024,7 @@ mod tests {
             name: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
+            cache_ttl: Default::default(),
         };
 
         let expected_files: Vec<PathBuf> = vec![
@@ -2038,6 +2048,7 @@ mod tests {
             name: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: overview_folder.path().to_path_buf(),
+            cache_ttl: Default::default(),
         };
 
         provider
@@ -2139,6 +2150,7 @@ mod tests {
             name: "NetCdfCfDataProvider".to_string(),
             path: test_data!("netcdf4d").into(),
             overviews: overview_folder.path().to_path_buf(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -2227,6 +2239,7 @@ mod tests {
                 path: test_data!("netcdf4d/").into(),
                 base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
                 overviews: test_data!("netcdf4d/overviews/").into(),
+                cache_ttl: Default::default(),
             });
 
         ctx.db()

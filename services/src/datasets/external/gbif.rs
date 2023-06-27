@@ -44,13 +44,17 @@ pub const GBIF_PROVIDER_ID: DataProviderId =
 pub struct GbifDataProviderDefinition {
     name: String,
     db_config: DatabaseConnectionConfig,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for GbifDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
-        Ok(Box::new(GbifDataProvider::new(self.db_config).await?))
+        Ok(Box::new(
+            GbifDataProvider::new(self.db_config, self.cache_ttl).await?,
+        ))
     }
 
     fn type_name(&self) -> &'static str {
@@ -70,6 +74,7 @@ impl DataProviderDefinition for GbifDataProviderDefinition {
 pub struct GbifDataProvider {
     db_config: DatabaseConnectionConfig,
     pool: Pool<PostgresConnectionManager<NoTls>>,
+    cache_ttl: CacheTtlSeconds,
 }
 
 impl GbifDataProvider {
@@ -83,11 +88,15 @@ impl GbifDataProvider {
         "canonicalname",
     ];
 
-    async fn new(db_config: DatabaseConnectionConfig) -> Result<Self> {
+    async fn new(db_config: DatabaseConnectionConfig, cache_ttl: CacheTtlSeconds) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
 
-        Ok(Self { db_config, pool })
+        Ok(Self {
+            db_config,
+            pool,
+            cache_ttl,
+        })
     }
 
     fn level_name(path: &str) -> String {
@@ -504,7 +513,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: Some(format!("{taxonrank} = '{canonicalname}'")),
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: self.cache_ttl,
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -947,7 +956,6 @@ mod tests {
 
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::CacheHint;
     use rand::RngCore;
     use tokio::runtime::Handle;
     use tokio_postgres::Config;
@@ -1056,6 +1064,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1136,6 +1145,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1224,6 +1234,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1308,6 +1319,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1374,6 +1386,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1417,6 +1430,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1468,6 +1482,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1515,6 +1530,7 @@ mod tests {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
                     db_config: db_config.clone(),
+                    cache_ttl: Default::default(),
                 })
                 .initialize()
                 .await
@@ -1735,6 +1751,7 @@ mod tests {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
                     db_config,
+                    cache_ttl: Default::default(),
                 })
                 .initialize()
                 .await
@@ -2073,7 +2090,7 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
-                    CacheHint::default(), // TODO: make configurable in data provider(?)
+                    CacheHint::default(),
                 )
                 .unwrap();
 
@@ -2098,6 +2115,7 @@ mod tests {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
                     db_config,
+                    cache_ttl: Default::default(),
                 })
                     .initialize()
                     .await
@@ -2145,6 +2163,7 @@ mod tests {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
                     db_config,
+                    cache_ttl: Default::default(),
                 })
                 .initialize()
                 .await
