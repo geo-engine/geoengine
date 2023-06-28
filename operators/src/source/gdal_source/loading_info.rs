@@ -200,6 +200,9 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
             .cloned()
             .collect::<Vec<_>>();
 
+        // TODO: if `parts` is empty, return a `GdalLoadingInfoTemporalSlice` with `None` as params but proper cache ttl,
+        //       otherwise the result will not be cached, because the fill adapter can't derive the ttl as there are no surrounding tiles
+
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoTemporalSliceIterator::Static {
                 parts: parts.into_iter(),

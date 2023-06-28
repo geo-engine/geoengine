@@ -1514,7 +1514,7 @@ mod tests {
             })
             .collect();
 
-        let expected_positions = vec![
+        let expected_expirations = vec![
             true,                     // GAP
             true,                     // GAP
             cache_hint1.is_expired(), // data
@@ -1525,7 +1525,7 @@ mod tests {
             cache_hint1.is_expired(), // data
         ];
 
-        assert_eq!(cache_expirations, expected_positions);
+        assert_eq!(cache_expirations, expected_expirations);
     }
 
     #[tokio::test]
@@ -1601,7 +1601,7 @@ mod tests {
             })
             .collect();
 
-        let expected_positions = vec![
+        let expected_expirations = vec![
             cache_hint1.expires(), // GAP (use first real tile)
             cache_hint1.expires(), // GAP (use first real tile)
             cache_hint1.expires(), // data
@@ -1612,6 +1612,37 @@ mod tests {
             cache_hint1.expires(), // data
         ];
 
-        assert_eq!(cache_expirations, expected_positions);
+        assert_eq!(cache_expirations, expected_expirations);
+    }
+
+    #[tokio::test]
+    async fn it_derives_cache_hint_from_no_tiles() {
+        let data = vec![
+            // no surrounding tiles
+        ];
+
+        let result_data = data.into_iter().map(Ok);
+
+        let in_stream = stream::iter(result_data);
+        let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
+        let global_geo_transform = GeoTransform::test_default();
+        let tile_shape = [2, 2].into();
+
+        let adapter = SparseTilesFillAdapter::new(
+            in_stream,
+            grid_bounding_box,
+            global_geo_transform,
+            tile_shape,
+            FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+        );
+
+        let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
+
+        assert_eq!(tiles.len(), 4);
+
+        // as there are no surrounding tiles, we have no further information and fall back to not caching
+        for tile in tiles {
+            assert!(tile.as_ref().unwrap().cache_hint.is_expired());
+        }
     }
 }

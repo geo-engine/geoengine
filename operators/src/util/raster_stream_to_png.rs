@@ -55,7 +55,10 @@ where
     let output_tile: BoxFuture<Result<RasterTile2D<T>>> =
         Box::pin(tile_stream.fold(output_tile, |raster2d, tile| {
             let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
-                (Ok(raster2d), Ok(tile)) if tile.is_empty() => Ok(raster2d),
+                (Ok(mut raster2d), Ok(tile)) if tile.is_empty() => {
+                    raster2d.cache_hint.merge_with(&tile.cache_hint);
+                    Ok(raster2d)
+                }
                 (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
                     Ok(_) => Ok(raster2d),
                     Err(error) => Err(error.into()),
