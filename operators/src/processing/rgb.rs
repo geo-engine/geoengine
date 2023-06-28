@@ -117,7 +117,7 @@ impl OperatorData for RgbSources {
 }
 
 impl RgbSources {
-    pub fn new_a(
+    pub fn new(
         red: Box<dyn RasterOperator>,
         green: Box<dyn RasterOperator>,
         blue: Box<dyn RasterOperator>,
