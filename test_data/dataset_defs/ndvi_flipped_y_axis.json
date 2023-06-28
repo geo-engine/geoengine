@@ -330,6 +330,7 @@
     "step": {
       "granularity": "months",
       "step": 1
-    }
+    },
+    "cacheTtl": 0
   }
 }

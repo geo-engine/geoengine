@@ -73,10 +73,12 @@ pub const NETCDF_CF_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x1690_c483_b17f_4d98_95c8_00a6_4849_cd0b);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NetCdfCfDataProviderDefinition {
     pub name: String,
     pub path: PathBuf,
     pub overviews: PathBuf,
+    #[serde(default)]
     pub cache_ttl: CacheTtlSeconds,
 }
 

@@ -318,7 +318,8 @@
           "height": 1800,
           "fileNotFoundHandling": "NoData",
           "noDataValue": 0.0
-        }
+        },
+        "cacheTtl": 0
       },
       {
         "time": { "start": 1391212800000, "end": 1393632000000 },
@@ -337,7 +338,8 @@
           "height": 1800,
           "fileNotFoundHandling": "NoData",
           "noDataValue": 0.0
-        }
+        },
+        "cacheTtl": 0
       }
     ]
   }

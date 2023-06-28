@@ -8,5 +8,6 @@
     "port": 5432,
     "database": "abcd",
     "schema": "public"
-  }
+  },
+  "cacheTtl": 0
 }

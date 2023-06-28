@@ -20,7 +20,8 @@
         "int": [],
         "text": []
       },
-      "onError": "abort"
+      "onError": "abort",
+      "cacheTtl": 0
     },
     "resultDescriptor": {
       "type": "vector",

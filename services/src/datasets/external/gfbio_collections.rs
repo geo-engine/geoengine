@@ -542,11 +542,12 @@ impl GfbioCollectionsDataProvider {
                 source: Box::new(e),
             })?;
 
-        let smd = pmd.get_ogr_metadata(&client).await.map_err(|e| {
-            geoengine_operators::error::Error::LoadingInfo {
+        let smd = pmd
+            .get_ogr_metadata(&client, self.cache_ttl)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
-            }
-        })?;
+            })?;
 
         Ok(Box::new(smd))
     }
