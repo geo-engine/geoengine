@@ -313,7 +313,7 @@ fn compute_tile(
     fn fit_to_interval_0_255(value: f64, min: f64, max: f64, scale: f64) -> u32 {
         let mut result = value - min; // shift towards zero
         result /= max - min; // normalize to [0, 1]
-        result *= scale; // after scaling, value stays in [0, 1]
+        result *= scale; // after scaling with scale ∈ [0, 1], value stays in [0, 1]
         result = (255. * result).round().clamp(0., 255.); // bring value to integer range [0, 255]
         result.as_()
     }
