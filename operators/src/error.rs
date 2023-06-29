@@ -384,6 +384,12 @@ pub enum Error {
     LineSimplification {
         source: crate::processing::LineSimplificationError,
     },
+
+    #[snafu(context(false))]
+    #[snafu(display("RgbOperator error: {source}"))]
+    RgbOperator {
+        source: crate::processing::RgbOperatorError,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
