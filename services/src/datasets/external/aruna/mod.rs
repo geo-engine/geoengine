@@ -20,6 +20,7 @@ use aruna_rust_api::api::storage::services::v1::{
     GetObjectGroupObjectsRequest, GetObjectGroupsRequest,
 };
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, SpatialResolution, VectorQueryRectangle,
 };
@@ -67,6 +68,8 @@ pub struct ArunaDataProviderDefinition {
     project_id: String,
     api_token: String,
     filter_label: String,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[typetag::serde]
@@ -142,6 +145,7 @@ pub struct ArunaDataProvider {
     object_group_stub: ObjectGroupServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
     object_stub: ObjectServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
     label_filter: Option<LabelOrIdQuery>,
+    cache_ttl: CacheTtlSeconds,
 }
 
 impl ArunaDataProvider {
@@ -182,6 +186,7 @@ impl ArunaDataProvider {
             object_group_stub,
             object_stub,
             label_filter,
+            cache_ttl: def.cache_ttl,
         })
     }
 
@@ -383,7 +388,11 @@ impl ArunaDataProvider {
     /// a concrete url on every call to `MetaData.loading_info()`.
     /// This is required, since download links from the core-storage are only valid
     /// for 15 minutes.
-    fn vector_loading_template(vi: &VectorInfo, rd: &VectorResultDescriptor) -> OgrSourceDataset {
+    fn vector_loading_template(
+        vi: &VectorInfo,
+        rd: &VectorResultDescriptor,
+        cache_ttl: CacheTtlSeconds,
+    ) -> OgrSourceDataset {
         let data_type = match rd.data_type {
             VectorDataType::Data => None,
             x => Some(x),
@@ -461,6 +470,7 @@ impl ArunaDataProvider {
             on_error: OgrSourceErrorSpec::Abort,
             sql_query: None,
             attribute_query: None,
+            cache_ttl,
         }
     }
 
@@ -469,7 +479,7 @@ impl ArunaDataProvider {
     /// a concrete url on every call to `MetaData.loading_info()`.
     /// This is required, since download links from the core-storage are only valid
     /// for 15 minutes.
-    fn raster_loading_template(info: &RasterInfo) -> GdalLoadingInfo {
+    fn raster_loading_template(info: &RasterInfo, cache_ttl: CacheTtlSeconds) -> GdalLoadingInfo {
         let part = GdalLoadingInfoTemporalSlice {
             time: info.time_interval,
             params: Some(GdalDatasetParameters {
@@ -486,6 +496,7 @@ impl ArunaDataProvider {
                 allow_alphaband_as_mask: true,
                 retry: None,
             }),
+            cache_ttl,
         };
 
         GdalLoadingInfo {
@@ -552,7 +563,8 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
             DataType::SingleVectorFile(info) => {
                 let result_descriptor =
                     Self::create_single_vector_file_result_descriptor(meta_data.crs.into(), &info);
-                let template = Self::vector_loading_template(&info, &result_descriptor);
+                let template =
+                    Self::vector_loading_template(&info, &result_descriptor, self.cache_ttl);
 
                 let res = ArunaMetaData {
                     collection_id: aruna_dataset_ids.collection_id,
@@ -607,7 +619,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             DataType::SingleRasterFile(info) => {
                 let result_descriptor =
                     Self::create_single_raster_file_result_descriptor(meta_data.crs.into(), info)?;
-                let template = Self::raster_loading_template(info);
+                let template = Self::raster_loading_template(info, self.cache_ttl);
 
                 let res = ArunaMetaData {
                     collection_id: aruna_dataset_ids.collection_id,
@@ -787,6 +799,7 @@ impl ExpiringDownloadLink for OgrSourceDataset {
             on_error: self.on_error,
             sql_query: self.sql_query.clone(),
             attribute_query: self.attribute_query.clone(),
+            cache_ttl: self.cache_ttl,
         })
     }
 }
@@ -920,7 +933,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
+        BoundingBox2D, CacheTtlSeconds, SpatialResolution, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
@@ -1027,6 +1040,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             name: "NFDI".to_string(),
             filter_label: FILTER_LABEL.to_string(),
+            cache_ttl: Default::default(),
         };
         ArunaDataProvider::new(Box::new(def)).await.unwrap()
     }
@@ -1614,7 +1628,8 @@ mod tests {
 
         let rd = ArunaDataProvider::create_single_vector_file_result_descriptor(md.crs.into(), &vi);
 
-        let template = ArunaDataProvider::vector_loading_template(&vi, &rd);
+        let template =
+            ArunaDataProvider::vector_loading_template(&vi, &rd, CacheTtlSeconds::default());
 
         let url = template
             .new_link("test".to_string())
@@ -1647,7 +1662,7 @@ mod tests {
             super::metadata::DataType::SingleVectorFile(_) => panic!("Expected raster description"),
         };
 
-        let template = ArunaDataProvider::raster_loading_template(&ri);
+        let template = ArunaDataProvider::raster_loading_template(&ri, CacheTtlSeconds::default());
 
         let url = template
             .new_link("test".to_string())

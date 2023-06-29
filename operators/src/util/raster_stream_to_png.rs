@@ -1,7 +1,7 @@
 use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
     operations::image::{Colorizer, DefaultColors, RgbaColor, ToPng},
-    primitives::{AxisAlignedRectangle, RasterQueryRectangle, TimeInterval},
+    primitives::{AxisAlignedRectangle, CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
@@ -23,7 +23,7 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
     time: Option<TimeInterval>,
     colorizer: Option<Colorizer>,
     conn_closed: BoxFuture<'_, ()>,
-) -> Result<Vec<u8>>
+) -> Result<(Vec<u8>, CacheHint)>
 where
     T: Pixel,
 {
@@ -49,12 +49,16 @@ where
         time.unwrap_or_default(),
         query_geo_transform,
         GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
+        CacheHint::max_duration(),
     ));
 
     let output_tile: BoxFuture<Result<RasterTile2D<T>>> =
         Box::pin(tile_stream.fold(output_tile, |raster2d, tile| {
             let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
-                (Ok(raster2d), Ok(tile)) if tile.is_empty() => Ok(raster2d),
+                (Ok(mut raster2d), Ok(tile)) if tile.is_empty() => {
+                    raster2d.cache_hint.merge_with(&tile.cache_hint);
+                    Ok(raster2d)
+                }
                 (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
                     Ok(_) => Ok(raster2d),
                     Err(error) => Err(error.into()),
@@ -71,7 +75,10 @@ where
     let result = abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
 
     let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
-    Ok(result.grid_array.to_png(width, height, &colorizer)?)
+    Ok((
+        result.grid_array.to_png(width, height, &colorizer)?,
+        result.cache_hint,
+    ))
 }
 
 /// Method to generate a default `Colorizer`.
@@ -128,7 +135,7 @@ mod tests {
         let query_partition =
             SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
-        let image_bytes = raster_stream_to_png_bytes(
+        let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_partition,

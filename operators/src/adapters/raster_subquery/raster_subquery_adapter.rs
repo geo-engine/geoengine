@@ -1,3 +1,4 @@
+use crate::adapters::sparse_tiles_fill_adapter::FillerTileCacheExpirationStrategy;
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor};
 use crate::error;
@@ -10,6 +11,7 @@ use futures::{
 };
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
@@ -157,7 +159,11 @@ where
     }
 
     /// Wrap the `RasterSubQueryAdapter` with a filter and a `SparseTilesFillAdapter` to produce a `Stream` compatible with `RasterQueryProcessor`.
-    pub fn filter_and_fill(self) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
+    /// Set the `cache_expiration` to unlimited, if the filler tiles will alway be empty.
+    pub fn filter_and_fill(
+        self,
+        cache_expiration: FillerTileCacheExpirationStrategy,
+    ) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
     where
         Self: Stream<Item = Result<Option<RasterTile2D<PixelType>>>> + 'a,
     {
@@ -173,8 +179,13 @@ where
             }
         });
 
-        let s_filled =
-            SparseTilesFillAdapter::new(s, grid_bounds, global_geo_transform, tile_shape);
+        let s_filled = SparseTilesFillAdapter::new(
+            s,
+            grid_bounds,
+            global_geo_transform,
+            tile_shape,
+            cache_expiration,
+        );
         s_filled.boxed()
     }
 
@@ -543,8 +554,12 @@ pub fn identity_accu<T: Pixel>(
 ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> {
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
-        let output_tile =
-            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster);
+        let output_tile = RasterTile2D::new_with_tile_info(
+            query_rect.time_interval,
+            tile_info,
+            output_raster,
+            CacheHint::max_duration(),
+        );
         RasterTileAccu2D::new(output_tile, pool)
     })
     .map_err(From::from)
@@ -569,6 +584,7 @@ where
     }
 
     let mut materialized_tile = accu_tile.into_materialized_tile();
+
     materialized_tile.blit(tile)?;
 
     Ok(RasterTileAccu2D::new(materialized_tile.into(), pool))
@@ -594,7 +610,7 @@ where
 mod tests {
     use geoengine_datatypes::{
         primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{Grid, GridShape, RasterDataType},
+        raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
@@ -616,6 +632,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -623,6 +640,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -632,6 +650,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -641,6 +660,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
         ];
 
@@ -695,6 +715,6 @@ mod tests {
             .map(Option::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
-        assert_eq!(data, res);
+        assert!(data.tiles_equal_ignoring_cache_hint(&res));
     }
 }

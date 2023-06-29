@@ -3,7 +3,7 @@ use crate::processing::raster_vector_join::create_feature_aggregator;
 use futures::stream::{once as once_stream, BoxStream};
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, FeatureDataType, Geometry, VectorQueryRectangle,
+    BoundingBox2D, CacheHint, FeatureDataType, Geometry, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use std::marker::PhantomData;
@@ -161,6 +161,7 @@ struct VectorRasterJoiner<G, C> {
     state: Option<JoinerState<G, C>>,
     aggregation_method: FeatureAggregationMethod,
     ignore_no_data: bool,
+    cache_hint: CacheHint,
 }
 
 impl<G, C> VectorRasterJoiner<G, C>
@@ -176,6 +177,7 @@ where
             state: None,
             aggregation_method,
             ignore_no_data,
+            cache_hint: CacheHint::max_duration(),
         }
     }
 
@@ -247,6 +249,8 @@ where
             }
         }
 
+        self.cache_hint.merge_with(&raster.cache_hint);
+
         Ok(self)
     }
 
@@ -254,10 +258,14 @@ where
         let Some(state) = self.state else {
             return Err(Error::EmptyInput); // TODO: maybe output empty dataset or just nulls
         };
-        Ok(state
+        let mut new_collection = state
             .covered_pixels
             .collection()
-            .add_column(new_column_name, state.aggregator.into_data())?)
+            .add_column(new_column_name, state.aggregator.into_data())?;
+
+        new_collection.cache_hint = self.cache_hint;
+
+        Ok(new_collection)
     }
 }
 
@@ -307,7 +315,10 @@ mod tests {
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
-    use geoengine_datatypes::collections::{MultiPointCollection, MultiPolygonCollection};
+    use geoengine_datatypes::collections::{
+        ChunksEqualIgnoringCacheHint, MultiPointCollection, MultiPolygonCollection,
+    };
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{BoundingBox2D, DateTime, FeatureData, MultiPolygon};
     use geoengine_datatypes::primitives::{Measurement, SpatialResolution};
     use geoengine_datatypes::primitives::{MultiPoint, TimeInterval};
@@ -334,6 +345,7 @@ mod tests {
                 .unwrap(),
                 vec![time_instant; 5],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -392,9 +404,8 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert_eq!(
-            result,
-            MultiPointCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
                     vec![(-13.95, 20.05)],
                     vec![(-14.05, 20.05)],
@@ -408,7 +419,7 @@ mod tests {
                 &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55, 51]))],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -424,6 +435,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap(); 4],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -486,9 +498,8 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert_eq!(
-            result,
-            MultiPointCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
                     (-13.95, 20.05),
                     (-14.05, 20.05),
@@ -501,7 +512,7 @@ mod tests {
                 &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -524,6 +535,7 @@ mod tests {
                     4
                 ],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -585,9 +597,8 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert_eq!(
-            result,
-            MultiPointCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
                     (-13.95, 20.05),
                     (-14.05, 20.05),
@@ -604,7 +615,7 @@ mod tests {
                 &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[allow(clippy::too_many_lines)]
@@ -628,6 +639,7 @@ mod tests {
                     4
                 ],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -700,9 +712,8 @@ mod tests {
             DateTime::new_utc(2014, 3, 1, 0, 0, 0),
         )
         .unwrap();
-        assert_eq!(
-            result,
-            MultiPointCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
                     (-13.95, 20.05),
                     (-14.05, 20.05),
@@ -722,7 +733,7 @@ mod tests {
                 )],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -739,6 +750,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -750,6 +762,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -761,6 +774,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -772,6 +786,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         let raster_source = MockRasterSource {
@@ -813,6 +828,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::default(); 2],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -858,9 +874,8 @@ mod tests {
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
 
-        assert_eq!(
-            result,
-            MultiPointCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
                     vec![(0.0, 0.0), (2.0, 0.0)],
                     vec![(1.0, 0.0), (3.0, 0.0)],
@@ -880,7 +895,7 @@ mod tests {
                 )],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -897,6 +912,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -908,6 +924,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_a_2 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -919,6 +936,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![600, 500, 400, 300, 200, 100])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -930,6 +948,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -941,6 +960,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         let raster_tile_b_2 = RasterTile2D::new_with_tile_info(
@@ -953,6 +973,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![100, 200, 300, 400, 500, 600])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         let raster_source = MockRasterSource {
@@ -998,6 +1019,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::default(); 1],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1043,9 +1065,8 @@ mod tests {
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
 
-        assert_eq!(
-            result,
-            MultiPolygonCollection::from_slices(
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPolygonCollection::from_slices(
                 &[
                     MultiPolygon::new(vec![vec![vec![
                         (0.5, -0.5).into(),
@@ -1072,6 +1093,6 @@ mod tests {
                 )],
             )
             .unwrap()
-        );
+        ));
     }
 }

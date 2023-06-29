@@ -3,6 +3,7 @@ use crate::handlers::ErrorResponse;
 use crate::util::config::get_config_element;
 
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
+use actix_http::header::{HeaderName, HeaderValue};
 use actix_http::uri::PathAndQuery;
 use actix_http::{Extensions, HttpMessage, StatusCode};
 
@@ -10,6 +11,7 @@ use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{http, middleware, web, HttpRequest, HttpResponse};
 use futures::future::BoxFuture;
+use geoengine_datatypes::primitives::CacheHint;
 use log::debug;
 
 use std::any::Any;
@@ -397,5 +399,27 @@ pub fn connection_closed(_req: &HttpRequest, timeout: Option<Duration>) -> BoxFu
         Box::pin(tokio::time::sleep(timeout))
     } else {
         Box::pin(futures::future::pending())
+    }
+}
+
+pub trait CacheControlHeader {
+    fn cache_control_header(&self) -> (HeaderName, HeaderValue);
+}
+
+impl CacheControlHeader for CacheHint {
+    fn cache_control_header(&self) -> (HeaderName, HeaderValue) {
+        let value = match self.expires().seconds_to_expiration() {
+            // RFC 2616:
+            // "To mark a response as "never expires," an origin server sends an Expires date approximately one year
+            // from the time the response is sent. HTTP/1.1 servers SHOULD NOT send Expires dates more than one year in the future."
+            s if s > 31_536_000 => HeaderValue::from_str("private, max-age=31536000")
+                .expect("should be a valid header value according to the HTTP standard"),
+            s if s == 0 => HeaderValue::from_str("no-cache")
+                .expect("should be a valid header value according to the HTTP standard"),
+            s => HeaderValue::from_str(&format!("private, max-age={s}",))
+                .expect("should be a valid header value according to the HTTP standard"),
+        };
+
+        (actix_http::header::CACHE_CONTROL, value)
     }
 }

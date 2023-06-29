@@ -270,6 +270,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         primitives::{SpatialResolution, TimeInterval},
+        raster::TilesEqualIgnoringCacheHint,
         util::test::TestDefault,
     };
 
@@ -355,6 +356,6 @@ mod tests {
 
         // TODO: how to ensure the tiles are actually from the cache?
 
-        assert_eq!(tiles, tiles_from_cache);
+        assert!(tiles.tiles_equal_ignoring_cache_hint(&tiles_from_cache));
     }
 }

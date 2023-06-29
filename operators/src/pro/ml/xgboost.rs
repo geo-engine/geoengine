@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::StreamExt;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle, SpatialPartition2D,
     SpatialResolution,
@@ -246,6 +247,12 @@ where
         let global_geo_transform = tile.global_geo_transform;
         let ndv = self.no_data_value;
 
+        let cache_hint = bands_of_tile
+            .iter()
+            .fold(CacheHint::max_duration(), |acc, bt| {
+                acc.merged(&bt.cache_hint)
+            });
+
         let predicted_grid = crate::util::spawn_blocking(move || {
             process_tile(
                 bands_of_tile,
@@ -266,6 +273,7 @@ where
                 global_geo_transform,
                 predicted_grid.into(),
                 props.clone(),
+                cache_hint,
             );
 
         Ok(rt)
@@ -381,6 +389,7 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
 
     use futures::StreamExt;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
@@ -420,6 +429,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([5, 5].into(), t1).unwrap()),
+                CacheHint::default(),
             ),
             RasterTile2D::<i32>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 1),
@@ -429,6 +439,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([5, 5].into(), t2).unwrap()),
+                CacheHint::default(),
             ),
         ];
 
@@ -463,6 +474,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
             },
             GridOrEmpty::from(Grid2D::new([5, 5].into(), tile).unwrap()),
+            CacheHint::default(),
         )];
 
         MockRasterSource {

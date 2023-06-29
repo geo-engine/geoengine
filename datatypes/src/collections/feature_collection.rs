@@ -20,6 +20,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::{mem, slice};
 
+use crate::primitives::CacheHint;
 use crate::primitives::{BoolDataRef, Coordinate2D, DateTimeDataRef, TimeInstance};
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
@@ -42,6 +43,7 @@ use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
 
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FeatureCollection<CollectionType> {
     #[serde(with = "struct_serde")]
     pub(super) table: StructArray,
@@ -51,6 +53,8 @@ pub struct FeatureCollection<CollectionType> {
 
     #[serde(skip)]
     collection_type: PhantomData<CollectionType>,
+
+    pub cache_hint: CacheHint,
 }
 
 impl<CollectionType> FeatureCollection<CollectionType> {
@@ -65,11 +69,13 @@ impl<CollectionType> FeatureCollection<CollectionType> {
     pub(super) fn new_from_internals(
         table: StructArray,
         types: HashMap<String, FeatureDataType>,
+        cache_hint: CacheHint,
     ) -> Self {
         Self {
             table,
             types,
             collection_type: Default::default(),
+            cache_hint,
         }
     }
 }
@@ -213,6 +219,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.clone(), filtered_data, None)?,
             self.types.clone(),
+            self.cache_hint,
         ))
     }
 
@@ -309,6 +316,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             types,
+            self.cache_hint,
         ))
     }
 
@@ -394,6 +402,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             types,
+            self.cache_hint,
         ))
     }
 
@@ -532,6 +541,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.clone(), new_data, None)?,
             self.types.clone(),
+            self.cache_hint.merged(&other.cache_hint),
         ))
     }
 
@@ -638,6 +648,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             types,
+            self.cache_hint,
         ))
     }
 
@@ -659,7 +670,11 @@ where
 
         let table = StructArray::from(table_ref.into_data());
 
-        Ok(Self::new_from_internals(table, self.types.clone()))
+        Ok(Self::new_from_internals(
+            table,
+            self.types.clone(),
+            self.cache_hint,
+        ))
     }
 
     fn replace_time(&self, time_intervals: &[TimeInterval]) -> Result<Self::Output> {
@@ -719,6 +734,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             self.types.clone(),
+            self.cache_hint,
         ))
     }
 }
@@ -1116,7 +1132,7 @@ where
     /// assert_eq!(pc.len(), 0);
     /// ```
     pub fn empty() -> Self {
-        Self::from_data(vec![], vec![], Default::default())
+        Self::from_data(vec![], vec![], Default::default(), CacheHint::default())
             .expect("should not fail because no data is given")
     }
 
@@ -1126,7 +1142,7 @@ where
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionInfos};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint, CacheHint};
     /// use std::collections::HashMap;
     ///
     /// let pc = MultiPointCollection::from_data(
@@ -1137,6 +1153,7 @@ where
     ///         map.insert("float".into(), FeatureData::Float(vec![0., 1.]));
     ///         map
     ///     },
+    ///     CacheHint::default(),
     /// ).unwrap();
     ///
     /// assert_eq!(pc.len(), 2);
@@ -1150,6 +1167,7 @@ where
         features: Vec<CollectionType>,
         time_intervals: Vec<TimeInterval>,
         data: HashMap<String, FeatureData>,
+        cache_hint: CacheHint,
     ) -> Result<Self> {
         let number_of_rows = time_intervals.len();
         let number_of_column: usize = data.len() + 1 + usize::from(CollectionType::IS_GEOMETRY);
@@ -1212,6 +1230,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), arrays, None)?,
             types,
+            cache_hint,
         ))
     }
 
@@ -1233,6 +1252,7 @@ where
             data.iter()
                 .map(|(k, v)| (k.clone().into(), v.clone().into()))
                 .collect(),
+            CacheHint::default(),
         )
     }
 
@@ -1240,23 +1260,8 @@ where
     pub(super) fn is_reserved_name(name: &str) -> bool {
         name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
     }
-}
 
-impl<CollectionType> Clone for FeatureCollection<CollectionType> {
-    fn clone(&self) -> Self {
-        Self {
-            table: self.table.clone(),
-            types: self.types.clone(),
-            collection_type: Default::default(),
-        }
-    }
-}
-
-impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
-where
-    CollectionType: Geometry + ArrowTyped,
-{
-    fn eq(&self, other: &Self) -> bool {
+    fn equals_ignoring_cache_hint(&self, other: &Self) -> bool {
         if self.types != other.types {
             return false;
         }
@@ -1283,6 +1288,26 @@ where
         }
 
         true
+    }
+}
+
+impl<CollectionType> Clone for FeatureCollection<CollectionType> {
+    fn clone(&self) -> Self {
+        Self {
+            table: self.table.clone(),
+            types: self.types.clone(),
+            collection_type: Default::default(),
+            cache_hint: self.cache_hint.clone_with_current_datetime(),
+        }
+    }
+}
+
+impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.equals_ignoring_cache_hint(other) && self.cache_hint == other.cache_hint
     }
 }
 
@@ -1397,6 +1422,70 @@ where
     }
 
     Ok(())
+}
+
+/// A way to compare two `FeatureCollection`s ignoring the `CacheHint` and only considering the actual data.
+pub trait ChunksEqualIgnoringCacheHint<C> {
+    fn chunks_equal_ignoring_cache_hint(&self, other: &dyn IterableFeatureCollection<C>) -> bool;
+}
+
+/// Allow comparing Iterables of `BaseTile` ignoring the `CacheHint` and only considering the actual data.
+pub trait IterableFeatureCollection<C> {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_>;
+}
+
+struct SingleChunkIter<'a, C> {
+    chunk: Option<&'a FeatureCollection<C>>,
+}
+
+impl<'a, C> Iterator for SingleChunkIter<'a, C> {
+    type Item = &'a FeatureCollection<C>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.chunk.take()
+    }
+}
+
+impl<C> IterableFeatureCollection<C> for FeatureCollection<C> {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_> {
+        Box::new(SingleChunkIter { chunk: Some(self) })
+    }
+}
+
+impl<C> IterableFeatureCollection<C> for Vec<FeatureCollection<C>> {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_> {
+        Box::new(self.iter())
+    }
+}
+
+impl<C, const N: usize> IterableFeatureCollection<C> for [FeatureCollection<C>; N] {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_> {
+        Box::new(self.iter())
+    }
+}
+
+impl<C, I: IterableFeatureCollection<C>> ChunksEqualIgnoringCacheHint<C> for I
+where
+    C: Geometry + ArrowTyped,
+{
+    fn chunks_equal_ignoring_cache_hint(&self, other: &dyn IterableFeatureCollection<C>) -> bool {
+        let mut iter_self = self.iter_chunks();
+        let mut iter_other = other.iter_chunks();
+
+        loop {
+            match (iter_self.next(), iter_other.next()) {
+                (Some(a), Some(b)) => {
+                    if !a.equals_ignoring_cache_hint(b) {
+                        return false;
+                    }
+                }
+                // both iterators are exhausted
+                (None, None) => return true,
+                // one iterator is exhausted, the other is not, so they are not equal
+                _ => return false,
+            }
+        }
+    }
 }
 
 /// Custom serializer for Arrow's `StructArray`
@@ -1567,6 +1656,7 @@ where
         Ok(Self::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             self.types.clone(),
+            self.cache_hint,
         ))
     }
 }
@@ -1593,6 +1683,7 @@ mod tests {
                 vec![],
                 vec![TimeInterval::new(0, 1).unwrap(); length],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap()
         }
@@ -1645,6 +1736,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1665,6 +1757,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 

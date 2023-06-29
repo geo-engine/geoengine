@@ -26,7 +26,8 @@
       },
       "forceOgrTimeFilter": false,
       "onError": "abort",
-      "provenance": null
+      "provenance": null,
+      "cacheTtl": 0
     },
     "resultDescriptor": {
       "dataType": "MultiPoint",

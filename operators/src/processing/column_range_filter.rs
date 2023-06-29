@@ -181,7 +181,10 @@ mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::MockFeatureCollectionSource;
-    use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
+    use geoengine_datatypes::collections::{
+        ChunksEqualIgnoringCacheHint, FeatureCollectionModifications, MultiPointCollection,
+    };
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -244,6 +247,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -283,9 +287,8 @@ mod tests {
 
         assert_eq!(collections.len(), 1);
 
-        assert_eq!(
-            collections[0],
-            collection.filter(vec![false, true, true, false]).unwrap()
-        );
+        assert!(collections[0].chunks_equal_ignoring_cache_hint(
+            &collection.filter(vec![false, true, true, false]).unwrap()
+        ));
     }
 }

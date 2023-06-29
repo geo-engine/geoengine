@@ -389,6 +389,7 @@ impl From<&NumberStatistics> for StatisticsOutput {
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::collections::DataCollection;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
@@ -494,6 +495,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
+                    CacheHint::default(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
@@ -575,6 +577,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -599,6 +602,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -689,6 +693,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -713,6 +718,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -802,6 +808,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -826,6 +833,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,

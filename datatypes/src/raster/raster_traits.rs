@@ -59,7 +59,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        primitives::TimeInterval,
+        primitives::{CacheHint, TimeInterval},
         raster::{Grid2D, RasterTile2D, TileInformation},
         util::test::TestDefault,
     };
@@ -98,6 +98,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         validate_coordinate(&raster_tile, (0.0, 0.0));
@@ -122,6 +123,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         validate_coordinate(&raster_tile, (0.0, 0.0));

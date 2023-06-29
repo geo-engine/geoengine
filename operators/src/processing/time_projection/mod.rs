@@ -271,9 +271,10 @@ mod tests {
         mock::MockFeatureCollectionSource,
     };
     use geoengine_datatypes::{
-        collections::{MultiPointCollection, VectorDataType},
+        collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection, VectorDataType},
         primitives::{
-            BoundingBox2D, DateTime, MultiPoint, SpatialResolution, TimeGranularity, TimeInterval,
+            BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialResolution, TimeGranularity,
+            TimeInterval,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -427,6 +428,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         );
@@ -497,10 +499,11 @@ mod tests {
                 .unwrap(),
             ],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result[0], expected);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&expected));
     }
 
     #[tokio::test]
@@ -529,6 +532,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         );
@@ -599,10 +603,11 @@ mod tests {
                 .unwrap(),
             ],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result[0], expected);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&expected));
     }
 
     #[test]
