@@ -481,13 +481,14 @@ mod tests {
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
-        send_test_request,
+        register_ndvi_workflow_helper_with_cache_ttl, send_test_request,
     };
     use actix_web::dev::ServiceResponse;
     use actix_web::http::header;
     use actix_web::http::Method;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
+    use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
@@ -992,7 +993,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_sets_cache_control_header() {
+    async fn it_sets_cache_control_header_no_cache() {
         let app_ctx = InMemoryContext::test_default();
 
         let ctx = app_ctx.default_session_context().await;
@@ -1013,6 +1014,36 @@ mod tests {
         assert_eq!(
             response.headers().get(header::CACHE_CONTROL).unwrap(),
             "no-cache"
+        );
+    }
+
+    #[tokio::test]
+    async fn it_sets_cache_control_header_with_cache() {
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, id) =
+            register_ndvi_workflow_helper_with_cache_ttl(&app_ctx, CacheTtlSeconds::new(60)).await;
+
+        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx).await;
+
+        assert_eq!(
+            response.status(),
+            200,
+            "{:?}",
+            actix_web::test::read_body(response).await
+        );
+
+        let cache_header = response.headers().get(header::CACHE_CONTROL).unwrap();
+
+        // defensive check here. Between creation of the tiles and the response of the handler might be some time, so the ttl of the output may be a bit lower than the defined ttl for the dataset
+        assert!(
+            cache_header == "private, max-age=60"
+                || cache_header == "private, max-age=59"
+                || cache_header == "private, max-age=58"
         );
     }
 }

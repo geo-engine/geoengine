@@ -41,8 +41,12 @@ use crate::{
 };
 
 // TODO: move test helper somewhere else?
-#[allow(clippy::missing_panics_doc)]
 pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
+    create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default())
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalMetaDataRegular {
     let no_data_value = Some(0.); // TODO: is it really 0?
     GdalMetaDataRegular {
         data_time: TimeInterval::new_unchecked(
@@ -91,7 +95,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             )),
             resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
         },
-        cache_ttl: CacheTtlSeconds::default(),
+        cache_ttl,
     }
 }
 
