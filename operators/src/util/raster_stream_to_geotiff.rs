@@ -16,6 +16,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, DateTimeParseFormat, QueryRectangle, RasterQueryRectangle,
     SpatialPartition2D, TimeInterval,
 };
+use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridIdx2D, GridSize,
     MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D, TilingSpecification,
@@ -43,7 +44,7 @@ pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'stat
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
     tiling_specification: TilingSpecification,
-) -> Result<Vec<u8>>
+) -> Result<(Vec<u8>, CacheHint)>
 where
     T: Pixel + GdalType,
 {
@@ -64,9 +65,11 @@ where
         gdal_tiff_metadata,
     )?;
 
-    spawn_blocking(move || {
+    let cache_hint = spawn_blocking(move || {
         let mut band_idx = 1;
         let mut time = initial_tile_time;
+
+        let mut cache_hint = CacheHint::max_duration();
 
         for tile in tiles {
             if tile.time != time {
@@ -88,14 +91,19 @@ where
                 )?;
             }
 
+            cache_hint.merge_with(&tile.cache_hint);
+
             writer.write_tile_into_band(tile, dataset.rasterband(band_idx)?)?;
         }
 
-        Result::<(), Error>::Ok(())
+        Result::<CacheHint, Error>::Ok(cache_hint)
     })
     .await??;
 
-    Ok(gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)?)
+    Ok((
+        gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)?,
+        cache_hint,
+    ))
 }
 
 fn create_multiband_dataset_and_writer<T>(
@@ -690,6 +698,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             self.result.push(GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: Some(dataset_parameters),
+                cache_ttl: CacheTtlSeconds::default(), // not relevant for writing tiffs
             });
             self.init_new_intermediate_dataset(
                 time_interval,
@@ -1029,6 +1038,7 @@ mod tests {
     use std::marker::PhantomData;
     use std::ops::Add;
 
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{DateTime, Duration};
     use geoengine_datatypes::raster::Grid;
     use geoengine_datatypes::{
@@ -1579,6 +1589,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: *time_intervals.get(1).unwrap(),
@@ -1586,6 +1597,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
         ];
 
@@ -1713,7 +1725,7 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
-        let mut bytes = raster_stream_to_multiband_geotiff_bytes(
+        let (mut bytes, _) = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_bbox,

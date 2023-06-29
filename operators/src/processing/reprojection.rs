@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{
-        fold_by_coordinate_lookup_future, RasterSubQueryAdapter, SparseTilesFillAdapter,
-        TileReprojectionSubQuery,
+        fold_by_coordinate_lookup_future, FillerTileCacheExpirationStrategy, RasterSubQueryAdapter,
+        SparseTilesFillAdapter, TileReprojectionSubQuery,
     },
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
@@ -555,7 +555,7 @@ where
                 ctx,
                 sub_query_spec,
             )
-            .filter_and_fill())
+            .filter_and_fill(FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles))
         } else {
             log::debug!("No intersection between source data / srs and target srs");
 
@@ -569,6 +569,7 @@ where
                 grid_bounds,
                 tiling_strat.geo_transform,
                 self.tiling_spec.tile_size_in_pixels,
+                FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
             )))
         }
     }
@@ -597,6 +598,8 @@ mod tests {
     use geoengine_datatypes::primitives::{
         AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat,
     };
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
+    use geoengine_datatypes::raster::TilesEqualIgnoringCacheHint;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -634,6 +637,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheHint::default(),
         )?;
 
         let expected = MultiPoint::many(vec![
@@ -707,6 +711,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
+            CacheHint::default(),
         )?;
 
         let expected = [MultiLineString::new(vec![vec![
@@ -786,6 +791,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
+            CacheHint::default(),
         )?;
 
         let expected = [MultiPolygon::new(vec![vec![vec![
@@ -863,6 +869,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -870,6 +877,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -879,6 +887,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -888,6 +897,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
         ];
 
@@ -943,7 +953,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
-        assert_eq!(data, res);
+        assert!(data.tiles_equal_ignoring_cache_hint(&res));
 
         Ok(())
     }
@@ -1108,6 +1118,7 @@ mod tests {
                 bbox: None,
                 resolution: None,
             },
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let id: DataId = DatasetId::new().into();
@@ -1240,6 +1251,7 @@ mod tests {
                 bbox: None,
                 resolution: None,
             },
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let id: DataId = DatasetId::new().into();
@@ -1319,6 +1331,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 3],
                 HashMap::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -1394,6 +1407,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 3],
                 HashMap::default(),
+                CacheHint::default(),
             )
             .unwrap()],
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n
@@ -1471,6 +1485,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 1],
                 HashMap::default(),
+                CacheHint::default(),
             )
             .unwrap()],
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n

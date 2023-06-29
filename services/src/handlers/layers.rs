@@ -905,6 +905,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, TimeGranularity, TimeInterval,
     };
@@ -1314,6 +1315,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                     properties: Default::default(),
+                    cache_hint: CacheHint::default(),
                 },
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_955_200_000, 1_672_041_600_000),
@@ -1321,6 +1323,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                     properties: Default::default(),
+                    cache_hint: CacheHint::default(),
                 },
             ];
 

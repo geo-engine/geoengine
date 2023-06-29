@@ -146,6 +146,8 @@ mod tests {
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
     use futures::{StreamExt, TryStreamExt};
+    use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval, VectorQueryRectangle,
     };
@@ -200,6 +202,7 @@ mod tests {
             MultiPoint::many(coordinates[0..5].to_vec()).unwrap(),
             vec![TimeInterval::default(); 5],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap()
         .byte_size();
@@ -215,25 +218,25 @@ mod tests {
 
         assert_eq!(collections.len(), 2);
 
-        assert_eq!(
-            collections[0],
-            MultiPointCollection::from_data(
+        assert!(collections[0].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_data(
                 MultiPoint::many(coordinates[0..6].to_vec()).unwrap(),
                 vec![TimeInterval::default(); 6],
-                Default::default()
+                Default::default(),
+                CacheHint::default()
             )
             .unwrap()
-        );
+        ));
 
-        assert_eq!(
-            collections[1],
-            MultiPointCollection::from_data(
+        assert!(collections[1].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_data(
                 MultiPoint::many(coordinates[6..10].to_vec()).unwrap(),
                 vec![TimeInterval::default(); 4],
-                Default::default()
+                Default::default(),
+                CacheHint::default()
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -273,16 +276,19 @@ mod tests {
                 MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
+                CacheHint::default(),
             ),
             MultiPointCollection::from_data(
                 vec![], // should fail
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
+                CacheHint::default(),
             ),
             MultiPointCollection::from_data(
                 MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
+                CacheHint::default(),
             ),
         ])
         .map_err(Error::from);
@@ -292,25 +298,31 @@ mod tests {
             .await;
 
         assert_eq!(merged_collections.len(), 3);
-        assert_eq!(
-            merged_collections[0].as_ref().unwrap(),
-            &MultiPointCollection::from_data(
-                MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
-                vec![TimeInterval::new(0, 1).unwrap()],
-                Default::default(),
-            )
+        assert!(merged_collections[0]
+            .as_ref()
             .unwrap()
-        );
+            .chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
+                    vec![TimeInterval::new(0, 1).unwrap()],
+                    Default::default(),
+                    CacheHint::default()
+                )
+                .unwrap()
+            ));
         assert!(merged_collections[1].is_err());
-        assert_eq!(
-            merged_collections[2].as_ref().unwrap(),
-            &MultiPointCollection::from_data(
-                MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
-                vec![TimeInterval::new(0, 1).unwrap()],
-                Default::default(),
-            )
+        assert!(merged_collections[2]
+            .as_ref()
             .unwrap()
-        );
+            .chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
+                    vec![TimeInterval::new(0, 1).unwrap()],
+                    Default::default(),
+                    CacheHint::default()
+                )
+                .unwrap()
+            ));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -322,6 +334,7 @@ mod tests {
                     MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                     vec![TimeInterval::new(0, 1).unwrap()],
                     Default::default(),
+                    CacheHint::default(),
                 )
                 .map_err(Error::from),
             )),
@@ -331,6 +344,7 @@ mod tests {
                     MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
                     vec![TimeInterval::new(0, 1).unwrap()],
                     Default::default(),
+                    CacheHint::default(),
                 )
                 .map_err(Error::from),
             )),
@@ -352,14 +366,17 @@ mod tests {
             .await;
 
         assert_eq!(merged_collections.len(), 1);
-        assert_eq!(
-            merged_collections[0].as_ref().unwrap(),
-            &MultiPointCollection::from_data(
-                MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
-                vec![TimeInterval::new(0, 1).unwrap(); 2],
-                Default::default(),
-            )
+        assert!(merged_collections[0]
+            .as_ref()
             .unwrap()
-        );
+            .chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
+                    vec![TimeInterval::new(0, 1).unwrap(); 2],
+                    Default::default(),
+                    CacheHint::default()
+                )
+                .unwrap()
+            ));
     }
 }

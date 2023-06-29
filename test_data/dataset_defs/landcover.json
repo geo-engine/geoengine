@@ -97,6 +97,7 @@
       "height": 1800,
       "fileNotFoundHandling": "NoData",
       "noDataValue": 255.0
-    }
+    },
+    "cacheTtl": 0
   }
 }

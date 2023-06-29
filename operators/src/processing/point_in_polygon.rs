@@ -7,6 +7,7 @@ use std::sync::Arc;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -19,7 +20,7 @@ use crate::engine::{
     VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::engine::{OperatorData, QueryProcessor};
-use crate::error;
+use crate::error::{self, Error};
 use crate::util::Result;
 use arrow::array::BooleanArray;
 use async_trait::async_trait;
@@ -276,22 +277,38 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                     let initial_filter = BooleanArray::from(vec![false; points.len()]);
                     let arc_points = Arc::new(points);
 
-                    let filter = self
+                    let (filter, cache_hint) = self
                         .polygons
                         .query(query, ctx)
                         .await?
-                        .fold(Ok(initial_filter), |filter, polygons| async {
-                            let polygons = polygons?;
+                        .fold(
+                            Result::<(BooleanArray, CacheHint)>::Ok((
+                                initial_filter,
+                                CacheHint::max_duration(),
+                            )),
+                            |acc, polygons| async {
+                                let (filter, mut cache_hint) = acc?;
+                                let polygons = polygons?;
 
-                            if polygons.is_empty() {
-                                return filter;
-                            }
+                                cache_hint.merge_with(&polygons.cache_hint);
 
-                            Self::filter_points(ctx, arc_points.clone(), polygons, &filter?).await
-                        })
+                                if polygons.is_empty() {
+                                    return Ok((filter, cache_hint));
+                                }
+
+                                Ok((
+                                    Self::filter_points(ctx, arc_points.clone(), polygons, &filter)
+                                        .await?,
+                                    cache_hint,
+                                ))
+                            },
+                        )
                         .await?;
 
-                    arc_points.filter(filter).map_err(Into::into)
+                    let mut new_points = arc_points.filter(filter).map_err(Into::<Error>::into)?;
+                    new_points.cache_hint = cache_hint;
+
+                    Ok(new_points)
                 });
 
         Ok(
@@ -323,6 +340,8 @@ mod tests {
     use super::*;
     use std::str::FromStr;
 
+    use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
@@ -346,6 +365,7 @@ mod tests {
             .unwrap()],
             vec![Default::default(); 1],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -394,6 +414,7 @@ mod tests {
             MultiPoint::many(vec![(0.001, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheHint::default(),
         )?;
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
@@ -409,6 +430,7 @@ mod tests {
                 ]]])?],
                 vec![TimeInterval::new_unchecked(0, 1); 1],
                 Default::default(),
+                CacheHint::default(),
             )?)
             .boxed();
 
@@ -444,7 +466,7 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0], points);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&points));
 
         Ok(())
     }
@@ -455,14 +477,19 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheHint::default(),
         )?;
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
-        let polygon_source = MockFeatureCollectionSource::single(
-            MultiPolygonCollection::from_data(vec![], vec![], Default::default())?,
-        )
-        .boxed();
+        let polygon_source =
+            MockFeatureCollectionSource::single(MultiPolygonCollection::from_data(
+                vec![],
+                vec![],
+                Default::default(),
+                CacheHint::default(),
+            )?)
+            .boxed();
 
         let operator = PointInPolygonFilter {
             params: PointInPolygonFilterParams {},
@@ -495,7 +522,7 @@ mod tests {
             .await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0], MultiPointCollection::empty());
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::empty()));
 
         Ok(())
     }
@@ -510,6 +537,7 @@ mod tests {
                 TimeInterval::new(0, 5)?,
             ],
             Default::default(),
+            CacheHint::default(),
         )?;
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
@@ -527,6 +555,7 @@ mod tests {
                 vec![polygon.clone(), polygon],
                 vec![TimeInterval::new(0, 1)?, TimeInterval::new(1, 2)?],
                 Default::default(),
+                CacheHint::default(),
             )?)
             .boxed();
 
@@ -562,7 +591,9 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0], points.filter(vec![true, false, true])?);
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&points.filter(vec![true, false, true])?)
+        );
 
         Ok(())
     }
@@ -574,11 +605,13 @@ mod tests {
             MultiPoint::many(vec![(5.0, 5.1), (15.0, 15.1)]).unwrap(),
             vec![TimeInterval::new(0, 1)?; 2],
             Default::default(),
+            CacheHint::default(),
         )?;
         let points2 = MultiPointCollection::from_data(
             MultiPoint::many(vec![(6.0, 6.1), (16.0, 16.1)]).unwrap(),
             vec![TimeInterval::new(1, 2)?; 2],
             Default::default(),
+            CacheHint::default(),
         )?;
 
         let point_source =
@@ -604,11 +637,13 @@ mod tests {
                 vec![polygon1.clone()],
                 vec![TimeInterval::new(0, 1)?],
                 Default::default(),
+                CacheHint::default(),
             )?,
             MultiPolygonCollection::from_data(
                 vec![polygon1, polygon2],
                 vec![TimeInterval::new(1, 2)?, TimeInterval::new(1, 2)?],
                 Default::default(),
+                CacheHint::default(),
             )?,
         ])
         .boxed();
@@ -650,8 +685,8 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert_eq!(result[0], points1.filter(vec![true, false])?);
-        assert_eq!(result[1], points2);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&points1.filter(vec![true, false])?));
+        assert!(result[1].chunks_equal_ignoring_cache_hint(&points2));
 
         let query = query_processor
             .query(query_rectangle, &ctx_one_chunk)
@@ -665,18 +700,22 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            points1.filter(vec![true, false])?.append(&points2)?
-        );
+        assert!(result[0].chunks_equal_ignoring_cache_hint(
+            &points1.filter(vec![true, false])?.append(&points2)?
+        ));
 
         Ok(())
     }
 
     #[tokio::test]
     async fn empty_points() {
-        let point_collection =
-            MultiPointCollection::from_data(vec![], vec![], Default::default()).unwrap();
+        let point_collection = MultiPointCollection::from_data(
+            vec![],
+            vec![],
+            Default::default(),
+            CacheHint::default(),
+        )
+        .unwrap();
 
         let polygon_collection = MultiPolygonCollection::from_data(
             vec![MultiPolygon::new(vec![vec![vec![
@@ -689,6 +728,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::default()],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -728,13 +768,18 @@ mod tests {
             .await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0], MultiPointCollection::empty());
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::empty()));
     }
 
     #[tokio::test]
     async fn it_checks_sref() {
-        let point_collection =
-            MultiPointCollection::from_data(vec![], vec![], Default::default()).unwrap();
+        let point_collection = MultiPointCollection::from_data(
+            vec![],
+            vec![],
+            Default::default(),
+            CacheHint::default(),
+        )
+        .unwrap();
 
         let polygon_collection = MultiPolygonCollection::from_data(
             vec![MultiPolygon::new(vec![vec![vec![
@@ -747,6 +792,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::default()],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 

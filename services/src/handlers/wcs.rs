@@ -28,7 +28,7 @@ use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::server::{connection_closed, not_implemented_handler};
+use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -441,7 +441,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
 
     let query_ctx = ctx.query_context()?;
 
-    let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
+    let (bytes, cache_hint) = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_multiband_geotiff_bytes(
             p,
             query_rect,
@@ -462,7 +462,10 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         .await)?
     .map_err(error::Error::from)?;
 
-    Ok(HttpResponse::Ok().content_type("image/tiff").body(bytes))
+    Ok(HttpResponse::Ok()
+        .append_header(cache_hint.cache_control_header())
+        .content_type("image/tiff")
+        .body(bytes))
 }
 
 pub struct CoverageResponse {}
@@ -711,6 +714,56 @@ mod tests {
             include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
             test::read_body(res).await.as_ref()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_sets_cache_control_header() {
+        let exe_ctx_tiling_spec = TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        };
+
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
+        let app_ctx = InMemoryContext::new_with_context_spec(
+            exe_ctx_tiling_spec,
+            TestDefault::test_default(),
+        );
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+
+        let params = &[
+            ("service", "WCS"),
+            ("request", "GetCoverage"),
+            ("version", "1.1.1"),
+            ("identifier", &id.to_string()),
+            ("boundingbox", "20,-10,80,50,urn:ogc:def:crs:EPSG::4326"),
+            ("format", "image/tiff"),
+            ("gridbasecrs", "urn:ogc:def:crs:EPSG::4326"),
+            ("gridcs", "urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS"),
+            ("gridtype", "urn:ogc:def:method:WCS:1.1:2dSimpleGrid"),
+            ("gridorigin", "80,-10"),
+            ("gridoffsets", "0.1,0.1"),
+            ("time", "2014-01-01T00:00:00.0Z"),
+            ("nodatavalue", "0.0"),
+        ];
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/wcs/{}?{}",
+                &id.to_string(),
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+        assert_eq!(
+            res.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-cache"
         );
     }
 }

@@ -100,9 +100,42 @@ pub struct OperatorTileCache {
 
 identifier!(QueryId);
 
+struct FindMatchResult {
+    match_found: Option<CacheEntryId>,
+    expired_entries: Vec<CacheEntryId>,
+}
+
 impl OperatorTileCache {
-    pub fn find_match(&self, query: &RasterQueryRectangle) -> Option<(&CacheEntryId, &CacheEntry)> {
-        self.entries.iter().find(|(_id, r)| r.matches(query))
+    /// Find a match for the query in the cache.
+    ///
+    /// This method will also remove expired entries it encounters.
+    ///
+    /// It returns the expired entries, s.t. the caller can remove them from the lru index structure.
+    fn find_match(&mut self, query: &RasterQueryRectangle) -> FindMatchResult {
+        let mut expired_entries = vec![];
+
+        let match_found = self.entries.iter().find(|(id, r)| {
+            let matches = r.matches(query);
+
+            if matches && r.is_expired() {
+                expired_entries.push(**id);
+
+                return false;
+            }
+
+            matches
+        });
+
+        let match_found = match_found.map(|(id, _)| *id);
+
+        for id in &expired_entries {
+            self.entries.remove(id);
+        }
+
+        FindMatchResult {
+            match_found,
+            expired_entries,
+        }
     }
 }
 
@@ -132,6 +165,10 @@ impl CacheEntry {
 
     fn byte_size(&self) -> usize {
         self.tiles.byte_size() + std::mem::size_of::<RasterQueryRectangle>()
+    }
+
+    fn is_expired(&self) -> bool {
+        self.tiles.is_expired()
     }
 }
 
@@ -163,6 +200,23 @@ impl ByteSize for CachedTiles {
             CachedTiles::I64(tiles) => tiles.byte_size(),
             CachedTiles::F32(tiles) => tiles.byte_size(),
             CachedTiles::F64(tiles) => tiles.byte_size(),
+        }
+    }
+}
+
+impl CachedTiles {
+    fn is_expired(&self) -> bool {
+        match self {
+            CachedTiles::U8(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::U16(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::U32(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::U64(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::I8(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::I16(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::I32(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::I64(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::F32(v) => v.iter().any(|t| t.cache_hint.is_expired()),
+            CachedTiles::F64(v) => v.iter().any(|t| t.cache_hint.is_expired()),
         }
     }
 }
@@ -389,15 +443,37 @@ impl TileCache {
     {
         let mut backend = self.backend.write().await;
 
-        let (entry_id, typed_stream) = {
-            let cache = backend.operator_caches.get(&key)?;
+        let (result, expired_entries) = {
+            // lookup the corresponding cache
+            let cache = backend.operator_caches.get_mut(&key)?;
 
-            let (id, entry) = cache.find_match(query)?;
+            let FindMatchResult {
+                match_found,
+                expired_entries,
+            } = cache.find_match(query);
 
-            let typed_stream = entry.tile_stream(query);
+            let result = match_found.map(|entry_id| {
+                // if match was found, get the tile stream
+                (
+                    entry_id,
+                    cache
+                        .entries
+                        .get(&entry_id)
+                        .expect("entry should exist because it was returned from `find_match`")
+                        .tile_stream(query),
+                )
+            });
 
-            (*id, typed_stream)
+            (result, expired_entries)
         };
+
+        // remove expired entries from lru index
+        for entry in expired_entries {
+            backend.lru.pop_entry(&entry);
+        }
+
+        // unpack match if there is one
+        let (entry_id, typed_stream) = result?;
 
         // set as most recently used
         backend.lru.promote(&entry_id);
@@ -455,18 +531,17 @@ impl TileCache {
     {
         let mut backend = self.backend.write().await;
 
-        // check if landing zone has enough space, otherwise abort query
+        // if the tile is already expired we can stop caching the whole query
+        if tile.cache_hint.is_expired() {
+            Self::remove_query_from_landing_zone(&mut backend, key, query_id);
+            return Err(super::error::CacheError::TileExpiredBeforeInsertion);
+        }
+
+        // check if landing zone has enough space, otherwise abort caching the query
         if backend.landing_zone_byte_size_used + std::mem::size_of::<RasterTile2D<T>>()
             > backend.landing_zone_byte_size_total
         {
-            let cache = backend.operator_caches.entry(key).or_default();
-
-            let entry = cache.landing_zone.remove(&query_id);
-
-            if let Some(entry) = entry {
-                backend.landing_zone_byte_size_used -= entry.byte_size();
-            }
-
+            Self::remove_query_from_landing_zone(&mut backend, key, query_id);
             return Err(super::error::CacheError::NotEnoughSpaceInLandingZone);
         }
 
@@ -559,12 +634,26 @@ impl TileCache {
         }
         Ok(())
     }
+
+    fn remove_query_from_landing_zone(
+        backend: &mut TileCacheBackend,
+        key: CanonicOperatorName,
+        query_id: QueryId,
+    ) {
+        let cache = backend.operator_caches.entry(key).or_default();
+
+        let entry = cache.landing_zone.remove(&query_id);
+
+        if let Some(entry) = entry {
+            backend.landing_zone_byte_size_used -= entry.byte_size();
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{CacheHint, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{Grid, RasterProperties},
     };
     use serde_json::json;
@@ -597,6 +686,7 @@ mod tests {
                 .unwrap()
                 .into(),
             properties: RasterProperties::default(),
+            cache_hint: CacheHint::max_duration(),
         }
     }
 
@@ -676,14 +766,61 @@ mod tests {
 
     #[test]
     fn cache_byte_size() {
-        assert_eq!(create_tile().byte_size(), 260);
+        assert_eq!(create_tile().byte_size(), 284);
         assert_eq!(
             CachedTiles::U8(Arc::new(vec![create_tile()])).byte_size(),
-            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 260
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 284
         );
         assert_eq!(
             CachedTiles::U8(Arc::new(vec![create_tile(), create_tile()])).byte_size(),
-            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 2 * 260
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 2 * 284
         );
+    }
+
+    #[tokio::test]
+    async fn it_checks_ttl() {
+        let mut tile_cache = TileCache {
+            backend: RwLock::new(TileCacheBackend {
+                operator_caches: Default::default(),
+                lru: LruCache::unbounded(),
+                cache_byte_size_total: usize::MAX,
+                cache_byte_size_used: 0,
+                landing_zone_byte_size_total: usize::MAX,
+                landing_zone_byte_size_used: 0,
+            }),
+        };
+
+        process_query(&mut tile_cache, op(1)).await;
+
+        // access works because no ttl is set
+        tile_cache
+            .query_cache::<u8>(op(1), &query_rect())
+            .await
+            .unwrap();
+
+        // manually expire entry
+        {
+            let mut backend = tile_cache.backend.write().await;
+            let cache = backend.operator_caches.iter_mut().next().unwrap();
+
+            let tiles = &mut cache.1.entries.iter_mut().next().unwrap().1.tiles;
+            match tiles {
+                CachedTiles::U8(tiles) => {
+                    let mut expired_tiles = (**tiles).clone();
+                    expired_tiles[0].cache_hint = CacheHint::with_created_and_expires(
+                        DateTime::new_utc(0, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(0, 1, 1, 0, 0, 1).into(),
+                    );
+                    *tiles = Arc::new(expired_tiles);
+                }
+                _ => panic!("wrong tile type"),
+            }
+        }
+
+        // access fails because ttl is expired
+        assert!(tile_cache
+            .query_cache::<u8>(op(1), &query_rect())
+            .await
+            .is_none());
     }
 }

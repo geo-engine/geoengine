@@ -4,6 +4,7 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -82,6 +83,8 @@ where
 
         let collection = covered_pixels.collection_ref();
 
+        let mut cache_hint = CacheHint::max_duration();
+
         for time_span in FeatureTimeSpanIter::new(collection.time_intervals()) {
             let query = VectorQueryRectangle {
                 spatial_bounds: query.spatial_bounds,
@@ -150,6 +153,8 @@ where
                         break;
                     }
                 }
+
+                cache_hint.merge_with(&raster.cache_hint);
             }
 
             temporal_aggregator.add_feature_data(
@@ -162,9 +167,13 @@ where
             }
         }
 
-        collection
+        let mut new_collection = collection
             .add_column(new_column_name, temporal_aggregator.into_data())
-            .map_err(Into::into)
+            .map_err(Into::<crate::error::Error>::into)?;
+
+        new_collection.cache_hint = cache_hint;
+
+        Ok(new_collection)
     }
 
     fn create_aggregator<P: Pixel>(
@@ -253,6 +262,7 @@ mod tests {
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::collections::{MultiPointCollection, MultiPolygonCollection};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::MultiPolygon;
     use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -276,6 +286,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         let raster_source = MockRasterSource {
@@ -314,6 +325,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::default(); 6],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -355,6 +367,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -366,6 +379,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         let raster_source = MockRasterSource {
@@ -404,6 +418,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::default(); 6],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -445,6 +460,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -456,6 +472,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -467,6 +484,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -478,6 +496,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         let raster_source = MockRasterSource {
@@ -517,6 +536,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::default(); 2],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -562,6 +582,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -573,6 +594,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_a_2 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -584,6 +606,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![160, 150, 140, 130, 120, 110])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -595,6 +618,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -606,6 +630,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_2 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -617,6 +642,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![110, 120, 130, 140, 150, 160])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         let raster_source = MockRasterSource {
@@ -660,6 +686,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::default(); 1],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
