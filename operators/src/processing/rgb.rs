@@ -360,6 +360,9 @@ fn compute_tile(
         red.tile_position,
         red.global_geo_transform,
         out_grid,
+        red.cache_hint
+            .merged(&green.cache_hint)
+            .merged(&blue.cache_hint),
     )
 }
 
@@ -398,7 +401,8 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::{
-        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        CacheHint, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        TimeInterval,
     };
     use geoengine_datatypes::raster::{
         Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
@@ -595,6 +599,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
             },
             real_raster,
+            CacheHint::no_cache(),
         );
 
         MockRasterSource {
