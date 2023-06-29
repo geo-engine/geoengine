@@ -92,6 +92,12 @@ impl RasterOperator for TemporalRasterAggregation {
             &self.params
         );
 
+        let mut out_result_descriptor = source.result_descriptor().clone();
+
+        if let Some(output_type) = self.params.output_type {
+            out_result_descriptor.data_type = output_type;
+        };
+
         let initialized_operator = InitializedTemporalRasterAggregation {
             name,
             aggregation_type: self.params.aggregation,
@@ -100,7 +106,7 @@ impl RasterOperator for TemporalRasterAggregation {
                 .params
                 .window_reference
                 .unwrap_or(TimeInstance::EPOCH_START),
-            result_descriptor: source.result_descriptor().clone(),
+            result_descriptor: out_result_descriptor,
             source,
             tiling_specification: context.tiling_specification(),
             output_type: self.params.output_type,
