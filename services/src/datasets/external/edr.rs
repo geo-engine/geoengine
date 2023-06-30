@@ -680,7 +680,10 @@ impl EdrCollectionMetaData {
                 no_data_value: None,
                 properties_mapping: None,
                 gdal_open_options: None,
-                gdal_config_options: None,
+                gdal_config_options: Some(vec![(
+                    "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
+                    "YES".to_string(),
+                )]),
                 allow_alphaband_as_mask: false,
                 retry: None,
             }),
@@ -1076,4 +1079,110 @@ pub enum EdrProviderError {
     NoSupportedOutputFormat,
     NoVectorSpecConfigured,
     NoRasterSpecConfigured,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, io::BufReader};
+
+    use futures_util::StreamExt;
+    use geoengine_datatypes::{
+        operations::image::Colorizer,
+        primitives::{DateTime, SpatialResolution},
+        test_data,
+        util::test::TestDefault,
+    };
+    use geoengine_operators::{
+        call_on_typed_operator,
+        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, WorkflowOperatorPath},
+        util::raster_stream_to_png::raster_stream_to_png_bytes,
+    };
+    use tracing_subscriber::layer;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn query_data() -> Result<()> {
+        let layer_id = "collections/GFS_between-depth/liquid-volumetric-soil-moisture-non-frozen";
+        let provider_id = "dc2ddc34-b0d9-4ee0-bf3e-414f01a805ad";
+
+        let mut exe: MockExecutionContext = MockExecutionContext::test_default();
+
+        let def: Box<dyn DataProviderDefinition> = serde_json::from_reader(BufReader::new(
+            File::open(test_data!("provider_defs/open_weather.json"))?,
+        ))?;
+
+        let provider = def.initialize().await.unwrap();
+
+        let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
+            provider
+                .meta_data(
+                    &ExternalDataId {
+                        provider_id: DataProviderId::from_str(provider_id)?,
+                        layer_id: LayerId(layer_id.to_owned()),
+                    }
+                    .into(),
+                )
+                .await?;
+
+        exe.add_meta_data(
+            ExternalDataId {
+                provider_id: DataProviderId::from_str(provider_id)?,
+                layer_id: LayerId(layer_id.to_owned()),
+            }
+            .into(),
+            meta,
+        );
+
+        let op = GdalSource {
+            params: GdalSourceParameters {
+                data: ExternalDataId {
+                    provider_id: DataProviderId::from_str(provider_id)?,
+                    layer_id: LayerId(layer_id.to_owned()),
+                }
+                .into(),
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe)
+        .await
+        .unwrap();
+
+        println!("{:?}", op.result_descriptor());
+
+        let processor = op.query_processor()?.get_u8().unwrap();
+
+        let spatial_bounds = SpatialPartition2D::new((0., 90.).into(), (180., 0.).into()).unwrap();
+
+        let spatial_resolution = SpatialResolution::new_unchecked(1., 1.);
+        let query = RasterQueryRectangle {
+            spatial_bounds,
+            time_interval: TimeInterval::new_unchecked(1687867200000, 1688806800000),
+            spatial_resolution,
+        };
+
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+
+        // TODO: check actual data
+        //assert_eq!(result.len(), 4);
+
+        let out_file_name = format!("{}_2.png", query.time_interval.start().as_datetime_string());
+
+        let image_bytes = raster_stream_to_png_bytes(
+            processor,
+            query,
+            ctx,
+            180,
+            90,
+            None,
+            None,
+            Box::pin(futures::future::pending()),
+        )
+        .await
+        .unwrap();
+
+        geoengine_datatypes::util::test::save_test_bytes(&image_bytes, &out_file_name);
+
+        Ok(())
+    }
 }
