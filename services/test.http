@@ -298,3 +298,21 @@ curl 'http://localhost:3030/workflow' -X POST -H 'User-Agent: Mozilla/5.0 (Windo
 
 curl 'http://localhost:4200/api/wfs/27ea8d72-ba91-523b-88f6-92f2a76bb58b?service=WFS&version=2.0.0&request=GetFeature&outputFormat=application/json&typeNames=27ea8d72-ba91-523b-88f6-92f2a76bb58b&bbox=-20037508.342789244,-9509989.31112849,20037508.342789244,17571955.5584226&time=2014-04-01T12:00:00.000Z/2014-04-01T12:00:00.000Z&srsName=EPSG:3857&queryResolution=39135.75848201024' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:106.0) Gecko/20100101 Firefox/106.0' -H 'Accept: application/json, text/plain, */*' -H 'Accept-Language: de,en-US;q=0.7,en;q=0.3' -H 'Accept-Encoding: gzip, deflate, br' 
 -H 'Authorization: Bearer {{anonymousSession.response.body.$.id}}' -H 'Connection: keep-alive' -H 'Referer: http://localhost:4200/' -H 'Cookie: default-theme=ngax' -H 'Sec-Fetch-Dest: empty' -H 'Sec-Fetch-Mode: cors' -H 'Sec-Fetch-Site: same-origin' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache'
+
+
+###
+
+
+
+# @name lastTask
+PUT http://localhost:3030/api/ebv/overviews/67%2Fpublic%2Fvaldez_comcom_id67_20230626_v1.nc
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+Content-Type: application/json
+Accept: application/json
+
+###
+
+GET http://localhost:3030/api/tasks/{{lastTask.response.body.$.task_id}}/status
+Authorization: Bearer 8aca8875-425a-4ef1-8ee6-cdfc62dd7525
+
+###

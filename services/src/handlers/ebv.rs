@@ -432,10 +432,13 @@ impl<C: Context> Task<C::TaskContext> for EvbOverviewTask<C> {
                         skip: vec![file],
                         error: vec![],
                     }),
-                    Err(e) => Err(NetCdfCf4DProviderError::CannotCreateOverview {
-                        dataset: file,
-                        source: Box::new(e),
-                    }),
+                    Err(e) => {
+                        debug!("Error during overview creation: {:?}", &e);
+                        Err(NetCdfCf4DProviderError::CannotCreateOverview {
+                            dataset: file,
+                            source: Box::new(e),
+                        })
+                    }
                 }
             })
             .await;
