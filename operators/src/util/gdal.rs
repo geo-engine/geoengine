@@ -246,6 +246,29 @@ pub fn raster_descriptor_from_dataset(
     })
 }
 
+// a version of `raster_descriptor_from_dataset` that does not read the sref from the dataset but takes it as an argument
+pub fn raster_descriptor_from_dataset_and_sref(
+    dataset: &Dataset,
+    band: isize,
+    spatial_ref: SpatialReference,
+) -> Result<RasterResultDescriptor> {
+    let rasterband = &dataset.rasterband(band)?;
+
+    let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
+        .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
+
+    let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+
+    Ok(RasterResultDescriptor {
+        data_type,
+        spatial_reference: spatial_ref.into(),
+        measurement: measurement_from_rasterband(dataset, band)?,
+        time: None,
+        bbox: None,
+        resolution: Some(geo_transfrom.spatial_resolution()),
+    })
+}
+
 // TODO: use https://github.com/georust/gdal/pull/271 when merged and released
 fn measurement_from_rasterband(dataset: &Dataset, band: isize) -> Result<Measurement> {
     unsafe fn _string(raw_ptr: *const std::os::raw::c_char) -> String {
