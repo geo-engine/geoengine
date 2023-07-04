@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::util::canonicalize_subpath;
 use rayon::ThreadPool;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -21,7 +22,7 @@ mod simple_context;
 
 use crate::datasets::storage::DatasetDb;
 
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId, NamedData};
 
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
@@ -271,6 +272,36 @@ where
         file.flush().await?;
 
         Ok(())
+    }
+
+    async fn resolve_named_data(
+        &self,
+        data: &NamedData,
+    ) -> Result<DataId, geoengine_operators::error::Error> {
+        if let Some(provider) = &data.provider {
+            // TODO: resolve provider name to provider id
+            let provider_id = DataProviderId::from_str(provider)?;
+
+            let data_id = ExternalDataId {
+                provider_id,
+                layer_id: LayerId(data.name.clone()),
+            };
+
+            return Ok(data_id.into());
+        }
+
+        let dataset_id = self
+            .db
+            .resolve_dataset_name_to_id(&data.into())
+            .await
+            .map_err(
+                |source| geoengine_operators::error::Error::CannotResolveDatasetName {
+                    name: data.clone(),
+                    source: Box::new(source),
+                },
+            )?;
+
+        Ok(dataset_id.into())
     }
 }
 

@@ -1,11 +1,11 @@
 use crate::api::model::datatypes::{
     AxisLabels, BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer,
-    ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTime,
+    ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DatasetName, DateTime,
     DateTimeParseFormat, DefaultColors, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId,
     LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon,
-    NoGeometry, OverUnderColors, Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType,
-    RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
-    SpatialPartition2D, SpatialReference, SpatialReferenceAuthority, SpatialResolution,
+    NamedData, NoGeometry, OverUnderColors, Palette, PlotOutputFormat, PlotQueryRectangle,
+    RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
+    RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority, SpatialResolution,
     TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
@@ -18,6 +18,7 @@ use crate::api::model::operators::{
     TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
     VectorResultDescriptor,
 };
+use crate::api::model::responses::datasets::DatasetNameResponse;
 use crate::api::model::responses::{
     BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
     UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
@@ -34,6 +35,7 @@ use crate::handlers;
 use crate::handlers::plots::WrappedPlotOutput;
 use crate::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
+use crate::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
@@ -60,7 +62,7 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
-use super::handlers::permissions::PermissionRequest;
+use super::handlers::permissions::{PermissionRequest, Resource};
 use super::handlers::users::AddRole;
 use super::permissions::{Permission, ResourceId, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
@@ -127,6 +129,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::projects::update_project_handler,
         handlers::projects::delete_project_handler,
         pro::handlers::projects::load_project_version_handler,
+        handlers::upload::list_upload_files_handler,
+        handlers::upload::list_upload_file_layers_handler,
         handlers::upload::upload_handler,
         pro::handlers::permissions::add_permission_handler,
         pro::handlers::permissions::remove_permission_handler
@@ -136,6 +140,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             UnsupportedMediaTypeForJsonResponse,
             PayloadTooLargeResponse,
             IdResponse,
+            DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
             BadRequestQueryResponse
@@ -153,6 +158,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             DataId,
             DataProviderId,
             DatasetId,
+            DatasetName,
+            NamedData,
             ExternalDataId,
             LayerId,
             ProjectId,
@@ -275,6 +282,9 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             FeatureType,
             Coordinates,
 
+            UploadFilesResponse,
+            UploadFileLayersResponse,
+
             CreateDataset,
             AutoCreateDataset,
             OrderBy,
@@ -340,6 +350,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             RasterStreamWebsocketResultType,
 
             PermissionRequest,
+            Resource,
             ResourceId,
             Permission,
             AddRole,
@@ -385,7 +396,7 @@ impl Modify for ApiDocInfo {
             utoipa::openapi::LicenseBuilder::new()
                 .name("Apache 2.0 (pro features excluded)")
                 .url(Some(
-                    "https://github.com/geo-engine/geoengine/blob/master/LICENSE",
+                    "https://github.com/geo-engine/geoengine/blob/main/LICENSE",
                 ))
                 .build(),
         );

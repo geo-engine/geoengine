@@ -1,8 +1,9 @@
 use crate::{
     engine::{
-        ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorName,
-        QueryContext, QueryProcessor, SingleVectorSource, TypedVectorQueryProcessor,
-        VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+        CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
+        Operator, OperatorName, QueryContext, QueryProcessor, SingleVectorSource,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        WorkflowOperatorPath,
     },
     util::Result,
 };
@@ -50,6 +51,8 @@ impl VectorOperator for LineSimplification {
             return Err(LineSimplificationError::InvalidEpsilon.into());
         }
 
+        let name = CanonicOperatorName::from(&self);
+
         let sources = self.sources.initialize_sources(path, context).await?;
         let source = sources.vector;
 
@@ -60,6 +63,7 @@ impl VectorOperator for LineSimplification {
         }
 
         let initialized_operator = InitializedLineSimplification {
+            name,
             result_descriptor: source.result_descriptor().clone(),
             source,
             algorithm: self.params.algorithm,
@@ -89,6 +93,7 @@ pub enum LineSimplificationAlgorithm {
 }
 
 pub struct InitializedLineSimplification {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedVectorOperator>,
     algorithm: LineSimplificationAlgorithm,
@@ -152,6 +157,10 @@ impl InitializedVectorOperator for InitializedLineSimplification {
             )),
         }
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 struct LineSimplificationProcessor<P, G, A>
@@ -204,10 +213,10 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiPolygonRef<'c>, MultiPolygon> for 
 
 impl<'c> LineSimplificationAlgorithmImpl<MultiLineStringRef<'c>, MultiLineString> for Visvalingam {
     fn simplify(geometry: MultiLineStringRef<'c>, epsilon: f64) -> MultiLineString {
-        use geo::SimplifyVWPreserve;
+        use geo::SimplifyVwPreserve;
 
         let geo_geometry = geo::MultiLineString::<f64>::from(&geometry);
-        let geo_geometry = geo_geometry.simplifyvw_preserve(&epsilon);
+        let geo_geometry = geo_geometry.simplify_vw_preserve(&epsilon);
         geo_geometry.into()
     }
 
@@ -220,10 +229,10 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiLineStringRef<'c>, MultiLineString
 
 impl<'c> LineSimplificationAlgorithmImpl<MultiPolygonRef<'c>, MultiPolygon> for Visvalingam {
     fn simplify(geometry: MultiPolygonRef<'c>, epsilon: f64) -> MultiPolygon {
-        use geo::SimplifyVWPreserve;
+        use geo::SimplifyVwPreserve;
 
         let geo_geometry = geo::MultiPolygon::<f64>::from(&geometry);
-        let geo_geometry = geo_geometry.simplifyvw_preserve(&epsilon);
+        let geo_geometry = geo_geometry.simplify_vw_preserve(&epsilon);
         geo_geometry.into()
     }
 
@@ -324,11 +333,13 @@ mod tests {
     };
     use geoengine_datatypes::{
         collections::{
-            FeatureCollectionInfos, GeometryCollection, MultiLineStringCollection,
-            MultiPointCollection, MultiPolygonCollection,
+            ChunksEqualIgnoringCacheHint, FeatureCollectionInfos, GeometryCollection,
+            MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection,
         },
-        dataset::{DataId, DatasetId},
-        primitives::{FeatureData, MultiLineString, MultiPoint, TimeInterval},
+        dataset::{DataId, DatasetId, NamedData},
+        primitives::{
+            FeatureData, MultiLineString, MultiPoint, TimeInterval, {CacheHint, CacheTtlSeconds},
+        },
         spatial_reference::SpatialReference,
         test_data,
         util::{test::TestDefault, Identifier},
@@ -455,6 +466,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -514,18 +526,21 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(collections[0], expected);
+        assert!(collections[0].chunks_equal_ignoring_cache_hint(&expected));
     }
 
     #[tokio::test]
     async fn test_polygon_simplification() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("polygons");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/germany_polygon.gpkg").into(),
@@ -549,6 +564,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPolygon,
@@ -568,7 +584,7 @@ mod tests {
             },
             sources: OgrSource {
                 params: OgrSourceParameters {
-                    data: id,
+                    data: name,
                     attribute_projection: None,
                     attribute_filters: None,
                 },

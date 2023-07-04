@@ -2,5 +2,6 @@
   "type": "NetCdfCfDataProviderDefinition",
   "name": "terranova",
   "path": "test_data/netcdf4d/",
-  "overviews": "test_data/netcdf4d/overviews/"
+  "overviews": "test_data/netcdf4d/overviews/",
+  "cacheTtl": 0
 }

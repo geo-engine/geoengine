@@ -3,7 +3,7 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error::ProviderDoesNotSupportBrowsing;
 use crate::error::{Error, Result};
@@ -22,6 +22,7 @@ use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
 use futures::future::join_all;
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
@@ -57,6 +58,8 @@ pub struct GfbioCollectionsDataProviderDefinition {
     collection_api_auth_token: String,
     abcd_db_config: DatabaseConnectionConfig,
     pangaea_url: Url,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[typetag::serde]
@@ -69,6 +72,7 @@ impl DataProviderDefinition for GfbioCollectionsDataProviderDefinition {
                 self.collection_api_auth_token,
                 self.abcd_db_config,
                 self.pangaea_url,
+                self.cache_ttl,
             )
             .await?,
         ))
@@ -94,6 +98,7 @@ pub struct GfbioCollectionsDataProvider {
     abcd_db_config: DatabaseConnectionConfig,
     pangaea_url: Url,
     pool: Pool<PostgresConnectionManager<NoTls>>,
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Debug, Deserialize)]
@@ -263,6 +268,7 @@ impl GfbioCollectionsDataProvider {
         auth_token: String,
         db_config: DatabaseConnectionConfig,
         pangaea_url: Url,
+        cache_ttl: CacheTtlSeconds,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -273,6 +279,7 @@ impl GfbioCollectionsDataProvider {
             abcd_db_config: db_config,
             pangaea_url,
             pool,
+            cache_ttl,
         })
     }
 
@@ -483,6 +490,7 @@ impl GfbioCollectionsDataProvider {
                     abcd_unit_id,
                     &column_name_to_hash,
                 )?),
+                cache_ttl: self.cache_ttl,
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -503,7 +511,7 @@ impl GfbioCollectionsDataProvider {
                 time: None,
                 bbox: None,
             },
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         }))
     }
 
@@ -534,11 +542,12 @@ impl GfbioCollectionsDataProvider {
                 source: Box::new(e),
             })?;
 
-        let smd = pmd.get_ogr_metadata(&client).await.map_err(|e| {
-            geoengine_operators::error::Error::LoadingInfo {
+        let smd = pmd
+            .get_ogr_metadata(&client, self.cache_ttl)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
-            }
-        })?;
+            })?;
 
         Ok(Box::new(smd))
     }
@@ -632,11 +641,10 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
                         operator: TypedOperator::Vector(
                             OgrSource {
                                 params: OgrSourceParameters {
-                                    data: DataId::External(ExternalDataId {
-                                        provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
-                                        layer_id: id.clone(),
-                                    })
-                                    .into(),
+                                    data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                        GFBIO_COLLECTIONS_PROVIDER_ID.to_string(),
+                                        id.to_string(),
+                                    ),
                                     attribute_filters: None,
                                     attribute_projection: None,
                                 },
@@ -800,7 +808,9 @@ mod tests {
     use rand::RngCore;
     use tokio_postgres::Config;
 
-    use crate::{datasets::listing::Provenance, util::config};
+    use crate::{
+        api::model::datatypes::ExternalDataId, datasets::listing::Provenance, util::config,
+    };
 
     use super::*;
 
@@ -925,6 +935,7 @@ mod tests {
                     password: db_config.password.clone(),
                 },
                 "https://doi.pangaea.de".parse().unwrap(),
+                Default::default(),
             )
             .await
             .unwrap();
@@ -1024,6 +1035,7 @@ mod tests {
                 gfbio_collections_server_token.to_string(),
                 provider_db_config,
                 "https://doi.pangaea.de".parse().unwrap(),
+                Default::default(),
             )
             .await
             .unwrap();
@@ -1170,6 +1182,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: Some("surrogate_key = 17 AND adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71 = 'ZFMK Sc0602'".to_string()),
+                cache_ttl: CacheTtlSeconds::default(),
             };
 
             if loading_info != expected {
@@ -1209,6 +1222,7 @@ mod tests {
                 gfbio_collections_server_token.to_string(),
                 provider_db_config,
                 "https://doi.pangaea.de".parse().unwrap(),
+                Default::default(),
             )
             .await
             .unwrap();

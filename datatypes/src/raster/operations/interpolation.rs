@@ -33,6 +33,7 @@ where
                 input.time,
                 *info_out,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
+                input.cache_hint.clone_with_current_datetime(),
             ));
         }
 
@@ -61,6 +62,7 @@ where
             info_out.global_tile_position,
             info_out.global_geo_transform,
             out_data,
+            input.cache_hint.clone_with_current_datetime(),
         );
 
         Ok(out_tile)
@@ -109,6 +111,7 @@ where
                 input.time,
                 *info_out,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
+                input.cache_hint.clone_with_current_datetime(),
             ));
         }
 
@@ -170,6 +173,7 @@ where
             info_out.global_tile_position,
             info_out.global_geo_transform,
             out_data,
+            input.cache_hint.clone_with_current_datetime(),
         );
 
         Ok(out_tile)
@@ -181,8 +185,9 @@ mod tests {
     use rayon::ThreadPoolBuilder;
 
     use super::*;
-    use crate::raster::{
-        GeoTransform, Grid2D, GridOrEmpty, MaskedGrid, RasterTile2D, TileInformation,
+    use crate::{
+        primitives::CacheHint,
+        raster::{GeoTransform, Grid2D, GridOrEmpty, MaskedGrid, RasterTile2D, TileInformation},
     };
 
     #[test]
@@ -197,6 +202,7 @@ mod tests {
             GridOrEmpty::Grid(MaskedGrid::from(
                 Grid2D::new([3, 3].into(), vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap(),
             )),
+            CacheHint::default(),
         );
 
         let output_info = TileInformation {
@@ -269,6 +275,7 @@ mod tests {
             GridOrEmpty::Grid(MaskedGrid::from(
                 Grid2D::new([3, 3].into(), vec![1., 2., 3., 4., 5., 6., 7., 8., 9.]).unwrap(),
             )),
+            CacheHint::default(),
         );
 
         let output_info = TileInformation {

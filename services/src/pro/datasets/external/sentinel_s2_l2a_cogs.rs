@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId, NamedData};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::{self, Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -16,6 +16,7 @@ use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, Measurement, RasterQueryRectangle,
     SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,
@@ -56,6 +57,8 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     stac_api_retries: StacApiRetries,
     #[serde(default)]
     gdal_retries: GdalRetries,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -103,6 +106,7 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
             &self.zones,
             self.stac_api_retries,
             self.gdal_retries,
+            self.cache_ttl,
         )))
     }
 
@@ -150,6 +154,8 @@ pub struct SentinelS2L2aCogsDataProvider {
 
     stac_api_retries: StacApiRetries,
     gdal_retries: GdalRetries,
+
+    cache_ttl: CacheTtlSeconds,
 }
 
 impl SentinelS2L2aCogsDataProvider {
@@ -160,6 +166,7 @@ impl SentinelS2L2aCogsDataProvider {
         zones: &[Zone],
         stac_api_retries: StacApiRetries,
         gdal_retries: GdalRetries,
+        cache_ttl: CacheTtlSeconds,
     ) -> Self {
         Self {
             id,
@@ -167,6 +174,7 @@ impl SentinelS2L2aCogsDataProvider {
             datasets: Self::create_datasets(&id, bands, zones),
             stac_api_retries,
             gdal_retries,
+            cache_ttl,
         }
     }
 
@@ -190,11 +198,11 @@ impl SentinelS2L2aCogsDataProvider {
                         workflow: Workflow {
                             operator: source_operator_from_dataset(
                                 GdalSource::TYPE_NAME,
-                                &DataId::External(ExternalDataId {
-                                    provider_id: *id,
-                                    layer_id: layer_id.clone(),
-                                })
-                                .into(),
+                                &NamedData {
+                                    namespace: None,
+                                    provider: Some(id.to_string()),
+                                    name: layer_id.to_string(),
+                                },
                             )
                             .expect("Gdal source is a valid operator."),
                         },
@@ -311,10 +319,11 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: DataId::External(ExternalDataId {
-                                provider_id: self.id,
-                                layer_id: id.clone(),
-                            })
+                            data: NamedData {
+                                namespace: None,
+                                provider: Some(self.id.to_string()),
+                                name: id.to_string(),
+                            }
                             .into(),
                         },
                     }
@@ -335,6 +344,7 @@ pub struct SentinelS2L2aCogsMetaData {
     band: Band,
     stac_api_retries: StacApiRetries,
     gdal_retries: GdalRetries,
+    cache_ttl: CacheTtlSeconds,
 }
 
 impl SentinelS2L2aCogsMetaData {
@@ -409,7 +419,7 @@ impl SentinelS2L2aCogsMetaData {
                             band_name: self.band.name.clone(),
                         })?;
 
-                parts.push(self.create_loading_info_part(time_interval, asset)?);
+                parts.push(self.create_loading_info_part(time_interval, asset, self.cache_ttl)?);
             }
         }
         debug!("number of generated loading infos: {}", parts.len());
@@ -454,6 +464,7 @@ impl SentinelS2L2aCogsMetaData {
         &self,
         time_interval: TimeInterval,
         asset: &StacAsset,
+        cache_ttl: CacheTtlSeconds,
     ) -> Result<GdalLoadingInfoTemporalSlice> {
         let [stac_shape_y, stac_shape_x] = asset.proj_shape.ok_or(error::Error::StacInvalidBbox)?;
 
@@ -494,6 +505,7 @@ impl SentinelS2L2aCogsMetaData {
                     max_retries: self.gdal_retries.number_of_retries,
                 }),
             }),
+            cache_ttl,
         })
     }
 
@@ -693,6 +705,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             band: dataset.band.clone(),
             stac_api_retries: self.stac_api_retries,
             gdal_retries: self.gdal_retries,
+            cache_ttl: self.cache_ttl,
         }))
     }
 }
@@ -738,7 +751,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use std::{fs::File, io::BufReader, str::FromStr};
 
-    use crate::test_data;
+    use crate::{api::model::datatypes::ExternalDataId, test_data};
     use futures::StreamExt;
     use geoengine_datatypes::{
         dataset::DatasetId,
@@ -823,6 +836,7 @@ mod tests {
                 allow_alphaband_as_mask: true,
                 retry: Some(GdalRetryOptions { max_retries: 10 }),
             }),
+            cache_ttl: CacheTtlSeconds::default(),
         }];
 
         if let GdalLoadingInfoTemporalSliceIterator::Static { parts } = loading_info.info {
@@ -863,23 +877,24 @@ mod tests {
                 )
                 .await?;
 
+        let name = NamedData {
+            namespace: None,
+            provider: Some("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".into()),
+            name: "UTM32N-B01".into(),
+        };
+
         exe.add_meta_data(
             ExternalDataId {
                 provider_id: DataProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
                 layer_id: LayerId("UTM32N:B01".to_owned()),
             }
             .into(),
+            name.clone().into(),
             meta,
         );
 
         let op = GdalSource {
-            params: GdalSourceParameters {
-                data: ExternalDataId {
-                    provider_id: DataProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
-                    layer_id: LayerId("UTM32N:B01".to_owned()),
-                }
-                .into(),
-            },
+            params: GdalSourceParameters { data: name.into() },
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe)
@@ -1144,6 +1159,7 @@ mod tests {
                 gdal_retries: GdalRetries {
                     number_of_retries: 999,
                 },
+                cache_ttl: Default::default(),
             });
 
         let provider = provider_def.initialize().await.unwrap();
@@ -1205,6 +1221,7 @@ mod tests {
                     allow_alphaband_as_mask: true,
                     retry: Some(GdalRetryOptions { max_retries: 999 }),
                 }),
+                cache_ttl: CacheTtlSeconds::default(),
             }]
         );
 
@@ -1226,8 +1243,14 @@ mod tests {
 
         let mut execution_context = MockExecutionContext::test_default();
         let id: geoengine_datatypes::dataset::DataId = DatasetId::new().into();
+        let name = NamedData {
+            namespace: None,
+            provider: None,
+            name: "UTM36S-B04".into(),
+        };
         execution_context.add_meta_data(
             id.clone(),
+            name.clone().into(),
             Box::new(GdalMetaDataStatic {
                 time: None,
                 result_descriptor: RasterResultDescriptor {
@@ -1239,11 +1262,12 @@ mod tests {
                     resolution: None,
                 },
                 params,
+                cache_ttl: CacheTtlSeconds::default(),
             }),
         );
 
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { data: id },
+            params: GdalSourceParameters { data: name.into() },
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)

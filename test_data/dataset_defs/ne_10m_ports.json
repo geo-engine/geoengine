@@ -1,7 +1,7 @@
 {
   "properties": {
-    "id": "a9623a5b-b6c5-404b-bc5a-313ff72e4e75",
-    "name": "Natural Earth 10m Ports",
+    "name": "ne_10m_ports",
+    "displayName": "Natural Earth 10m Ports",
     "description": "Ports from Natural Earth",
     "sourceOperator": "OgrSource",
     "provenance": [
@@ -30,7 +30,8 @@
       },
       "forceOgrTimeFilter": false,
       "onError": "ignore",
-      "provenance": null
+      "provenance": null,
+      "cacheTtl": 0
     },
     "resultDescriptor": {
       "dataType": "MultiPoint",

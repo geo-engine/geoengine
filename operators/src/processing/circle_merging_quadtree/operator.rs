@@ -6,6 +6,7 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint,
     MultiPointAccess, VectorQueryRectangle,
@@ -15,9 +16,9 @@ use snafu::ensure;
 
 use crate::adapters::FeatureCollectionStreamExt;
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
-    SingleVectorSource, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    CanonicOperatorName, ExecutionContext, InitializedVectorOperator, Operator, QueryContext,
+    QueryProcessor, SingleVectorSource, TypedVectorQueryProcessor, VectorColumnInfo,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::engine::{InitializedSources, OperatorName, WorkflowOperatorPath};
 use crate::error::{self, Error};
@@ -58,6 +59,7 @@ impl OperatorName for VisualPointClustering {
 
 #[typetag::serde]
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl VectorOperator for VisualPointClustering {
     async fn _initialize(
         mut self: Box<Self>,
@@ -83,6 +85,8 @@ impl VectorOperator for VisualPointClustering {
             self.params.count_column != self.params.radius_column,
             error::DuplicateOutputColumns
         );
+
+        let name = CanonicOperatorName::from(&self);
 
         let radius_model = LogScaledRadius::new(self.params.min_radius_px, self.params.delta_px)?;
 
@@ -167,6 +171,7 @@ impl VectorOperator for VisualPointClustering {
         let in_desc = vector_source.result_descriptor();
 
         Ok(InitializedVisualPointClustering {
+            name,
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: in_desc.spatial_reference,
@@ -187,6 +192,7 @@ impl VectorOperator for VisualPointClustering {
 }
 
 pub struct InitializedVisualPointClustering {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     radius_model: LogScaledRadius,
@@ -229,6 +235,10 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 pub struct VisualPointClusteringProcessor {
@@ -265,6 +275,7 @@ impl VisualPointClusteringProcessor {
         count_column: &str,
         resolution: f64,
         columns: &HashMap<String, FeatureDataType>,
+        cache_hint: CacheHint,
     ) -> Result<MultiPointCollection> {
         let mut builder = MultiPointCollection::builder();
 
@@ -311,6 +322,8 @@ impl VisualPointClusteringProcessor {
             builder.finish_row();
         }
 
+        builder.cache_hint(cache_hint);
+
         builder.build().map_err(Into::into)
     }
 
@@ -343,6 +356,7 @@ impl VisualPointClusteringProcessor {
 struct GridFoldState {
     grid: Grid<LogScaledRadius>,
     column_mapping: HashMap<String, AttributeAggregateDef>,
+    cache_hint: CacheHint,
 }
 
 #[async_trait]
@@ -370,6 +384,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
         let initial_grid_fold_state = Result::<GridFoldState>::Ok(GridFoldState {
             grid: Grid::new(query.spatial_bounds, scaled_radius_model),
             column_mapping: self.attribute_mapping.clone(),
+            cache_hint: CacheHint::max_duration(),
         });
 
         let grid_future = self.source.query(query, ctx).await?.fold(
@@ -380,6 +395,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                 let GridFoldState {
                     mut grid,
                     column_mapping,
+                    mut cache_hint,
                 } = state?;
 
                 let feature_collection = feature_collection?;
@@ -419,9 +435,12 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                     }
                 }
 
+                cache_hint.merge_with(&feature_collection.cache_hint);
+
                 Ok(GridFoldState {
                     grid,
                     column_mapping,
+                    cache_hint,
                 })
             },
         );
@@ -433,6 +452,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             let GridFoldState {
                 grid,
                 column_mapping: _,
+                cache_hint,
             } = grid?;
 
             let mut cmq = CircleMergingQuadtree::new(query.spatial_bounds, *grid.radius_model(), 1);
@@ -448,6 +468,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                 &self.count_column,
                 joint_resolution,
                 &column_schema,
+                cache_hint,
             )
         });
 
@@ -457,6 +478,8 @@ impl QueryProcessor for VisualPointClusteringProcessor {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::FeatureData;
     use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::TimeInterval;
@@ -478,6 +501,7 @@ mod tests {
             MultiPoint::many(coordinates).unwrap(),
             vec![TimeInterval::default(); 10],
             HashMap::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -521,9 +545,8 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_slices(
+        assert!(result[0].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
                 &[TimeInterval::default(); 2],
                 &[
@@ -535,7 +558,7 @@ mod tests {
                 ],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -603,9 +626,8 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_slices(
+        assert!(result[0].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
                 &[TimeInterval::default(); 2],
                 &[
@@ -618,7 +640,7 @@ mod tests {
                 ],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -686,9 +708,8 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_slices(
+        assert!(result[0].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &[(0.0, 0.1), (50.0, 50.1)],
                 &[TimeInterval::default(); 2],
                 &[
@@ -701,7 +722,7 @@ mod tests {
                 ],
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -777,9 +798,8 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_slices(
+        assert!(result[0].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_slices(
                 &[(0.0, 0.1), (50.0, 50.1), (25.0, 25.1)],
                 &[TimeInterval::default(); 3],
                 &[
@@ -803,6 +823,86 @@ mod tests {
                 ],
             )
             .unwrap()
-        );
+        ));
+    }
+
+    #[tokio::test]
+    async fn it_attaches_cache_hint() {
+        let mut coordinates = vec![(0.0, 0.1); 2];
+        coordinates.extend_from_slice(&[(50.0, 50.1); 2]);
+        coordinates.extend_from_slice(&[(25.0, 25.1); 2]);
+
+        let mut input = MultiPointCollection::from_slices(
+            &MultiPoint::many(coordinates).unwrap(),
+            &[TimeInterval::default(); 6],
+            &[(
+                "text",
+                FeatureData::NullableText(vec![
+                    Some("foo".to_string()),
+                    Some("bar".to_string()),
+                    Some("foo".to_string()),
+                    None,
+                    None,
+                    None,
+                ]),
+            )],
+        )
+        .unwrap();
+
+        let cache_hint = CacheHint::seconds(1234);
+
+        input.cache_hint = cache_hint;
+
+        let operator = VisualPointClustering {
+            params: VisualPointClusteringParams {
+                min_radius_px: 8.,
+                delta_px: 1.,
+                radius_column: "radius".to_string(),
+                count_column: "count".to_string(),
+                column_aggregates: [(
+                    "text".to_string(),
+                    AttributeAggregateDef {
+                        column_name: "text".to_string(),
+                        aggregate_type: AttributeAggregateType::StringSample,
+                        measurement: None,
+                    },
+                )]
+                .iter()
+                .cloned()
+                .collect(),
+            },
+            sources: SingleVectorSource {
+                vector: MockFeatureCollectionSource::single(input).boxed(),
+            },
+        };
+
+        let execution_context = MockExecutionContext::test_default();
+
+        let initialized_operator = operator
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap();
+
+        let query_processor = initialized_operator
+            .query_processor()
+            .unwrap()
+            .multi_point()
+            .unwrap();
+
+        let query_context = MockQueryContext::test_default();
+
+        let qrect = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+        };
+
+        let query = query_processor.query(qrect, &query_context).await.unwrap();
+
+        let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].cache_hint.expires(), cache_hint.expires());
     }
 }

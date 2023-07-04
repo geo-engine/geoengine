@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorName,
-    QueryContext, SingleVectorSource, TypedVectorQueryProcessor, VectorOperator,
+    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
+    OperatorName, QueryContext, SingleVectorSource, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::util::Result;
@@ -68,6 +68,8 @@ impl VectorOperator for TimeProjection {
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(self.params.step.step > 0, error::WindowSizeMustNotBeZero);
 
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
 
         debug!("Initializing `TimeProjection` with {:?}.", &self.params);
@@ -82,6 +84,7 @@ impl VectorOperator for TimeProjection {
         rewrite_result_descriptor(&mut result_descriptor, self.params.step, step_reference)?;
 
         let initialized_operator = InitializedVectorTimeProjection {
+            name,
             source: initialized_sources.vector,
             result_descriptor,
             step: self.params.step,
@@ -109,6 +112,7 @@ fn rewrite_result_descriptor(
 }
 
 pub struct InitializedVectorTimeProjection {
+    name: CanonicOperatorName,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
     step: TimeStep,
@@ -130,6 +134,10 @@ impl InitializedVectorOperator for InitializedVectorTimeProjection {
                 step_reference: self.step_reference,
             }.boxed().into()),
         )
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -263,9 +271,10 @@ mod tests {
         mock::MockFeatureCollectionSource,
     };
     use geoengine_datatypes::{
-        collections::{MultiPointCollection, VectorDataType},
+        collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection, VectorDataType},
         primitives::{
-            BoundingBox2D, DateTime, MultiPoint, SpatialResolution, TimeGranularity, TimeInterval,
+            BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialResolution, TimeGranularity,
+            TimeInterval,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -419,6 +428,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         );
@@ -489,10 +499,11 @@ mod tests {
                 .unwrap(),
             ],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result[0], expected);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&expected));
     }
 
     #[tokio::test]
@@ -521,6 +532,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         );
@@ -591,10 +603,11 @@ mod tests {
                 .unwrap(),
             ],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result[0], expected);
+        assert!(result[0].chunks_equal_ignoring_cache_hint(&expected));
     }
 
     #[test]

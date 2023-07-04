@@ -1,4 +1,3 @@
-use crate::api::model::datatypes::DatasetId;
 use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, MockMetaData,
     OgrMetaData,
@@ -6,9 +5,10 @@ use crate::api::model::operators::{
 use crate::datasets::listing::Provenance;
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::projects::Symbology;
-
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+use super::datatypes::DatasetName;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema)]
@@ -64,6 +64,7 @@ impl From<MetaDataDefinition> for crate::datasets::storage::MetaDataDefinition {
 #[serde(rename_all = "camelCase")]
 pub struct MetaDataSuggestion {
     pub main_file: String,
+    pub layer_name: String,
     pub meta_data: MetaDataDefinition,
 }
 
@@ -71,8 +72,8 @@ pub struct MetaDataSuggestion {
 #[serde(rename_all = "camelCase")]
 // TODO: validate user input
 pub struct AddDataset {
-    pub id: Option<DatasetId>,
-    pub name: String,
+    pub name: Option<DatasetName>,
+    pub display_name: String,
     pub description: String,
     pub source_operator: String,
     pub symbology: Option<Symbology>,

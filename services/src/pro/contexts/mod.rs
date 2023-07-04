@@ -3,9 +3,10 @@ mod in_memory;
 #[cfg(feature = "postgres")]
 mod postgres;
 
+use std::str::FromStr;
 use std::sync::Arc;
 
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::canonicalize_subpath;
@@ -14,6 +15,7 @@ use geoengine_operators::engine::{
     MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
+use geoengine_operators::pro::cache::cache_operator::InitializedCacheOperator;
 use geoengine_operators::pro::meta::quota::QuotaCheck;
 use geoengine_operators::pro::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -37,6 +39,7 @@ use async_trait::async_trait;
 use super::permissions::PermissionDb;
 use super::projects::ProProjectDb;
 use super::users::{RoleDb, UserAuth, UserSession};
+use super::util::config::Cache;
 
 pub use in_memory::ProInMemoryDb;
 pub use postgres::PostgresDb;
@@ -100,7 +103,19 @@ where
         span: CreateSpan,
         path: WorkflowOperatorPath,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
-        Box::new(InitializedOperatorWrapper::new(op, span, path))
+        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span, path))
+            as Box<dyn geoengine_operators::engine::InitializedRasterOperator>;
+
+        if get_config_element::<Cache>()
+            .expect(
+                "Cache config should be present because it is part of the Settings-default.toml",
+            )
+            .enabled
+        {
+            return Box::new(InitializedCacheOperator::new(wrapped));
+        }
+
+        wrapped
     }
 
     fn wrap_initialized_vector_operator(
@@ -166,6 +181,36 @@ where
         file.flush().await?;
 
         Ok(())
+    }
+
+    async fn resolve_named_data(
+        &self,
+        data: &geoengine_datatypes::dataset::NamedData,
+    ) -> Result<geoengine_datatypes::dataset::DataId, geoengine_operators::error::Error> {
+        if let Some(provider) = &data.provider {
+            // TODO: resolve provider name to provider id
+            let provider_id = DataProviderId::from_str(provider)?;
+
+            let data_id = ExternalDataId {
+                provider_id,
+                layer_id: LayerId(data.name.clone()),
+            };
+
+            return Ok(data_id.into());
+        }
+
+        let dataset_id = self
+            .db
+            .resolve_dataset_name_to_id(&data.into())
+            .await
+            .map_err(
+                |source| geoengine_operators::error::Error::CannotResolveDatasetName {
+                    name: data.clone(),
+                    source: Box::new(source),
+                },
+            )?;
+
+        Ok(dataset_id.into())
     }
 }
 

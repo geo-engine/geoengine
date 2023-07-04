@@ -1,18 +1,19 @@
 mod any;
 pub mod arrow;
+mod byte_size;
 pub mod gdal;
 pub mod helpers;
 pub mod identifiers;
 pub mod ranges;
 mod result;
-pub mod well_known_data;
-
 pub mod test;
-use std::path::{Path, PathBuf};
+pub mod well_known_data;
 
 pub use self::identifiers::Identifier;
 pub use any::{AsAny, AsAnyArc};
+pub use byte_size::ByteSize;
 pub use result::Result;
+use std::path::{Path, PathBuf};
 
 /// Canonicalize `base`/`sub_path` and ensure the `sub_path` doesn't escape the `base`
 /// returns an error if the `sub_path` escapes the `base`

@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedSources, InitializedVectorOperator, Operator, OperatorName,
-    QueryContext, QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
+    OperatorName, QueryContext, QueryProcessor, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::util::input::StringOrNumberRange;
@@ -43,9 +43,12 @@ impl VectorOperator for ColumnRangeFilter {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
 
         let initialized_operator = InitializedColumnRangeFilter {
+            name,
             result_descriptor: initialized_sources.vector.result_descriptor().clone(),
             vector_source: initialized_sources.vector,
             state: self.params,
@@ -58,6 +61,7 @@ impl VectorOperator for ColumnRangeFilter {
 }
 
 pub struct InitializedColumnRangeFilter {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     state: ColumnRangeFilterParams,
@@ -73,6 +77,10 @@ impl InitializedVectorOperator for InitializedColumnRangeFilter {
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -173,7 +181,10 @@ mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::MockFeatureCollectionSource;
-    use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
+    use geoengine_datatypes::collections::{
+        ChunksEqualIgnoringCacheHint, FeatureCollectionModifications, MultiPointCollection,
+    };
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -236,6 +247,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -275,9 +287,8 @@ mod tests {
 
         assert_eq!(collections.len(), 1);
 
-        assert_eq!(
-            collections[0],
-            collection.filter(vec![false, true, true, false]).unwrap()
-        );
+        assert!(collections[0].chunks_equal_ignoring_cache_hint(
+            &collection.filter(vec![false, true, true, false]).unwrap()
+        ));
     }
 }

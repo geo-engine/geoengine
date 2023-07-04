@@ -1,7 +1,7 @@
 {
   "properties": {
-    "id": "36574dc3-560a-4b09-9d22-d5945f2b8094",
-    "name": "NDVI flipped y-axis",
+    "name": "ndvi_flipped_axis",
+    "displayName": "NDVI flipped y-axis",
     "description": "NDVI data from MODIS but with flipped y-axis",
     "sourceOperator": "GdalSource",
     "symbology": {
@@ -330,6 +330,7 @@
     "step": {
       "granularity": "months",
       "step": 1
-    }
+    },
+    "cacheTtl": 0
   }
 }

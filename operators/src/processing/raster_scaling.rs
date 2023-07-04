@@ -1,6 +1,6 @@
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
+    OperatorName, RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
     TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
@@ -76,6 +76,7 @@ impl OperatorName for RasterScaling {
 }
 
 pub struct InitializedRasterScalingOperator {
+    name: CanonicOperatorName,
     slope: SlopeOffsetSelection,
     offset: SlopeOffsetSelection,
     result_descriptor: RasterResultDescriptor,
@@ -91,6 +92,8 @@ impl RasterOperator for RasterScaling {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let input = self.sources.initialize_sources(path, context).await?;
         let in_desc = input.raster.result_descriptor();
 
@@ -107,6 +110,7 @@ impl RasterOperator for RasterScaling {
         };
 
         let initialized_operator = InitializedRasterScalingOperator {
+            name,
             slope: self.params.slope,
             offset: self.params.offset,
             result_descriptor: out_desc,
@@ -141,6 +145,10 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
         };
 
         Ok(res)
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -244,7 +252,7 @@ where
 mod tests {
 
     use geoengine_datatypes::{
-        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             Grid2D, GridOrEmpty2D, GridShape, MaskedGrid2D, RasterDataType, RasterProperties,
             TileInformation, TilingSpecification,
@@ -287,6 +295,7 @@ mod tests {
             },
             raster.into(),
             raster_props,
+            CacheHint::default(),
         );
 
         let spatial_resolution = raster_tile.spatial_resolution();
@@ -395,6 +404,7 @@ mod tests {
             },
             raster.into(),
             raster_props,
+            CacheHint::default(),
         );
 
         let spatial_resolution = raster_tile.spatial_resolution();

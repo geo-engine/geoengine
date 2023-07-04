@@ -3,7 +3,7 @@ use super::{
     GridBoundingBox, GridBounds, GridIdx, GridShape, GridShape1D, GridShape2D, GridShape3D,
     GridSize, GridSpaceToLinearSpace,
 };
-use crate::util::Result;
+use crate::util::{ByteSize, Result};
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, ops::Add};
 
@@ -103,6 +103,8 @@ where
         Ok(EmptyGrid::new(bounds))
     }
 }
+
+impl<D, T> ByteSize for EmptyGrid<D, T> {}
 
 #[cfg(test)]
 mod tests {

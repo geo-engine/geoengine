@@ -430,17 +430,16 @@ impl From<&Project> for ProjectListing {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema, Default)]
 pub enum ProjectFilter {
-    Name { term: String },
-    Description { term: String },
+    Name {
+        term: String,
+    },
+    Description {
+        term: String,
+    },
+    #[default]
     None,
-}
-
-impl Default for ProjectFilter {
-    fn default() -> Self {
-        ProjectFilter::None
-    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, Validate)]
@@ -772,7 +771,7 @@ mod tests {
         });
 
         assert_eq!(
-            serde_json::to_value(&symbology).unwrap(),
+            serde_json::to_value(symbology).unwrap(),
             json!({
                 "type": "point",
                 "radius": {
@@ -809,7 +808,7 @@ mod tests {
     #[test]
     fn serialize_derived_number_param() {
         assert_eq!(
-            serde_json::to_value(&NumberParam::Derived(DerivedNumber {
+            serde_json::to_value(NumberParam::Derived(DerivedNumber {
                 attribute: "foo".to_owned(),
                 factor: 1.,
                 default_value: 0.

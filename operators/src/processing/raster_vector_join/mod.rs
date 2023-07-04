@@ -4,9 +4,10 @@ mod non_aggregated;
 mod util;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator, OperatorName,
-    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
+    Operator, OperatorName, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor,
+    VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
 use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
@@ -45,8 +46,18 @@ pub struct RasterVectorJoinParams {
     /// Specifies which method is used for aggregating values for a feature
     pub feature_aggregation: FeatureAggregationMethod,
 
+    /// Whether NO DATA values should be ignored in aggregating the joined feature data
+    /// `false` by default
+    #[serde(default)]
+    pub feature_aggregation_ignore_no_data: bool,
+
     /// Specifies which method is used for aggregating values over time
     pub temporal_aggregation: TemporalAggregationMethod,
+
+    /// Whether NO DATA values should be ignored in aggregating the joined temporal data
+    /// `false` by default
+    #[serde(default)]
+    pub temporal_aggregation_ignore_no_data: bool,
 }
 
 /// How to aggregate the values for the geometries inside a feature e.g.
@@ -92,6 +103,8 @@ impl VectorOperator for RasterVectorJoin {
                 reason: "`rasters` must be of equal length as `names`"
             }
         );
+
+        let name = CanonicOperatorName::from(&self);
 
         let vector_source = self
             .sources
@@ -171,6 +184,7 @@ impl VectorOperator for RasterVectorJoin {
         });
 
         Ok(InitializedRasterVectorJoin {
+            name,
             result_descriptor,
             vector_source,
             raster_sources,
@@ -183,6 +197,7 @@ impl VectorOperator for RasterVectorJoin {
 }
 
 pub struct InitializedRasterVectorJoin {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
@@ -210,6 +225,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                         typed_raster_processors,
                         self.state.names.clone(),
                         self.state.feature_aggregation,
+                        self.state.feature_aggregation_ignore_no_data,
                     )
                     .boxed(),
                     TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
@@ -218,7 +234,9 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                             typed_raster_processors,
                             self.state.names.clone(),
                             self.state.feature_aggregation,
+                            self.state.feature_aggregation_ignore_no_data,
                             self.state.temporal_aggregation,
+                            self.state.temporal_aggregation_ignore_no_data,
                         )
                         .boxed()
                     }
@@ -231,6 +249,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                         typed_raster_processors,
                         self.state.names.clone(),
                         self.state.feature_aggregation,
+                        self.state.feature_aggregation_ignore_no_data,
                     )
                     .boxed(),
                     TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
@@ -239,7 +258,9 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                             typed_raster_processors,
                             self.state.names.clone(),
                             self.state.feature_aggregation,
+                            self.state.feature_aggregation_ignore_no_data,
                             self.state.temporal_aggregation,
+                            self.state.temporal_aggregation_ignore_no_data,
                         )
                         .boxed()
                     }
@@ -248,11 +269,16 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
             TypedVectorQueryProcessor::MultiLineString(_) => return Err(Error::NotYetImplemented),
         })
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 pub fn create_feature_aggregator<P: Pixel>(
     number_of_features: usize,
     aggregation: FeatureAggregationMethod,
+    ignore_no_data: bool,
 ) -> TypedAggregator {
     match aggregation {
         FeatureAggregationMethod::First => match P::TYPE {
@@ -263,12 +289,16 @@ pub fn create_feature_aggregator<P: Pixel>(
             | RasterDataType::I8
             | RasterDataType::I16
             | RasterDataType::I32
-            | RasterDataType::I64 => FirstValueIntAggregator::new(number_of_features).into_typed(),
+            | RasterDataType::I64 => {
+                FirstValueIntAggregator::new(number_of_features, ignore_no_data).into_typed()
+            }
             RasterDataType::F32 | RasterDataType::F64 => {
-                FirstValueFloatAggregator::new(number_of_features).into_typed()
+                FirstValueFloatAggregator::new(number_of_features, ignore_no_data).into_typed()
             }
         },
-        FeatureAggregationMethod::Mean => MeanValueAggregator::new(number_of_features).into_typed(),
+        FeatureAggregationMethod::Mean => {
+            MeanValueAggregator::new(number_of_features, ignore_no_data).into_typed()
+        }
     }
 }
 
@@ -285,7 +315,8 @@ mod tests {
     use crate::util::gdal::add_ndvi_dataset;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
-    use geoengine_datatypes::dataset::DataId;
+    use geoengine_datatypes::dataset::NamedData;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DataRef, DateTime, FeatureDataRef, MultiPoint, SpatialResolution,
         TimeInterval, VectorQueryRectangle,
@@ -300,7 +331,9 @@ mod tests {
             params: RasterVectorJoinParams {
                 names: ["foo", "bar"].iter().copied().map(str::to_string).collect(),
                 feature_aggregation: FeatureAggregationMethod::First,
+                feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
+                temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![]).boxed(),
@@ -334,9 +367,9 @@ mod tests {
         assert_eq!(deserialized.params, raster_vector_join.params);
     }
 
-    fn ndvi_source(id: DataId) -> Box<dyn RasterOperator> {
+    fn ndvi_source(name: NamedData) -> Box<dyn RasterOperator> {
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { data: id },
+            params: GdalSourceParameters { data: name },
         };
 
         gdal_source.boxed()
@@ -362,6 +395,7 @@ mod tests {
                     4
                 ],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -374,7 +408,9 @@ mod tests {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
                 feature_aggregation: FeatureAggregationMethod::First,
+                feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::First,
+                temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
@@ -435,6 +471,7 @@ mod tests {
                     4
                 ],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -447,7 +484,9 @@ mod tests {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
                 feature_aggregation: FeatureAggregationMethod::First,
+                feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
+                temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
@@ -511,6 +550,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 4],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -523,7 +563,9 @@ mod tests {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
                 feature_aggregation: FeatureAggregationMethod::First,
+                feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
+                temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
@@ -577,6 +619,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 4],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap()],
             SpatialReference::from_str("EPSG:3857").unwrap(),
@@ -590,7 +633,9 @@ mod tests {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
                 feature_aggregation: FeatureAggregationMethod::First,
+                feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
+                temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: point_source,

@@ -2,7 +2,8 @@ use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use futures::TryStreamExt;
-use geoengine_datatypes::dataset::{DataId, DatasetId};
+use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     Measurement, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
 };
@@ -297,7 +298,12 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
                 )
                 .unwrap();
-                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+                RasterTile2D::new_with_tile_info(
+                    query_time,
+                    tile_info,
+                    data.into(),
+                    CacheHint::default(),
+                )
             })
             .collect();
 
@@ -365,7 +371,12 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
                 )
                 .unwrap();
-                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+                RasterTile2D::new_with_tile_info(
+                    query_time,
+                    tile_info,
+                    data.into(),
+                    CacheHint::default(),
+                )
             })
             .collect();
 
@@ -445,7 +456,12 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
                 )
                 .unwrap();
-                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+                RasterTile2D::new_with_tile_info(
+                    query_time,
+                    tile_info,
+                    data.into(),
+                    CacheHint::default(),
+                )
             })
             .collect();
 
@@ -519,7 +535,12 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                     vec![(id % 255) as u8; tile_info.tile_size_in_pixels.number_of_elements()],
                 )
                 .unwrap();
-                RasterTile2D::new_with_tile_info(query_time, tile_info, data.into())
+                RasterTile2D::new_with_tile_info(
+                    query_time,
+                    tile_info,
+                    data.into(),
+                    CacheHint::default(),
+                )
             })
             .collect();
         let mock_raster_operator = MockRasterSource {
@@ -598,10 +619,11 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
     ];
 
     let id: DataId = DatasetId::new().into();
+    let name = NamedData::with_system_name("world");
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { data: id.clone() },
+        params: GdalSourceParameters { data: name.clone() },
     }
     .boxed();
 
@@ -613,7 +635,7 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex.add_meta_data(id.clone(), meta_data.box_clone());
+            mex.add_meta_data(id.clone(), name.clone(), meta_data.box_clone());
             mex
         },
         [ChunkByteSize::MAX],
@@ -648,10 +670,11 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
     ];
 
     let id: DataId = DatasetId::new().into();
+    let name = NamedData::with_system_name("world");
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { data: id.clone() },
+        params: GdalSourceParameters { data: name.clone() },
     };
 
     let expression_operator = Expression {
@@ -673,7 +696,7 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex.add_meta_data(id.clone(), meta_data.box_clone());
+            mex.add_meta_data(id.clone(), name.clone(), meta_data.box_clone());
             mex
         },
         [ChunkByteSize::MAX],
@@ -708,10 +731,11 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
     ];
 
     let id: DataId = DatasetId::new().into();
+    let name = NamedData::with_system_name("world");
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { data: id.clone() },
+        params: GdalSourceParameters { data: name.clone() },
     };
 
     let projection_operator = Reprojection {
@@ -730,7 +754,7 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex.add_meta_data(id.clone(), meta_data.box_clone());
+            mex.add_meta_data(id.clone(), name.clone(), meta_data.box_clone());
             mex
         },
         [ChunkByteSize::MAX],
@@ -770,10 +794,11 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
     ];
 
     let id: DataId = DatasetId::new().into();
+    let name = NamedData::with_system_name("world");
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { data: id.clone() },
+        params: GdalSourceParameters { data: name.clone() },
     };
 
     let projection_operator = Reprojection {
@@ -795,7 +820,7 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
         |ts, num_threads| {
             let mut mex =
                 MockExecutionContext::new_with_tiling_spec_and_thread_count(ts, num_threads);
-            mex.add_meta_data(id.clone(), meta_data.box_clone());
+            mex.add_meta_data(id.clone(), name.clone(), meta_data.box_clone());
             mex
         },
         [ChunkByteSize::MAX],

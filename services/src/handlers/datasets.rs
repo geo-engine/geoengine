@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::{
-    api::model::datatypes::DatasetId,
-    api::model::responses::datasets::errors::*,
+    api::model::datatypes::DatasetName,
+    api::model::responses::datasets::{errors::*, DatasetNameResponse},
     api::model::services::{
         AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
         MetaDataSuggestion,
@@ -21,7 +21,7 @@ use crate::{
     util::{
         config::{get_config_element, Data},
         extractors::{ValidatedJson, ValidatedQuery},
-        IdResponse,
+        path_with_base_path,
     },
 };
 use actix_web::{web, FromRequest, HttpResponse, Responder};
@@ -31,7 +31,7 @@ use gdal::{
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
-    primitives::{FeatureDataType, Measurement, VectorQueryRectangle},
+    primitives::{CacheTtlSeconds, FeatureDataType, Measurement, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
@@ -143,7 +143,7 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     Ok(web::Json(list))
 }
 
-/// Retrieves details about a dataset using the internal id.
+/// Retrieves details about a dataset using the internal name.
 #[utoipa::path(
     tag = "Datasets",
     get,
@@ -169,29 +169,34 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Referenced an unknown dataset" = (value = json!({
                 "error": "CannotLoadDataset",
-                "message": "CannotLoadDataset: UnknownDatasetId"
+                "message": "CannotLoadDataset: UnknownDatasetName"
             })))
         )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
-        ("dataset" = DatasetId, description = "Dataset id")
+        ("dataset" = DatasetName, description = "Dataset Name")
     ),
     security(
         ("session_token" = [])
     )
 )]
 pub async fn get_dataset_handler<C: ApplicationContext>(
-    dataset: web::Path<DatasetId>,
+    dataset: web::Path<DatasetName>,
     session: C::Session,
     app_ctx: web::Data<C>,
 ) -> Result<impl Responder, GetDatasetError> {
-    let dataset = app_ctx
-        .session_context(session)
-        .db()
-        .load_dataset(&dataset.into_inner())
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&dataset.into_inner())
         .await
         .context(CannotLoadDataset)?;
+    let dataset = session_ctx
+        .load_dataset(&dataset_id)
+        .await
+        .context(CannotLoadDataset)?;
+
     Ok(web::Json(dataset))
 }
 
@@ -207,7 +212,8 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
             },
             "definition": {
                 "properties": {
-                    "name": "Germany Border",
+                    "name": "germany_border",
+                    "displayName": "Germany Border",
                     "description": "The Outline of Germany",
                     "sourceOperator": "OgrSource"
                 },
@@ -246,7 +252,8 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
             },
             "definition": {
                 "properties": {
-                    "name": "Plain Data",
+                    "name": "plain_data",
+                    "displayName": "Plain Data",
                     "description": "Demo Dataset",
                     "sourceOperator": "OgrSource"
                 },
@@ -286,7 +293,7 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
         }))))
     ),
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse),
+        (status = 200, response = DatasetNameResponse),
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Body is invalid json" = (value = json!({
                 "error": "BodyDeserializeError",
@@ -339,7 +346,7 @@ pub async fn create_dataset_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
     let create = create.into_inner();
     match create {
         CreateDataset {
@@ -358,7 +365,7 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     upload_id: UploadId,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
     let db = app_ctx.session_context(session).db();
     let upload = db.load_upload(upload_id).await.context(UploadNotFound)?;
 
@@ -366,12 +373,12 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
         .context(CannotResolveUploadFilePath)?;
 
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
-    let id = db
+    let result = db
         .add_dataset(definition.properties, meta_data)
         .await
         .context(DatabaseAccess)?;
 
-    Ok(web::Json(IdResponse::from(id)))
+    Ok(web::Json(result.name.into()))
 }
 
 async fn create_volume_dataset<C: ApplicationContext>(
@@ -379,7 +386,7 @@ async fn create_volume_dataset<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<IdResponse<DatasetId>>, CreateDatasetError> {
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
     let volumes = get_config_element::<Data>()
         .context(CannotAccessConfig)?
         .volumes;
@@ -397,12 +404,12 @@ async fn create_volume_dataset<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
-    let id = db
+    let result = db
         .add_dataset(definition.properties, meta_data)
         .await
         .context(DatabaseAccess)?;
 
-    Ok(web::Json(IdResponse::from(id)))
+    Ok(web::Json(result.name.into()))
 }
 
 pub fn adjust_meta_data_path<A: AdjustFilePath>(
@@ -442,7 +449,7 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
     path = "/dataset/auto",
     request_body = AutoCreateDataset,
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse),
+        (status = 200, response = DatasetNameResponse),
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Body is invalid json" = (value = json!({
                 "error": "BodyDeserializeError",
@@ -485,18 +492,19 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: ValidatedJson<AutoCreateDataset>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<DatasetNameResponse>> {
     let db = app_ctx.session_context(session).db();
     let upload = db.load_upload(create.upload).await?;
 
     let create = create.into_inner();
 
     let main_file_path = upload.id.root_path()?.join(&create.main_file);
-    let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
+    let meta_data = auto_detect_meta_data_definition(&main_file_path, &create.layer_name)?;
+    let meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
     let properties = AddDataset {
-        id: None,
-        name: create.dataset_name,
+        name: None,
+        display_name: create.dataset_name,
         description: create.dataset_description,
         source_operator: meta_data.source_operator_type().to_owned(),
         symbology: None,
@@ -504,12 +512,13 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     };
 
     let meta_data = db.wrap_meta_data(meta_data);
-    let id = db.add_dataset(properties, meta_data).await?;
+    let result = db.add_dataset(properties, meta_data).await?;
 
-    Ok(web::Json(IdResponse::from(id)))
+    Ok(web::Json(result.name.into()))
 }
 
 /// Inspects an upload and suggests metadata that can be used when creating a new dataset based on it.
+/// Tries to automatically detect the main file and layer name if not specified.
 #[utoipa::path(
     tag = "Datasets",
     get,
@@ -601,18 +610,26 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
         .load_upload(suggest.upload)
         .await?;
 
+    let suggest = suggest.into_inner();
+
     let main_file = suggest
-        .into_inner()
         .main_file
         .or_else(|| suggest_main_file(&upload))
         .ok_or(error::Error::NoMainFileCandidateFound)?;
 
-    let main_file_path = upload.id.root_path()?.join(&main_file);
+    let layer_name = suggest.layer_name;
 
-    let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
+    let main_file_path = path_with_base_path(&upload.id.root_path()?, Path::new(&main_file))?;
+
+    let meta_data = auto_detect_meta_data_definition(&main_file_path, &layer_name)?;
+
+    let layer_name = meta_data.loading_info.layer_name.clone();
+
+    let meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
     Ok(web::Json(MetaDataSuggestion {
         main_file,
+        layer_name,
         meta_data: meta_data.into(),
     }))
 }
@@ -635,30 +652,45 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
     None
 }
 
+fn select_layer_from_dataset<'a>(
+    dataset: &'a Dataset,
+    layer_name: &Option<String>,
+) -> Result<Layer<'a>> {
+    if let Some(ref layer_name) = layer_name {
+        dataset.layer_by_name(layer_name).map_err(|_| {
+            crate::error::Error::DatasetInvalidLayerName {
+                layer_name: layer_name.clone(),
+            }
+        })
+    } else {
+        dataset
+            .layer(0)
+            .map_err(|_| crate::error::Error::DatasetHasNoAutoImportableLayer)
+    }
+}
+
 fn auto_detect_meta_data_definition(
     main_file_path: &Path,
-) -> Result<crate::datasets::storage::MetaDataDefinition> {
+    layer_name: &Option<String>,
+) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>> {
+    // TODO: handle Raster datasets as well
+
     let dataset = gdal_open_dataset(main_file_path).context(error::Operator)?;
-    let layer = {
-        if let Ok(layer) = dataset.layer(0) {
-            layer
-        } else {
-            // TODO: handle Raster datasets as well
-            return Err(crate::error::Error::DatasetHasNoAutoImportableLayer);
-        }
-    };
+
+    let layer = select_layer_from_dataset(&dataset, layer_name)?;
 
     let columns_map = detect_columns(&layer);
     let columns_vecs = column_map_to_column_vecs(&columns_map);
 
-    let mut geometry = detect_vector_geometry(&dataset);
+    let mut geometry = detect_vector_geometry(&layer);
     let mut x = String::new();
     let mut y: Option<String> = None;
 
     if geometry.data_type == VectorDataType::Data {
         // help Gdal detecting geometry
         if let Some(auto_detect) = gdal_autodetect(main_file_path, &columns_vecs.text) {
-            geometry = detect_vector_geometry(&auto_detect.dataset);
+            let layer = select_layer_from_dataset(&auto_detect.dataset, layer_name)?;
+            geometry = detect_vector_geometry(&layer);
             if geometry.data_type != VectorDataType::Data {
                 x = auto_detect.x;
                 y = auto_detect.y;
@@ -668,56 +700,55 @@ fn auto_detect_meta_data_definition(
 
     let time = detect_time_type(&columns_vecs);
 
-    Ok(crate::datasets::storage::MetaDataDefinition::OgrMetaData(
-        StaticMetaData::<_, _, VectorQueryRectangle> {
-            loading_info: OgrSourceDataset {
-                file_name: main_file_path.into(),
-                layer_name: geometry.layer_name.unwrap_or_else(|| layer.name()),
-                data_type: Some(geometry.data_type),
-                time,
-                default_geometry: None,
-                columns: Some(OgrSourceColumnSpec {
-                    format_specifics: None,
-                    x,
-                    y,
-                    int: columns_vecs.int,
-                    float: columns_vecs.float,
-                    text: columns_vecs.text,
-                    bool: vec![],
-                    datetime: columns_vecs.date,
-                    rename: None,
-                }),
-                force_ogr_time_filter: false,
-                force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Ignore,
-                sql_query: None,
-                attribute_query: None,
-            },
-            result_descriptor: VectorResultDescriptor {
-                data_type: geometry.data_type,
-                spatial_reference: geometry.spatial_reference,
-                columns: columns_map
-                    .into_iter()
-                    .filter_map(|(k, v)| {
-                        v.try_into()
-                            .map(|v| {
-                                (
-                                    k,
-                                    VectorColumnInfo {
-                                        data_type: v,
-                                        measurement: Measurement::Unitless,
-                                    },
-                                )
-                            })
-                            .ok()
-                    }) // ignore all columns here that don't have a corresponding type in our collections
-                    .collect(),
-                time: None,
-                bbox: None,
-            },
-            phantom: Default::default(),
+    Ok(StaticMetaData::<_, _, VectorQueryRectangle> {
+        loading_info: OgrSourceDataset {
+            file_name: main_file_path.into(),
+            layer_name: geometry.layer_name.unwrap_or_else(|| layer.name()),
+            data_type: Some(geometry.data_type),
+            time,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: None,
+                x,
+                y,
+                int: columns_vecs.int,
+                float: columns_vecs.float,
+                text: columns_vecs.text,
+                bool: vec![],
+                datetime: columns_vecs.date,
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         },
-    ))
+        result_descriptor: VectorResultDescriptor {
+            data_type: geometry.data_type,
+            spatial_reference: geometry.spatial_reference,
+            columns: columns_map
+                .into_iter()
+                .filter_map(|(k, v)| {
+                    v.try_into()
+                        .map(|v| {
+                            (
+                                k,
+                                VectorColumnInfo {
+                                    data_type: v,
+                                    measurement: Measurement::Unitless,
+                                },
+                            )
+                        })
+                        .ok()
+                }) // ignore all columns here that don't have a corresponding type in our collections
+                .collect(),
+            time: None,
+            bbox: None,
+        },
+        phantom: Default::default(),
+    })
 }
 
 /// create Gdal dataset with autodetect parameters based on available columns
@@ -872,30 +903,28 @@ fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
     }
 }
 
-fn detect_vector_geometry(dataset: &Dataset) -> DetectedGeometry {
-    for layer in dataset.layers() {
-        for g in layer.defn().geom_fields() {
-            if let Ok(data_type) = VectorDataType::try_from_ogr_type_code(g.field_type()) {
-                return DetectedGeometry {
-                    layer_name: Some(layer.name()),
-                    data_type,
-                    spatial_reference: g
-                        .spatial_ref()
-                        .context(error::Gdal)
-                        .and_then(|s| {
-                            let s: Result<SpatialReference> = s.try_into().context(error::DataType);
-                            s
-                        })
-                        .map(Into::into)
-                        .unwrap_or(SpatialReferenceOption::Unreferenced),
-                };
-            }
+fn detect_vector_geometry(layer: &Layer) -> DetectedGeometry {
+    for g in layer.defn().geom_fields() {
+        if let Ok(data_type) = VectorDataType::try_from_ogr_type_code(g.field_type()) {
+            return DetectedGeometry {
+                layer_name: Some(layer.name()),
+                data_type,
+                spatial_reference: g
+                    .spatial_ref()
+                    .context(error::Gdal)
+                    .and_then(|s| {
+                        let s: Result<SpatialReference> = s.try_into().context(error::DataType);
+                        s
+                    })
+                    .map(Into::into)
+                    .unwrap_or(SpatialReferenceOption::Unreferenced),
+            };
         }
     }
 
     // fallback type if no geometry was found
     DetectedGeometry {
-        layer_name: None,
+        layer_name: Some(layer.name()),
         data_type: VectorDataType::Data,
         spatial_reference: SpatialReferenceOption::Unreferenced,
     }
@@ -1009,8 +1038,8 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
         (status = 200, description = "OK"),
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Referenced an unknown dataset" = (value = json!({
-                "error": "UnknownDatasetId",
-                "message": "UnknownDatasetId"
+                "error": "UnknownDatasetName",
+                "message": "UnknownDatasetName"
             }))),
             ("Given dataset can only be deleted by owner" = (value = json!({
                 "error": "OperationRequiresOwnerPermission",
@@ -1020,22 +1049,24 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
     params(
-        ("dataset" = DatasetId, description = "Dataset id")
+        ("dataset" = DatasetName, description = "Dataset id")
     ),
     security(
         ("session_token" = [])
     )
 )]
 pub async fn delete_dataset_handler<C: ApplicationContext>(
-    dataset: web::Path<DatasetId>,
+    dataset: web::Path<DatasetName>,
     session: C::Session,
     app_ctx: web::Data<C>,
 ) -> Result<HttpResponse> {
-    app_ctx
-        .session_context(session)
-        .db()
-        .delete_dataset(dataset.into_inner())
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&dataset.into_inner())
         .await?;
+
+    session_ctx.delete_dataset(dataset_id).await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -1043,7 +1074,8 @@ pub async fn delete_dataset_handler<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::DatasetId;
+    use crate::api::model::datatypes::{DatasetName, NamedData};
+    use crate::api::model::responses::datasets::{DatasetIdAndName, DatasetNameResponse};
     use crate::api::model::services::DatasetDefinition;
     use crate::contexts::{
         ApplicationContext, InMemoryContext, Session, SessionId, SimpleApplicationContext,
@@ -1056,6 +1088,7 @@ mod tests {
     use crate::util::tests::{
         read_body_json, read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
     };
+    use crate::util::IdResponse;
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -1076,7 +1109,6 @@ mod tests {
     };
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use serde_json::{json, Value};
-    use std::str::FromStr;
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -1095,10 +1127,9 @@ mod tests {
             bbox: None,
         };
 
-        let id = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
         let ds = AddDataset {
-            id: Some(id),
-            name: "OgrDataset".to_string(),
+            name: Some(DatasetName::new(None, "My Dataset")),
+            display_name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
@@ -1118,19 +1149,18 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
         };
 
         let db = ctx.db();
-        let _id = db.add_dataset(ds, Box::new(meta)).await?;
-
-        let id2 = DatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")?;
+        let DatasetIdAndName { id: id1, name: _ } = db.add_dataset(ds, Box::new(meta)).await?;
 
         let ds = AddDataset {
-            id: Some(id2),
-            name: "OgrDataset2".to_string(),
+            name: Some(DatasetName::new(None, "My_Dataset2")),
+            display_name: "OgrDataset2".to_string(),
             description: "My Ogr dataset2".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: Some(Symbology::Point(PointSymbology::default())),
@@ -1150,12 +1180,13 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
         };
 
-        let _id2 = db.add_dataset(ds, Box::new(meta)).await?;
+        let DatasetIdAndName { id: id2, name: _ } = db.add_dataset(ds, Box::new(meta)).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
@@ -1176,8 +1207,9 @@ mod tests {
         assert_eq!(
             read_body_json(res).await,
             json!([{
-                "id": "370e99ec-9fd8-401d-828d-d67b431a8742",
-                "name": "OgrDataset2",
+                "id": id2,
+                "name": "My_Dataset2",
+                "displayName": "OgrDataset2",
                 "description": "My Ogr dataset2",
                 "tags": [],
                 "sourceOperator": "OgrSource",
@@ -1212,8 +1244,9 @@ mod tests {
                     "text": null
                 }
             }, {
-                "id": "370e99ec-9fd8-401d-828d-d67b431a8742",
-                "name": "OgrDataset",
+                "id": id1,
+                "name": "My Dataset",
+                "displayName": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
                 "sourceOperator": "OgrSource",
@@ -1266,15 +1299,15 @@ mod tests {
         app_ctx: C,
         upload_id: UploadId,
         session_id: SessionId,
-    ) -> DatasetId {
+    ) -> DatasetName {
         let s = json!({
             "dataPath": {
                 "upload": upload_id
             },
             "definition": {
                 "properties": {
-                    "id": null,
-                    "name": "Uploaded Natural Earth 10m Ports",
+                    "name": "uploaded_ne_10m_ports",
+                    "displayName": "Uploaded Natural Earth 10m Ports",
                     "description": "Ports from Natural Earth",
                     "sourceOperator": "OgrSource"
                 },
@@ -1347,19 +1380,19 @@ mod tests {
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_json(s);
         let res = send_test_request(req, app_ctx).await;
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "{res:?}");
 
-        let dataset: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-        dataset.id
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        dataset_name
     }
 
     async fn make_ogr_source<C: ExecutionContext>(
         exe_ctx: &C,
-        dataset_id: DatasetId,
+        named_data: NamedData,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         OgrSource {
             params: OgrSourceParameters {
-                data: dataset_id.into(),
+                data: named_data.into(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -1393,11 +1426,19 @@ mod tests {
         let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
 
-        let dataset_id =
+        let _dataset_id =
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
         let exe_ctx = ctx.execution_context()?;
 
-        let source = make_ogr_source(&exe_ctx, dataset_id).await?;
+        let source = make_ogr_source(
+            &exe_ctx,
+            NamedData {
+                namespace: None,
+                provider: None,
+                name: "uploaded_ne_10m_ports".to_string(),
+            },
+        )
+        .await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
         let query_ctx = ctx.query_context()?;
@@ -1456,8 +1497,8 @@ mod tests {
             data_path: DataPath::Volume(volume.clone()),
             definition: DatasetDefinition {
                 properties: AddDataset {
-                    id: None,
-                    name: "ndvi".to_string(),
+                    name: None,
+                    display_name: "ndvi".to_string(),
                     description: "ndvi".to_string(),
                     source_operator: "GdalSource".to_string(),
                     symbology: None,
@@ -1477,12 +1518,11 @@ mod tests {
         let res = send_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
-        let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-        let dataset_id = dataset_id.id;
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
 
         // assert dataset is accessible via regular session
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/{dataset_id}"))
+            .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
@@ -1496,10 +1536,12 @@ mod tests {
 
     #[test]
     fn it_auto_detects() {
-        let mut meta_data = auto_detect_meta_data_definition(test_data!(
-            "vector/data/ne_10m_ports/ne_10m_ports.shp"
-        ))
+        let meta_data = auto_detect_meta_data_definition(
+            test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp"),
+            &None,
+        )
         .unwrap();
+        let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
         {
@@ -1537,6 +1579,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1591,9 +1634,13 @@ mod tests {
 
     #[test]
     fn it_detects_time_json() {
-        let mut meta_data =
-            auto_detect_meta_data_definition(test_data!("vector/data/points_with_iso_time.json"))
-                .unwrap();
+        let meta_data = auto_detect_meta_data_definition(
+            test_data!("vector/data/points_with_iso_time.json"),
+            &None,
+        )
+        .unwrap();
+
+        let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
         {
@@ -1632,6 +1679,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1665,9 +1713,13 @@ mod tests {
 
     #[test]
     fn it_detects_time_gpkg() {
-        let mut meta_data =
-            auto_detect_meta_data_definition(test_data!("vector/data/points_with_time.gpkg"))
-                .unwrap();
+        let meta_data = auto_detect_meta_data_definition(
+            test_data!("vector/data/points_with_time.gpkg"),
+            &None,
+        )
+        .unwrap();
+
+        let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
         {
@@ -1706,6 +1758,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1739,9 +1792,11 @@ mod tests {
 
     #[test]
     fn it_detects_time_shp() {
-        let mut meta_data =
-            auto_detect_meta_data_definition(test_data!("vector/data/points_with_date.shp"))
+        let meta_data =
+            auto_detect_meta_data_definition(test_data!("vector/data/points_with_date.shp"), &None)
                 .unwrap();
+
+        let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
         {
@@ -1780,6 +1835,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1813,10 +1869,13 @@ mod tests {
 
     #[test]
     fn it_detects_time_start_duration() {
-        let meta_data = auto_detect_meta_data_definition(test_data!(
-            "vector/data/points_with_iso_start_duration.json"
-        ))
+        let meta_data = auto_detect_meta_data_definition(
+            test_data!("vector/data/points_with_iso_start_duration.json"),
+            &None,
+        )
         .unwrap();
+
+        let meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         assert_eq!(
             meta_data,
@@ -1847,6 +1906,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1880,8 +1940,10 @@ mod tests {
 
     #[test]
     fn it_detects_csv() {
-        let mut meta_data =
-            auto_detect_meta_data_definition(test_data!("vector/data/lonlat.csv")).unwrap();
+        let meta_data =
+            auto_detect_meta_data_definition(test_data!("vector/data/lonlat.csv"), &None).unwrap();
+
+        let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
         {
@@ -1919,6 +1981,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default()
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1974,8 +2037,8 @@ mod tests {
         };
 
         let ds = AddDataset {
-            id: None,
-            name: "OgrDataset".to_string(),
+            name: None,
+            display_name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
@@ -1995,13 +2058,17 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
         };
 
         let db = ctx.db();
-        let id = db.add_dataset(ds, Box::new(meta)).await?;
+        let DatasetIdAndName {
+            id,
+            name: dataset_name,
+        } = db.add_dataset(ds, Box::new(meta)).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{id}"))
@@ -2016,8 +2083,9 @@ mod tests {
         assert_eq!(
             res_body,
             json!({
+                "name": dataset_name,
                 "id": id,
-                "name": "OgrDataset",
+                "displayName": "OgrDataset",
                 "description": "My Ogr dataset",
                 "resultDescriptor": {
                     "type": "vector",
@@ -2114,6 +2182,7 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             json!({
               "mainFile": "test.json",
+              "layerName": "test",
               "metaData": {
                 "type": "OgrMetaData",
                 "loadingInfo": {
@@ -2143,7 +2212,8 @@ mod tests {
                   "forceOgrSpatialFilter": false,
                   "onError": "ignore",
                   "sqlQuery": null,
-                  "attributeQuery": null
+                  "attributeQuery": null,
+                  "cacheTtl": 0,
                 },
                 "resultDescriptor": {
                   "dataType": "MultiPoint",
@@ -2187,14 +2257,15 @@ mod tests {
         let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
 
-        let dataset_id =
+        let dataset_name =
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
 
         let db = ctx.db();
+        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
-            .uri(&format!("/dataset/{dataset_id}"))
+            .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
@@ -2225,8 +2296,8 @@ mod tests {
             data_path: DataPath::Volume(volume.clone()),
             definition: DatasetDefinition {
                 properties: AddDataset {
-                    id: None,
-                    name: "ndvi".to_string(),
+                    name: None,
+                    display_name: "ndvi".to_string(),
                     description: "ndvi".to_string(),
                     source_operator: "GdalSource".to_string(),
                     symbology: None,
@@ -2246,14 +2317,14 @@ mod tests {
             .set_payload(serde_json::to_string(&create)?);
         let res = send_test_request(req, app_ctx.clone()).await;
 
-        let dataset_id: IdResponse<DatasetId> = actix_web::test::read_body_json(res).await;
-        let dataset_id = dataset_id.id;
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
 
         let db = ctx.db();
+        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
-            .uri(&format!("/dataset/{dataset_id}"))
+            .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));

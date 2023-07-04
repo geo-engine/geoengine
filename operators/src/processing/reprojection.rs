@@ -3,15 +3,15 @@ use std::marker::PhantomData;
 use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{
-        fold_by_coordinate_lookup_future, RasterSubQueryAdapter, SparseTilesFillAdapter,
-        TileReprojectionSubQuery,
+        fold_by_coordinate_lookup_future, FillerTileCacheExpirationStrategy, RasterSubQueryAdapter,
+        SparseTilesFillAdapter, TileReprojectionSubQuery,
     },
     engine::{
-        ExecutionContext, InitializedRasterOperator, InitializedSources, InitializedVectorOperator,
-        Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-        WorkflowOperatorPath,
+        CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
+        InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
+        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
+        TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        VectorResultDescriptor, WorkflowOperatorPath,
     },
     error::{self, Error},
     util::Result,
@@ -56,6 +56,7 @@ impl OperatorName for Reprojection {
 }
 
 pub struct InitializedVectorReprojection {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedVectorOperator>,
     source_srs: SpatialReference,
@@ -63,6 +64,7 @@ pub struct InitializedVectorReprojection {
 }
 
 pub struct InitializedRasterReprojection {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     state: Option<ReprojectionBounds>,
@@ -79,6 +81,7 @@ impl InitializedVectorReprojection {
     /// This function errors if the `source`'s `SpatialReference` is `None`.
     /// This function errors if the source's bounding box cannot be reprojected to the target's `SpatialReference`.
     pub fn try_new_with_input(
+        name: CanonicOperatorName,
         params: ReprojectionParams,
         source_vector_operator: Box<dyn InitializedVectorOperator>,
     ) -> Result<Self> {
@@ -105,6 +108,7 @@ impl InitializedVectorReprojection {
         };
 
         Ok(InitializedVectorReprojection {
+            name,
             result_descriptor: out_desc,
             source: source_vector_operator,
             source_srs: in_srs,
@@ -115,6 +119,7 @@ impl InitializedVectorReprojection {
 
 impl InitializedRasterReprojection {
     pub fn try_new_with_input(
+        name: CanonicOperatorName,
         params: ReprojectionParams,
         source_raster_operator: Box<dyn InitializedRasterOperator>,
         tiling_spec: TilingSpecification,
@@ -150,6 +155,7 @@ impl InitializedRasterReprojection {
         };
 
         Ok(InitializedRasterReprojection {
+            name,
             result_descriptor,
             source: source_raster_operator,
             state,
@@ -198,6 +204,8 @@ impl VectorOperator for Reprojection {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let vector_source =
             self.sources
                 .vector()
@@ -209,6 +217,7 @@ impl VectorOperator for Reprojection {
         let initilaized_source = vector_source.initialize_sources(path, context).await?;
 
         let initialized_operator = InitializedVectorReprojection::try_new_with_input(
+            name,
             self.params,
             initilaized_source.vector,
         )?;
@@ -252,6 +261,10 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
                 ))
             }
         }
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -318,6 +331,8 @@ impl RasterOperator for Reprojection {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let raster_source =
             self.sources
                 .raster()
@@ -329,6 +344,7 @@ impl RasterOperator for Reprojection {
         let initialized_source = raster_source.initialize_sources(path, context).await?;
 
         let initialized_operator = InitializedRasterReprojection::try_new_with_input(
+            name,
             self.params,
             initialized_source.raster,
             context.tiling_specification(),
@@ -454,6 +470,10 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
             }
         })
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 pub struct RasterReprojectionProcessor<Q, P>
@@ -535,7 +555,7 @@ where
                 ctx,
                 sub_query_spec,
             )
-            .filter_and_fill())
+            .filter_and_fill(FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles))
         } else {
             log::debug!("No intersection between source data / srs and target srs");
 
@@ -549,6 +569,7 @@ where
                 grid_bounds,
                 tiling_strat.geo_transform,
                 self.tiling_spec.tile_size_in_pixels,
+                FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
             )))
         }
     }
@@ -573,9 +594,12 @@ mod tests {
     use float_cmp::approx_eq;
     use futures::StreamExt;
     use geoengine_datatypes::collections::IntoGeometryIterator;
+    use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::{
         AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat,
     };
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
+    use geoengine_datatypes::raster::TilesEqualIgnoringCacheHint;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -613,6 +637,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheHint::default(),
         )?;
 
         let expected = MultiPoint::many(vec![
@@ -667,7 +692,6 @@ mod tests {
 
         result[0]
             .geometries()
-            .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(&MultiPoint, &a.into(), e, epsilon = 0.00001));
@@ -687,6 +711,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
+            CacheHint::default(),
         )?;
 
         let expected = [MultiLineString::new(vec![vec![
@@ -741,7 +766,6 @@ mod tests {
 
         result[0]
             .geometries()
-            .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(
@@ -767,6 +791,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
+            CacheHint::default(),
         )?;
 
         let expected = [MultiPolygon::new(vec![vec![vec![
@@ -822,7 +847,6 @@ mod tests {
 
         result[0]
             .geometries()
-            .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(&MultiPolygon, &a.into(), e, epsilon = 0.00001));
@@ -845,6 +869,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -852,6 +877,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -861,6 +887,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -870,6 +897,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
+                cache_hint: CacheHint::default(),
             },
         ];
 
@@ -925,7 +953,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
-        assert_eq!(data, res);
+        assert!(data.tiles_equal_ignoring_cache_hint(&res));
 
         Ok(())
     }
@@ -1090,10 +1118,12 @@ mod tests {
                 bbox: None,
                 resolution: None,
             },
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let id: DataId = DatasetId::new().into();
-        exe_ctx.add_meta_data(id.clone(), Box::new(m));
+        let name = NamedData::with_system_name("ndvi");
+        exe_ctx.add_meta_data(id.clone(), name.clone(), Box::new(m));
 
         exe_ctx.tiling_specification = TilingSpecification::new((0.0, 0.0).into(), [60, 60].into());
 
@@ -1103,7 +1133,7 @@ mod tests {
         // 2014-04-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters { data: id.clone() },
+            params: GdalSourceParameters { data: name },
         }
         .boxed();
 
@@ -1221,10 +1251,12 @@ mod tests {
                 bbox: None,
                 resolution: None,
             },
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let id: DataId = DatasetId::new().into();
-        exe_ctx.add_meta_data(id.clone(), Box::new(m));
+        let name = NamedData::with_system_name("ndvi");
+        exe_ctx.add_meta_data(id.clone(), name.clone(), Box::new(m));
 
         exe_ctx.tiling_specification =
             TilingSpecification::new((0.0, 0.0).into(), [600, 600].into());
@@ -1235,7 +1267,7 @@ mod tests {
         let time_interval = TimeInterval::new_instant(1_388_534_400_000).unwrap(); // 2014-01-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters { data: id.clone() },
+            params: GdalSourceParameters { data: name },
         }
         .boxed();
 
@@ -1299,6 +1331,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 3],
                 HashMap::default(),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -1374,6 +1407,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 3],
                 HashMap::default(),
+                CacheHint::default(),
             )
             .unwrap()],
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n
@@ -1451,6 +1485,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 1],
                 HashMap::default(),
+                CacheHint::default(),
             )
             .unwrap()],
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n

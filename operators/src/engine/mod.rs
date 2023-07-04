@@ -6,8 +6,9 @@ pub use execution_context::{
     ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
 };
 pub use operator::{
-    InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator, OperatorData,
-    OperatorName, PlotOperator, RasterOperator, TypedOperator, VectorOperator,
+    CanonicOperatorName, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, OperatorData, OperatorName, PlotOperator, RasterOperator,
+    TypedOperator, VectorOperator,
 };
 pub use operator_impl::{
     MultipleRasterOrSingleVectorSource, MultipleRasterSources, MultipleVectorSources, Operator,
@@ -183,13 +184,18 @@ macro_rules! call_on_bi_generic_raster_processor {
 }
 
 /// Shorthand type for a function that creates a `Span` for tracing
-pub type CreateSpan = fn() -> Span;
+pub type CreateSpan = fn(path: &WorkflowOperatorPath, query_counter: usize) -> Span;
 
 /// Macro for creating a span-fn for a given type, e.g. `span_fn!(MyType)`
 macro_rules! span_fn {
     ($op: ty) => {
         fn span(&self) -> crate::engine::CreateSpan {
-            || tracing::span!(tracing::Level::TRACE, <$op>::TYPE_NAME)
+            |path, query_counter| tracing::span!(
+                tracing::Level::TRACE,
+                <$op>::TYPE_NAME,
+                path = %path,
+                query_counter = %query_counter
+            )
         }
     };
 }

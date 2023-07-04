@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 use std::path::Path;
 
-use crate::api::model::datatypes::DatasetId;
+use crate::api::model::datatypes::DatasetName;
 use crate::api::model::services::AddDataset;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
@@ -14,6 +14,7 @@ use crate::util::config::get_config_element;
 use crate::util::IdResponse;
 use actix_web::{web, FromRequest, Responder};
 use futures_util::StreamExt;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -69,7 +70,7 @@ pub struct OdmErrorResponse {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct CreateDatasetResponse {
     upload: UploadId,
-    dataset: DatasetId,
+    dataset: DatasetName,
 }
 
 /// Create a new drone mapping task from a given upload. Returns the task id
@@ -273,7 +274,7 @@ where
 
     Ok(web::Json(CreateDatasetResponse {
         upload: upload_id,
-        dataset,
+        dataset: dataset.name,
     }))
 }
 
@@ -293,9 +294,9 @@ async fn dataset_definition_from_geotiff(
 
         Ok(DatasetDefinition {
             properties: AddDataset {
-                id: Some(DatasetId::new()),
-                name: "ODM Result".to_owned(), // TODO: more info
-                description: String::new(),    // TODO: more info
+                name: None,
+                display_name: "ODM Result".to_owned(), // TODO: more info
+                description: String::new(),            // TODO: more info
                 source_operator: "GdalSource".to_owned(),
                 symbology: None,
                 provenance: None,
@@ -311,6 +312,7 @@ async fn dataset_definition_from_geotiff(
                     bbox: None,       // TODO: determine bbox
                     resolution: None, // TODO: determine resolution
                 },
+                cache_ttl: CacheTtlSeconds::default(),
             }),
         })
     })
@@ -372,6 +374,7 @@ mod tests {
 
     use super::*;
     use crate::contexts::{Session, SessionContext};
+    use crate::datasets::listing::DatasetProvider;
     use crate::error::Result;
     use crate::test_data;
     use crate::util::tests::TestDataUploads;
@@ -497,7 +500,12 @@ mod tests {
         test_data.uploads.push(dataset_response.upload);
 
         // test if the meta data is correct
-        let dataset_id = dataset_response.dataset;
+        let dataset_name = dataset_response.dataset;
+        let dataset_id = ctx
+            .db()
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap();
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             ctx.execution_context()
                 .unwrap()
@@ -567,13 +575,17 @@ mod tests {
                     allow_alphaband_as_mask: true,
                     retry: None,
                 }),
+                cache_ttl: CacheTtlSeconds::default(),
             }
         );
 
         // test if the data can be loaded
         let op = GdalSource {
             params: GdalSourceParameters {
-                data: dataset_id.into(),
+                data: geoengine_datatypes::dataset::NamedData::with_namespaced_name(
+                    session.user.id.to_string(),
+                    dataset_id.to_string(),
+                ),
             },
         }
         .boxed();

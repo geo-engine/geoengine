@@ -4,6 +4,7 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -28,7 +29,9 @@ pub struct RasterVectorAggregateJoinProcessor<G> {
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
     feature_aggregation: FeatureAggregationMethod,
+    feature_aggregation_ignore_no_data: bool,
     temporal_aggregation: TemporalAggregationMethod,
+    temporal_aggregation_ignore_no_data: bool,
 }
 
 impl<G> RasterVectorAggregateJoinProcessor<G>
@@ -41,34 +44,46 @@ where
         raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
         feature_aggregation: FeatureAggregationMethod,
+        feature_aggregation_ignore_no_data: bool,
         temporal_aggregation: TemporalAggregationMethod,
+        temporal_aggregation_ignore_no_data: bool,
     ) -> Self {
         Self {
             collection,
             raster_processors,
             column_names,
             feature_aggregation,
+            feature_aggregation_ignore_no_data,
             temporal_aggregation,
+            temporal_aggregation_ignore_no_data,
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // TODO: refactor to reduce arguments
     async fn extract_raster_values<P: Pixel>(
         collection: &FeatureCollection<G>,
         raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &str,
         feature_aggreation: FeatureAggregationMethod,
+        feature_aggregation_ignore_no_data: bool,
         temporal_aggregation: TemporalAggregationMethod,
+        temporal_aggregation_ignore_no_data: bool,
         query: VectorQueryRectangle,
         ctx: &dyn QueryContext,
     ) -> Result<FeatureCollection<G>> {
-        let mut temporal_aggregator =
-            Self::create_aggregator::<P>(collection.len(), temporal_aggregation);
+        let mut temporal_aggregator = Self::create_aggregator::<P>(
+            collection.len(),
+            temporal_aggregation,
+            temporal_aggregation_ignore_no_data,
+        );
 
         let collection = collection.sort_by_time_asc()?;
 
         let covered_pixels = collection.create_covered_pixels();
 
         let collection = covered_pixels.collection_ref();
+
+        let mut cache_hint = CacheHint::max_duration();
 
         for time_span in FeatureTimeSpanIter::new(collection.time_intervals()) {
             let query = VectorQueryRectangle {
@@ -81,8 +96,11 @@ where
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
-            let mut feature_aggregator =
-                create_feature_aggregator::<P>(collection.len(), feature_aggreation);
+            let mut feature_aggregator = create_feature_aggregator::<P>(
+                collection.len(),
+                feature_aggreation,
+                feature_aggregation_ignore_no_data,
+            );
 
             let mut time_end = None;
 
@@ -97,8 +115,11 @@ where
                             time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
                         )?;
 
-                        feature_aggregator =
-                            create_feature_aggregator::<P>(collection.len(), feature_aggreation);
+                        feature_aggregator = create_feature_aggregator::<P>(
+                            collection.len(),
+                            feature_aggreation,
+                            feature_aggregation_ignore_no_data,
+                        );
 
                         if temporal_aggregator.is_satisfied() {
                             break;
@@ -132,6 +153,8 @@ where
                         break;
                     }
                 }
+
+                cache_hint.merge_with(&raster.cache_hint);
             }
 
             temporal_aggregator.add_feature_data(
@@ -144,14 +167,19 @@ where
             }
         }
 
-        collection
+        let mut new_collection = collection
             .add_column(new_column_name, temporal_aggregator.into_data())
-            .map_err(Into::into)
+            .map_err(Into::<crate::error::Error>::into)?;
+
+        new_collection.cache_hint = cache_hint;
+
+        Ok(new_collection)
     }
 
     fn create_aggregator<P: Pixel>(
         number_of_features: usize,
         aggregation: TemporalAggregationMethod,
+        ignore_no_data: bool,
     ) -> TypedAggregator {
         match aggregation {
             TemporalAggregationMethod::First => match P::TYPE {
@@ -163,14 +191,14 @@ where
                 | RasterDataType::I16
                 | RasterDataType::I32
                 | RasterDataType::I64 => {
-                    FirstValueIntAggregator::new(number_of_features).into_typed()
+                    FirstValueIntAggregator::new(number_of_features, ignore_no_data).into_typed()
                 }
                 RasterDataType::F32 | RasterDataType::F64 => {
-                    FirstValueFloatAggregator::new(number_of_features).into_typed()
+                    FirstValueFloatAggregator::new(number_of_features, ignore_no_data).into_typed()
                 }
             },
             TemporalAggregationMethod::Mean => {
-                MeanValueAggregator::new(number_of_features).into_typed()
+                MeanValueAggregator::new(number_of_features, ignore_no_data).into_typed()
             }
             TemporalAggregationMethod::None => {
                 unreachable!("this type of aggregator does not lead to this kind of processor")
@@ -193,13 +221,26 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let stream = self.collection
-            .query(query, ctx).await?
+        let stream = self
+            .collection
+            .query(query, ctx)
+            .await?
             .and_then(move |mut collection| async move {
-
-                for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {
+                for (raster, new_column_name) in
+                    self.raster_processors.iter().zip(&self.column_names)
+                {
                     collection = call_on_generic_raster_processor!(raster, raster => {
-                        Self::extract_raster_values(&collection, raster, new_column_name, self.feature_aggregation, self.temporal_aggregation, query, ctx).await?
+                        Self::extract_raster_values(
+                            &collection,
+                            raster,
+                            new_column_name,
+                            self.feature_aggregation,
+                            self.feature_aggregation_ignore_no_data,
+                            self.temporal_aggregation,
+                            self.temporal_aggregation_ignore_no_data,
+                            query,
+                            ctx
+                        ).await?
                     });
                 }
 
@@ -221,6 +262,7 @@ mod tests {
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::collections::{MultiPointCollection, MultiPolygonCollection};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::MultiPolygon;
     use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -244,6 +286,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         let raster_source = MockRasterSource {
@@ -282,6 +325,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::default(); 6],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -290,7 +334,9 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             FeatureAggregationMethod::First,
+            false,
             TemporalAggregationMethod::First,
+            false,
             VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
                 time_interval: Default::default(),
@@ -321,6 +367,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -332,6 +379,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         let raster_source = MockRasterSource {
@@ -370,6 +418,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::default(); 6],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -378,7 +427,9 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             FeatureAggregationMethod::First,
+            false,
             TemporalAggregationMethod::Mean,
+            false,
             VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
@@ -409,6 +460,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -420,6 +472,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -431,6 +484,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -442,6 +496,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         let raster_source = MockRasterSource {
@@ -481,6 +536,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::default(); 2],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -489,7 +545,9 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             FeatureAggregationMethod::Mean,
+            false,
             TemporalAggregationMethod::Mean,
+            false,
             VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
@@ -524,6 +582,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -535,6 +594,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_a_2 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
@@ -546,6 +606,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![160, 150, 140, 130, 120, 110])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -557,6 +618,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -568,6 +630,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
         let raster_tile_b_2 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -579,6 +642,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![110, 120, 130, 140, 150, 160])
                 .unwrap()
                 .into(),
+            CacheHint::default(),
         );
 
         let raster_source = MockRasterSource {
@@ -622,6 +686,7 @@ mod tests {
             .unwrap()],
             vec![TimeInterval::default(); 1],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -630,7 +695,9 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             FeatureAggregationMethod::Mean,
+            false,
             TemporalAggregationMethod::Mean,
+            false,
             VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),

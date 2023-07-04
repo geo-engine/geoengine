@@ -5,15 +5,16 @@ use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
+    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
     SpatialPartitioned, SpatialResolution, TimeInstance, TimeInterval,
@@ -70,6 +71,8 @@ impl RasterOperator for Interpolation {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let raster_source = initialized_sources.raster;
         let in_descriptor = raster_source.result_descriptor();
@@ -96,6 +99,7 @@ impl RasterOperator for Interpolation {
         };
 
         let initialized_operator = InitializedInterpolation {
+            name,
             result_descriptor: out_descriptor,
             raster_source,
             interpolation_method: self.params.interpolation,
@@ -110,6 +114,7 @@ impl RasterOperator for Interpolation {
 }
 
 pub struct InitializedInterpolation {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     raster_source: Box<dyn InitializedRasterOperator>,
     interpolation_method: InterpolationMethod,
@@ -143,6 +148,10 @@ impl InitializedRasterOperator for InitializedInterpolation {
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -216,7 +225,9 @@ where
             ctx,
             sub_query,
         )
-        .filter_and_fill())
+        .filter_and_fill(
+            crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+        ))
     }
 }
 
@@ -374,6 +385,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
             [0, 0].into(),
             geo_transform,
             GridOrEmpty::from(grid),
+            CacheHint::max_duration(),
         );
 
         InterpolationAccu::new(input_tile, tile_info, pool)
@@ -448,7 +460,7 @@ mod tests {
             [2, 2].into(),
         ));
 
-        let raster = make_raster();
+        let raster = make_raster(CacheHint::max_duration());
 
         let operator = Interpolation {
             params: InterpolationParams {
@@ -526,7 +538,7 @@ mod tests {
         Ok(())
     }
 
-    fn make_raster() -> Box<dyn RasterOperator> {
+    fn make_raster(cache_hint: CacheHint) -> Box<dyn RasterOperator> {
         // test raster:
         // [0, 10)
         // || 1 | 2 || 3 | 4 ||
@@ -544,6 +556,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![1, 2, 5, 6]).unwrap()),
+                cache_hint,
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -553,6 +566,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![3, 4, 7, 8]).unwrap()),
+                cache_hint,
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -562,6 +576,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![8, 7, 4, 3]).unwrap()),
+                cache_hint,
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -571,6 +586,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![6, 5, 2, 1]).unwrap()),
+                cache_hint,
             ),
         ];
 
@@ -588,5 +604,48 @@ mod tests {
             },
         }
         .boxed()
+    }
+
+    #[tokio::test]
+    async fn it_attaches_cache_hint() -> Result<()> {
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [2, 2].into(),
+        ));
+
+        let cache_hint = CacheHint::seconds(1234);
+        let raster = make_raster(cache_hint);
+
+        let operator = Interpolation {
+            params: InterpolationParams {
+                interpolation: InterpolationMethod::NearestNeighbor,
+                input_resolution: InputResolution::Value(SpatialResolution::one()),
+            },
+            sources: SingleRasterSource { raster },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await?;
+
+        let processor = operator.query_processor()?.get_i8().unwrap();
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 20),
+            spatial_resolution: SpatialResolution::zero_point_five(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let result_stream = processor.query(query_rect, &query_ctx).await?;
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>()?;
+
+        for tile in result {
+            // dbg!(tile.time, tile.grid_array);
+            assert_eq!(tile.cache_hint.expires(), cache_hint.expires());
+        }
+
+        Ok(())
     }
 }

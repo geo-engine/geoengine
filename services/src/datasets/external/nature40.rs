@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error;
 use crate::error::Error;
@@ -16,6 +16,7 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use gdal::DatasetOptions;
 use gdal::Metadata;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -54,6 +55,8 @@ pub struct Nature40DataProviderDefinition {
     password: String,
     #[serde(default)]
     request_retries: RequestRetries,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -85,6 +88,7 @@ impl DataProviderDefinition for Nature40DataProviderDefinition {
             user: self.user,
             password: self.password,
             request_retries: self.request_retries,
+            cache_ttl: self.cache_ttl,
         }))
     }
 
@@ -108,6 +112,7 @@ pub struct Nature40DataProvider {
     user: String,
     password: String,
     request_retries: RequestRetries,
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Deserialize, Debug)]
@@ -270,11 +275,10 @@ impl LayerCollectionProvider for Nature40DataProvider {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: DataId::External(ExternalDataId {
-                                provider_id: self.id,
-                                layer_id: id.clone(),
-                            })
-                            .into(),
+                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                self.id.to_string(),
+                                id.to_string(),
+                            ),
                         },
                     }
                     .boxed(),
@@ -465,6 +469,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 Some(self.auth().to_vec()),
             )?,
             result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize)?,
+            cache_ttl: self.cache_ttl,
         }))
     }
 }
@@ -512,7 +517,8 @@ mod tests {
 
     use geoengine_datatypes::{
         primitives::{
-            Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+            CacheTtlSeconds, Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution,
+            TimeInterval,
         },
         raster::RasterDataType,
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
@@ -529,7 +535,9 @@ mod tests {
     };
     use serde_json::json;
 
-    use crate::{layers::layer::ProviderLayerCollectionId, test_data};
+    use crate::{
+        api::model::datatypes::ExternalDataId, layers::layer::ProviderLayerCollectionId, test_data,
+    };
 
     use super::*;
 
@@ -790,6 +798,7 @@ mod tests {
             user: "geoengine".to_owned(),
             password: "pwd".to_owned(),
             request_retries: Default::default(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -886,6 +895,7 @@ mod tests {
             user: "geoengine".to_owned(),
             password: "pwd".to_owned(),
             request_retries: Default::default(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -958,7 +968,8 @@ mod tests {
                         gdal_config_options: None,
                         allow_alphaband_as_mask: true,
                         retry: None,
-                    })
+                    }),
+                    cache_ttl: CacheTtlSeconds::default(),
                 }
             );
 

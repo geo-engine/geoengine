@@ -1,0 +1,76 @@
+{
+  "properties": {
+    "name": "ne2_raster_red",
+    "displayName": "Natural Earth II – Red",
+    "description": "This data derived from Natural Earth 1 portrays the world environment in an idealized manner with little human influence. The softly blended colors of Natural Earth 2 are ideal for historical mapping, because it shows the world much as it looked before the modern era.",
+    "sourceOperator": "GdalSource",
+    "provenance": [
+      {
+        "citation": "Made with Natural Earth. Free vector and raster map data @ naturalearthdata.com.",
+        "license": "CC0 (public domain)",
+        "uri": "https://www.naturalearthdata.com/downloads/50m-raster-data/50m-natural-earth-2/"
+      }
+    ],
+    "symbology": {
+      "type": "raster",
+      "opacity": 1,
+      "colorizer": {
+        "type": "linearGradient",
+        "breakpoints": [
+          {
+            "value": 0,
+            "color": [255, 245, 240, 255]
+          },
+          {
+            "value": 127,
+            "color": [250, 105, 73, 255]
+          },
+          {
+            "value": 255,
+            "color": [254, 244, 239, 255]
+          }
+        ],
+        "noDataColor": [0, 0, 0, 0],
+        "underColor": [255, 245, 240, 255],
+        "overColor": [254, 244, 239, 255]
+      }
+    }
+  },
+  "metaData": {
+    "type": "GdalStatic",
+    "resultDescriptor": {
+      "dataType": "U8",
+      "spatialReference": "EPSG:4326",
+      "measurement": {
+        "type": "unitless"
+      },
+      "time": {
+        "start": "-262144-01-01T00:00:00+00:00",
+        "end": "+262143-12-31T23:59:59.999+00:00"
+      },
+      "bbox": {
+        "upperLeftCoordinate": [-180, 90.0],
+        "lowerRightCoordinate": [180.0, -90.0]
+      },
+      "resolution": {
+        "x": 0.09999999999999,
+        "y": 0.09999999999999
+      }
+    },
+    "params": {
+      "filePath": "test_data/raster/natural_earth_2/NE2_150M_SR_W.tif",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -180.0,
+          "y": 90.0
+        },
+        "xPixelSize": 0.1,
+        "yPixelSize": -0.1
+      },
+      "width": 3600,
+      "height": 1800,
+      "fileNotFoundHandling": "NoData"
+    }
+  }
+}

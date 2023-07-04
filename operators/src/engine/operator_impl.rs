@@ -1,4 +1,4 @@
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 use serde::{Deserialize, Serialize};
 
 use crate::util::input::{MultiRasterOrVectorOperator, RasterOrVectorOperator};
@@ -161,8 +161,8 @@ impl<Params, Sources> OperatorData for Operator<Params, Sources>
 where
     Sources: OperatorData,
 {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        self.sources.data_ids_collect(data_ids);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        self.sources.data_names_collect(data_names);
     }
 }
 
@@ -170,56 +170,56 @@ impl<Params> OperatorData for SourceOperator<Params>
 where
     Params: OperatorData,
 {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        self.params.data_ids_collect(data_ids);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        self.params.data_names_collect(data_names);
     }
 }
 
 impl OperatorData for SingleRasterOrVectorSource {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        self.source.data_ids_collect(data_ids);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        self.source.data_names_collect(data_names);
     }
 }
 
 impl OperatorData for MultipleRasterOrSingleVectorSource {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        self.source.data_ids_collect(data_ids);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        self.source.data_names_collect(data_names);
     }
 }
 
 impl OperatorData for SingleVectorSource {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        self.vector.data_ids_collect(data_ids);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        self.vector.data_names_collect(data_names);
     }
 }
 
 impl OperatorData for SingleRasterSource {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        self.raster.data_ids_collect(data_ids);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        self.raster.data_names_collect(data_names);
     }
 }
 
 impl OperatorData for MultipleRasterSources {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
         for source in &self.rasters {
-            source.data_ids_collect(data_ids);
+            source.data_names_collect(data_names);
         }
     }
 }
 
 impl OperatorData for MultipleVectorSources {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
         for source in &self.vectors {
-            source.data_ids_collect(data_ids);
+            source.data_names_collect(data_names);
         }
     }
 }
 
 impl OperatorData for SingleVectorMultipleRasterSources {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        self.vector.data_ids_collect(data_ids);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        self.vector.data_names_collect(data_names);
         for source in &self.rasters {
-            source.data_ids_collect(data_ids);
+            source.data_names_collect(data_names);
         }
     }
 }

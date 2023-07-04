@@ -1,12 +1,9 @@
+use arrow::datatypes::{DataType, Date64Type, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
 use arrow::{
-    array::FixedSizeListArray,
-    datatypes::{DataType, Date64Type, Field, Float64Type, Int64Type},
-};
-use arrow::{
     array::{
-        as_boolean_array, as_primitive_array, as_string_array, Array, ArrayData, ArrayRef,
-        BooleanArray, ListArray, StructArray,
+        as_boolean_array, as_primitive_array, as_string_array, Array, ArrayRef, BooleanArray,
+        ListArray, StructArray,
     },
     buffer::Buffer,
 };
@@ -23,6 +20,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::{mem, slice};
 
+use crate::primitives::CacheHint;
 use crate::primitives::{BoolDataRef, Coordinate2D, DateTimeDataRef, TimeInstance};
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
@@ -45,6 +43,7 @@ use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
 
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FeatureCollection<CollectionType> {
     #[serde(with = "struct_serde")]
     pub(super) table: StructArray,
@@ -54,6 +53,8 @@ pub struct FeatureCollection<CollectionType> {
 
     #[serde(skip)]
     collection_type: PhantomData<CollectionType>,
+
+    pub cache_hint: CacheHint,
 }
 
 impl<CollectionType> FeatureCollection<CollectionType> {
@@ -68,11 +69,13 @@ impl<CollectionType> FeatureCollection<CollectionType> {
     pub(super) fn new_from_internals(
         table: StructArray,
         types: HashMap<String, FeatureDataType>,
+        cache_hint: CacheHint,
     ) -> Self {
         Self {
             table,
             types,
             collection_type: Default::default(),
+            cache_hint,
         }
     }
 }
@@ -194,33 +197,29 @@ where
 
         // TODO: use filter directly on struct array when it is implemented
 
-        let table_data = self.table.data();
-        let arrow::datatypes::DataType::Struct(columns) = table_data.data_type() else {
+        let arrow::datatypes::DataType::Struct(columns) = self.table.data_type() else {
             unreachable!("`table` field must be a struct")
         };
 
-        let mut filtered_data =
-            Vec::<(arrow::datatypes::Field, arrow::array::ArrayRef)>::with_capacity(columns.len());
+        let mut filtered_data = Vec::<ArrayRef>::with_capacity(columns.len());
 
         for (column, array) in columns.iter().zip(self.table.columns()) {
-            filtered_data.push((
-                column.clone(),
-                match column.name().as_str() {
-                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::filter(
-                        downcast_array(array),
-                        &filter_array,
-                    )?),
-                    Self::TIME_COLUMN_NAME => {
-                        Arc::new(TimeInterval::filter(downcast_array(array), &filter_array)?)
-                    }
-                    _ => arrow::compute::filter(array.as_ref(), &filter_array)?,
-                },
-            ));
+            filtered_data.push(match column.name().as_str() {
+                Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::filter(
+                    downcast_array(array),
+                    &filter_array,
+                )?),
+                Self::TIME_COLUMN_NAME => {
+                    Arc::new(TimeInterval::filter(downcast_array(array), &filter_array)?)
+                }
+                _ => arrow::compute::filter(array.as_ref(), &filter_array)?,
+            });
         }
 
         Ok(Self::new_from_internals(
-            filtered_data.into(),
+            StructArray::try_new(columns.clone(), filtered_data, None)?,
             self.types.clone(),
+            self.cache_hint,
         ))
     }
 
@@ -315,8 +314,9 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len())?,
+            StructArray::try_new(columns.into(), column_values, None)?,
             types,
+            self.cache_hint,
         ))
     }
 
@@ -400,8 +400,9 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len())?,
+            StructArray::try_new(columns.into(), column_values, None)?,
             types,
+            self.cache_hint,
         ))
     }
 
@@ -511,12 +512,11 @@ where
             }
         );
 
-        let table_data = self.table.data();
-        let DataType::Struct(columns) = table_data.data_type() else {
+        let DataType::Struct(columns) = self.table.data_type() else {
             unreachable!("`tables` field must be a struct")
         };
 
-        let mut new_data = Vec::<(Field, ArrayRef)>::with_capacity(columns.len());
+        let mut new_data = Vec::<ArrayRef>::with_capacity(columns.len());
 
         // concat data column by column
         for (column, array_a) in columns.iter().zip(self.table.columns()) {
@@ -525,25 +525,23 @@ where
                 .column_by_name(column.name())
                 .expect("column must occur in both collections");
 
-            new_data.push((
-                column.clone(),
-                match column.name().as_str() {
-                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::concat(
-                        downcast_array(array_a),
-                        downcast_array(array_b),
-                    )?),
-                    Self::TIME_COLUMN_NAME => Arc::new(TimeInterval::concat(
-                        downcast_array(array_a),
-                        downcast_array(array_b),
-                    )?),
-                    _ => arrow::compute::concat(&[array_a.as_ref(), array_b.as_ref()])?,
-                },
-            ));
+            new_data.push(match column.name().as_str() {
+                Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::concat(
+                    downcast_array(array_a),
+                    downcast_array(array_b),
+                )?),
+                Self::TIME_COLUMN_NAME => Arc::new(TimeInterval::concat(
+                    downcast_array(array_a),
+                    downcast_array(array_b),
+                )?),
+                _ => arrow::compute::concat(&[array_a.as_ref(), array_b.as_ref()])?,
+            });
         }
 
         Ok(Self::new_from_internals(
-            new_data.into(),
+            StructArray::try_new(columns.clone(), new_data, None)?,
             self.types.clone(),
+            self.cache_hint.merged(&other.cache_hint),
         ))
     }
 
@@ -648,8 +646,9 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len())?,
+            StructArray::try_new(columns.into(), column_values, None)?,
             types,
+            self.cache_hint,
         ))
     }
 
@@ -669,9 +668,13 @@ where
 
         let table_ref = arrow::compute::take(&self.table, &sort_indices, None)?;
 
-        let table = StructArray::from(table_ref.data().clone());
+        let table = StructArray::from(table_ref.into_data());
 
-        Ok(Self::new_from_internals(table, self.types.clone()))
+        Ok(Self::new_from_internals(
+            table,
+            self.types.clone(),
+            self.cache_hint,
+        ))
     }
 
     fn replace_time(&self, time_intervals: &[TimeInterval]) -> Result<Self::Output> {
@@ -711,9 +714,7 @@ where
             TimeInterval::arrow_data_type(),
             false,
         ));
-        column_values.push(Arc::new(FixedSizeListArray::from(
-            time_intervals.data().clone(),
-        )));
+        column_values.push(Arc::new(time_intervals));
 
         // copy remaining attribute data
         for (column_name, column_type) in &self.types {
@@ -731,8 +732,9 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len())?,
+            StructArray::try_new(columns.into(), column_values, None)?,
             self.types.clone(),
+            self.cache_hint,
         ))
     }
 }
@@ -1005,12 +1007,12 @@ where
             match self.types.get(column_name).expect("previously checked") {
                 FeatureDataType::Float => {
                     let array: &arrow::array::Float64Array = downcast_array(column);
-                    FloatDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    FloatDataRef::new(array.values(), array.nulls()).into()
                 }
                 FeatureDataType::Text => {
                     let array: &arrow::array::StringArray = downcast_array(column);
                     let fixed_nulls = if column.null_count() > 0 {
-                        array.data_ref().null_bitmap()
+                        array.nulls()
                     } else {
                         None // StringBuilder assigns some null_bitmap even if there are no nulls
                     };
@@ -1018,17 +1020,17 @@ where
                 }
                 FeatureDataType::Int => {
                     let array: &arrow::array::Int64Array = downcast_array(column);
-                    IntDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    IntDataRef::new(array.values(), array.nulls()).into()
                 }
                 FeatureDataType::Category => {
                     let array: &arrow::array::UInt8Array = downcast_array(column);
-                    CategoryDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    CategoryDataRef::new(array.values(), array.nulls()).into()
                 }
                 FeatureDataType::Bool => {
                     let array: &arrow::array::BooleanArray = downcast_array(column);
                     // TODO: This operation is quite expensive for getting a reference
                     let transformed: Vec<_> = array.iter().map(|x| x.unwrap_or(false)).collect();
-                    BoolDataRef::new(transformed, array.data_ref().null_bitmap()).into()
+                    BoolDataRef::new(transformed, array.nulls()).into()
                 }
                 FeatureDataType::DateTime => {
                     let array: &arrow::array::Date64Array = downcast_array(column);
@@ -1038,7 +1040,7 @@ where
                             array.len(),
                         )
                     };
-                    DateTimeDataRef::new(timestamps, array.data_ref().null_bitmap()).into()
+                    DateTimeDataRef::new(timestamps, array.nulls()).into()
                 }
             },
         )
@@ -1130,7 +1132,7 @@ where
     /// assert_eq!(pc.len(), 0);
     /// ```
     pub fn empty() -> Self {
-        Self::from_data(vec![], vec![], Default::default())
+        Self::from_data(vec![], vec![], Default::default(), CacheHint::default())
             .expect("should not fail because no data is given")
     }
 
@@ -1140,7 +1142,7 @@ where
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionInfos};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint, CacheHint};
     /// use std::collections::HashMap;
     ///
     /// let pc = MultiPointCollection::from_data(
@@ -1151,6 +1153,7 @@ where
     ///         map.insert("float".into(), FeatureData::Float(vec![0., 1.]));
     ///         map
     ///     },
+    ///     CacheHint::default(),
     /// ).unwrap();
     ///
     /// assert_eq!(pc.len(), 2);
@@ -1164,6 +1167,7 @@ where
         features: Vec<CollectionType>,
         time_intervals: Vec<TimeInterval>,
         data: HashMap<String, FeatureData>,
+        cache_hint: CacheHint,
     ) -> Result<Self> {
         let number_of_rows = time_intervals.len();
         let number_of_column: usize = data.len() + 1 + usize::from(CollectionType::IS_GEOMETRY);
@@ -1224,8 +1228,9 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, arrays, number_of_rows)?,
+            StructArray::try_new(columns.into(), arrays, None)?,
             types,
+            cache_hint,
         ))
     }
 
@@ -1247,6 +1252,7 @@ where
             data.iter()
                 .map(|(k, v)| (k.clone().into(), v.clone().into()))
                 .collect(),
+            CacheHint::default(),
         )
     }
 
@@ -1254,23 +1260,8 @@ where
     pub(super) fn is_reserved_name(name: &str) -> bool {
         name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
     }
-}
 
-impl<CollectionType> Clone for FeatureCollection<CollectionType> {
-    fn clone(&self) -> Self {
-        Self {
-            table: StructArray::from(self.table.data().clone()),
-            types: self.types.clone(),
-            collection_type: Default::default(),
-        }
-    }
-}
-
-impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
-where
-    CollectionType: Geometry + ArrowTyped,
-{
-    fn eq(&self, other: &Self) -> bool {
+    fn equals_ignoring_cache_hint(&self, other: &Self) -> bool {
         if self.types != other.types {
             return false;
         }
@@ -1300,6 +1291,26 @@ where
     }
 }
 
+impl<CollectionType> Clone for FeatureCollection<CollectionType> {
+    fn clone(&self) -> Self {
+        Self {
+            table: self.table.clone(),
+            types: self.types.clone(),
+            collection_type: Default::default(),
+            cache_hint: self.cache_hint.clone_with_current_datetime(),
+        }
+    }
+}
+
+impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.equals_ignoring_cache_hint(other) && self.cache_hint == other.cache_hint
+    }
+}
+
 impl<CollectionType> VectorDataTyped for FeatureCollection<CollectionType>
 where
     CollectionType: Geometry,
@@ -1322,25 +1333,6 @@ where
     fn geometry_options(&'i self) -> Self::GeometryOptionIterator {
         SomeIter::new(self.geometries())
     }
-}
-
-/// Create an `arrow` struct from column meta data and data
-pub fn struct_array_from_data(
-    columns: Vec<Field>,
-    column_values: Vec<ArrayRef>,
-    number_of_features: usize,
-) -> Result<StructArray> {
-    Ok(StructArray::from(
-        ArrayData::builder(arrow::datatypes::DataType::Struct(columns))
-            .child_data(
-                column_values
-                    .into_iter()
-                    .map(|a| a.data().clone())
-                    .collect(),
-            )
-            .len(number_of_features)
-            .build()?,
-    ))
 }
 
 /// Types that are suitable to act as filters
@@ -1430,6 +1422,70 @@ where
     }
 
     Ok(())
+}
+
+/// A way to compare two `FeatureCollection`s ignoring the `CacheHint` and only considering the actual data.
+pub trait ChunksEqualIgnoringCacheHint<C> {
+    fn chunks_equal_ignoring_cache_hint(&self, other: &dyn IterableFeatureCollection<C>) -> bool;
+}
+
+/// Allow comparing Iterables of `BaseTile` ignoring the `CacheHint` and only considering the actual data.
+pub trait IterableFeatureCollection<C> {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_>;
+}
+
+struct SingleChunkIter<'a, C> {
+    chunk: Option<&'a FeatureCollection<C>>,
+}
+
+impl<'a, C> Iterator for SingleChunkIter<'a, C> {
+    type Item = &'a FeatureCollection<C>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.chunk.take()
+    }
+}
+
+impl<C> IterableFeatureCollection<C> for FeatureCollection<C> {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_> {
+        Box::new(SingleChunkIter { chunk: Some(self) })
+    }
+}
+
+impl<C> IterableFeatureCollection<C> for Vec<FeatureCollection<C>> {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_> {
+        Box::new(self.iter())
+    }
+}
+
+impl<C, const N: usize> IterableFeatureCollection<C> for [FeatureCollection<C>; N] {
+    fn iter_chunks(&self) -> Box<dyn Iterator<Item = &FeatureCollection<C>> + '_> {
+        Box::new(self.iter())
+    }
+}
+
+impl<C, I: IterableFeatureCollection<C>> ChunksEqualIgnoringCacheHint<C> for I
+where
+    C: Geometry + ArrowTyped,
+{
+    fn chunks_equal_ignoring_cache_hint(&self, other: &dyn IterableFeatureCollection<C>) -> bool {
+        let mut iter_self = self.iter_chunks();
+        let mut iter_other = other.iter_chunks();
+
+        loop {
+            match (iter_self.next(), iter_other.next()) {
+                (Some(a), Some(b)) => {
+                    if !a.equals_ignoring_cache_hint(b) {
+                        return false;
+                    }
+                }
+                // both iterators are exhausted
+                (None, None) => return true,
+                // one iterator is exhausted, the other is not, so they are not equal
+                _ => return false,
+            }
+        }
+    }
 }
 
 /// Custom serializer for Arrow's `StructArray`
@@ -1598,8 +1654,9 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len())?,
+            StructArray::try_new(columns.into(), column_values, None)?,
             self.types.clone(),
+            self.cache_hint,
         ))
     }
 }
@@ -1626,12 +1683,15 @@ mod tests {
                 vec![],
                 vec![TimeInterval::new(0, 1).unwrap(); length],
                 Default::default(),
+                CacheHint::default(),
             )
             .unwrap()
         }
 
         fn time_interval_size(length: usize) -> usize {
-            let base = 64;
+            assert_eq!(mem::size_of::<arrow::array::FixedSizeListArray>(), 104);
+
+            let base = 104;
 
             if length == 0 {
                 return base;
@@ -1647,10 +1707,10 @@ mod tests {
             empty_hash_map_size
         );
 
-        let struct_stack_size = 176;
+        let struct_stack_size = 104;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
-        let arrow_overhead_bytes = 264;
+        let arrow_overhead_bytes = 96;
 
         for i in 0..10 {
             assert_eq!(
@@ -1676,6 +1736,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1696,6 +1757,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 

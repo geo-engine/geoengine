@@ -11,5 +11,6 @@
     "database": "abcd",
     "schema": "public"
   },
-  "pangaeaUrl": "https://doi.pangaea.de"
+  "pangaeaUrl": "https://doi.pangaea.de",
+  "cacheTtl": 0
 }

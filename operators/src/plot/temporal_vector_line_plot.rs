@@ -1,7 +1,8 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedSources, InitializedVectorOperator,
-    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
-    SingleVectorSource, TypedPlotQueryProcessor, VectorQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedSources,
+    InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    PlotResultDescriptor, QueryContext, SingleVectorSource, TypedPlotQueryProcessor,
+    VectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::engine::{QueryProcessor, VectorColumnInfo};
 use crate::error;
@@ -56,6 +57,8 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_source = self.sources.initialize_sources(path, context).await?;
         let source = initialized_source.vector;
         let result_descriptor = source.result_descriptor();
@@ -100,6 +103,7 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
         let in_desc = source.result_descriptor().clone();
 
         Ok(InitializedFeatureAttributeValuesOverTime {
+            name,
             result_descriptor: in_desc.into(),
             vector_source: source,
             state: self.params,
@@ -112,6 +116,7 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
 
 /// The initialization of `FeatureAttributeValuesOverTime`
 pub struct InitializedFeatureAttributeValuesOverTime {
+    name: CanonicOperatorName,
     result_descriptor: PlotResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     state: FeatureAttributeValuesOverTimeParams,
@@ -130,6 +135,10 @@ impl InitializedPlotOperator for InitializedFeatureAttributeValuesOverTime {
 
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -268,6 +277,7 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
@@ -318,6 +328,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -465,6 +476,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                CacheHint::default(),
             )
             .unwrap(),
         )
@@ -600,6 +612,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                CacheHint::default(),
             )
             .unwrap(),
         )

@@ -1,7 +1,8 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedSources, InitializedVectorOperator,
-    Operator, OperatorName, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
-    TypedPlotQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedSources,
+    InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    PlotResultDescriptor, QueryContext, TypedPlotQueryProcessor, TypedVectorQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::engine::{QueryProcessor, SingleVectorSource};
 use crate::error::Error;
@@ -52,6 +53,8 @@ impl PlotOperator for PieChart {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let vector_source = initialized_sources.vector;
 
@@ -80,6 +83,7 @@ impl PlotOperator for PieChart {
                     };
 
                 Ok(InitializedCountPieChart::new(
+                    name,
                     vector_source,
                     in_desc.into(),
                     column_name.clone(),
@@ -97,6 +101,7 @@ impl PlotOperator for PieChart {
 
 /// The initialization of `Histogram`
 pub struct InitializedCountPieChart<Op> {
+    name: CanonicOperatorName,
     source: Op,
     result_descriptor: PlotResultDescriptor,
     column_name: String,
@@ -107,6 +112,7 @@ pub struct InitializedCountPieChart<Op> {
 
 impl<Op> InitializedCountPieChart<Op> {
     pub fn new(
+        name: CanonicOperatorName,
         source: Op,
         result_descriptor: PlotResultDescriptor,
         column_name: String,
@@ -115,6 +121,7 @@ impl<Op> InitializedCountPieChart<Op> {
         donut: bool,
     ) -> Self {
         Self {
+            name,
             source,
             result_descriptor,
             column_name,
@@ -140,6 +147,10 @@ impl InitializedPlotOperator for InitializedCountPieChart<Box<dyn InitializedVec
 
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -281,7 +292,8 @@ mod tests {
         OgrSourceDatasetTimeType, OgrSourceErrorSpec, OgrSourceParameters,
     };
     use crate::test_data;
-    use geoengine_datatypes::dataset::{DataId, DatasetId};
+    use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
+    use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, FeatureDataType, NoGeometry, SpatialResolution, TimeInterval,
     };
@@ -493,10 +505,12 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn text_attribute() {
         let dataset_id = DatasetId::new();
+        let dataset_name = NamedData::with_system_name("ne_10m_ports");
 
         let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
             DataId::Internal { dataset_id },
+            dataset_name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -524,6 +538,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -582,7 +597,7 @@ mod tests {
             },
             sources: OgrSource {
                 params: OgrSourceParameters {
-                    data: dataset_id.into(),
+                    data: dataset_name.clone(),
                     attribute_projection: None,
                     attribute_filters: None,
                 },
@@ -626,7 +641,7 @@ mod tests {
             },
             sources: OgrSource {
                 params: OgrSourceParameters {
-                    data: dataset_id.into(),
+                    data: dataset_name,
                     attribute_projection: None,
                     attribute_filters: Some(vec![AttributeFilter {
                         attribute: "name".to_string(),

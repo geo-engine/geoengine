@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::engine::QueryContext;
+use crate::engine::{CanonicOperatorName, QueryContext};
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName, ResultDescriptor,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
@@ -12,7 +12,7 @@ use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::{
     Geometry, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInterval,
     VectorQueryRectangle,
@@ -92,7 +92,7 @@ impl<G> OperatorData for MockFeatureCollectionSource<G>
 where
     G: Geometry + ArrowTyped,
 {
-    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
+    fn data_names_collect(&self, _data_names: &mut Vec<NamedData>) {}
 }
 
 impl<G> MockFeatureCollectionSource<G>
@@ -135,6 +135,7 @@ where
 }
 
 pub struct InitializedMockFeatureCollectionSource<R: ResultDescriptor, G: Geometry> {
+    name: CanonicOperatorName,
     result_descriptor: R,
     collections: Vec<FeatureCollection<G>>,
 }
@@ -195,6 +196,7 @@ macro_rules! impl_mock_feature_collection_source {
                 };
 
                 Ok(InitializedMockFeatureCollectionSource {
+                    name: CanonicOperatorName::from(&self),
                     result_descriptor,
                     collections: self.params.collections,
                 }
@@ -218,6 +220,9 @@ macro_rules! impl_mock_feature_collection_source {
             fn result_descriptor(&self) -> &VectorResultDescriptor {
                 &self.result_descriptor
             }
+            fn canonic_name(&self) -> CanonicOperatorName {
+                self.name.clone()
+            }
         }
     };
 }
@@ -233,12 +238,15 @@ mod tests {
     use crate::engine::QueryProcessor;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
+    use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
     #[test]
     fn serde() {
+        let cache_hint = CacheHint::default();
         let collection = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
@@ -249,6 +257,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            cache_hint,
         )
         .unwrap();
 
@@ -327,6 +336,7 @@ mod tests {
                         "types": {
                             "foobar": "int"
                         },
+                        "cacheHint": cache_hint
                     }],
                     "spatialReference": "EPSG:4326",
                     "measurements": null,
@@ -349,6 +359,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -379,6 +390,6 @@ mod tests {
 
         assert_eq!(collections.len(), 1);
 
-        assert_eq!(collections[0], collection);
+        assert!(collections[0].chunks_equal_ignoring_cache_hint(&collection));
     }
 }

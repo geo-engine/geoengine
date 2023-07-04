@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use postgres_types::ToSql;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -23,7 +24,7 @@ use geoengine_operators::source::{
     OgrSourceErrorSpec, OgrSourceParameters,
 };
 
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -43,13 +44,17 @@ pub const GBIF_PROVIDER_ID: DataProviderId =
 pub struct GbifDataProviderDefinition {
     name: String,
     db_config: DatabaseConnectionConfig,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for GbifDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
-        Ok(Box::new(GbifDataProvider::new(self.db_config).await?))
+        Ok(Box::new(
+            GbifDataProvider::new(self.db_config, self.cache_ttl).await?,
+        ))
     }
 
     fn type_name(&self) -> &'static str {
@@ -69,6 +74,7 @@ impl DataProviderDefinition for GbifDataProviderDefinition {
 pub struct GbifDataProvider {
     db_config: DatabaseConnectionConfig,
     pool: Pool<PostgresConnectionManager<NoTls>>,
+    cache_ttl: CacheTtlSeconds,
 }
 
 impl GbifDataProvider {
@@ -82,11 +88,15 @@ impl GbifDataProvider {
         "canonicalname",
     ];
 
-    async fn new(db_config: DatabaseConnectionConfig) -> Result<Self> {
+    async fn new(db_config: DatabaseConnectionConfig, cache_ttl: CacheTtlSeconds) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
 
-        Ok(Self { db_config, pool })
+        Ok(Self {
+            db_config,
+            pool,
+            cache_ttl,
+        })
     }
 
     fn level_name(path: &str) -> String {
@@ -362,11 +372,10 @@ impl LayerCollectionProvider for GbifDataProvider {
                 operator: TypedOperator::Vector(
                     OgrSource {
                         params: OgrSourceParameters {
-                            data: DataId::External(ExternalDataId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                layer_id: id.clone(),
-                            })
-                            .into(),
+                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                GBIF_PROVIDER_ID.to_string(),
+                                id.to_string(),
+                            ),
                             attribute_projection: None,
                             attribute_filters: None,
                         },
@@ -504,6 +513,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: Some(format!("{taxonrank} = '{canonicalname}'")),
+                cache_ttl: self.cache_ttl,
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -950,9 +960,9 @@ mod tests {
     use tokio::runtime::Handle;
     use tokio_postgres::Config;
 
-    use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, CacheHint, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
@@ -1054,6 +1064,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1134,6 +1145,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1222,6 +1234,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1306,6 +1319,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1372,6 +1386,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1415,6 +1430,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1466,6 +1482,7 @@ mod tests {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -1513,6 +1530,7 @@ mod tests {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
                     db_config: db_config.clone(),
+                    cache_ttl: Default::default(),
                 })
                 .initialize()
                 .await
@@ -1708,6 +1726,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: Some("species = 'Rhipidia willistoniana'".to_string()),
+                    cache_ttl: CacheTtlSeconds::default(),
                 };
 
                 if loading_info != expected {
@@ -1732,6 +1751,7 @@ mod tests {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
                     db_config,
+                    cache_ttl: Default::default(),
                 })
                 .initialize()
                 .await
@@ -2070,10 +2090,11 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    CacheHint::default(),
                 )
                 .unwrap();
 
-                if result != &expected {
+                if !result.chunks_equal_ignoring_cache_hint(&expected) {
                     return Err(format!("{result:?} != {expected:?}"));
                 }
 
@@ -2094,6 +2115,7 @@ mod tests {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
                     db_config,
+                    cache_ttl: Default::default(),
                 })
                     .initialize()
                     .await
@@ -2141,6 +2163,7 @@ mod tests {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
                     db_config,
+                    cache_ttl: Default::default(),
                 })
                 .initialize()
                 .await
@@ -2165,11 +2188,10 @@ mod tests {
                         operator: TypedOperator::Vector(
                             OgrSource {
                                 params: OgrSourceParameters {
-                                    data: DataId::External(ExternalDataId {
-                                        provider_id: GBIF_PROVIDER_ID,
-                                        layer_id: layer_id.clone(),
-                                    })
-                                    .into(),
+                                    data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                        GBIF_PROVIDER_ID.to_string(),
+                                        layer_id.to_string(),
+                                    ),
                                     attribute_projection: None,
                                     attribute_filters: None,
                                 },

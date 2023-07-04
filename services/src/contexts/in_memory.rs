@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use super::{ApplicationContext, Db, GeoEngineDb, SessionContext, SimpleSession};
 use super::{Session, SimpleApplicationContext};
+use crate::api::model::datatypes::DatasetName;
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDbBackend;
 use crate::datasets::upload::{Volume, Volumes};
@@ -206,6 +207,16 @@ pub struct InMemoryDb {
 impl InMemoryDb {
     pub fn new(backend: Arc<InMemoryDbBackend>) -> Self {
         Self { backend }
+    }
+
+    /// Check whether the namepsace of the given dataset is allowed for insertion
+    pub(crate) fn check_namespace(id: &DatasetName) -> Result<()> {
+        // due to a lack of users, etc., we only allow one namespace for now
+        if id.namespace.is_none() {
+            Ok(())
+        } else {
+            Err(Error::InvalidDatasetIdNamespace)
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::engine::{OperatorData, QueryContext};
+use crate::engine::{CanonicOperatorName, OperatorData, QueryContext};
 use crate::{
     engine::{
         ExecutionContext, InitializedVectorOperator, OperatorName, SourceOperator,
@@ -10,7 +10,8 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
@@ -43,6 +44,7 @@ impl VectorQueryProcessor for MockPointSourceProcessor {
                     chunk.iter().copied().map(Into::into).collect(),
                     vec![TimeInterval::default(); chunk.len()],
                     HashMap::new(),
+                    CacheHint::max_duration(),
                 )?)
             })
             .boxed())
@@ -61,7 +63,7 @@ impl OperatorName for MockPointSource {
 }
 
 impl OperatorData for MockPointSource {
-    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
+    fn data_names_collect(&self, _data_names: &mut Vec<NamedData>) {}
 }
 
 #[typetag::serde]
@@ -73,6 +75,7 @@ impl VectorOperator for MockPointSource {
         _context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         Ok(InitializedMockPointSource {
+            name: CanonicOperatorName::from(&self),
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReference::epsg_4326().into(),
@@ -89,6 +92,7 @@ impl VectorOperator for MockPointSource {
 }
 
 pub struct InitializedMockPointSource {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     points: Vec<Coordinate2D>,
 }
@@ -105,6 +109,10 @@ impl InitializedVectorOperator for InitializedMockPointSource {
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

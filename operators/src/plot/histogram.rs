@@ -1,5 +1,5 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
     PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor,
@@ -91,6 +91,8 @@ impl PlotOperator for Histogram {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         Ok(match self.sources.source {
             RasterOrVectorOperator::Raster(raster_source) => {
                 ensure!(
@@ -107,6 +109,7 @@ impl PlotOperator for Histogram {
 
                 let in_desc = raster_source.result_descriptor();
                 InitializedHistogram::new(
+                    name,
                     PlotResultDescriptor {
                         spatial_reference: in_desc.spatial_reference,
                         time: in_desc.time,
@@ -161,7 +164,7 @@ impl PlotOperator for Histogram {
 
                 let in_desc = vector_source.result_descriptor().clone();
 
-                InitializedHistogram::new(in_desc.into(), self.params, vector_source).boxed()
+                InitializedHistogram::new(name, in_desc.into(), self.params, vector_source).boxed()
             }
         })
     }
@@ -171,6 +174,7 @@ impl PlotOperator for Histogram {
 
 /// The initialization of `Histogram`
 pub struct InitializedHistogram<Op> {
+    name: CanonicOperatorName,
     result_descriptor: PlotResultDescriptor,
     metadata: HistogramMetadataOptions,
     source: Op,
@@ -180,6 +184,7 @@ pub struct InitializedHistogram<Op> {
 
 impl<Op> InitializedHistogram<Op> {
     pub fn new(
+        name: CanonicOperatorName,
         result_descriptor: PlotResultDescriptor,
         params: HistogramParams,
         source: Op,
@@ -200,6 +205,7 @@ impl<Op> InitializedHistogram<Op> {
         };
 
         Self {
+            name,
             result_descriptor,
             metadata: HistogramMetadataOptions {
                 number_of_buckets,
@@ -229,6 +235,10 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterO
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorOperator>> {
@@ -251,6 +261,10 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
 
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -645,10 +659,11 @@ mod tests {
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
     use crate::test_data;
-    use geoengine_datatypes::dataset::{DataId, DatasetId};
+    use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::raster::{
         EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };
@@ -787,6 +802,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
+                    CacheHint::default(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
@@ -1045,6 +1061,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn text_attribute() {
         let dataset_id = DatasetId::new();
+        let dataset_name = NamedData::with_system_name("ne_10m_ports");
 
         let workflow = serde_json::json!({
             "type": "Histogram",
@@ -1060,10 +1077,7 @@ mod tests {
                 "source": {
                     "type": "OgrSource",
                     "params": {
-                        "data": {
-                            "type": "internal",
-                            "datasetId": dataset_id
-                        },
+                        "data": dataset_name.clone(),
                         "attributeProjection": null
                     },
                 }
@@ -1074,6 +1088,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
             DataId::Internal { dataset_id },
+            dataset_name,
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -1101,6 +1116,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1174,7 +1190,7 @@ mod tests {
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
-                bounds: HistogramBounds::Data(Data::default()),
+                bounds: HistogramBounds::Data(Data),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
                 },
@@ -1190,6 +1206,7 @@ mod tests {
                             tile_size_in_pixels,
                         },
                         EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1378,7 +1395,7 @@ mod tests {
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
-                bounds: HistogramBounds::Data(Data::default()),
+                bounds: HistogramBounds::Data(Data),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
                 },
@@ -1394,6 +1411,7 @@ mod tests {
                             tile_size_in_pixels,
                         },
                         Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,

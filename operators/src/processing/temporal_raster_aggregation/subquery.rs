@@ -6,7 +6,9 @@ use crate::{
 use async_trait::async_trait;
 use futures::TryFuture;
 use geoengine_datatypes::{
-    primitives::{RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
+    primitives::{
+        CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep,
+    },
     raster::{
         EmptyGrid2D, GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D,
         GridShapeAccess, Pixel, RasterTile2D, TileInformation, UpdateIndexedElementsParallel,
@@ -37,6 +39,7 @@ pub struct TileAccumulator<P: Pixel, F: TemporalRasterPixelAggregator<P>> {
     state_grid: GridOrEmpty2D<F::PixelState>,
     prestine: bool,
     pool: Arc<ThreadPool>,
+    cache_hint: CacheHint,
 }
 
 impl<P, F> TileAccumulator<P, F>
@@ -93,6 +96,7 @@ where
         }
 
         self.prestine = false;
+        self.cache_hint.merge_with(&in_tile.cache_hint);
     }
 }
 
@@ -112,6 +116,7 @@ where
             state_grid,
             prestine: _,
             pool: _pool,
+            cache_hint,
         } = self;
 
         Ok(RasterTile2D::new(
@@ -119,6 +124,7 @@ where
             tile_position,
             global_geo_transform,
             F::into_grid(state_grid)?,
+            cache_hint,
         ))
     }
 
@@ -165,6 +171,7 @@ where
             state_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
             prestine: true,
             pool: pool.clone(),
+            cache_hint: CacheHint::max_duration(),
         };
 
         futures::future::ok(accu)

@@ -11,7 +11,7 @@ use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
@@ -59,6 +59,8 @@ pub trait ExecutionContext: Send
     async fn read_ml_model(&self, path: PathBuf) -> Result<String>;
 
     async fn write_ml_model(&mut self, path: PathBuf, ml_model_str: String) -> Result<()>;
+
+    async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId>;
 }
 
 #[async_trait]
@@ -92,6 +94,7 @@ where
 pub struct MockExecutionContext {
     pub thread_pool: Arc<ThreadPool>,
     pub meta_data: HashMap<DataId, Box<dyn Any + Send + Sync>>,
+    pub named_data: HashMap<NamedData, DataId>,
     pub tiling_specification: TilingSpecification,
     pub ml_models: HashMap<PathBuf, String>,
 }
@@ -101,6 +104,7 @@ impl TestDefault for MockExecutionContext {
         Self {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
+            named_data: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
             ml_models: HashMap::default(),
         }
@@ -112,6 +116,7 @@ impl MockExecutionContext {
         Self {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
+            named_data: HashMap::default(),
             tiling_specification,
             ml_models: HashMap::default(),
         }
@@ -124,19 +129,28 @@ impl MockExecutionContext {
         Self {
             thread_pool: create_rayon_thread_pool(num_threads),
             meta_data: HashMap::default(),
+            named_data: HashMap::default(),
             tiling_specification,
             ml_models: HashMap::default(),
         }
     }
 
-    pub fn add_meta_data<L, R, Q>(&mut self, data: DataId, meta_data: Box<dyn MetaData<L, R, Q>>)
-    where
+    pub fn add_meta_data<L, R, Q>(
+        &mut self,
+        data: DataId,
+        named_data: NamedData,
+        meta_data: Box<dyn MetaData<L, R, Q>>,
+    ) where
         L: Send + Sync + 'static,
         R: Send + Sync + 'static + ResultDescriptor,
         Q: Send + Sync + 'static,
     {
-        self.meta_data
-            .insert(data, Box::new(meta_data) as Box<dyn Any + Send + Sync>);
+        self.meta_data.insert(
+            data.clone(),
+            Box::new(meta_data) as Box<dyn Any + Send + Sync>,
+        );
+
+        self.named_data.insert(named_data, data);
     }
 
     pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
@@ -210,6 +224,13 @@ impl ExecutionContext for MockExecutionContext {
         self.ml_models.insert(path, ml_model_str);
 
         Ok(())
+    }
+
+    async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId> {
+        self.named_data
+            .get(data)
+            .cloned()
+            .ok_or_else(|| Error::UnknownDatasetName { name: data.clone() })
     }
 }
 

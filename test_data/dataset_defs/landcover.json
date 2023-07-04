@@ -1,7 +1,7 @@
 {
   "properties": {
-    "id": "9ee3619e-d0f9-4ced-9c44-3d407c3aed69",
-    "name": "Land Cover",
+    "name": "land_cover",
+    "displayName": "Land Cover",
     "description": "Land Cover derived from MODIS/Terra+Aqua Land Cover",
     "sourceOperator": "GdalSource",
     "symbology": {
@@ -97,6 +97,7 @@
       "height": 1800,
       "fileNotFoundHandling": "NoData",
       "noDataValue": 255.0
-    }
+    },
+    "cacheTtl": 0
   }
 }

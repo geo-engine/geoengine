@@ -31,6 +31,7 @@ mod tests {
 
     use crate::collections::BuilderProvider;
     use crate::collections::FeatureCollectionModifications;
+    use crate::primitives::CacheHint;
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, TimeInterval,
     };
@@ -158,6 +159,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -200,6 +202,7 @@ mod tests {
             )]
             .into_iter()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
         let column = pc.data("foo").unwrap();
@@ -231,6 +234,7 @@ mod tests {
             ]
             .into_iter()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -255,6 +259,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
         let mut iter = collection.into_iter();

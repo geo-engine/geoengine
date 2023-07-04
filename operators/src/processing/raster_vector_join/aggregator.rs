@@ -10,7 +10,7 @@ use snafu::ensure;
 pub trait Aggregator {
     type Output: Pixel;
 
-    fn new(number_of_features: usize) -> Self;
+    fn new(number_of_features: usize, ignore_nulls: bool) -> Self;
 
     // TODO: add values for slice
     fn add_value<P>(&mut self, feature_idx: usize, pixel: P, weight: u64)
@@ -119,6 +119,7 @@ pub struct FirstValueAggregator<T> {
     values: Vec<T>,
     not_pristine: Vec<bool>,
     null: Vec<bool>,
+    ignore_nulls: bool,
     number_of_pristine_values: usize,
 }
 
@@ -128,11 +129,12 @@ where
 {
     type Output = T;
 
-    fn new(number_of_features: usize) -> Self {
+    fn new(number_of_features: usize, ignore_nulls: bool) -> Self {
         Self {
             values: vec![T::zero(); number_of_features],
             not_pristine: vec![false; number_of_features],
             null: vec![false; number_of_features],
+            ignore_nulls,
             number_of_pristine_values: number_of_features,
         }
     }
@@ -152,7 +154,7 @@ where
     }
 
     fn add_null(&mut self, feature_idx: usize) {
-        if self.not_pristine[feature_idx] {
+        if self.ignore_nulls || self.not_pristine[feature_idx] {
             return;
         }
 
@@ -254,17 +256,19 @@ pub struct MeanValueAggregator {
     means: Vec<f64>,
     sum_weights: Vec<f64>,
     null: Vec<bool>,
+    ignore_nulls: bool,
     number_of_non_null_values: usize,
 }
 
 impl Aggregator for MeanValueAggregator {
     type Output = f64;
 
-    fn new(number_of_features: usize) -> Self {
+    fn new(number_of_features: usize, ignore_nulls: bool) -> Self {
         Self {
             means: vec![0.; number_of_features],
             sum_weights: vec![0.; number_of_features],
             null: vec![false; number_of_features],
+            ignore_nulls,
             number_of_non_null_values: number_of_features,
         }
     }
@@ -290,7 +294,7 @@ impl Aggregator for MeanValueAggregator {
     }
 
     fn add_null(&mut self, feature_idx: usize) {
-        if self.null[feature_idx] {
+        if self.ignore_nulls || self.null[feature_idx] {
             return;
         }
 
@@ -365,7 +369,7 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn fist_value_f64() {
-        let mut aggregator = FirstValueFloatAggregator::new(2);
+        let mut aggregator = FirstValueFloatAggregator::new(2, false);
 
         aggregator.add_value(0, 1, 1);
         aggregator.add_value(0, 2, 1);
@@ -377,7 +381,7 @@ mod tests {
 
     #[test]
     fn fist_value_i64() {
-        let mut aggregator = FirstValueIntAggregator::new(2);
+        let mut aggregator = FirstValueIntAggregator::new(2, false);
 
         aggregator.add_value(0, 2., 1);
         aggregator.add_value(0, 0., 1);
@@ -390,7 +394,7 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn mean() {
-        let mut aggregator = MeanValueAggregator::new(2);
+        let mut aggregator = MeanValueAggregator::new(2, false);
 
         for i in 1..=10 {
             aggregator.add_value(0, i, 1);
@@ -402,7 +406,7 @@ mod tests {
 
     #[test]
     fn typed() {
-        let mut aggregator = FirstValueIntAggregator::new(2).into_typed();
+        let mut aggregator = FirstValueIntAggregator::new(2, false).into_typed();
 
         aggregator.add_value(0, 2., 1);
         aggregator.add_value(0, 0., 1);
@@ -423,7 +427,7 @@ mod tests {
 
     #[test]
     fn satisfaction() {
-        let mut aggregator = FirstValueIntAggregator::new(2).into_typed();
+        let mut aggregator = FirstValueIntAggregator::new(2, false).into_typed();
 
         assert!(!aggregator.is_satisfied());
 
@@ -442,7 +446,7 @@ mod tests {
 
     #[test]
     fn nulls() {
-        let mut aggregator = FirstValueIntAggregator::new(2).into_typed();
+        let mut aggregator = FirstValueIntAggregator::new(2, false).into_typed();
 
         assert!(!aggregator.is_satisfied());
 
@@ -456,7 +460,7 @@ mod tests {
 
     #[test]
     fn value_then_null() {
-        let mut aggregator = FirstValueIntAggregator::new(1).into_typed();
+        let mut aggregator = FirstValueIntAggregator::new(1, false).into_typed();
 
         aggregator.add_value(0, 1337, 1);
         aggregator.add_null(0);
@@ -465,5 +469,34 @@ mod tests {
             aggregator.into_data(),
             FeatureData::NullableInt(vec![Some(1337)])
         );
+    }
+
+    #[test]
+    fn null_then_value() {
+        let mut aggregator = FirstValueIntAggregator::new(1, true).into_typed();
+
+        aggregator.add_null(0);
+        aggregator.add_value(0, 1337, 1);
+
+        assert!(aggregator.is_satisfied());
+
+        assert_eq!(
+            aggregator.into_data(),
+            FeatureData::NullableInt(vec![Some(1337)])
+        );
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn mean_with_nulls() {
+        let mut aggregator = MeanValueAggregator::new(2, true);
+
+        for i in 1..=10 {
+            aggregator.add_value(0, i, 1);
+            aggregator.add_null(0);
+            aggregator.add_value(1, i, i);
+        }
+
+        assert_eq!(aggregator.data(), &[5.5, 385. / 55.]);
     }
 }
