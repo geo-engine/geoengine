@@ -560,9 +560,12 @@ mod tests {
                 .unwrap(),
             "IAU2000:4711"
         );
-        assert!(SpatialReference::new(SpatialReferenceAuthority::Esri, 42)
-            .proj_string()
-            .is_err());
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Esri, 42)
+                .proj_string()
+                .unwrap(),
+            "ESRI:42"
+        );
         assert!(SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1)
             .proj_string()
             .is_err());
