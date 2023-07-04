@@ -2,9 +2,6 @@
 /target
 **/*.rs.bk
 
-# Rust artifacts
-Cargo.lock
-
 # Build artifacts
 *.profraw
 lcov.info

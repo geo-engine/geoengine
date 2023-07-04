@@ -269,7 +269,7 @@ impl GeometryCollection for MultiPointCollection {
         let coordinates_ref = geometries.values();
         let coordinates: &FixedSizeListArray = downcast_array(coordinates_ref);
 
-        let number_of_coordinates = coordinates.data().len();
+        let number_of_coordinates = coordinates.len();
 
         let floats_ref = coordinates.values();
         let floats: &Float64Array = downcast_array(floats_ref);
@@ -282,7 +282,6 @@ impl GeometryCollection for MultiPointCollection {
         }
     }
 
-    #[allow(clippy::cast_ptr_alignment)]
     fn feature_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table
@@ -290,26 +289,22 @@ impl GeometryCollection for MultiPointCollection {
             .expect("There should exist a geometry column because it is added during creation of the collection");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
-        let data = geometries.data();
-        let buffer = &data.buffers()[0];
-
-        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), geometries.len() + 1) }
+        geometries.offsets()
     }
 }
 
 impl ReplaceRawArrayCoords for MultiPointCollection {
     fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Result<ArrayData> {
         let geometries: &ListArray = downcast_array(array_ref);
-        let offset_array = geometries.data();
-        let offsets_buffer = &offset_array.buffers()[0];
-        let num_features = offset_array.len();
+        let offsets_buffer = geometries.offsets();
+        let num_features = geometries.len();
 
         let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
         let num_floats = num_coords * 2;
 
         Ok(ArrayData::builder(MultiPoint::arrow_data_type())
             .len(num_features)
-            .add_buffer(offsets_buffer.clone())
+            .add_buffer(offsets_buffer.inner().inner().clone())
             .add_child_data(
                 ArrayData::builder(Coordinate2D::arrow_data_type())
                     .len(num_coords)
@@ -329,8 +324,10 @@ impl ReplaceRawArrayCoords for MultiPointCollection {
 mod tests {
     use super::*;
 
+    use crate::collections::feature_collection::ChunksEqualIgnoringCacheHint;
     use crate::collections::{BuilderProvider, FeatureCollectionModifications, ToGeoJson};
     use crate::operations::reproject::Reproject;
+    use crate::primitives::CacheHint;
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
         TimeInstance, TimeInterval,
@@ -340,6 +337,7 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
+    #[allow(clippy::redundant_clone)] // this test is about the clone implementation
     fn clone() {
         let pc = MultiPointCollection::empty();
         let cloned = pc.clone();
@@ -367,6 +365,7 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -397,6 +396,7 @@ mod tests {
                 TimeInterval::new_unchecked(2, 3),
             ],
             HashMap::new(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -506,6 +506,7 @@ mod tests {
                 TimeInterval::new_unchecked(2, 3),
             ],
             HashMap::new(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -535,6 +536,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -554,6 +556,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -724,6 +727,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::redundant_clone)] // this test is about the clone implementation
     fn clone2() {
         let pc = MultiPointCollection::from_data(
             MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)]]).unwrap(),
@@ -736,13 +740,14 @@ mod tests {
                 map.insert("number".into(), FeatureData::Float(vec![0., 1.]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
         let cloned = pc.clone();
 
         assert_eq!(pc.len(), cloned.len());
-        assert_eq!(pc, cloned);
+        assert!(pc.chunks_equal_ignoring_cache_hint(&cloned));
     }
 
     #[test]
@@ -758,6 +763,7 @@ mod tests {
                 map.insert("number".into(), FeatureData::Float(vec![0., 1.]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -789,7 +795,7 @@ mod tests {
         };
 
         assert_eq!(a.len(), b.len());
-        assert_eq!(a, b);
+        assert!(a.chunks_equal_ignoring_cache_hint(&b));
     }
 
     #[test]
@@ -856,6 +862,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -921,6 +928,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -959,6 +967,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -991,6 +1000,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1029,6 +1039,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1065,6 +1076,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1113,13 +1125,14 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
         let serialized = serde_json::to_string(&collection).unwrap();
         let deserialized: MultiPointCollection = serde_json::from_str(&serialized).unwrap();
 
-        assert_eq!(collection, deserialized);
+        assert!(collection.chunks_equal_ignoring_cache_hint(&deserialized));
     }
 
     #[test]
@@ -1145,6 +1158,7 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1188,6 +1202,7 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1212,12 +1227,13 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
         let sorted_collection = collection.sort_by_time_asc().unwrap();
 
-        assert_eq!(sorted_collection, expected_collection);
+        assert!(sorted_collection.chunks_equal_ignoring_cache_hint(&expected_collection));
     }
 
     #[test]
@@ -1253,6 +1269,7 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1305,6 +1322,7 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1319,7 +1337,6 @@ mod tests {
         // Assert geometrys are approx equal
         proj_pc
             .geometries()
-            .into_iter()
             .zip(expected_points.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(&MultiPoint, &a.into(), e, epsilon = 0.000_001));
@@ -1368,6 +1385,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
         let mut iter = collection.into_iter();
@@ -1421,6 +1439,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1457,6 +1476,7 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
         let mut iter = collection.geometries();
@@ -1487,6 +1507,7 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
         let mut iter = collection.geometries();
@@ -1522,6 +1543,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 

@@ -55,6 +55,8 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
 
         self.grid_array.grid_blit_from(&shifted_source);
 
+        self.cache_hint.merge_with(&source.cache_hint);
+
         Ok(())
     }
 }
@@ -103,6 +105,8 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for RasterTile2D<T> {
 
         self.grid_array.grid_blit_from(&shifted_source);
 
+        self.cache_hint.merge_with(&source.cache_hint);
+
         Ok(())
     }
 }
@@ -110,7 +114,7 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for RasterTile2D<T> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        primitives::TimeInterval,
+        primitives::{CacheHint, TimeInterval},
         raster::{Blit, GeoTransform, Grid2D, RasterTile2D},
     };
 
@@ -122,14 +126,24 @@ mod tests {
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
-        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1)
-            .into_materialized_tile();
+        let mut t1 = RasterTile2D::new_without_offset(
+            temporal_bounds,
+            geo_transform,
+            r1,
+            CacheHint::default(),
+        )
+        .into_materialized_tile();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 
         let r2 = Grid2D::new(dim.into(), data).unwrap();
-        let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2);
+        let t2 = RasterTile2D::new_without_offset(
+            temporal_bounds,
+            geo_transform,
+            r2,
+            CacheHint::default(),
+        );
 
         t1.blit(t2).unwrap();
 
@@ -147,14 +161,24 @@ mod tests {
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
-        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1)
-            .into_materialized_tile();
+        let mut t1 = RasterTile2D::new_without_offset(
+            temporal_bounds,
+            geo_transform,
+            r1,
+            CacheHint::default(),
+        )
+        .into_materialized_tile();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((-5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 
         let r2 = Grid2D::new(dim.into(), data).unwrap();
-        let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2);
+        let t2 = RasterTile2D::new_without_offset(
+            temporal_bounds,
+            geo_transform,
+            r2,
+            CacheHint::default(),
+        );
 
         t1.blit(t2).unwrap();
 
@@ -172,14 +196,24 @@ mod tests {
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
-        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1)
-            .into_materialized_tile();
+        let mut t1 = RasterTile2D::new_without_offset(
+            temporal_bounds,
+            geo_transform,
+            r1,
+            CacheHint::default(),
+        )
+        .into_materialized_tile();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((-5.0, 10.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 
         let r2 = Grid2D::new(dim.into(), data).unwrap();
-        let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2);
+        let t2 = RasterTile2D::new_without_offset(
+            temporal_bounds,
+            geo_transform,
+            r2,
+            CacheHint::default(),
+        );
 
         t1.blit(t2).unwrap();
 
@@ -197,13 +231,23 @@ mod tests {
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
         let r1 = Grid2D::new(dim.into(), data).unwrap();
-        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1);
+        let mut t1 = RasterTile2D::new_without_offset(
+            temporal_bounds,
+            geo_transform,
+            r1,
+            CacheHint::default(),
+        );
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 
         let r2 = Grid2D::new(dim.into(), data).unwrap();
-        let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2);
+        let t2 = RasterTile2D::new_without_offset(
+            temporal_bounds,
+            geo_transform,
+            r2,
+            CacheHint::default(),
+        );
 
         t1.blit(t2).unwrap();
 
@@ -218,5 +262,33 @@ mod tests {
             masked_grid.inner_grid.data,
             vec![0, 0, 8, 9, 0, 0, 12, 13, 0, 0, 0, 0, 0, 0, 0, 0]
         );
+    }
+
+    #[test]
+    fn it_attaches_cache_hint() {
+        let dim = [4, 4];
+        let data = vec![0; 16];
+        let geo_transform = GeoTransform::new((0.0, 10.0).into(), 10.0 / 4.0, -10.0 / 4.0);
+        let temporal_bounds: TimeInterval = TimeInterval::default();
+
+        let r1 = Grid2D::new(dim.into(), data).unwrap();
+        let mut t1 = RasterTile2D::new_without_offset(
+            temporal_bounds,
+            geo_transform,
+            r1,
+            CacheHint::max_duration(),
+        )
+        .into_materialized_tile();
+
+        let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let geo_transform = GeoTransform::new((-5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
+
+        let r2 = Grid2D::new(dim.into(), data).unwrap();
+        let cache_hint = CacheHint::seconds(1234);
+        let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2, cache_hint);
+
+        t1.blit(t2).unwrap();
+
+        assert_eq!(t1.cache_hint.expires(), cache_hint.expires());
     }
 }

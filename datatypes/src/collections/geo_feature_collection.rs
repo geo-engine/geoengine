@@ -1,6 +1,7 @@
 use crate::primitives::{BoundingBox2D, Coordinate2D, Geometry, GeometryRef, TimeInterval};
 use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
+use arrow::array::StructArray;
 use arrow::{
     array::{Array, ArrayData},
     buffer::Buffer,
@@ -8,7 +9,6 @@ use arrow::{
 use rayon::prelude::IntoParallelIterator;
 use std::sync::Arc;
 
-use super::feature_collection::struct_array_from_data;
 use super::FeatureCollection;
 
 /// This trait allows iterating over the geometries of a feature collection
@@ -116,8 +116,9 @@ where
         }
 
         Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len())?,
+            StructArray::try_new(columns.into(), column_values, None)?,
             self.types.clone(),
+            self.cache_hint,
         ))
     }
 }

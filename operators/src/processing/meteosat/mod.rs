@@ -39,10 +39,11 @@ mod test_util {
 
     use futures::StreamExt;
     use geoengine_datatypes::hashmap;
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
 
-    use geoengine_datatypes::dataset::{DataId, DatasetId};
+    use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
@@ -178,6 +179,7 @@ mod test_util {
             },
             raster,
             props,
+            CacheHint::default(),
         );
 
         MockRasterSource {
@@ -202,6 +204,7 @@ mod test_util {
 
     pub(crate) fn _create_gdal_src(ctx: &mut MockExecutionContext) -> GdalSource {
         let dataset_id: DataId = DatasetId::new().into();
+        let dataset_name = NamedData::with_system_name("gdal-ds");
 
         let no_data_value = Some(0.);
         let meta = GdalMetaDataRegular {
@@ -266,11 +269,12 @@ mod test_util {
                 bbox: None,
                 resolution: None,
             },
+            cache_ttl: CacheTtlSeconds::default(),
         };
-        ctx.add_meta_data(dataset_id.clone(), Box::new(meta));
+        ctx.add_meta_data(dataset_id, dataset_name.clone(), Box::new(meta));
 
         GdalSource {
-            params: GdalSourceParameters { data: dataset_id },
+            params: GdalSourceParameters { data: dataset_name },
         }
     }
 }

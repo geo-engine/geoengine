@@ -12,6 +12,7 @@ mod raster_type_conversion;
 mod raster_vector_join;
 mod rasterization;
 mod reprojection;
+mod rgb;
 mod temporal_raster_aggregation;
 mod time_projection;
 mod time_shift;
@@ -23,7 +24,8 @@ pub use line_simplification::{
     LineSimplification, LineSimplificationError, LineSimplificationParams,
 };
 pub use neighborhood_aggregate::{
-    NeighborhoodAggregate, NeighborhoodAggregateError, NeighborhoodAggregateParams,
+    AggregateFunctionParams, NeighborhoodAggregate, NeighborhoodAggregateError,
+    NeighborhoodAggregateParams, NeighborhoodParams,
 };
 pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
@@ -33,6 +35,7 @@ pub use raster_type_conversion::{RasterTypeConversionParams, RasterTypeConversio
 pub use reprojection::{
     InitializedRasterReprojection, InitializedVectorReprojection, Reprojection, ReprojectionParams,
 };
+pub use rgb::{Rgb, RgbOperatorError, RgbParams, RgbSources};
 pub use temporal_raster_aggregation::{
     Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters,
 };

@@ -1,4 +1,5 @@
-use crate::api::model::datatypes::DatasetId;
+use crate::api::model::datatypes::DatasetName;
+use crate::api::model::responses::datasets::DatasetIdAndName;
 use crate::api::model::services::AddDataset;
 use crate::contexts::SessionContext;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
@@ -49,7 +50,7 @@ const fn default_as_cog() -> bool {
 /// response of the dataset from workflow handler
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct RasterDatasetFromWorkflowResult {
-    pub dataset: DatasetId,
+    pub dataset: DatasetName,
     pub upload: UploadId,
 }
 
@@ -125,7 +126,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
         .await?;
 
         Ok(RasterDatasetFromWorkflowResult {
-            dataset,
+            dataset: dataset.name,
             upload: self.upload,
         })
     }
@@ -201,10 +202,9 @@ async fn create_dataset<C: SessionContext>(
     origin_result_descriptor: &RasterResultDescriptor,
     query_rectangle: RasterQueryRectangle,
     ctx: &C,
-) -> error::Result<DatasetId> {
+) -> error::Result<DatasetIdAndName> {
     ensure!(!slice_info.is_empty(), error::EmptyDatasetCannotBeImported);
 
-    let dataset_id = DatasetId::new();
     let first_start = slice_info
         .first()
         .expect("slice_info should have at least one element")
@@ -232,10 +232,12 @@ async fn create_dataset<C: SessionContext>(
         let params = loading_info_slice
             .params
             .expect("datasets with exactly one timestep should have data");
+        let cache_ttl = loading_info_slice.cache_ttl;
         MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
             time,
             params,
             result_descriptor,
+            cache_ttl,
         })
     } else {
         MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
@@ -246,8 +248,8 @@ async fn create_dataset<C: SessionContext>(
 
     let dataset_definition = DatasetDefinition {
         properties: AddDataset {
-            id: Some(dataset_id),
-            name: info.name,
+            name: None,
+            display_name: info.name,
             description: info.description.unwrap_or_default(),
             source_operator: "GdalSource".to_owned(),
             symbology: None,  // TODO add symbology?
@@ -258,7 +260,7 @@ async fn create_dataset<C: SessionContext>(
 
     let db = ctx.db();
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
-    let dataset = db.add_dataset(dataset_definition.properties, meta).await?;
+    let result = db.add_dataset(dataset_definition.properties, meta).await?;
 
-    Ok(dataset)
+    Ok(result)
 }

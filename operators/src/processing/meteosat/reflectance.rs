@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
+    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -53,6 +53,7 @@ impl OperatorName for Reflectance {
 }
 
 pub struct InitializedReflectance {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     params: ReflectanceParams,
@@ -66,6 +67,8 @@ impl RasterOperator for Reflectance {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_source = self.sources.initialize_sources(path, context).await?;
         let input = initialized_source.raster;
 
@@ -116,6 +119,7 @@ impl RasterOperator for Reflectance {
         };
 
         let initialized_operator = InitializedReflectance {
+            name,
             result_descriptor: out_desc,
             source: input,
             params: self.params,
@@ -144,6 +148,10 @@ impl InitializedRasterOperator for InitializedReflectance {
         } else {
             Err(Error::InvalidRasterDataType)
         }
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

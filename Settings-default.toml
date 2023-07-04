@@ -175,3 +175,11 @@ endpoint = "127.0.0.1:6831"
 
 [data]
 volumes = { test_data = "test_data/"}
+
+[cache]
+enabled = false
+# storage limit for the cache
+cache_size_in_mb = 1_000 # 1 GB
+# storage limit for collecting query results before insertion into the cache in 
+landing_zone_ratio = 0.1 # 10% of total cache size
+

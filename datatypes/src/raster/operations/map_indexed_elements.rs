@@ -192,7 +192,6 @@ where
 
     fn map_indexed_elements(self, map_fn: F) -> Self::Output {
         let (out_data, validity_mask) = (0..self.shape.number_of_elements())
-            .into_iter()
             .map(|lin_idx| {
                 let in_masked_value = None as Option<In>;
 
@@ -317,6 +316,7 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
+            cache_hint: self.cache_hint.clone_with_current_datetime(),
         }
     }
 }
@@ -638,6 +638,7 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
+            cache_hint: self.cache_hint.clone_with_current_datetime(),
         }
     }
 }

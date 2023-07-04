@@ -1,12 +1,14 @@
-use crate::adapters::SparseTilesFillAdapter;
+use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
 use crate::engine::{
-    InitializedRasterOperator, OperatorData, OperatorName, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, InitializedRasterOperator, OperatorData, OperatorName, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::CacheExpiration;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
@@ -136,6 +138,7 @@ where
             tiling_strategy.tile_grid_box(query.spatial_partition()),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
+            FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
         )
         .boxed())
     }
@@ -151,7 +154,7 @@ pub struct MockRasterSourceParams<T: Pixel> {
 pub type MockRasterSource<T> = SourceOperator<MockRasterSourceParams<T>>;
 
 impl<T: Pixel> OperatorData for MockRasterSource<T> {
-    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
+    fn data_names_collect(&self, _data_names: &mut Vec<NamedData>) {}
 }
 
 /// Implement a mock raster source with typetag for a specific generic type
@@ -201,6 +204,8 @@ macro_rules! impl_mock_raster_source {
                 _path: WorkflowOperatorPath,
                 context: &dyn crate::engine::ExecutionContext,
             ) -> Result<Box<dyn InitializedRasterOperator>> {
+                let name = CanonicOperatorName::from(&self);
+
                 let data = self.params.data;
                 let tiling_specification = context.tiling_specification();
 
@@ -217,6 +222,7 @@ macro_rules! impl_mock_raster_source {
                 };
 
                 Ok(InitializedMockRasterSource {
+                    name,
                     result_descriptor: self.params.result_descriptor,
                     data,
                     tiling_specification,
@@ -245,6 +251,7 @@ impl_mock_raster_source!(f32);
 impl_mock_raster_source!(f64);
 
 pub struct InitializedMockRasterSource<T: Pixel> {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     data: Vec<RasterTile2D<T>>,
     tiling_specification: TilingSpecification,
@@ -266,12 +273,17 @@ where
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D, SpatialResolution};
     use geoengine_datatypes::raster::{Grid, MaskedGrid, RasterDataType, RasterProperties};
     use geoengine_datatypes::util::test::TestDefault;
@@ -286,6 +298,7 @@ mod tests {
         let raster =
             MaskedGrid::from(Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6]).unwrap());
 
+        let cache_hint = CacheHint::default();
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
@@ -294,6 +307,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
             },
             raster.into(),
+            cache_hint,
         );
 
         let mrs = MockRasterSource {
@@ -349,8 +363,9 @@ mod tests {
                         "scale":null,
                         "offset":null,
                         "description":null,
-                        "properties_map":{}
-                    }
+                        "propertiesMap": []
+                    },
+                    "cacheHint": cache_hint,
                 }],
                 "resultDescriptor": {
                     "dataType": "U8",
@@ -400,6 +415,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(1, 1),
@@ -409,6 +425,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 2),
@@ -418,6 +435,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
+                        cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 2),
@@ -427,6 +445,7 @@ mod tests {
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
+                        cache_hint: CacheHint::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {

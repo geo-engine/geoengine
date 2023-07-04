@@ -888,8 +888,7 @@ async fn remove_collection_from_collection<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
 
-    use std::sync::Arc;
-
+    use super::*;
     use crate::contexts::{SessionId, SimpleApplicationContext, SimpleSession};
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::handlers::ErrorResponse;
@@ -906,6 +905,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, TimeGranularity, TimeInterval,
     };
@@ -928,8 +928,7 @@ mod tests {
         engine::VectorOperator,
         mock::{MockPointSource, MockPointSourceParams},
     };
-
-    use super::*;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_add_layer_to_collection() {
@@ -1316,6 +1315,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                     properties: Default::default(),
+                    cache_hint: CacheHint::default(),
                 },
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_955_200_000, 1_672_041_600_000),
@@ -1323,6 +1323,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                     properties: Default::default(),
+                    cache_hint: CacheHint::default(),
                 },
             ];
 
@@ -1553,10 +1554,9 @@ mod tests {
                 .unwrap();
 
         // query the newly created dataset
-        let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
         let dataset_operator = GdalSource {
             params: GdalSourceParameters {
-                data: dataset_id.into(),
+                data: response.dataset.into(),
             },
         }
         .boxed();

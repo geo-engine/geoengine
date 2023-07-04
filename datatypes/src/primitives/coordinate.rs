@@ -7,6 +7,7 @@ use float_cmp::ApproxEq;
 use postgres_types::{FromSql, ToSql};
 use proj::Coord;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::{
     fmt,
     ops::{Add, Div, Mul, Sub},
@@ -197,7 +198,7 @@ impl ArrowTyped for Coordinate2D {
     fn arrow_data_type() -> DataType {
         let nullable = true; // TODO: should actually be false, but arrow's builders set it to `true` currently
 
-        DataType::FixedSizeList(Box::new(Field::new("item", DataType::Float64, nullable)), 2)
+        DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float64, nullable)), 2)
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
@@ -213,7 +214,7 @@ impl ArrowTyped for Coordinate2D {
 
     fn concat(a: &Self::ArrowArray, b: &Self::ArrowArray) -> Result<Self::ArrowArray, ArrowError> {
         Ok(arrow::array::FixedSizeListArray::from(
-            arrow::compute::concat(&[a, b])?.data().clone(),
+            arrow::compute::concat(&[a, b])?.to_data(),
         ))
     }
 
@@ -222,9 +223,7 @@ impl ArrowTyped for Coordinate2D {
         filter_array: &BooleanArray,
     ) -> Result<Self::ArrowArray, ArrowError> {
         Ok(arrow::array::FixedSizeListArray::from(
-            arrow::compute::filter(data_array, filter_array)?
-                .data()
-                .clone(),
+            arrow::compute::filter(data_array, filter_array)?.to_data(),
         ))
     }
 
@@ -462,6 +461,23 @@ mod test {
             result,
             Coordinate2D::from_vec(vec![Coordinate2D::new(0., 0.), Coordinate2D::new(2., 2.),])
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn arrow_builder_size() {
+        let mut builder = Coordinate2D::arrow_builder(2);
+        let v = builder.values();
+        v.append_values(&[1., 2.], &[true, true]);
+        v.append_values(&[3., 4.], &[true, true]);
+        v.append_values(&[5., 6.], &[true, true]);
+
+        assert_eq!(builder.value_length(), 2);
+        assert_eq!(builder.values().len(), 6);
+
+        assert_eq!(
+            Coordinate2D::builder_byte_size(&mut builder),
+            6 * std::mem::size_of::<f64>()
         );
     }
 }

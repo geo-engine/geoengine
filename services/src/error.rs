@@ -197,10 +197,17 @@ pub enum Error {
     UnknownUploadId,
     PathIsNotAFile,
     Multipart {
-        source: actix_multipart::MultipartError,
+        // TODO: this error is not send, so this does not work
+        // source: actix_multipart::MultipartError,
+        reason: String,
     },
     InvalidUploadFileName,
+    InvalidDatasetIdNamespace,
+    DuplicateDatasetId,
     InvalidDatasetName,
+    DatasetInvalidLayerName {
+        layer_name: String,
+    },
     DatasetHasNoAutoImportableLayer,
     #[snafu(display("GdalError: {}", source))]
     Gdal {
@@ -425,6 +432,8 @@ pub enum Error {
     ProviderDoesNotSupportBrowsing,
 
     InvalidPath,
+
+    InvalidWorkflowOutputType,
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -497,7 +506,9 @@ impl From<reqwest::Error> for Error {
 
 impl From<actix_multipart::MultipartError> for Error {
     fn from(source: actix_multipart::MultipartError) -> Self {
-        Self::Multipart { source }
+        Self::Multipart {
+            reason: source.to_string(),
+        }
     }
 }
 

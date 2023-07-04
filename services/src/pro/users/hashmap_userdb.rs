@@ -168,7 +168,7 @@ impl UserAuth for ProInMemoryContext {
 
         let external_id = user.external_id.clone();
 
-        let internal_id = match db.get(&external_id) {
+        let id = match db.get(&external_id) {
             Some(user) => user.id,
             None => {
                 let id = UserId::new();
@@ -193,7 +193,7 @@ impl UserAuth for ProInMemoryContext {
         let session = UserSession {
             id: SessionId::new(),
             user: UserInfo {
-                id: internal_id,
+                id,
                 email: Some(user.email.clone()),
                 real_name: Some(user.real_name.clone()),
             },
@@ -201,7 +201,7 @@ impl UserAuth for ProInMemoryContext {
             valid_until: session_created + duration,
             project: None,
             view: None,
-            roles: vec![internal_id.into(), Role::registered_user_role_id()],
+            roles: vec![id.into(), Role::registered_user_role_id()],
         };
 
         backend.sessions.insert(session.id, session.clone());

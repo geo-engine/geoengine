@@ -4,6 +4,7 @@ use crate::api::model::datatypes::{
     TimeInstance, TimeStep, VectorQueryRectangle,
 };
 use async_trait::async_trait;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
@@ -428,7 +429,7 @@ impl<'a> ToSchema<'a> for OgrMetaData {
     fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
         (
-            "MockMetaData",
+            "OgrMetaData",
             ObjectBuilder::new()
                 .property("loadingInfo", Ref::from_schema_name("OgrSourceDataset"))
                 .required("loadingInfo")
@@ -448,6 +449,8 @@ pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl From<geoengine_operators::source::GdalMetaDataStatic> for GdalMetaDataStatic {
@@ -456,6 +459,7 @@ impl From<geoengine_operators::source::GdalMetaDataStatic> for GdalMetaDataStati
             time: value.time.map(Into::into),
             params: value.params.into(),
             result_descriptor: value.result_descriptor.into(),
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -466,6 +470,7 @@ impl From<GdalMetaDataStatic> for geoengine_operators::source::GdalMetaDataStati
             time: value.time.map(Into::into),
             params: value.params.into(),
             result_descriptor: value.result_descriptor.into(),
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -488,6 +493,8 @@ pub struct OgrSourceDataset {
     pub on_error: OgrSourceErrorSpec,
     pub sql_query: Option<String>,
     pub attribute_query: Option<String>,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl From<geoengine_operators::source::OgrSourceDataset> for OgrSourceDataset {
@@ -504,6 +511,7 @@ impl From<geoengine_operators::source::OgrSourceDataset> for OgrSourceDataset {
             on_error: value.on_error.into(),
             sql_query: value.sql_query,
             attribute_query: value.attribute_query,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -522,6 +530,7 @@ impl From<OgrSourceDataset> for geoengine_operators::source::OgrSourceDataset {
             on_error: value.on_error.into(),
             sql_query: value.sql_query,
             attribute_query: value.attribute_query,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -865,6 +874,8 @@ pub struct GdalMetaDataRegular {
     pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub data_time: TimeInterval,
     pub step: TimeStep,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl From<geoengine_operators::source::GdalMetaDataRegular> for GdalMetaDataRegular {
@@ -879,6 +890,7 @@ impl From<geoengine_operators::source::GdalMetaDataRegular> for GdalMetaDataRegu
                 .collect(),
             data_time: value.data_time.into(),
             step: value.step.into(),
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -895,6 +907,7 @@ impl From<GdalMetaDataRegular> for geoengine_operators::source::GdalMetaDataRegu
                 .collect(),
             data_time: value.data_time.into(),
             step: value.step.into(),
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -921,6 +934,8 @@ pub struct GdalDatasetParameters {
     // Configs as key, value pairs that will be set as thread local config options, e.g.
     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
     // TODO: validate the config options: only allow specific keys and specific values
+    // TODO: remove, when <https://github.com/juhaku/utoipa/issues/429> is fixed
+    #[schema(value_type = Option<Vec<StringPair>>)]
     pub gdal_config_options: Option<Vec<GdalConfigOption>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
@@ -1114,6 +1129,8 @@ pub struct GdalMetadataNetCdfCf {
     /// A band offset specifies the first band index to use for the first point in time.
     /// All other time steps are added to this offset.
     pub band_offset: usize,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl From<geoengine_operators::source::GdalMetadataNetCdfCf> for GdalMetadataNetCdfCf {
@@ -1125,6 +1142,7 @@ impl From<geoengine_operators::source::GdalMetadataNetCdfCf> for GdalMetadataNet
             end: value.end.into(),
             step: value.step.into(),
             band_offset: value.band_offset,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -1138,6 +1156,7 @@ impl From<GdalMetadataNetCdfCf> for geoengine_operators::source::GdalMetadataNet
             end: value.end.into(),
             step: value.step.into(),
             band_offset: value.band_offset,
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -1173,6 +1192,8 @@ impl From<GdalMetaDataList> for geoengine_operators::source::GdalMetaDataList {
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl From<geoengine_operators::source::GdalLoadingInfoTemporalSlice>
@@ -1182,6 +1203,7 @@ impl From<geoengine_operators::source::GdalLoadingInfoTemporalSlice>
         Self {
             time: value.time.into(),
             params: value.params.map(Into::into),
+            cache_ttl: value.cache_ttl,
         }
     }
 }
@@ -1193,6 +1215,7 @@ impl From<GdalLoadingInfoTemporalSlice>
         Self {
             time: value.time.into(),
             params: value.params.map(Into::into),
+            cache_ttl: value.cache_ttl,
         }
     }
 }

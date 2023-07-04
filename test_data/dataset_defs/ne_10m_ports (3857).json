@@ -1,7 +1,7 @@
 {
   "properties": {
-    "id": "f47fc99c-c085-4fe3-90f3-120491facb28",
-    "name": "Natural Earth 10m Ports 3857",
+    "name": "ne_10_ports_3857",
+    "displayName": "Natural Earth 10m Ports 3857",
     "description": "Ports from Natural Earth reprojected to EPSG:3857",
     "sourceOperator": "OgrSource",
     "provenance": [
@@ -30,7 +30,8 @@
       },
       "forceOgrTimeFilter": false,
       "onError": "ignore",
-      "provenance": null
+      "provenance": null,
+      "cacheTtl": 0
     },
     "resultDescriptor": {
       "dataType": "MultiPoint",

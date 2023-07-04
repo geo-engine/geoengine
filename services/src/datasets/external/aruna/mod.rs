@@ -1,5 +1,5 @@
 pub use self::error::ArunaProviderError;
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -20,6 +20,7 @@ use aruna_rust_api::api::storage::services::v1::{
     GetObjectGroupObjectsRequest, GetObjectGroupsRequest,
 };
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, SpatialResolution, VectorQueryRectangle,
 };
@@ -67,6 +68,8 @@ pub struct ArunaDataProviderDefinition {
     project_id: String,
     api_token: String,
     filter_label: String,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[typetag::serde]
@@ -142,6 +145,7 @@ pub struct ArunaDataProvider {
     object_group_stub: ObjectGroupServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
     object_stub: ObjectServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
     label_filter: Option<LabelOrIdQuery>,
+    cache_ttl: CacheTtlSeconds,
 }
 
 impl ArunaDataProvider {
@@ -182,6 +186,7 @@ impl ArunaDataProvider {
             object_group_stub,
             object_stub,
             label_filter,
+            cache_ttl: def.cache_ttl,
         })
     }
 
@@ -299,12 +304,12 @@ impl ArunaDataProvider {
 
         let data_get_response = reqwest::Client::new().get(download_url).send().await?;
 
-        return if let reqwest::StatusCode::OK = data_get_response.status() {
+        if let reqwest::StatusCode::OK = data_get_response.status() {
             let json = data_get_response.json::<GEMetadata>().await?;
             Ok(json)
         } else {
             Err(ArunaProviderError::MissingArunaMetaData)
-        };
+        }
     }
 
     /// Creates a result descriptor for vector data
@@ -383,7 +388,11 @@ impl ArunaDataProvider {
     /// a concrete url on every call to `MetaData.loading_info()`.
     /// This is required, since download links from the core-storage are only valid
     /// for 15 minutes.
-    fn vector_loading_template(vi: &VectorInfo, rd: &VectorResultDescriptor) -> OgrSourceDataset {
+    fn vector_loading_template(
+        vi: &VectorInfo,
+        rd: &VectorResultDescriptor,
+        cache_ttl: CacheTtlSeconds,
+    ) -> OgrSourceDataset {
         let data_type = match rd.data_type {
             VectorDataType::Data => None,
             x => Some(x),
@@ -461,6 +470,7 @@ impl ArunaDataProvider {
             on_error: OgrSourceErrorSpec::Abort,
             sql_query: None,
             attribute_query: None,
+            cache_ttl,
         }
     }
 
@@ -469,7 +479,7 @@ impl ArunaDataProvider {
     /// a concrete url on every call to `MetaData.loading_info()`.
     /// This is required, since download links from the core-storage are only valid
     /// for 15 minutes.
-    fn raster_loading_template(info: &RasterInfo) -> GdalLoadingInfo {
+    fn raster_loading_template(info: &RasterInfo, cache_ttl: CacheTtlSeconds) -> GdalLoadingInfo {
         let part = GdalLoadingInfoTemporalSlice {
             time: info.time_interval,
             params: Some(GdalDatasetParameters {
@@ -486,6 +496,7 @@ impl ArunaDataProvider {
                 allow_alphaband_as_mask: true,
                 retry: None,
             }),
+            cache_ttl,
         };
 
         GdalLoadingInfo {
@@ -552,7 +563,8 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
             DataType::SingleVectorFile(info) => {
                 let result_descriptor =
                     Self::create_single_vector_file_result_descriptor(meta_data.crs.into(), &info);
-                let template = Self::vector_loading_template(&info, &result_descriptor);
+                let template =
+                    Self::vector_loading_template(&info, &result_descriptor, self.cache_ttl);
 
                 let res = ArunaMetaData {
                     collection_id: aruna_dataset_ids.collection_id,
@@ -607,7 +619,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             DataType::SingleRasterFile(info) => {
                 let result_descriptor =
                     Self::create_single_raster_file_result_descriptor(meta_data.crs.into(), info)?;
-                let template = Self::raster_loading_template(info);
+                let template = Self::raster_loading_template(info, self.cache_ttl);
 
                 let res = ArunaMetaData {
                     collection_id: aruna_dataset_ids.collection_id,
@@ -709,11 +721,10 @@ impl LayerCollectionProvider for ArunaDataProvider {
             DataType::SingleVectorFile(_) => TypedOperator::Vector(
                 OgrSource {
                     params: OgrSourceParameters {
-                        data: DataId::External(ExternalDataId {
-                            provider_id: self.id,
-                            layer_id: id.clone(),
-                        })
-                        .into(),
+                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                            self.id.to_string(),
+                            id.to_string(),
+                        ),
                         attribute_projection: None,
                         attribute_filters: None,
                     },
@@ -723,11 +734,10 @@ impl LayerCollectionProvider for ArunaDataProvider {
             DataType::SingleRasterFile(_) => TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        data: DataId::External(ExternalDataId {
-                            provider_id: self.id,
-                            layer_id: id.clone(),
-                        })
-                        .into(),
+                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                            self.id.to_string(),
+                            id.to_string(),
+                        ),
                     },
                 }
                 .boxed(),
@@ -789,6 +799,7 @@ impl ExpiringDownloadLink for OgrSourceDataset {
             on_error: self.on_error,
             sql_query: self.sql_query.clone(),
             attribute_query: self.attribute_query.clone(),
+            cache_ttl: self.cache_ttl,
         })
     }
 }
@@ -811,7 +822,7 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
                     .iter()
                     .map(|part| {
                         let mut new_part = part.clone();
-                        if let Some(mut params) = new_part.params.as_mut() {
+                        if let Some(params) = new_part.params.as_mut() {
                             params.file_path = PathBuf::from(
                                 params
                                     .file_path
@@ -922,7 +933,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
+        BoundingBox2D, CacheTtlSeconds, SpatialResolution, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
@@ -1029,6 +1040,7 @@ mod tests {
             project_id: PROJECT_ID.to_string(),
             name: "NFDI".to_string(),
             filter_label: FILTER_LABEL.to_string(),
+            cache_ttl: Default::default(),
         };
         ArunaDataProvider::new(Box::new(def)).await.unwrap()
     }
@@ -1551,11 +1563,7 @@ mod tests {
                 "operator": {
                     "type": "OgrSource",
                     "params": {
-                        "data": {
-                            "type": "external",
-                            "providerId": "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0",
-                            "layerId": "COLLECTION_ID"
-                        },
+                        "data": "_:86a7f7ce-1bab-4ce9-a32b-172c0f958ee0:COLLECTION_ID",
                         "attributeProjection": null,
                         "attributeFilters": null
                     }
@@ -1589,11 +1597,7 @@ mod tests {
                 "operator": {
                     "type": "GdalSource",
                     "params": {
-                        "data": {
-                            "type": "external",
-                            "providerId": "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0",
-                            "layerId": "COLLECTION_ID"
-                        }
+                        "data": "_:86a7f7ce-1bab-4ce9-a32b-172c0f958ee0:COLLECTION_ID"
                     }
                 }
             }),
@@ -1624,7 +1628,8 @@ mod tests {
 
         let rd = ArunaDataProvider::create_single_vector_file_result_descriptor(md.crs.into(), &vi);
 
-        let template = ArunaDataProvider::vector_loading_template(&vi, &rd);
+        let template =
+            ArunaDataProvider::vector_loading_template(&vi, &rd, CacheTtlSeconds::default());
 
         let url = template
             .new_link("test".to_string())
@@ -1657,7 +1662,7 @@ mod tests {
             super::metadata::DataType::SingleVectorFile(_) => panic!("Expected raster description"),
         };
 
-        let template = ArunaDataProvider::raster_loading_template(&ri);
+        let template = ArunaDataProvider::raster_loading_template(&ri, CacheTtlSeconds::default());
 
         let url = template
             .new_link("test".to_string())
@@ -1772,6 +1777,10 @@ mod tests {
             provider_id: DataProviderId::from_str(PROVIDER_ID).unwrap(),
             layer_id: LayerId(COLLECTION_ID.to_string()),
         });
+        let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
+            PROVIDER_ID.to_string(),
+            COLLECTION_ID.to_string(),
+        );
 
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -1782,11 +1791,11 @@ mod tests {
             .unwrap();
 
         let mut context = MockExecutionContext::test_default();
-        context.add_meta_data(id.clone().into(), meta);
+        context.add_meta_data(id.clone().into(), name.clone(), meta);
 
         let src = OgrSource {
             params: OgrSourceParameters {
-                data: id.into(),
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },

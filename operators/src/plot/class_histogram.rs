@@ -1,5 +1,5 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
     PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor,
@@ -50,6 +50,8 @@ impl PlotOperator for ClassHistogram {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         Ok(match self.sources.source {
             RasterOrVectorOperator::Raster(raster_source) => {
                 ensure!(
@@ -76,6 +78,7 @@ impl PlotOperator for ClassHistogram {
                 };
 
                 InitializedClassHistogram::new(
+                    name,
                     PlotResultDescriptor {
                         spatial_reference: in_desc.spatial_reference,
                         time: in_desc.time,
@@ -140,6 +143,7 @@ impl PlotOperator for ClassHistogram {
                 };
 
                 InitializedClassHistogram::new(
+                    name,
                     in_desc.into(),
                     self.params.column_name,
                     source_measurement,
@@ -155,6 +159,7 @@ impl PlotOperator for ClassHistogram {
 
 /// The initialization of `Histogram`
 pub struct InitializedClassHistogram<Op> {
+    name: CanonicOperatorName,
     result_descriptor: PlotResultDescriptor,
     source_measurement: ClassificationMeasurement,
     source: Op,
@@ -163,12 +168,14 @@ pub struct InitializedClassHistogram<Op> {
 
 impl<Op> InitializedClassHistogram<Op> {
     pub fn new(
+        name: CanonicOperatorName,
         result_descriptor: PlotResultDescriptor,
         column_name: Option<String>,
         source_measurement: ClassificationMeasurement,
         source: Op,
     ) -> Self {
         Self {
+            name,
             result_descriptor,
             source_measurement,
             source,
@@ -190,6 +197,10 @@ impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedRa
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedVectorOperator>> {
@@ -205,6 +216,10 @@ impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedVe
 
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -386,10 +401,11 @@ mod tests {
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
     use crate::test_data;
-    use geoengine_datatypes::dataset::{DataId, DatasetId};
+    use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::raster::{
         Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };
@@ -467,6 +483,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
+                    CacheHint::default(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
@@ -720,6 +737,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn text_attribute() {
         let dataset_id = DatasetId::new();
+        let dataset_name = NamedData::with_system_name("ne_10m_ports");
 
         let workflow = serde_json::json!({
             "type": "Histogram",
@@ -730,10 +748,7 @@ mod tests {
                 "source": {
                     "type": "OgrSource",
                     "params": {
-                        "data": {
-                            "type": "internal",
-                            "datasetId": dataset_id
-                        },
+                        "data": dataset_name.clone(),
                         "attributeProjection": null
                     },
                 }
@@ -744,6 +759,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
             DataId::Internal { dataset_id },
+            dataset_name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -771,6 +787,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -861,6 +878,7 @@ mod tests {
                         Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1060,6 +1078,7 @@ mod tests {
                             tile_size_in_pixels,
                         },
                         Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,

@@ -162,7 +162,7 @@ mod tests {
         };
 
         assert_eq!(
-            serde_json::to_value(&session).unwrap(),
+            serde_json::to_value(session).unwrap(),
             serde_json::json!({
                 "id": "d1322969-5ada-4a2c-bacf-a3045383ba41",
                 "user": {

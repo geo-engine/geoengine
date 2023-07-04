@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
+    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -49,6 +49,7 @@ impl OperatorName for Radiance {
 }
 
 pub struct InitializedRadiance {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
 }
@@ -61,6 +62,8 @@ impl RasterOperator for Radiance {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let input = initialized_sources.raster;
 
@@ -111,6 +114,7 @@ impl RasterOperator for Radiance {
         };
 
         let initialized_operator = InitializedRadiance {
+            name,
             result_descriptor: out_desc,
             source: input,
         };
@@ -161,6 +165,10 @@ impl InitializedRasterOperator for InitializedRadiance {
                 QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
             }
         })
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

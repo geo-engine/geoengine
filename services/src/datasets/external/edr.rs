@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -12,10 +12,11 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use gdal::Dataset;
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::hashmap;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, ContinuousMeasurement, Coordinate2D, FeatureDataType,
-    Measurement, RasterQueryRectangle, SpatialPartition2D, TimeInstance, TimeInterval,
-    VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, ContinuousMeasurement, Coordinate2D,
+    FeatureDataType, Measurement, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
+    TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
@@ -31,22 +32,23 @@ use geoengine_operators::source::{
     OgrSourceParameters, OgrSourceTimeFormat,
 };
 use geoengine_operators::util::gdal::gdal_open_dataset;
-use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
+use std::sync::OnceLock;
 use url::Url;
 
-lazy_static! {
-    static ref GEO_FILETYPES: HashMap<String, bool> = {
-        let mut m = HashMap::new();
-        //name:is_raster
-        m.insert("GeoTIFF".to_string(), true);
-        m.insert("GeoJSON".to_string(), false);
-        m
-    };
+static GEO_FILETYPES: OnceLock<HashMap<String, bool>> = OnceLock::new();
+
+// TODO: change to `LazyLock' once stable
+fn init_geo_filetypes() -> HashMap<String, bool> {
+    //name:is_raster
+    hashmap! {
+        "GeoTIFF".to_string() => true,
+        "GeoJSON".to_string() => false
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +59,8 @@ pub struct EdrDataProviderDefinition {
     #[serde(deserialize_with = "deserialize_base_url")]
     base_url: Url,
     vector_spec: Option<EdrVectorSpec>,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,6 +79,7 @@ impl DataProviderDefinition for EdrDataProviderDefinition {
             base_url: self.base_url,
             vector_spec: self.vector_spec,
             client: Client::new(),
+            cache_ttl: self.cache_ttl,
         }))
     }
 
@@ -97,6 +102,7 @@ pub struct EdrDataProvider {
     base_url: Url,
     vector_spec: Option<EdrVectorSpec>,
     client: Client,
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[async_trait]
@@ -402,7 +408,10 @@ impl EdrCollectionMetaData {
 
     fn select_output_format(&self) -> Result<String, geoengine_operators::error::Error> {
         for format in &self.output_formats {
-            if GEO_FILETYPES.contains_key(format) {
+            if GEO_FILETYPES
+                .get_or_init(init_geo_filetypes)
+                .contains_key(format)
+            {
                 return Ok(format.to_string());
             }
         }
@@ -413,6 +422,7 @@ impl EdrCollectionMetaData {
 
     fn is_raster_file(&self) -> Result<bool, geoengine_operators::error::Error> {
         Ok(*GEO_FILETYPES
+            .get_or_init(init_geo_filetypes)
             .get(&self.select_output_format()?)
             .expect("can only return values in map"))
     }
@@ -588,6 +598,7 @@ impl EdrCollectionMetaData {
         download_url: String,
         layer_name: String,
         vector_spec: EdrVectorSpec,
+        cache_ttl: CacheTtlSeconds,
     ) -> OgrSourceDataset {
         OgrSourceDataset {
             file_name: download_url.into(),
@@ -605,6 +616,7 @@ impl EdrCollectionMetaData {
             on_error: OgrSourceErrorSpec::Abort,
             sql_query: None,
             attribute_query: None,
+            cache_ttl,
         }
     }
 
@@ -613,10 +625,11 @@ impl EdrCollectionMetaData {
         base_url: &Url,
         height: &str,
         vector_spec: EdrVectorSpec,
+        cache_ttl: CacheTtlSeconds,
     ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>
     {
         let (download_url, layer_name) = self.get_vector_download_url(base_url, height)?;
-        let omd = self.get_ogr_source_ds(download_url, layer_name, vector_spec);
+        let omd = self.get_ogr_source_ds(download_url, layer_name, vector_spec, cache_ttl);
 
         Ok(StaticMetaData {
             loading_info: omd,
@@ -645,7 +658,7 @@ impl EdrCollectionMetaData {
 
     fn get_gdal_loading_info_temporal_slice(
         &self,
-        base_url: &Url,
+        provider: &EdrDataProvider,
         parameter: &str,
         height: &str,
         data_time: TimeInterval,
@@ -658,7 +671,7 @@ impl EdrCollectionMetaData {
             time: data_time,
             params: Some(GdalDatasetParameters {
                 file_path: self
-                    .get_raster_download_url(base_url, parameter, height, current_time)?
+                    .get_raster_download_url(&provider.base_url, parameter, height, current_time)?
                     .into(),
                 rasterband_channel: 1,
                 geo_transform: dataset
@@ -681,6 +694,7 @@ impl EdrCollectionMetaData {
                 allow_alphaband_as_mask: false,
                 retry: None,
             }),
+            cache_ttl: provider.cache_ttl,
         })
     }
 }
@@ -887,11 +901,10 @@ impl LayerCollectionProvider for EdrDataProvider {
             TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        data: DataId::External(ExternalDataId {
-                            provider_id: self.id,
-                            layer_id: id.clone(),
-                        })
-                        .into(),
+                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                            self.id.to_string(),
+                            id.to_string(),
+                        ),
                     },
                 }
                 .boxed(),
@@ -900,11 +913,10 @@ impl LayerCollectionProvider for EdrDataProvider {
             TypedOperator::Vector(
                 OgrSource {
                     params: OgrSourceParameters {
-                        data: DataId::External(ExternalDataId {
-                            provider_id: self.id,
-                            layer_id: id.clone(),
-                        })
-                        .into(),
+                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                            self.id.to_string(),
+                            id.to_string(),
+                        ),
                         attribute_projection: None,
                         attribute_filters: None,
                     },
@@ -975,7 +987,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         };
 
         let smd = collection
-            .get_ogr_metadata(&self.base_url, &height, vector_spec)
+            .get_ogr_metadata(&self.base_url, &height, vector_spec, self.cache_ttl)
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
             })?;
@@ -1018,7 +1030,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
             for current_time in temporal_values_iter {
                 params.push(collection.get_gdal_loading_info_temporal_slice(
-                    &self.base_url,
+                    self,
                     &parameter,
                     &height,
                     TimeInterval::new_unchecked(
@@ -1031,7 +1043,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 previous_start = current_time;
             }
             params.push(collection.get_gdal_loading_info_temporal_slice(
-                &self.base_url,
+                self,
                 &parameter,
                 &height,
                 TimeInterval::new_unchecked(
@@ -1049,7 +1061,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                     .as_ref(),
             )?;
             params.push(collection.get_gdal_loading_info_temporal_slice(
-                &self.base_url,
+                self,
                 &parameter,
                 &height,
                 TimeInterval::default(),

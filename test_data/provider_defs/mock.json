@@ -27,11 +27,7 @@
           "operator": {
             "type": "MockDatasetDataSource",
             "params": {
-              "data": {
-                "type": "external",
-                "providerId": "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
-                "layerId": "myMock"
-              }
+              "data": "_:d0535f1d-27b6-4982-b2f8-b1070f1bf6ee:myMock"
             }
           }
         }

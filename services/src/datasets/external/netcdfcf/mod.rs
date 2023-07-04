@@ -4,9 +4,7 @@ use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
-use crate::api::model::datatypes::{
-    DataId, DataProviderId, ExternalDataId, LayerId, ResamplingMethod,
-};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId, ResamplingMethod};
 use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::MetaDataDefinition;
@@ -31,6 +29,7 @@ use gdal::raster::{Dimension, GdalDataType, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
     TimeInstance, TimeInterval, TimeStep, TimeStepIter, VectorQueryRectangle,
@@ -74,10 +73,13 @@ pub const NETCDF_CF_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x1690_c483_b17f_4d98_95c8_00a6_4849_cd0b);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NetCdfCfDataProviderDefinition {
     pub name: String,
     pub path: PathBuf,
     pub overviews: PathBuf,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Debug)]
@@ -85,6 +87,7 @@ pub struct NetCdfCfDataProvider {
     pub name: String,
     pub path: PathBuf,
     pub overviews: PathBuf,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[typetag::serde]
@@ -95,6 +98,7 @@ impl DataProviderDefinition for NetCdfCfDataProviderDefinition {
             name: self.name,
             path: self.path,
             overviews: self.overviews,
+            cache_ttl: self.cache_ttl,
         }))
     }
 
@@ -373,6 +377,7 @@ impl NetCdfCfDataProvider {
         path: &Path,
         overviews: &Path,
         id: &DataId,
+        cache_ttl: CacheTtlSeconds,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
         const LON_DIMENSION_INDEX: usize = 3;
@@ -516,6 +521,7 @@ impl NetCdfCfDataProvider {
                 end, // TODO: Use this or time dimension size (number of steps)?
                 step,
                 band_offset: dataset_id.entity * dimensions_time,
+                cache_ttl,
             }),
             TimeCoverage::List { time_stamps } => {
                 let mut params_list = Vec::with_capacity(time_stamps.len());
@@ -528,6 +534,7 @@ impl NetCdfCfDataProvider {
                         time: TimeInterval::new_instant(*time_instance)
                             .context(error::InvalidTimeCoverageInterval)?,
                         params: Some(params),
+                        cache_ttl: CacheTtlSeconds::default(),
                     });
                 }
 
@@ -1208,18 +1215,15 @@ pub fn layer_from_netcdf_overview(
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        data: DataId::External(ExternalDataId {
-                            provider_id,
-                            layer_id: LayerId(
-                                json!({
-                                    "fileName": overview.file_name,
-                                    "groupNames": groups,
-                                    "entity": entity
-                                })
-                                .to_string(),
-                            ),
-                        })
-                        .into(),
+                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                            provider_id.to_string(),
+                            json!({
+                                "fileName": overview.file_name,
+                                "groupNames": groups,
+                                "entity": entity
+                            })
+                            .to_string(),
+                        ),
                     },
                 }
                 .boxed(),
@@ -1470,8 +1474,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         let dataset = id.clone().into();
         let path = self.path.clone();
         let overviews = self.overviews.clone();
+        let cache_ttl = self.cache_ttl;
         crate::util::spawn_blocking(move || {
-            Self::meta_data(&path, &overviews, &dataset).map_err(|error| {
+            Self::meta_data(&path, &overviews, &dataset, cache_ttl).map_err(|error| {
                 geoengine_operators::error::Error::LoadingInfo {
                     source: Box::new(error),
                 }
@@ -1522,6 +1527,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use super::*;
 
+    use crate::api::model::datatypes::ExternalDataId;
     use crate::contexts::{SessionContext, SimpleApplicationContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::layers::storage::LayerProviderDb;
@@ -1714,6 +1720,7 @@ mod tests {
             name: "NetCdfCfDataProvider".to_string(),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -1782,6 +1789,7 @@ mod tests {
             name: "NetCdfCfDataProvider".to_string(),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -1838,6 +1846,7 @@ mod tests {
             name: "NetCdfCfDataProvider".to_string(),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -1918,6 +1927,7 @@ mod tests {
             name: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
+            cache_ttl: Default::default(),
         };
 
         let metadata = provider
@@ -2004,7 +2014,8 @@ mod tests {
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
                     retry: None,
-                })
+                },),
+                cache_ttl: CacheTtlSeconds::default(),
             }
         );
     }
@@ -2015,6 +2026,7 @@ mod tests {
             name: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
+            cache_ttl: Default::default(),
         };
 
         let expected_files: Vec<PathBuf> = vec![
@@ -2038,6 +2050,7 @@ mod tests {
             name: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: overview_folder.path().to_path_buf(),
+            cache_ttl: Default::default(),
         };
 
         provider
@@ -2123,7 +2136,8 @@ mod tests {
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
                     retry: None,
-                })
+                }),
+                cache_ttl: CacheTtlSeconds::default(),
             }
         );
     }
@@ -2138,6 +2152,7 @@ mod tests {
             name: "NetCdfCfDataProvider".to_string(),
             path: test_data!("netcdf4d").into(),
             overviews: overview_folder.path().to_path_buf(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -2226,6 +2241,7 @@ mod tests {
                 path: test_data!("netcdf4d/").into(),
                 base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
                 overviews: test_data!("netcdf4d/overviews/").into(),
+                cache_ttl: Default::default(),
             });
 
         ctx.db()
@@ -2248,24 +2264,23 @@ mod tests {
                 sources: ExpressionSources::new_a_b(
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: ExternalDataId {
-                                provider_id: EBV_PROVIDER_ID,
-                                layer_id: LayerId(
-                                    serde_json::json!({
-                                        "fileName": "dataset_irr_ts.nc",
-                                        "groupNames": ["metric_1"],
-                                        "entity": 0
-                                    })
-                                    .to_string(),
-                                ),
-                            }
-                            .into(),
+                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                EBV_PROVIDER_ID.to_string(),
+                                serde_json::json!({
+                                    "fileName": "dataset_irr_ts.nc",
+                                    "groupNames": ["metric_1"],
+                                    "entity": 0
+                                })
+                                .to_string(),
+                            ),
                         },
                     }
                     .boxed(),
                     GdalSource {
                         params: GdalSourceParameters {
-                            data: land_cover_dataset_id.into(),
+                            data: geoengine_datatypes::dataset::NamedData::with_system_name(
+                                land_cover_dataset_id.to_string(),
+                            ),
                         },
                     }
                     .boxed(),

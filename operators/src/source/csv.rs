@@ -7,7 +7,7 @@ use csv::{Position, Reader, StringRecord};
 use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
@@ -21,8 +21,9 @@ use geoengine_datatypes::{
 };
 
 use crate::engine::{
-    InitializedVectorOperator, OperatorData, OperatorName, QueryContext, SourceOperator,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    CanonicOperatorName, InitializedVectorOperator, OperatorData, OperatorName, QueryContext,
+    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
@@ -150,7 +151,7 @@ impl OperatorName for CsvSource {
 }
 
 impl OperatorData for CsvSourceParameters {
-    fn data_ids_collect(&self, _data_ids: &mut Vec<DataId>) {}
+    fn data_names_collect(&self, _data_names: &mut Vec<NamedData>) {}
 }
 
 #[typetag::serde]
@@ -162,6 +163,7 @@ impl VectorOperator for CsvSource {
         _context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let initialized_source = InitializedCsvSource {
+            name: CanonicOperatorName::from(&self),
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint, // TODO: get as user input
                 spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get as user input
@@ -179,6 +181,7 @@ impl VectorOperator for CsvSource {
 }
 
 pub struct InitializedCsvSource {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     state: CsvSourceParameters,
 }
@@ -195,6 +198,10 @@ impl InitializedVectorOperator for InitializedCsvSource {
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 

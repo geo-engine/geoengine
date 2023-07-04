@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::StreamExt;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle, SpatialPartition2D,
     SpatialResolution,
@@ -20,9 +21,9 @@ use snafu::{ensure, OptionExt, ResultExt};
 use xgboost_rs::{Booster, DMatrix, XGBError};
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSources, MultipleRasterSources,
-    Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
+    MultipleRasterSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::stream_zip::StreamVectorZip;
 use crate::util::Result;
@@ -91,6 +92,7 @@ impl OperatorName for XgboostOperator {
 }
 
 pub struct InitializedXgboostOperator {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     sources: Vec<Box<dyn InitializedRasterOperator>>,
     model: String,
@@ -107,6 +109,8 @@ impl RasterOperator for XgboostOperator {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let model = context.read_ml_model(self.params.model_sub_path).await?;
 
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
@@ -157,6 +161,7 @@ impl RasterOperator for XgboostOperator {
         };
 
         let initialized_operator = InitializedXgboostOperator {
+            name,
             result_descriptor: out_desc,
             sources: init_rasters,
             model,
@@ -198,6 +203,10 @@ impl InitializedRasterOperator for InitializedXgboostOperator {
             self.no_data_value,
         ))))
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 struct XgboostProcessor<Q>
@@ -238,6 +247,12 @@ where
         let global_geo_transform = tile.global_geo_transform;
         let ndv = self.no_data_value;
 
+        let cache_hint = bands_of_tile
+            .iter()
+            .fold(CacheHint::max_duration(), |acc, bt| {
+                acc.merged(&bt.cache_hint)
+            });
+
         let predicted_grid = crate::util::spawn_blocking(move || {
             process_tile(
                 bands_of_tile,
@@ -258,6 +273,7 @@ where
                 global_geo_transform,
                 predicted_grid.into(),
                 props.clone(),
+                cache_hint,
             );
 
         Ok(rt)
@@ -373,6 +389,7 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
 
     use futures::StreamExt;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
@@ -412,6 +429,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([5, 5].into(), t1).unwrap()),
+                CacheHint::default(),
             ),
             RasterTile2D::<i32>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 1),
@@ -421,6 +439,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                 },
                 GridOrEmpty::from(Grid2D::new([5, 5].into(), t2).unwrap()),
+                CacheHint::default(),
             ),
         ];
 
@@ -455,6 +474,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
             },
             GridOrEmpty::from(Grid2D::new([5, 5].into(), tile).unwrap()),
+            CacheHint::default(),
         )];
 
         MockRasterSource {

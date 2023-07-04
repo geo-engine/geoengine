@@ -4,7 +4,7 @@ use tracing::debug;
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
@@ -15,13 +15,13 @@ use super::{
 
 pub trait OperatorData {
     /// Get the ids of all the data involoved in this operator and its sources
-    fn data_ids(&self) -> Vec<DataId> {
+    fn data_names(&self) -> Vec<NamedData> {
         let mut datasets = vec![];
-        self.data_ids_collect(&mut datasets);
+        self.data_names_collect(&mut datasets);
         datasets
     }
 
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>);
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>);
 }
 
 /// Common methods for `RasterOperator`s
@@ -146,6 +146,9 @@ pub trait InitializedRasterOperator: Send + Sync {
     {
         Box::new(self)
     }
+
+    /// Get a canonic representation of the operator and its sources
+    fn canonic_name(&self) -> CanonicOperatorName;
 }
 
 pub trait InitializedVectorOperator: Send + Sync {
@@ -161,6 +164,42 @@ pub trait InitializedVectorOperator: Send + Sync {
         Self: Sized + 'static,
     {
         Box::new(self)
+    }
+
+    /// Get a canonic representation of the operator and its sources.
+    /// This only includes *logical* operators, not wrappers
+    fn canonic_name(&self) -> CanonicOperatorName;
+}
+
+/// A canonic name for an operator and its sources
+/// We use a byte representation of the operator json
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CanonicOperatorName(Vec<u8>);
+
+impl CanonicOperatorName {
+    pub fn new<T: Serialize>(value: &T) -> Result<Self> {
+        Ok(CanonicOperatorName(serde_json::to_vec(&value)?))
+    }
+
+    ///
+    /// # Panics
+    ///
+    /// if the value cannot be serialized as json
+    pub fn new_unchecked<T: Serialize>(value: &T) -> Self {
+        CanonicOperatorName(serde_json::to_vec(&value).unwrap())
+    }
+
+    pub fn byte_size(&self) -> usize {
+        std::mem::size_of::<CanonicOperatorName>() + self.0.len() * std::mem::size_of::<u8>()
+    }
+}
+
+impl<T> From<&T> for CanonicOperatorName
+where
+    T: Serialize,
+{
+    fn from(value: &T) -> Self {
+        CanonicOperatorName::new_unchecked(value)
     }
 }
 
@@ -178,6 +217,9 @@ pub trait InitializedPlotOperator: Send + Sync {
     {
         Box::new(self)
     }
+
+    /// Get a canonic representation of the operator and its sources
+    fn canonic_name(&self) -> CanonicOperatorName;
 }
 
 impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
@@ -187,6 +229,10 @@ impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         self.as_ref().query_processor()
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.as_ref().canonic_name()
     }
 }
 
@@ -198,6 +244,10 @@ impl InitializedVectorOperator for Box<dyn InitializedVectorOperator> {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         self.as_ref().query_processor()
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.as_ref().canonic_name()
+    }
 }
 
 impl InitializedPlotOperator for Box<dyn InitializedPlotOperator> {
@@ -207,6 +257,10 @@ impl InitializedPlotOperator for Box<dyn InitializedPlotOperator> {
 
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         self.as_ref().query_processor()
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.as_ref().canonic_name()
     }
 }
 
@@ -314,15 +368,31 @@ macro_rules! call_on_typed_operator {
 }
 
 impl OperatorData for TypedOperator {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+    fn data_names_collect(&self, data_ids: &mut Vec<NamedData>) {
         match self {
-            TypedOperator::Vector(v) => v.data_ids_collect(data_ids),
-            TypedOperator::Raster(r) => r.data_ids_collect(data_ids),
-            TypedOperator::Plot(p) => p.data_ids_collect(data_ids),
+            TypedOperator::Vector(v) => v.data_names_collect(data_ids),
+            TypedOperator::Raster(r) => r.data_names_collect(data_ids),
+            TypedOperator::Plot(p) => p.data_names_collect(data_ids),
         }
     }
 }
 
 pub trait OperatorName {
     const TYPE_NAME: &'static str;
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn op_name_byte_size() {
+        let op = CanonicOperatorName::new_unchecked(&json!({"foo": "bar"}));
+        assert_eq!(op.byte_size(), 37);
+
+        let op = CanonicOperatorName::new_unchecked(&json!({"foo": {"bar": [1,2,3]}}));
+        assert_eq!(op.byte_size(), 47);
+    }
 }

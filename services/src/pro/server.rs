@@ -149,6 +149,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let session_config: crate::util::config::Session = get_config_element()?;
     let web_config: crate::util::config::Web = get_config_element()?;
     let open_telemetry: crate::pro::util::config::OpenTelemetry = get_config_element()?;
+    let cache_config: crate::pro::util::config::Cache = get_config_element()?;
 
     if user_config.user_registration {
         info!("User Registration: enabled");
@@ -176,6 +177,12 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         warn!("Fixed session token is set, but it will be ignored in Geo Engine Pro");
     }
 
+    if cache_config.enabled {
+        info!("Cache: enabled");
+    } else {
+        info!("Cache: disabled");
+    }
+
     let data_path_config: config::DataProvider = get_config_element()?;
 
     let chunk_byte_size = config::get_config_element::<config::QueryContext>()?
@@ -195,6 +202,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                 chunk_byte_size,
                 static_files_dir,
                 web_config,
+                cache_config,
             )
             .await
         }
@@ -206,6 +214,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                 chunk_byte_size,
                 static_files_dir,
                 web_config,
+                cache_config,
             )
             .await
         }
@@ -219,6 +228,7 @@ async fn start_in_memory(
     chunk_byte_size: ChunkByteSize,
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
+    cache_config: crate::pro::util::config::Cache,
 ) -> Result<()> {
     info!("Using in memory backend");
     let ctx = ProInMemoryContext::new_with_data(
@@ -229,6 +239,7 @@ async fn start_in_memory(
         tiling_spec,
         chunk_byte_size,
         oidc_config,
+        cache_config,
     )
     .await;
 
@@ -249,6 +260,7 @@ async fn start_postgres(
     chunk_byte_size: ChunkByteSize,
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
+    cache_config: crate::pro::util::config::Cache,
 ) -> Result<()> {
     #[cfg(feature = "postgres")]
     {
@@ -274,6 +286,7 @@ async fn start_postgres(
             tiling_spec,
             chunk_byte_size,
             oidc_config,
+            cache_config,
         )
         .await?;
 

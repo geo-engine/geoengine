@@ -1,9 +1,9 @@
 use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser};
 use crate::{
     engine::{
-        ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorData,
-        OperatorName, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-        TypedRasterQueryProcessor, WorkflowOperatorPath,
+        CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
+        Operator, OperatorData, OperatorName, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
     },
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::Result,
@@ -11,7 +11,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::try_join;
 use geoengine_datatypes::{
-    dataset::DataId,
+    dataset::NamedData,
     primitives::{partitions_extent, time_interval_extent, Measurement, SpatialResolution},
     raster::RasterDataType,
 };
@@ -64,9 +64,9 @@ pub struct ExpressionSources {
 }
 
 impl OperatorData for ExpressionSources {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
         for source in self.iter() {
-            source.data_ids_collect(data_ids);
+            source.data_names_collect(data_names);
         }
     }
 }
@@ -233,6 +233,8 @@ impl RasterOperator for Expression {
             }
         );
 
+        let name = CanonicOperatorName::from(&self);
+
         // we refer to rasters by A, B, C, …
         let parameters = (0..self.sources.number_of_sources())
             .map(|i| {
@@ -294,6 +296,7 @@ impl RasterOperator for Expression {
         };
 
         let initialized_operator = InitializedExpression {
+            name,
             result_descriptor,
             sources,
             expression,
@@ -311,6 +314,7 @@ impl OperatorName for Expression {
 }
 
 pub struct InitializedExpression {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     sources: ExpressionInitializedSources,
     expression: ExpressionAst,
@@ -517,6 +521,10 @@ impl InitializedRasterOperator for InitializedExpression {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 #[cfg(test)]
@@ -525,6 +533,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
@@ -1087,6 +1096,13 @@ mod tests {
     }
 
     fn make_raster(no_data_value: Option<i8>) -> Box<dyn RasterOperator> {
+        make_raster_with_cache_hint(no_data_value, CacheHint::no_cache())
+    }
+
+    fn make_raster_with_cache_hint(
+        no_data_value: Option<i8>,
+        cache_hint: CacheHint,
+    ) -> Box<dyn RasterOperator> {
         let raster = Grid2D::<i8>::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap();
 
         let real_raster = if let Some(no_data_value) = no_data_value {
@@ -1105,6 +1121,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
             },
             real_raster,
+            cache_hint,
         );
 
         MockRasterSource {
@@ -1121,5 +1138,213 @@ mod tests {
             },
         }
         .boxed()
+    }
+
+    #[tokio::test]
+    async fn it_attaches_cache_hint_1() {
+        let no_data_value = 0;
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
+        let cache_hint = CacheHint::seconds(1234);
+        let raster_a = make_raster_with_cache_hint(Some(no_data_value), cache_hint);
+
+        let o = Expression {
+            params: ExpressionParams {
+                expression: "min(A * pi(), 10)".to_string(),
+                output_type: RasterDataType::I8,
+                output_measurement: Some(Measurement::Unitless),
+                map_no_data: false,
+            },
+            sources: ExpressionSources {
+                a: raster_a,
+                b: None,
+                c: None,
+                d: None,
+                e: None,
+                f: None,
+                g: None,
+                h: None,
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
+        .await
+        .unwrap();
+
+        let processor = o.query_processor().unwrap().get_i8().unwrap();
+
+        let ctx = MockQueryContext::new(1.into());
+        let result_stream = processor
+            .query(
+                RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 3.).into(),
+                        (2., 0.).into(),
+                    ),
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &ctx,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+
+        assert_eq!(result.len(), 1);
+
+        assert!(
+            result[0].as_ref().unwrap().cache_hint.total_ttl_seconds() > CacheTtlSeconds::new(0)
+                && result[0].as_ref().unwrap().cache_hint.total_ttl_seconds()
+                    <= cache_hint.total_ttl_seconds()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_attaches_cache_hint_2() {
+        let no_data_value = 0;
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
+        let cache_hint_a = CacheHint::seconds(1234);
+        let raster_a = make_raster_with_cache_hint(Some(no_data_value), cache_hint_a);
+
+        let cache_hint_b = CacheHint::seconds(4567);
+        let raster_b = make_raster_with_cache_hint(Some(no_data_value), cache_hint_b);
+
+        let o = Expression {
+            params: ExpressionParams {
+                expression: "A + B".to_string(),
+                output_type: RasterDataType::I8,
+                output_measurement: Some(Measurement::Unitless),
+                map_no_data: false,
+            },
+            sources: ExpressionSources {
+                a: raster_a,
+                b: Some(raster_b),
+                c: None,
+                d: None,
+                e: None,
+                f: None,
+                g: None,
+                h: None,
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
+        .await
+        .unwrap();
+
+        let processor = o.query_processor().unwrap().get_i8().unwrap();
+
+        let ctx = MockQueryContext::new(1.into());
+        let result_stream = processor
+            .query(
+                RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 3.).into(),
+                        (2., 0.).into(),
+                    ),
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &ctx,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0].as_ref().unwrap().cache_hint.expires(),
+            cache_hint_a.merged(&cache_hint_b).expires()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_attaches_cache_hint_3() {
+        let no_data_value = 0;
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            origin_coordinate: [0.0, 0.0].into(),
+            tile_size_in_pixels,
+        };
+
+        let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
+        let cache_hint_a = CacheHint::seconds(1234);
+        let raster_a = make_raster_with_cache_hint(Some(no_data_value), cache_hint_a);
+
+        let cache_hint_b = CacheHint::seconds(4567);
+        let raster_b = make_raster_with_cache_hint(Some(no_data_value), cache_hint_b);
+
+        let cache_hint_c = CacheHint::seconds(7891);
+        let raster_c = make_raster_with_cache_hint(Some(no_data_value), cache_hint_c);
+
+        let o = Expression {
+            params: ExpressionParams {
+                expression: "A + B".to_string(),
+                output_type: RasterDataType::I8,
+                output_measurement: Some(Measurement::Unitless),
+                map_no_data: false,
+            },
+            sources: ExpressionSources {
+                a: raster_a,
+                b: Some(raster_b),
+                c: Some(raster_c),
+                d: None,
+                e: None,
+                f: None,
+                g: None,
+                h: None,
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
+        .await
+        .unwrap();
+
+        let processor = o.query_processor().unwrap().get_i8().unwrap();
+
+        let ctx = MockQueryContext::new(1.into());
+        let result_stream = processor
+            .query(
+                RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 3.).into(),
+                        (2., 0.).into(),
+                    ),
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &ctx,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0].as_ref().unwrap().cache_hint.expires(),
+            cache_hint_a
+                .merged(&cache_hint_b)
+                .merged(&cache_hint_c)
+                .expires()
+        );
     }
 }

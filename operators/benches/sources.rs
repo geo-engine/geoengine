@@ -2,6 +2,7 @@ use std::time::Instant;
 use std::{hint::black_box, marker::PhantomData};
 
 use futures::StreamExt;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::{
@@ -40,15 +41,69 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
 
     MockRasterSourceProcessor {
         data: vec![
-            RasterTile2D::new(time, [-1, -1].into(), geo_transform, grid.clone()),
-            RasterTile2D::new(time, [-1, 0].into(), geo_transform, grid.clone()),
-            RasterTile2D::new(time, [-1, 1].into(), geo_transform, grid.clone()),
-            RasterTile2D::new(time, [0, -1].into(), geo_transform, grid.clone()),
-            RasterTile2D::new(time, [0, 0].into(), geo_transform, grid.clone()),
-            RasterTile2D::new(time, [0, 1].into(), geo_transform, grid.clone()),
-            RasterTile2D::new(time, [1, -1].into(), geo_transform, grid.clone()),
-            RasterTile2D::new(time, [1, 0].into(), geo_transform, grid.clone()),
-            RasterTile2D::new(time, [1, 1].into(), geo_transform, grid),
+            RasterTile2D::new(
+                time,
+                [-1, -1].into(),
+                geo_transform,
+                grid.clone(),
+                CacheHint::default(),
+            ),
+            RasterTile2D::new(
+                time,
+                [-1, 0].into(),
+                geo_transform,
+                grid.clone(),
+                CacheHint::default(),
+            ),
+            RasterTile2D::new(
+                time,
+                [-1, 1].into(),
+                geo_transform,
+                grid.clone(),
+                CacheHint::default(),
+            ),
+            RasterTile2D::new(
+                time,
+                [0, -1].into(),
+                geo_transform,
+                grid.clone(),
+                CacheHint::default(),
+            ),
+            RasterTile2D::new(
+                time,
+                [0, 0].into(),
+                geo_transform,
+                grid.clone(),
+                CacheHint::default(),
+            ),
+            RasterTile2D::new(
+                time,
+                [0, 1].into(),
+                geo_transform,
+                grid.clone(),
+                CacheHint::default(),
+            ),
+            RasterTile2D::new(
+                time,
+                [1, -1].into(),
+                geo_transform,
+                grid.clone(),
+                CacheHint::default(),
+            ),
+            RasterTile2D::new(
+                time,
+                [1, 0].into(),
+                geo_transform,
+                grid.clone(),
+                CacheHint::default(),
+            ),
+            RasterTile2D::new(
+                time,
+                [1, 1].into(),
+                geo_transform,
+                grid,
+                CacheHint::default(),
+            ),
         ],
         tiling_specification: tiling_spec,
     }

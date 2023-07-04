@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, MetaData, OperatorData, OperatorName,
-    QueryContext, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedVectorOperator, MetaData, OperatorData,
+    OperatorName, QueryContext, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -9,7 +9,8 @@ use futures::stream;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::{MultiPointCollection, VectorDataType};
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
@@ -98,6 +99,7 @@ impl VectorQueryProcessor for MockDatasetDataSourceProcessor {
                 loading_info.points.iter().map(Into::into).collect(),
                 vec![TimeInterval::default(); loading_info.points.len()],
                 HashMap::new(),
+                CacheHint::max_duration(),
             )?)
         })
         .boxed())
@@ -106,7 +108,7 @@ impl VectorQueryProcessor for MockDatasetDataSourceProcessor {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MockDatasetDataSourceParams {
-    pub data: DataId,
+    pub data: NamedData,
 }
 
 pub type MockDatasetDataSource = SourceOperator<MockDatasetDataSourceParams>;
@@ -123,9 +125,11 @@ impl VectorOperator for MockDatasetDataSource {
         _path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        let loading_info = context.meta_data(&self.params.data).await?;
+        let data_id = context.resolve_named_data(&self.params.data).await?;
+        let loading_info = context.meta_data(&data_id).await?;
 
         Ok(InitializedMockDatasetDataSource {
+            name: CanonicOperatorName::from(&self),
             result_descriptor: loading_info.result_descriptor().await?,
             loading_info,
         }
@@ -136,12 +140,13 @@ impl VectorOperator for MockDatasetDataSource {
 }
 
 impl OperatorData for MockDatasetDataSource {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        data_ids.push(self.params.data.clone());
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        data_names.push(self.params.data.clone());
     }
 }
 
 struct InitializedMockDatasetDataSource<R: ResultDescriptor, Q> {
+    name: CanonicOperatorName,
     result_descriptor: R,
     loading_info: Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, R, Q>>,
 }
@@ -161,6 +166,10 @@ impl InitializedVectorOperator
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 #[cfg(test)]
@@ -170,7 +179,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
-    use geoengine_datatypes::dataset::{DataId, DatasetId};
+    use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
@@ -182,13 +191,16 @@ mod tests {
         let id: DataId = DatasetId::new().into();
         execution_context.add_meta_data(
             id.clone(),
+            NamedData::with_system_name("points"),
             Box::new(MockDatasetDataSourceLoadingInfo {
                 points: vec![Coordinate2D::new(1., 2.); 3],
             }),
         );
 
         let mps = MockDatasetDataSource {
-            params: MockDatasetDataSourceParams { data: id },
+            params: MockDatasetDataSourceParams {
+                data: NamedData::with_system_name("points"),
+            },
         }
         .boxed();
         let initialized = mps

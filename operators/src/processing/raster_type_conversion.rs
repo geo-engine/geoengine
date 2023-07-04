@@ -7,9 +7,9 @@ use geoengine_datatypes::{
 use serde::{Deserialize, Serialize};
 
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
+    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 
@@ -28,6 +28,7 @@ impl OperatorName for RasterTypeConversion {
 }
 
 pub struct InitializedRasterTypeConversionOperator {
+    name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
 }
@@ -40,6 +41,8 @@ impl RasterOperator for RasterTypeConversion {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let in_desc = initialized_sources.raster.result_descriptor();
 
@@ -55,6 +58,7 @@ impl RasterOperator for RasterTypeConversion {
         };
 
         let initialized_operator = InitializedRasterTypeConversionOperator {
+            name,
             result_descriptor: out_desc,
             source: initialized_sources.raster,
         };
@@ -81,6 +85,10 @@ impl InitializedRasterOperator for InitializedRasterTypeConversionOperator {
         });
 
         Ok(res_op)
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -138,7 +146,7 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{CacheHint, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             Grid2D, GridOrEmpty2D, MaskedGrid2D, RasterDataType, TileInformation,
             TilingSpecification,
@@ -177,6 +185,7 @@ mod tests {
                 tile_size_in_pixels: grid_shape,
             },
             raster.into(),
+            CacheHint::default(),
         );
 
         let mrs = MockRasterSource {

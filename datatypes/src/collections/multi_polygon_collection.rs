@@ -41,20 +41,12 @@ impl GeometryCollection for MultiPolygonCollection {
         let coordinates_ref = rings.values();
         let coordinates: &FixedSizeListArray = downcast_array(coordinates_ref);
 
-        let number_of_coordinates = coordinates.data().len();
+        let floats: &Float64Array = downcast_array(coordinates.values());
+        let floats: &[f64] = floats.values().as_ref();
 
-        let floats_ref = coordinates.values();
-        let floats: &Float64Array = downcast_array(floats_ref);
-
-        unsafe {
-            slice::from_raw_parts(
-                floats.values().as_ptr().cast::<Coordinate2D>(),
-                number_of_coordinates,
-            )
-        }
+        unsafe { slice::from_raw_parts(floats.as_ptr().cast::<Coordinate2D>(), coordinates.len()) }
     }
 
-    #[allow(clippy::cast_ptr_alignment)]
     fn feature_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table
@@ -62,15 +54,11 @@ impl GeometryCollection for MultiPolygonCollection {
             .expect("There should exist a geometry column because it is added during creation of the collection");
         let geometries: &ListArray = downcast_array(geometries_ref);
 
-        let data = geometries.data();
-        let buffer = &data.buffers()[0];
-
-        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), geometries.len() + 1) }
+        geometries.offsets()
     }
 }
 
 impl MultiPolygonCollection {
-    #[allow(clippy::cast_ptr_alignment)]
     pub fn polygon_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table
@@ -81,13 +69,9 @@ impl MultiPolygonCollection {
         let polygons_ref = geometries.values();
         let polygons: &ListArray = downcast_array(polygons_ref);
 
-        let data = polygons.data();
-        let buffer = &data.buffers()[0];
-
-        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), polygons.len() + 1) }
+        polygons.offsets()
     }
 
-    #[allow(clippy::cast_ptr_alignment)]
     pub fn ring_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table
@@ -101,10 +85,7 @@ impl MultiPolygonCollection {
         let rings_ref = polygons.values();
         let rings: &ListArray = downcast_array(rings_ref);
 
-        let data = rings.data();
-        let buffer = &data.buffers()[0];
-
-        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), rings.len() + 1) }
+        rings.offsets()
     }
 }
 
@@ -414,32 +395,31 @@ impl ReplaceRawArrayCoords for MultiPolygonCollection {
     fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Result<ArrayData> {
         let geometries: &ListArray = downcast_array(array_ref);
 
-        let feature_offset_array = geometries.data();
-        let feature_offsets_buffer = &feature_offset_array.buffers()[0];
-        let num_features = (feature_offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
+        let num_features = geometries.len();
+        let feature_offsets = geometries.offsets();
 
-        let polygon_offsets_array = &feature_offset_array.child_data()[0];
-        let polygon_offsets_buffer = &polygon_offsets_array.buffers()[0];
-        let num_polygons = (polygon_offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
+        let polygons: &ListArray = downcast_array(geometries.values());
+        let num_polygons = polygons.len();
+        let polygon_offsets = polygons.offsets();
 
-        let ring_offsets_array = &polygon_offsets_array.child_data()[0];
-        let ring_offsets_buffer = &ring_offsets_array.buffers()[0];
-        let num_rings = (ring_offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
+        let rings: &ListArray = downcast_array(polygons.values());
+        let num_rings = rings.len();
+        let ring_offsets = rings.offsets();
 
         let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
         let num_floats = num_coords * 2;
 
         Ok(ArrayData::builder(MultiPolygon::arrow_data_type())
             .len(num_features)
-            .add_buffer(feature_offsets_buffer.clone())
+            .add_buffer(feature_offsets.inner().inner().clone())
             .add_child_data(
                 ArrayData::builder(MultiLineString::arrow_data_type())
                     .len(num_polygons)
-                    .add_buffer(polygon_offsets_buffer.clone())
+                    .add_buffer(polygon_offsets.inner().inner().clone())
                     .add_child_data(
                         ArrayData::builder(Coordinate2D::arrow_list_data_type())
                             .len(num_rings)
-                            .add_buffer(ring_offsets_buffer.clone())
+                            .add_buffer(ring_offsets.inner().inner().clone())
                             .add_child_data(
                                 ArrayData::builder(Coordinate2D::arrow_data_type())
                                     .len(num_coords)
@@ -530,7 +510,9 @@ mod tests {
 
     use super::*;
 
+    use crate::collections::feature_collection::ChunksEqualIgnoringCacheHint;
     use crate::collections::{BuilderProvider, FeatureCollectionModifications};
+    use crate::primitives::CacheHint;
     use crate::primitives::{FeatureData, FeatureDataRef, TimeInterval};
 
     #[test]
@@ -993,12 +975,13 @@ mod tests {
             .unwrap(),
         ];
 
+        assert_eq!(collection.geometries().len(), 2);
+
         let proj_collection = collection.reproject(&projector).unwrap();
 
         // Assert geometrys are approx equal
         proj_collection
             .geometries()
-            .into_iter()
             .zip(expected.iter())
             .for_each(|(a, e)| {
                 assert!(approx_eq!(&MultiPolygon, &a.into(), e, epsilon = 0.00001));
@@ -1099,10 +1082,11 @@ mod tests {
             .unwrap()],
             vec![Default::default(); 1],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(collection, from_geo);
+        assert!(collection.chunks_equal_ignoring_cache_hint(&from_geo));
     }
 
     #[test]

@@ -17,6 +17,7 @@ use futures::{ready, Stream, StreamExt};
 use futures::{Future, FutureExt};
 use gdal::vector::sql::ResultSet;
 use gdal::vector::{Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType};
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use log::debug;
 use pin_project::pin_project;
 use postgres_protocol::escape::{escape_identifier, escape_literal};
@@ -36,7 +37,10 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::{OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath};
+use crate::adapters::FeatureCollectionStreamExt;
+use crate::engine::{
+    CanonicOperatorName, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
+};
 use crate::error::Error;
 use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
@@ -49,7 +53,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use gdal::errors::GdalError;
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::NamedData;
 use std::convert::{TryFrom, TryInto};
 
 use self::dataset_iterator::OgrDatasetIterator;
@@ -57,7 +61,7 @@ use self::dataset_iterator::OgrDatasetIterator;
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceParameters {
-    pub data: DataId,
+    pub data: NamedData,
     pub attribute_projection: Option<Vec<String>>,
     pub attribute_filters: Option<Vec<AttributeFilter>>,
 }
@@ -71,8 +75,8 @@ pub struct AttributeFilter {
 }
 
 impl OperatorData for OgrSourceParameters {
-    fn data_ids_collect(&self, data_ids: &mut Vec<DataId>) {
-        data_ids.push(self.data.clone());
+    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
+        data_names.push(self.data.clone());
     }
 }
 
@@ -108,6 +112,8 @@ pub struct OgrSourceDataset {
     pub on_error: OgrSourceErrorSpec,
     pub sql_query: Option<String>,
     pub attribute_query: Option<String>,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl OgrSourceDataset {
@@ -341,6 +347,7 @@ pub struct OgrSourceState {
 }
 
 pub struct InitializedOgrSource {
+    name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     state: OgrSourceState,
 }
@@ -357,9 +364,11 @@ impl VectorOperator for OgrSource {
 
         debug!("Initializing OgrSource with path: {:?}", path);
 
+        let data_id = context.resolve_named_data(&self.params.data).await?;
+
         let info: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = context.meta_data(&self.params.data).await?;
+        > = context.meta_data(&data_id).await?;
 
         let result_descriptor = info.result_descriptor().await?;
 
@@ -394,6 +403,7 @@ impl VectorOperator for OgrSource {
         }
 
         let initialized_source = InitializedOgrSource {
+            name: CanonicOperatorName::from(&self),
             result_descriptor,
             state: OgrSourceState {
                 dataset_information: info,
@@ -464,6 +474,10 @@ impl InitializedVectorOperator for InitializedOgrSource {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 pub struct OgrSourceProcessor<G>
@@ -515,6 +529,7 @@ where
             self.attribute_filters.clone(),
         )
         .await?
+        .merge_chunks(ctx.chunk_byte_size().into()) // rechunk the data if necessary TODO: remove when source produces the right chunk sizes
         .boxed())
     }
 }
@@ -815,7 +830,10 @@ where
                 FieldValue::DateValue(value) => Ok(DateTime::from(
                     value
                         .and_hms_opt(0, 0, 0)
-                        .expect("`00:00:00` should be a valid time"),
+                        .expect("`00:00:00` should be a valid time")
+                        .and_local_timezone(chrono::Utc) // we don't have any other information
+                        .single()
+                        .expect("setting timezone to Utc should not fail"),
                 )
                 .into()),
                 FieldValue::DateTimeValue(value) => Ok(DateTime::from(value).into()),
@@ -1048,6 +1066,8 @@ where
                 break;
             }
         }
+
+        builder.cache_hint(dataset_information.cache_ttl.into());
 
         builder.build().map_err(Into::into)
     }
@@ -1445,10 +1465,11 @@ mod tests {
     use crate::test_data;
     use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::collections::{
-        DataCollection, FeatureCollectionInfos, GeometryCollection, MultiPointCollection,
-        MultiPolygonCollection,
+        ChunksEqualIgnoringCacheHint, DataCollection, FeatureCollectionInfos, GeometryCollection,
+        MultiPointCollection, MultiPolygonCollection,
     };
     use geoengine_datatypes::dataset::{DataId, DatasetId};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, Measurement, SpatialResolution, TimeGranularity,
     };
@@ -1495,6 +1516,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let serialized_spec = serde_json::to_value(&spec).unwrap();
@@ -1542,7 +1564,8 @@ mod tests {
                 "forceOgrSpatialFilter": false,
                 "onError": "ignore",
                 "sqlQuery": null,
-                "attributeQuery": null
+                "attributeQuery": null,
+                "cacheTtl": 0,
             })
         );
 
@@ -1612,6 +1635,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -1663,6 +1687,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -1708,6 +1733,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Abort,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
         let info = StaticMetaData {
             loading_info: dataset_information,
@@ -1757,6 +1783,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
         let info = StaticMetaData {
             loading_info: dataset_information,
@@ -1789,13 +1816,13 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 MultiPoint::many(vec![vec![(0.0, 0.1)], vec![(1.0, 1.1), (2.0, 2.1)]])?,
                 vec![Default::default(); 2],
                 HashMap::new(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -1804,9 +1831,11 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_bbox_filter() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -1820,6 +1849,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1834,7 +1864,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -1885,13 +1915,13 @@ mod tests {
             (4.292_873_969, 51.927_222_22),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -1900,9 +1930,11 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_force_spatial_filter() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -1916,6 +1948,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1930,7 +1963,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -1981,13 +2014,13 @@ mod tests {
             (4.292_873_969, 51.927_222_22),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -1996,9 +2029,11 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_fast_spatial_filter() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!(
@@ -2015,6 +2050,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2029,7 +2065,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -2080,13 +2116,13 @@ mod tests {
             (4.651_413_428, 51.805_833_33),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -2096,9 +2132,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports_columns() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -2126,6 +2164,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2179,7 +2218,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id.clone(),
+                data: name.clone(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -2295,9 +2334,8 @@ mod tests {
             .collect(),
         );
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 [
@@ -2310,7 +2348,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default(),
+            )?),
         );
 
         Ok(())
@@ -2320,9 +2359,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -2336,6 +2377,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2350,7 +2392,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id.clone(),
+                data: name.clone(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -3475,13 +3517,13 @@ mod tests {
             (-87.6, 41.88),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 1081],
                 HashMap::new(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -3514,6 +3556,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -3572,9 +3615,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 2],
                 [
@@ -3597,7 +3639,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -3632,6 +3675,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -3690,9 +3734,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 MultiPoint::many(vec![vec![(1.0, 2.0)], vec![(1.0, 2.0)]]).unwrap(),
                 vec![Default::default(); 2],
                 [
@@ -3715,7 +3758,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -3725,9 +3769,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn chunked() -> Result<()> {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -3741,6 +3787,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -3755,7 +3802,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id.clone(),
+                data: name.clone(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -3900,13 +3947,13 @@ mod tests {
             result.iter().zip(expected_multipoints.iter().cloned())
         {
             assert_eq!(collection.len(), 1);
-            assert_eq!(
-                collection,
-                &MultiPointCollection::from_data(
+            assert!(
+                collection.chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                     vec![expected_multi_point],
                     vec![Default::default(); 1],
                     Default::default(),
-                )?
+                    CacheHint::default()
+                )?)
             );
         }
 
@@ -3934,37 +3981,37 @@ mod tests {
         assert_eq!(result[2].len(), 25);
         assert_eq!(result[3].len(), 24);
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[0..25].to_vec(),
                 vec![Default::default(); result[0].len()],
                 Default::default(),
-            )?
+                CacheHint::default()
+            )?)
         );
-        assert_eq!(
-            result[1],
-            MultiPointCollection::from_data(
+        assert!(
+            result[1].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[25..50].to_vec(),
                 vec![Default::default(); result[1].len()],
                 Default::default(),
-            )?
+                CacheHint::default()
+            )?)
         );
-        assert_eq!(
-            result[2],
-            MultiPointCollection::from_data(
+        assert!(
+            result[2].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[50..75].to_vec(),
                 vec![Default::default(); result[2].len()],
                 Default::default(),
-            )?
+                CacheHint::default()
+            )?)
         );
-        assert_eq!(
-            result[3],
-            MultiPointCollection::from_data(
+        assert!(
+            result[3].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[75..99].to_vec(),
                 vec![Default::default(); result[3].len()],
                 Default::default(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -3973,9 +4020,11 @@ mod tests {
     #[tokio::test]
     async fn empty() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -3989,6 +4038,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4003,7 +4053,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4042,17 +4092,19 @@ mod tests {
 
         let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
 
+        // FIXME: this should be an empty collection. The ChunkMerger does not forward a single empty collection
         assert_eq!(result.len(), 1);
-
         assert!(result[0].is_empty());
     }
 
     #[tokio::test]
     async fn polygon_gpkg() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("german-polygons");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/germany_polygon.gpkg").into(),
@@ -4076,6 +4128,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPolygon,
@@ -4090,7 +4143,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4147,9 +4200,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn points_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("points");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points.csv").into(),
@@ -4175,6 +4230,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4207,7 +4263,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4260,19 +4316,22 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn points_date_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("lon-lat-date");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date.csv").into(),
@@ -4307,6 +4366,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4330,7 +4390,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4379,19 +4439,22 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn points_date_time_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("lon-lat-datetime");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date_time.csv").into(),
@@ -4428,6 +4491,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4451,7 +4515,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4500,19 +4564,22 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn points_date_time_tz_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("lon-lat-time-tz");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date_time_tz.csv").into(),
@@ -4549,6 +4616,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4572,7 +4640,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4621,19 +4689,22 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn points_unix_date() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("lon-lat-unix-date");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_unix_date.csv").into(),
@@ -4666,6 +4737,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4689,7 +4761,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4738,19 +4810,22 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn vector_date_time_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("lon-lat-datetime");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/lonlat_date_time.csv").into(),
@@ -4787,6 +4862,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4819,7 +4895,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4874,19 +4950,22 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn points_bool_csv() {
         let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("points-with-bool");
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
+            name.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: test_data!("vector/data/points_with_bool.csv").into(),
@@ -4912,6 +4991,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4935,7 +5015,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data: id,
+                data: name,
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -4988,10 +5068,11 @@ mod tests {
                 map.insert("bool".into(), FeatureData::Bool(vec![true, false, true]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -5026,6 +5107,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5084,9 +5166,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 2],
                 [
@@ -5109,7 +5190,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5142,6 +5224,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5209,9 +5292,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5225,7 +5307,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5258,6 +5341,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5323,9 +5407,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5339,7 +5422,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5372,6 +5456,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5437,9 +5522,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5453,7 +5537,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5490,6 +5575,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5555,9 +5641,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5571,7 +5656,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5604,6 +5690,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5672,9 +5759,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 2],
                 [
@@ -5697,7 +5783,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5730,6 +5817,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5804,9 +5892,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5820,7 +5907,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5853,6 +5941,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: Some("\"c\" = 'foo'".to_string()),
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5918,9 +6007,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5934,7 +6022,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5966,6 +6055,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -6055,6 +6145,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -6147,6 +6238,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: Some("\"name\" = 'Bangkok'".to_string()),
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -6236,6 +6328,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -6295,6 +6388,99 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         assert_eq!(result[0].len(), 67);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_attaches_cache_hint() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
+            layer_name: "ne_10m_ports".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Yes,
+                }),
+                x: String::new(),
+                y: None,
+                float: vec!["natlscale".to_string()],
+                int: vec![],
+                text: vec!["name".to_string()],
+                bool: vec![],
+                datetime: vec![],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+            cache_ttl: CacheTtlSeconds::max(),
+        };
+
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    (
+                        "natlscale".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    ),
+                    (
+                        "name".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless,
+                        },
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            Box::new(info),
+            vec![AttributeFilter {
+                attribute: "natlscale".to_owned(),
+                ranges: vec![StringOrNumberRange::Float(75.0..=76.0)],
+                keep_nulls: false,
+            }],
+        );
+
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<DataCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0].cache_hint.total_ttl_seconds(),
+            CacheTtlSeconds::max()
+        );
 
         Ok(())
     }

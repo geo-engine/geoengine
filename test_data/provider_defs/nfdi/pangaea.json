@@ -1,5 +1,6 @@
 {
   "type": "PangaeaDataProviderDefinition",
   "name": "Pangaea",
-  "baseUrl": "https://doi.pangaea.de"
+  "baseUrl": "https://doi.pangaea.de",
+  "cacheTtl": 0
 }

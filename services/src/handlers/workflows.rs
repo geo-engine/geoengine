@@ -23,7 +23,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
-    OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
+    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -101,10 +101,7 @@ where
                     "source": {
                         "type": "OgrSource",
                         "params": {
-                            "data": {
-                                "type": "internal",
-                                "datasetId": "c36f5ce7-d0df-4982-babb-cc9e67d2a196"
-                            },
+                            "data": "ne_10m_ports",
                             "attributeProjection": null,
                             "attributeFilters": null
                         }
@@ -282,14 +279,15 @@ async fn workflow_provenance<C: SessionContext>(
     workflow: &Workflow,
     ctx: &C,
 ) -> Result<Vec<ProvenanceEntry>> {
-    let datasets: Vec<DataId> = workflow
-        .operator
-        .data_ids()
-        .into_iter()
-        .map(Into::into)
-        .collect();
-
     let db = ctx.db();
+    let execution_ctx = ctx.execution_context()?;
+
+    let data_names = workflow.operator.data_names();
+    let mut datasets = Vec::<DataId>::with_capacity(data_names.len());
+    for data_name in data_names {
+        let data_id = execution_ctx.resolve_named_data(&data_name).await?;
+        datasets.push(data_id.into());
+    }
 
     let provenance: Vec<_> = datasets
         .iter()
@@ -453,7 +451,7 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     info: web::Json<RasterDatasetFromWorkflow>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<TaskResponse>> {
     let ctx = Arc::new(app_ctx.session_context(session));
 
     let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
@@ -677,6 +675,7 @@ mod tests {
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, FeatureData, Measurement, MultiPoint, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, TimeInterval,
@@ -917,6 +916,7 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    CacheHint::default(),
                 )
                 .unwrap(),
             )
@@ -1049,6 +1049,7 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    CacheHint::default(),
                 )
                 .unwrap(),
             )
@@ -1122,7 +1123,7 @@ mod tests {
 
         let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
-        let dataset = add_ndvi_to_datasets(&app_ctx).await;
+        let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
@@ -1158,7 +1159,7 @@ mod tests {
                     "data": [
                         {
                             "type": "internal",
-                            "datasetId": dataset.to_string()
+                            "datasetId": dataset_id.to_string()
                         }
                     ]
                 }
@@ -1184,10 +1185,7 @@ mod tests {
               "source": {
                 "type": "GdalSource",
                 "params": {
-                  "data": {
-                    "type": "internal",
-                    "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
-                  }
+                  "data": "test"
                 }
               }
             }
@@ -1234,13 +1232,13 @@ mod tests {
         let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
-        let dataset = add_ndvi_to_datasets(&app_ctx).await;
+        let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        data: dataset.into(),
+                        data: dataset_name.clone().into(),
                     },
                 }
                 .boxed(),
@@ -1275,10 +1273,7 @@ mod tests {
                 "operator": {
                     "type": "GdalSource",
                     "params": {
-                        "data": {
-                            "type": "internal",
-                            "datasetId": dataset
-                        }
+                        "data": dataset_name
                     }
                 }
             })
@@ -1326,7 +1321,7 @@ mod tests {
                     "data": [
                         {
                             "type": "internal",
-                            "datasetId": dataset
+                            "datasetId": dataset_id
                         }
                     ]
                 }
@@ -1353,7 +1348,7 @@ mod tests {
         let session = app_ctx.default_session_ref().await.clone();
         let session_id = session.id();
 
-        let dataset = add_ndvi_to_datasets(&app_ctx).await;
+        let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
@@ -1427,11 +1422,10 @@ mod tests {
             uploads: vec![response.upload],
         };
 
-        let dataset_id: geoengine_datatypes::dataset::DatasetId = response.dataset.into();
         // query the newly created dataset
         let op = GdalSource {
             params: GdalSourceParameters {
-                data: dataset_id.into(),
+                data: response.dataset.into(),
             },
         }
         .boxed();

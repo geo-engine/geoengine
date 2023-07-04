@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
+use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::error::{self, Error};
@@ -18,6 +18,7 @@ use bb8_postgres::bb8::{Pool, PooledConnection};
 use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
@@ -45,13 +46,17 @@ pub const GFBIO_PROVIDER_ID: DataProviderId =
 pub struct GfbioAbcdDataProviderDefinition {
     name: String,
     db_config: DatabaseConnectionConfig,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for GfbioAbcdDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
-        Ok(Box::new(GfbioAbcdDataProvider::new(self.db_config).await?))
+        Ok(Box::new(
+            GfbioAbcdDataProvider::new(self.db_config, self.cache_ttl).await?,
+        ))
     }
 
     fn type_name(&self) -> &'static str {
@@ -74,13 +79,14 @@ pub struct GfbioAbcdDataProvider {
     pool: Pool<PostgresConnectionManager<NoTls>>,
     column_hash_to_name: HashMap<String, String>,
     column_name_to_hash: HashMap<String, String>,
+    cache_ttl: CacheTtlSeconds,
 }
 
 impl GfbioAbcdDataProvider {
     const COLUMN_NAME_LONGITUDE: &'static str = "e9eefbe81d4343c6a114b7d522017bf493b89cef";
     const COLUMN_NAME_LATITUDE: &'static str = "506e190d0ad979d1c7a816223d1ded3604907d91";
 
-    async fn new(db_config: DatabaseConnectionConfig) -> Result<Self> {
+    async fn new(db_config: DatabaseConnectionConfig, cache_ttl: CacheTtlSeconds) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -92,6 +98,7 @@ impl GfbioAbcdDataProvider {
             pool,
             column_hash_to_name,
             column_name_to_hash,
+            cache_ttl,
         })
     }
 
@@ -291,11 +298,10 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
                 operator: TypedOperator::Vector(
                     OgrSource {
                         params: OgrSourceParameters {
-                            data: DataId::External(ExternalDataId {
-                                provider_id: GFBIO_PROVIDER_ID,
-                                layer_id: id.clone(),
-                            })
-                            .into(),
+                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                GFBIO_PROVIDER_ID.to_string(),
+                                id.to_string(),
+                            ),
                             attribute_projection: None,
                             attribute_filters: None,
                         },
@@ -394,6 +400,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: Some(GfbioAbcdDataProvider::build_attribute_query(surrogate_key)),
+                cache_ttl: self.cache_ttl,
             },
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -415,7 +422,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 time: None,
                 bbox: None,
             },
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         }))
     }
 }
@@ -462,7 +469,8 @@ mod tests {
     use crate::api::model::datatypes::{ExternalDataId, LayerId};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
-    use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -541,6 +549,7 @@ mod tests {
                 user: db_config.user.clone(),
                 password: db_config.password.clone(),
             },
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -604,6 +613,7 @@ mod tests {
             let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
                 db_config: provider_db_config,
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -751,6 +761,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: Some("surrogate_key = 1".to_string()),
+                cache_ttl: CacheTtlSeconds::default(),
             };
 
             if loading_info != expected {
@@ -784,6 +795,7 @@ mod tests {
                     user: db_config.user.clone(),
                     password: db_config.password.clone(),
                 },
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await
@@ -856,10 +868,11 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+                CacheHint::default(), // TODO: make configurable in data provider(?)
             )
             .unwrap();
 
-            if result != &expected {
+            if !result.chunks_equal_ignoring_cache_hint(&expected) {
                 return Err(format!("{result:?} != {expected:?}"));
             }
 
@@ -890,6 +903,7 @@ mod tests {
                     user: db_config.user.clone(),
                     password: db_config.password.clone(),
                 },
+                cache_ttl: Default::default(),
             })
             .initialize()
             .await

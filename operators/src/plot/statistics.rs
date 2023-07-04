@@ -1,5 +1,5 @@
 use crate::engine::{
-    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
     PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
@@ -54,6 +54,8 @@ impl PlotOperator for Statistics {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
         match self.sources.source {
             MultiRasterOrVectorOperator::Raster(rasters) => {
                 ensure!( self.params.column_names.is_empty() || self.params.column_names.len() == rasters.len(),
@@ -95,6 +97,7 @@ impl PlotOperator for Statistics {
                 let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
 
                 let initialized_operator = InitializedStatistics::new(
+                    name,
                     PlotResultDescriptor {
                         spatial_reference: rasters.get(0).map_or_else(
                             || SpatialReferenceOption::Unreferenced,
@@ -147,6 +150,7 @@ impl PlotOperator for Statistics {
                 };
 
                 let initialized_operator = InitializedStatistics::new(
+                    name,
                     PlotResultDescriptor {
                         spatial_reference: in_descriptor.spatial_reference,
                         time: in_descriptor.time,
@@ -166,6 +170,7 @@ impl PlotOperator for Statistics {
 
 /// The initialization of `Statistics`
 pub struct InitializedStatistics<Op> {
+    name: CanonicOperatorName,
     result_descriptor: PlotResultDescriptor,
     column_names: Vec<String>,
     source: Op,
@@ -173,11 +178,13 @@ pub struct InitializedStatistics<Op> {
 
 impl<Op> InitializedStatistics<Op> {
     pub fn new(
+        name: CanonicOperatorName,
         result_descriptor: PlotResultDescriptor,
         column_names: Vec<String>,
         source: Op,
     ) -> Self {
         Self {
+            name,
             result_descriptor,
             column_names,
             source,
@@ -199,6 +206,10 @@ impl InitializedPlotOperator for InitializedStatistics<Box<dyn InitializedVector
             .boxed(),
         ))
     }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
 }
 
 impl InitializedPlotOperator for InitializedStatistics<Vec<Box<dyn InitializedRasterOperator>>> {
@@ -218,6 +229,10 @@ impl InitializedPlotOperator for InitializedStatistics<Vec<Box<dyn InitializedRa
             }
             .boxed(),
         ))
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
     }
 }
 
@@ -374,6 +389,7 @@ impl From<&NumberStatistics> for StatisticsOutput {
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::collections::DataCollection;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
@@ -479,6 +495,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
+                    CacheHint::default(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
@@ -560,6 +577,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -584,6 +602,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -674,6 +693,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -698,6 +718,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -787,6 +808,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -811,6 +833,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
                             .unwrap()
                             .into(),
+                        CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,

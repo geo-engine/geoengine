@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::{DataId, DatasetId};
+use crate::api::model::datatypes::{DataId, DatasetId, DatasetName};
 use crate::api::model::operators::TypedResultDescriptor;
 use crate::datasets::storage::Dataset;
 use crate::error::Result;
@@ -22,7 +22,8 @@ use validator::{Validate, ValidationError};
 #[serde(rename_all = "camelCase")]
 pub struct DatasetListing {
     pub id: DatasetId,
-    pub name: String,
+    pub name: DatasetName,
+    pub display_name: String,
     pub description: String,
     pub tags: Vec<String>,
     pub source_operator: String,
@@ -78,6 +79,8 @@ pub trait DatasetProvider: Send
     async fn load_dataset(&self, dataset: &DatasetId) -> Result<Dataset>;
 
     async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
+
+    async fn resolve_dataset_name_to_id(&self, name: &DatasetName) -> Result<DatasetId>;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]

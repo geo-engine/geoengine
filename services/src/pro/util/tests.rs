@@ -1,5 +1,8 @@
 use crate::{
-    api::model::{datatypes::DatasetId, services::AddDataset},
+    api::model::{
+        datatypes::{DatasetId, DatasetName, NamedData},
+        services::AddDataset,
+    },
     contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
@@ -311,7 +314,7 @@ pub async fn register_ndvi_workflow_helper<C: ProApplicationContext>(
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    let dataset = add_ndvi_to_datasets(app_ctx, true, true).await;
+    let (_, dataset) = add_ndvi_to_datasets(app_ctx, true, true).await;
 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
@@ -341,14 +344,19 @@ pub async fn add_ndvi_to_datasets<C: ProApplicationContext>(
     app_ctx: &C,
     share_with_users: bool,
     share_with_anonymous: bool,
-) -> DatasetId
+) -> (DatasetId, NamedData)
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
+    let dataset_name = DatasetName {
+        namespace: None,
+        name: "NDVI".to_string(),
+    };
+
     let ndvi = DatasetDefinition {
         properties: AddDataset {
-            id: None,
-            name: "NDVI".to_string(),
+            name: Some(dataset_name.clone()),
+            display_name: "NDVI".to_string(),
             description: "NDVI data from MODIS".to_string(),
             source_operator: "GdalSource".to_string(),
             symbology: None,
@@ -368,7 +376,8 @@ where
     let dataset_id = db
         .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
         .await
-        .expect("dataset db access");
+        .expect("dataset db access")
+        .id;
 
     if share_with_users {
         db.add_permission(
@@ -386,7 +395,7 @@ where
             .unwrap();
     }
 
-    dataset_id
+    (dataset_id, dataset_name.into())
 }
 
 #[allow(clippy::missing_panics_doc)]
@@ -394,14 +403,19 @@ pub async fn add_ports_to_datasets<C: ProApplicationContext>(
     app_ctx: &C,
     share_with_users: bool,
     share_with_anonymous: bool,
-) -> DatasetId
+) -> (DatasetId, NamedData)
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
+    let dataset_name = DatasetName {
+        namespace: None,
+        name: "ne_10m_ports".to_string(),
+    };
+
     let ndvi = DatasetDefinition {
         properties: AddDataset {
-            id: None,
-            name: "Natural Earth 10m Ports".to_string(),
+            name: Some(dataset_name.clone()),
+            display_name: "Natural Earth 10m Ports".to_string(),
             description: "Ports from Natural Earth".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
@@ -421,7 +435,8 @@ where
     let dataset_id = db
         .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
         .await
-        .expect("dataset db access");
+        .expect("dataset db access")
+        .id;
 
     if share_with_users {
         db.add_permission(
@@ -439,7 +454,7 @@ where
             .unwrap();
     }
 
-    dataset_id
+    (dataset_id, dataset_name.into())
 }
 
 #[allow(clippy::missing_panics_doc)]

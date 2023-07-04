@@ -1,9 +1,9 @@
 use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, DefaultColors,
-    ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
-    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, OverUnderColors, Palette,
-    PlotOutputFormat, PlotQueryRectangle, RasterDataType, RasterPropertiesEntryType,
+    Coordinate2D, DataId, DataProviderId, DatasetId, DatasetName, DateTimeParseFormat,
+    DefaultColors, ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient,
+    Measurement, MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, OverUnderColors,
+    Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType, RasterPropertiesEntryType,
     RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
     SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
     TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
@@ -18,6 +18,7 @@ use crate::api::model::operators::{
     TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
     VectorResultDescriptor,
 };
+use crate::api::model::responses::datasets::DatasetNameResponse;
 use crate::api::model::responses::{
     BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
     UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
@@ -34,6 +35,7 @@ use crate::handlers;
 use crate::handlers::plots::WrappedPlotOutput;
 use crate::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
+use crate::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
@@ -110,6 +112,8 @@ use utoipa::{Modify, OpenApi};
         handlers::projects::load_project_handler,
         handlers::projects::update_project_handler,
         handlers::projects::delete_project_handler,
+        handlers::upload::list_upload_files_handler,
+        handlers::upload::list_upload_file_layers_handler,
         handlers::upload::upload_handler
     ),
     components(
@@ -117,6 +121,7 @@ use utoipa::{Modify, OpenApi};
             UnsupportedMediaTypeForJsonResponse,
             PayloadTooLargeResponse,
             IdResponse,
+            DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
             BadRequestQueryResponse
@@ -128,6 +133,8 @@ use utoipa::{Modify, OpenApi};
             DataId,
             DataProviderId,
             DatasetId,
+            DatasetName,
+            NamedData,
             ExternalDataId,
             LayerId,
             ProjectId,
@@ -250,6 +257,8 @@ use utoipa::{Modify, OpenApi};
             FeatureType,
             Coordinates,
 
+            UploadFilesResponse,
+            UploadFileLayersResponse,
             CreateDataset,
             AutoCreateDataset,
             OrderBy,
@@ -359,7 +368,7 @@ impl Modify for ApiDocInfo {
             utoipa::openapi::LicenseBuilder::new()
                 .name("Apache 2.0 (pro features excluded)")
                 .url(Some(
-                    "https://github.com/geo-engine/geoengine/blob/master/LICENSE",
+                    "https://github.com/geo-engine/geoengine/blob/main/LICENSE",
                 ))
                 .build(),
         );

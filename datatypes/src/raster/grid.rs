@@ -3,8 +3,8 @@ use super::{
     GridBoundingBox, GridBounds, GridContains, GridIdx, GridIdx2D, GridIndexAccess,
     GridIndexAccessMut, GridSize, GridSpaceToLinearSpace,
 };
-use crate::error;
 use crate::util::Result;
+use crate::{error, util::ByteSize};
 use num::Integer;
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
@@ -505,15 +505,24 @@ where
     }
 }
 
+impl<D, P> ByteSize for Grid<D, P>
+where
+    Vec<P>: ByteSize,
+{
+    fn heap_byte_size(&self) -> usize {
+        self.data.heap_byte_size()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use super::{Grid2D, Grid3D, GridIndexAccess, GridIndexAccessMut};
     use crate::raster::{
         BoundedGrid, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D, GridBounds,
         GridContains, GridIdx, GridIdx1D, GridIdx2D, GridIdx3D, GridShape, GridShape1D,
         GridShape2D, GridShape3D, GridSpaceToLinearSpace,
     };
-
-    use super::{Grid2D, Grid3D, GridIndexAccess, GridIndexAccessMut};
 
     #[test]
     fn simple_raster_2d() {
@@ -737,5 +746,26 @@ mod tests {
         let g2d_flipped_y = g2d.reversed_y_axis_grid();
         assert_eq!(g2d_flipped_y.shape, [2, 2, 3].into());
         assert_eq!(g2d_flipped_y.data, vec![2, 2, 2, 1, 1, 1, 4, 4, 4, 3, 3, 3]);
+    }
+
+    #[test]
+    fn size_of_grid() {
+        // (8+8) = 16 bytes for the shape
+        // 24 byte for the vec
+        // 6 * 4 = 24 bytes for the data
+        // 16 + 24 + 24 = 64 bytes
+        assert_eq!(
+            Grid2D::new([2, 3].into(), vec![1_i32, 1, 1, 2, 2, 2])
+                .unwrap()
+                .byte_size(),
+            64
+        );
+        // additional 3 * 4 = 12 bytes for the data
+        assert_eq!(
+            Grid2D::new([3, 3].into(), vec![1_i32, 1, 1, 2, 2, 2, 3, 3, 3])
+                .unwrap()
+                .byte_size(),
+            76
+        );
     }
 }
