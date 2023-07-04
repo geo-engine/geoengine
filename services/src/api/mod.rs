@@ -28,7 +28,7 @@ fn can_resolve_schema(schema: &RefOr<Schema>, components: &Components) {
             }
             Schema::Object(obj) => {
                 for property in obj.properties.values() {
-                    can_resolve_schema(&property, components);
+                    can_resolve_schema(property, components);
                 }
                 if let Some(additional_properties) = &obj.additional_properties {
                     if let AdditionalProperties::RefOr(properties_schema) =

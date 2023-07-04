@@ -1803,9 +1803,7 @@ impl<'a> ToSchema<'a> for StringPair {
     }
 
     fn aliases() -> Vec<(&'a str, utoipa::openapi::Schema)> {
-        let unpacked_schema = if let utoipa::openapi::RefOr::T(t) = Self::schema().1 {
-            t
-        } else {
+        let utoipa::openapi::RefOr::T(unpacked_schema) = Self::schema().1 else {
             unreachable!()
         };
         vec![
