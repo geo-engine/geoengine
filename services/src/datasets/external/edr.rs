@@ -10,6 +10,7 @@ use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::util::parsing::deserialize_base_url;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+use gdal::Dataset;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, ContinuousMeasurement, Coordinate2D, FeatureDataType,
@@ -24,11 +25,12 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
-    GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalSource, GdalSourceParameters, OgrSource,
-    OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
-    OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
+    FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice,
+    GdalMetaDataList, GdalSource, GdalSourceParameters, OgrSource, OgrSourceColumnSpec,
+    OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
+    OgrSourceParameters, OgrSourceTimeFormat,
 };
+use geoengine_operators::util::gdal::gdal_open_dataset;
 use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -55,7 +57,6 @@ pub struct EdrDataProviderDefinition {
     #[serde(deserialize_with = "deserialize_base_url")]
     base_url: Url,
     vector_spec: Option<EdrVectorSpec>,
-    raster_spec: Option<EdrRasterSpec>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,15 +64,6 @@ pub struct EdrVectorSpec {
     x: String,
     y: Option<String>,
     t: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EdrRasterSpec {
-    x_pixel_size: f64,
-    y_pixel_size: f64,
-    width: usize,
-    height: usize,
 }
 
 #[typetag::serde]
@@ -82,7 +74,6 @@ impl DataProviderDefinition for EdrDataProviderDefinition {
             id: self.id,
             base_url: self.base_url,
             vector_spec: self.vector_spec,
-            raster_spec: self.raster_spec,
             client: Client::new(),
         }))
     }
@@ -105,7 +96,6 @@ pub struct EdrDataProvider {
     id: DataProviderId,
     base_url: Url,
     vector_spec: Option<EdrVectorSpec>,
-    raster_spec: Option<EdrRasterSpec>,
     client: Client,
 }
 
@@ -660,8 +650,10 @@ impl EdrCollectionMetaData {
         height: &str,
         data_time: TimeInterval,
         current_time: &str,
-        raster_spec: &EdrRasterSpec,
+        dataset: &Dataset,
     ) -> Result<GdalLoadingInfoTemporalSlice, geoengine_operators::error::Error> {
+        let rasterband = &dataset.rasterband(1)?;
+
         Ok(GdalLoadingInfoTemporalSlice {
             time: data_time,
             params: Some(GdalDatasetParameters {
@@ -669,13 +661,15 @@ impl EdrCollectionMetaData {
                     .get_raster_download_url(base_url, parameter, height, current_time)?
                     .into(),
                 rasterband_channel: 1,
-                geo_transform: GdalDatasetGeoTransform {
-                    origin_coordinate: self.get_bounding_box()?.upper_left(),
-                    x_pixel_size: raster_spec.x_pixel_size,
-                    y_pixel_size: raster_spec.y_pixel_size,
-                },
-                width: raster_spec.width,
-                height: raster_spec.height,
+                geo_transform: dataset
+                    .geo_transform()
+                    .context(crate::error::Gdal)
+                    .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    })?
+                    .into(),
+                width: rasterband.x_size(),
+                height: rasterband.y_size(),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: None,
                 properties_mapping: None,
@@ -1001,11 +995,6 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let raster_spec = self.raster_spec.clone().ok_or_else(|| {
-            geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(EdrProviderError::NoRasterSpecConfigured),
-            }
-        })?;
         let (edr_id, collection) = self.load_collection_by_dataid(id).await?;
 
         let (parameter, height) = match edr_id {
@@ -1019,46 +1008,53 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         let mut params: Vec<GdalLoadingInfoTemporalSlice> = Vec::new();
 
         if let Some(temporal_extent) = collection.extent.temporal.clone() {
-            let mut previous_start: Option<String> = None;
+            let mut temporal_values_iter = temporal_extent.values.iter();
+            let mut previous_start = temporal_values_iter.next().unwrap();
+            let dataset = gdal_open_dataset(
+                collection
+                    .get_raster_download_url(&self.base_url, &parameter, &height, previous_start)?
+                    .as_ref(),
+            )?;
 
-            for current_time in &temporal_extent.values {
-                if let Some(previous_start_val) = previous_start.clone() {
-                    params.push(collection.get_gdal_loading_info_temporal_slice(
-                        &self.base_url,
-                        &parameter,
-                        &height,
-                        TimeInterval::new_unchecked(
-                            TimeInstance::from_str(&previous_start_val).unwrap(),
-                            TimeInstance::from_str(current_time).unwrap(),
-                        ),
-                        &previous_start_val,
-                        &raster_spec,
-                    )?);
-                }
-                previous_start = Some(current_time.clone());
+            for current_time in temporal_values_iter {
+                params.push(collection.get_gdal_loading_info_temporal_slice(
+                    &self.base_url,
+                    &parameter,
+                    &height,
+                    TimeInterval::new_unchecked(
+                        TimeInstance::from_str(previous_start).unwrap(),
+                        TimeInstance::from_str(current_time).unwrap(),
+                    ),
+                    previous_start,
+                    &dataset,
+                )?);
+                previous_start = current_time;
             }
-            let previous_start_val =
-                previous_start.expect("will be set because at least one time value will exist");
-
             params.push(collection.get_gdal_loading_info_temporal_slice(
                 &self.base_url,
                 &parameter,
                 &height,
                 TimeInterval::new_unchecked(
-                    TimeInstance::from_str(&previous_start_val).unwrap(),
+                    TimeInstance::from_str(previous_start).unwrap(),
                     TimeInstance::from_str(&temporal_extent.interval[0][1]).unwrap(),
                 ),
-                &previous_start_val,
-                &raster_spec,
+                previous_start,
+                &dataset,
             )?);
         } else {
+            let dummy_time = "2023-06-06T00:00:00Z";
+            let dataset = gdal_open_dataset(
+                collection
+                    .get_raster_download_url(&self.base_url, &parameter, &height, dummy_time)?
+                    .as_ref(),
+            )?;
             params.push(collection.get_gdal_loading_info_temporal_slice(
                 &self.base_url,
                 &parameter,
                 &height,
                 TimeInterval::default(),
-                "2023-06-06T00:00:00Z", //dummy
-                &raster_spec,
+                dummy_time,
+                &dataset,
             )?);
         }
 
