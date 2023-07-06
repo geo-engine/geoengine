@@ -72,12 +72,12 @@ impl SpatialReference {
 
     pub fn proj_string(self) -> Result<String> {
         match self.authority {
-            SpatialReferenceAuthority::Epsg | SpatialReferenceAuthority::Iau2000 => {
+            SpatialReferenceAuthority::Epsg | SpatialReferenceAuthority::Iau2000 | SpatialReferenceAuthority::Esri => {
                 Ok(format!("{}:{}", self.authority, self.code))
             }
             // poor-mans integration of Meteosat Second Generation 
             SpatialReferenceAuthority::SrOrg if self.code == 81 => Ok("+proj=geos +lon_0=0 +h=35785831 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs +type=crs".to_owned()),
-            SpatialReferenceAuthority::SrOrg | SpatialReferenceAuthority::Esri => {
+            SpatialReferenceAuthority::SrOrg => {
                 Err(error::Error::ProjStringUnresolvable { spatial_ref: self })
                 //TODO: we might need to look them up somehow! Best solution would be a registry where we can store user definexd srs strings.
             }
@@ -560,9 +560,12 @@ mod tests {
                 .unwrap(),
             "IAU2000:4711"
         );
-        assert!(SpatialReference::new(SpatialReferenceAuthority::Esri, 42)
-            .proj_string()
-            .is_err());
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Esri, 42)
+                .proj_string()
+                .unwrap(),
+            "ESRI:42"
+        );
         assert!(SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1)
             .proj_string()
             .is_err());
