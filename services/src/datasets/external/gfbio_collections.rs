@@ -13,7 +13,6 @@ use crate::layers::layer::{
     ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
-use crate::util::parsing::string_or_string_array;
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -113,24 +112,18 @@ pub struct CollectionResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct CollectionEntry {
-    #[serde(rename = "_id")]
     pub id: String,
-    #[serde(rename = "_type")]
-    pub type_: String,
-    #[serde(rename = "_source")]
-    pub source: CollectionEntrySource,
+    #[serde(rename = "parentIdentifier")]
+    pub parent_identifier: String,
+    pub vat: bool,
+    pub datalink: Option<String>,
+    pub citation: CollectionEntryCitation,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CollectionEntrySource {
-    #[serde(rename = "type", deserialize_with = "string_or_string_array")]
-    pub type_: Vec<String>,
-    pub datalink: Option<String>,
-    pub citation_title: String,
-    #[serde(rename = "abcdDatasetIdentifier")]
-    pub abcd_dataset_identifier: Option<String>,
-    #[serde(rename = "vatVisualizable")]
-    pub vat_visualizable: bool,
+pub struct CollectionEntryCitation {
+    pub title: String,
+    pub source: String,
 }
 
 #[derive(Debug, Clone)]
@@ -344,10 +337,15 @@ impl GfbioCollectionsDataProvider {
         collection: &str,
         entry: CollectionEntry,
     ) -> Result<CollectionItem> {
-        match entry.source.abcd_dataset_identifier.as_ref() {
-            Some(_) => self.create_abcd_layer_listing(collection, entry).await,
-            None => Ok(Self::create_pangaea_layer_listing(collection, entry)),
+        if entry.id.starts_with("urn:gfbio.org") {
+            return self.create_abcd_layer_listing(collection, entry).await;
         }
+
+        if entry.id.starts_with("oai:pangaea.de") {
+            return Ok(Self::create_pangaea_layer_listing(collection, entry));
+        }
+
+        Err(crate::error::Error::InvalidLayerId)
     }
 
     async fn create_abcd_layer_listing(
@@ -355,14 +353,9 @@ impl GfbioCollectionsDataProvider {
         collection: &str,
         entry: CollectionEntry,
     ) -> Result<CollectionItem> {
-        let abcd_dataset_identifier = entry
-            .source
-            .abcd_dataset_identifier
-            .expect("abcd_dataset_identifier should be present because it was checked in `create_layer_listing`");
-
-        let status = if entry.source.vat_visualizable {
+        let status = if entry.vat {
             let in_database = self
-                .get_surrogate_key_for_gfbio_dataset(&abcd_dataset_identifier)
+                .get_surrogate_key_for_gfbio_dataset(&entry.parent_identifier)
                 .await
                 .is_ok();
 
@@ -388,14 +381,14 @@ impl GfbioCollectionsDataProvider {
                 .try_into()
                 .expect("AbcdLayer should be a valid LayerId"),
             },
-            name: entry.source.citation_title,
+            name: entry.citation.title,
             description: String::new(),
             properties: vec![("status".to_string(), status.to_string()).into()],
         }))
     }
 
     fn create_pangaea_layer_listing(collection: &str, entry: CollectionEntry) -> CollectionItem {
-        let status = if entry.source.vat_visualizable {
+        let status = if entry.vat {
             LayerStatus::Ok
         } else {
             LayerStatus::Unavailable
@@ -411,7 +404,7 @@ impl GfbioCollectionsDataProvider {
                 .try_into()
                 .expect("PangaeaLayer should be a valid LayerId"),
             },
-            name: entry.source.citation_title,
+            name: entry.citation.title,
             description: String::new(),
             properties: vec![("status".to_string(), status.to_string()).into()],
         })
