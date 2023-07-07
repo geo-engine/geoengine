@@ -160,7 +160,7 @@ impl FromStr for GfBioCollectionId {
                 GfBioCollectionId::AbcdLayer {
                     collection: collection.to_string(),
                     dataset,
-                    unit,
+                    unit: unit.map(|u| u.replace("__", "/")), // decode the unit id,
                 }
             }
             ["collections", collection, "pangaea", layer] => GfBioCollectionId::PangaeaLayer {
@@ -212,7 +212,10 @@ impl TryFrom<GfBioCollectionId> for LayerId {
                 dataset,
                 unit: Some(unit),
             } => {
-                format!("collections/{collection}/abcd/{dataset}:{unit}")
+                format!(
+                    "collections/{collection}/abcd/{dataset}:{}",
+                    unit.replace('/', "__") // encode the unit so that it doesn't break parsing
+                )
             }
             GfBioCollectionId::AbcdLayer {
                 collection,
