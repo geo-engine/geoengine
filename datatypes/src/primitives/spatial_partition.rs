@@ -226,7 +226,7 @@ impl SpatialPartition2D {
     }
 
     #[must_use]
-    pub fn extend(&mut self, other: &Self) -> Self {
+    pub fn extended(self, other: &Self) -> Self {
         Self {
             upper_left_coordinate: Coordinate2D::new(
                 self.upper_left().x.min(other.upper_left().x),
@@ -237,6 +237,13 @@ impl SpatialPartition2D {
                 self.lower_right().y.min(other.lower_right().y),
             ),
         }
+    }
+
+    pub fn extend(&mut self, other: &Self) {
+        self.upper_left_coordinate.x = self.upper_left().x.min(other.upper_left().x);
+        self.upper_left_coordinate.y = self.upper_left().y.max(other.upper_left().y);
+        self.lower_right_coordinate.x = self.lower_right().x.max(other.lower_right().x);
+        self.lower_right_coordinate.y = self.lower_right().y.min(other.lower_right().y);
     }
 }
 
@@ -311,7 +318,7 @@ pub fn partitions_extent<I: Iterator<Item = Option<SpatialPartition2D>>>(
 
     for bbox in bboxes {
         if let Some(bbox) = bbox {
-            extent = extent.extend(&bbox);
+            extent.extend(&bbox);
         } else {
             return None;
         }
@@ -515,6 +522,27 @@ mod tests {
                 .into_iter()
             ),
             None
+        );
+    }
+
+    #[test]
+    fn extend() {
+        let mut p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let p2 = SpatialPartition2D::new_unchecked((1., 2.).into(), (2., 0.).into());
+        p1.extend(&p2);
+        assert_eq!(
+            p1,
+            SpatialPartition2D::new_unchecked((0., 2.).into(), (2., 0.).into())
+        );
+    }
+
+    #[test]
+    fn extended() {
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let p2 = SpatialPartition2D::new_unchecked((1., 2.).into(), (2., 0.).into());
+        assert_eq!(
+            p1.extended(&p2),
+            SpatialPartition2D::new_unchecked((0., 2.).into(), (2., 0.).into())
         );
     }
 }
