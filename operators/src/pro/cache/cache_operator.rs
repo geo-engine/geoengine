@@ -126,9 +126,7 @@ where
             .get::<Arc<TileCache>>()
             .expect("`TileCache` extension should be set during `ProContext` creation");
 
-        let cache_result = tile_cache
-            .query_cache::<T>(self.cache_key.clone(), &query)
-            .await;
+        let cache_result = tile_cache.query_cache::<T>(&self.cache_key, &query).await;
 
         if let Some(cache_result) = cache_result {
             // cache hit
@@ -140,9 +138,7 @@ where
         log::debug!("cache miss for operator {:?}", self.cache_key);
         let source_stream = self.processor.query(query, ctx).await?;
 
-        let query_id = tile_cache
-            .insert_query::<T>(self.cache_key.clone(), &query)
-            .await;
+        let query_id = tile_cache.insert_query::<T>(&self.cache_key, &query).await;
 
         if let Err(e) = query_id {
             log::debug!("could not insert query into cache: {:?}", e);
@@ -160,10 +156,8 @@ where
             while let Some(event) = stream_event_receiver.recv().await {
                 match event {
                     SourceStreamEvent::Tile(tile) => {
-                        let result = tile_cache
-                            .insert_tile(cache_key.clone(), query_id, tile)
-                            .await;
-                        log::debug!(
+                        let result = tile_cache.insert_tile(&cache_key, &query_id, tile).await;
+                        log::trace!(
                             "inserted tile into cache for cache key {:?} and query id {}. result: {:?}",
                             cache_key,
                             query_id,
@@ -171,7 +165,7 @@ where
                         );
                     }
                     SourceStreamEvent::Abort => {
-                        tile_cache.abort_query(cache_key.clone(), query_id).await;
+                        tile_cache.abort_query(&cache_key, &query_id).await;
                         log::debug!(
                             "aborted cache insertion for cache key {:?} and query id {}",
                             cache_key,
@@ -179,7 +173,7 @@ where
                         );
                     }
                     SourceStreamEvent::Finished => {
-                        let result = tile_cache.finish_query(cache_key.clone(), query_id).await;
+                        let result = tile_cache.finish_query(&cache_key, &query_id).await;
                         log::debug!(
                             "finished cache insertion for cache key {:?} and query id {}, result: {:?}",
                             cache_key,query_id,
@@ -234,16 +228,26 @@ where
         if let Some(tile) = &next {
             if let Ok(tile) = tile {
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
-                let _ = this
+                let r = this
                     .stream_event_sender
                     .send(SourceStreamEvent::Tile(tile.clone()));
+                if let Err(e) = r {
+                    log::debug!("could not send tile to cache: {}", e.to_string());
+                }
             } else {
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
-                let _ = this.stream_event_sender.send(SourceStreamEvent::Abort);
+                let r = this.stream_event_sender.send(SourceStreamEvent::Abort);
+                if let Err(e) = r {
+                    log::debug!("could not send abort to cache: {}", e.to_string());
+                }
             }
         } else {
             // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
-            let _ = this.stream_event_sender.send(SourceStreamEvent::Finished);
+            let r = this.stream_event_sender.send(SourceStreamEvent::Finished);
+            if let Err(e) = r {
+                log::debug!("could not send finished to cache: {}", e.to_string());
+            }
+            log::debug!("stream finished, mark cache entry as finished.");
             *this.finished = true;
         }
 
@@ -260,7 +264,10 @@ where
     fn drop(self: Pin<&mut Self>) {
         if !self.finished {
             // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
-            let _ = self.stream_event_sender.send(SourceStreamEvent::Abort);
+            let r = self.stream_event_sender.send(SourceStreamEvent::Abort);
+            if let Err(e) = r {
+                log::debug!("could not send abort to cache: {}", e.to_string());
+            }
         }
     }
 }
