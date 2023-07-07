@@ -4,7 +4,7 @@ use tracing::debug;
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::{dataset::NamedData, util::ByteSize};
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
@@ -188,9 +188,11 @@ impl CanonicOperatorName {
     pub fn new_unchecked<T: Serialize>(value: &T) -> Self {
         CanonicOperatorName(serde_json::to_vec(&value).unwrap())
     }
+}
 
-    pub fn byte_size(&self) -> usize {
-        std::mem::size_of::<CanonicOperatorName>() + self.0.len() * std::mem::size_of::<u8>()
+impl ByteSize for CanonicOperatorName {
+    fn heap_byte_size(&self) -> usize {
+        self.0.heap_byte_size()
     }
 }
 
