@@ -67,6 +67,10 @@ pub trait Task<C: TaskContext>: Send + Sync {
         None
     }
 
+    fn task_description(&self) -> Option<String> {
+        None
+    }
+
     /// Return subtasks of this tasks.
     ///
     /// For instance, they will get aborted when this tasks gets aborted.
@@ -95,6 +99,7 @@ pub enum TaskStatus {
     Running(Arc<RunningTaskStatusInfo>),
     #[serde(rename_all = "camelCase")]
     Completed {
+        description: Option<String>,
         info: Arc<dyn TaskStatusInfo>,
         time_total: String,
         time_started: DateTime,
@@ -205,6 +210,7 @@ impl TaskStatus {
     #[must_use]
     pub fn completed(&self, info: Arc<dyn TaskStatusInfo>) -> Self {
         Self::Completed {
+            description: self.description(),
             info,
             time_total: self.time_total(),
             time_started: self
@@ -271,11 +277,20 @@ impl TaskStatus {
             _ => None,
         }
     }
+
+    fn description(&self) -> Option<String> {
+        match self {
+            TaskStatus::Completed { description, .. } => description.clone(),
+            TaskStatus::Running(info) => info.description.clone(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunningTaskStatusInfo {
+    description: Option<String>,
     #[serde(serialize_with = "serialize_as_pct")]
     pct_complete: f64,
     time_started: DateTime,
@@ -284,9 +299,10 @@ pub struct RunningTaskStatusInfo {
 }
 
 impl RunningTaskStatusInfo {
-    pub fn new(pct_complete: f64, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
+    pub fn new(description: Option<String>, pct_complete: f64, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
         let time_estimate = TimeEstimation::new();
         Arc::new(RunningTaskStatusInfo {
+            description,
             pct_complete: pct_complete.clamp(0., 1.),
             time_started: time_estimate.time_started(),
             estimated_time_remaining: time_estimate,
@@ -301,6 +317,7 @@ impl RunningTaskStatusInfo {
         time_estimate.update_now(pct_complete);
 
         Arc::new(RunningTaskStatusInfo {
+            description: self.description.clone(),
             pct_complete,
             time_started: self.time_started,
             estimated_time_remaining: time_estimate,
