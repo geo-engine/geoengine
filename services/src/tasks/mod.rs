@@ -299,7 +299,11 @@ pub struct RunningTaskStatusInfo {
 }
 
 impl RunningTaskStatusInfo {
-    pub fn new(description: Option<String>, pct_complete: f64, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
+    pub fn new(
+        description: Option<String>,
+        pct_complete: f64,
+        info: Box<dyn TaskStatusInfo>,
+    ) -> Arc<Self> {
         let time_estimate = TimeEstimation::new();
         Arc::new(RunningTaskStatusInfo {
             description,
