@@ -169,33 +169,7 @@ impl TileCacheBackendSize {
     }
 }
 
-type CacheSizeLruRef<'a> = (
-    &'a mut HashMap<CacheEntryId, CacheEntry>,
-    &'a mut TileCacheBackendSize,
-    &'a mut LruCache<CacheEntryId, CanonicOperatorName>,
-);
-
-type LandingZoneSizeRef<'a> = (
-    &'a mut HashMap<QueryId, LandingZoneEntry>,
-    &'a mut TileCacheBackendSize,
-);
-
 impl TileCacheBackend {
-    fn cache_and_size_and_lru_mut(&mut self, key: &CanonicOperatorName) -> Option<CacheSizeLruRef> {
-        self.operator_caches
-            .get_mut(key)
-            .map(|cache| (&mut cache.entries, &mut self.cache_size, &mut self.lru))
-    }
-
-    fn landing_zone_and_size_mut(
-        &mut self,
-        key: &CanonicOperatorName,
-    ) -> Option<LandingZoneSizeRef> {
-        self.operator_caches
-            .get_mut(key)
-            .map(|cache| (&mut cache.landing_zone, &mut self.landing_zone_size))
-    }
-
     pub fn query_cache<T>(
         &mut self,
         key: &CanonicOperatorName,
@@ -204,7 +178,7 @@ impl TileCacheBackend {
     where
         T: Pixel + Cachable,
     {
-        let (cache, _cache_size, cache_lru) = self.cache_and_size_and_lru_mut(key)?;
+        let cache = &mut self.operator_caches.get_mut(key)?.entries;
 
         let mut expired_ids = Vec::new();
         let x = cache.iter().find(|&(id, r)| {
@@ -217,7 +191,7 @@ impl TileCacheBackend {
 
         let res = if let Some((id, entry)) = x {
             // set as most recently used
-            cache_lru.promote(id);
+            self.lru.promote(id);
             T::stream(entry.tiles.tile_stream(query))
         } else {
             None
@@ -247,28 +221,35 @@ impl TileCacheBackend {
             tiles: T::create_active_query_tiles(),
         };
 
-        let (landing_zone, landing_zone_size) = self
-            .landing_zone_and_size_mut(key)
-            .expect("Landing zone must must exist since we just created it");
+        let landing_zone = &mut self
+            .operator_caches
+            .get_mut(key)
+            .expect("There must be an entry since we just added one")
+            .landing_zone;
 
         // This gets or creates the cache entry for the operator graph. If it already exists, we don't need to add the size of the key again (see if case above).
-        landing_zone_size.try_add_element_bytes(&query_id)?;
-        landing_zone_size.try_add_element_bytes(&landing_zone_entry)?;
+        self.landing_zone_size.try_add_element_bytes(&query_id)?;
+        self.landing_zone_size
+            .try_add_element_bytes(&landing_zone_entry)?;
         let old_entry = landing_zone.insert(query_id, landing_zone_entry);
 
         if let Some(old_entry) = old_entry {
             debug!("Replacing old entry in landing zone!");
-            landing_zone_size.remove_element_bytes(&old_entry); // Since the old entry already was in the landing zone, we need to remove it from the size.
+            self.landing_zone_size.remove_element_bytes(&old_entry); // Since the old entry already was in the landing zone, we need to remove it from the size.
         }
 
         Ok(query_id)
     }
 
     fn remove_query_from_landing_zone(&mut self, key: &CanonicOperatorName, query_id: &QueryId) {
-        if let Some((landing_zone, landing_zone_size)) = self.landing_zone_and_size_mut(key) {
+        if let Some(landing_zone) = self
+            .operator_caches
+            .get_mut(key)
+            .map(|c| &mut c.landing_zone)
+        {
             if let Some(entry) = landing_zone.remove(query_id) {
-                landing_zone_size.remove_element_bytes(query_id);
-                landing_zone_size.remove_element_bytes(&entry);
+                self.landing_zone_size.remove_element_bytes(query_id);
+                self.landing_zone_size.remove_element_bytes(&entry);
             }
         } else {
             debug!("Tried to remove query ({}) from landing zone, but there was no entry for the operator ({:?})!", query_id, key);
@@ -311,9 +292,11 @@ impl TileCacheBackend {
             return Err(super::error::CacheError::NotEnoughSpaceInLandingZone);
         }
 
-        let (landing_zone, landing_zone_size) = self
-            .landing_zone_and_size_mut(key)
-            .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?;
+        let landing_zone = &mut self
+            .operator_caches
+            .get_mut(key)
+            .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?
+            .landing_zone;
 
         let entry = landing_zone
             .get_mut(query_id)
@@ -327,7 +310,7 @@ impl TileCacheBackend {
             .expect("time of tile must overlap with query");
 
         T::insert_tile(&mut entry.tiles, tile)?;
-        landing_zone_size.try_add_bytes(tile_size_bytes)?;
+        self.landing_zone_size.try_add_bytes(tile_size_bytes)?;
 
         trace!(
             "Inserted tile for query {} into landing zone. Landing zone size: {}. Landing zone size used: {}. Landing zone used percentage: {}",
@@ -351,22 +334,31 @@ impl TileCacheBackend {
         // TODO: maybe check if this cache result is already in the cache or could displace another one
 
         // this should always work, because the query was inserted at some point and then the cache entry was created
-        let (landing_zone, landing_zone_size) = self
-            .landing_zone_and_size_mut(key)
-            .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?;
+        let landing_zone = &mut self
+            .operator_caches
+            .get_mut(key)
+            .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?
+            .landing_zone;
 
         let active_query = landing_zone
             .remove(query_id)
             .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?;
 
         // remove the size of the query from the landing zone
-        landing_zone_size.remove_element_bytes(query_id);
-        landing_zone_size.remove_element_bytes(&active_query);
+        self.landing_zone_size.remove_element_bytes(query_id);
+        self.landing_zone_size.remove_element_bytes(&active_query);
 
         // debug output
         debug!(
             "Finished query {}. Landing zone size: {}. Landing zone size used: {}, Landing zone used percentage: {}.",
             query_id, self.landing_zone_size.total_byte_size(), self.landing_zone_size.byte_size_used(), self.landing_zone_size.size_used_fraction()
+        );
+
+        debug_assert!(
+            active_query.tiles.len() > 0,
+            "There must be at least one tile in the active query. CanonicOperatorName: {}, Query: {}",
+            key,
+            query_id
         );
 
         // move entry from landing zone into cache
@@ -376,25 +368,28 @@ impl TileCacheBackend {
         // calculate size of cache entry. This might be different from the size of the landing zone entry.
         let cache_entry_size_bytes = cache_entry.byte_size() + cache_entry_id.byte_size();
 
-        let (cache, cache_size, cache_lru) = self
-            .cache_and_size_and_lru_mut(key)
-            .expect("There must be cache elements entry if there was a loading zone");
+        let cache = &mut self
+            .operator_caches
+            .get_mut(key)
+            .expect("There must be cache elements entry if there was a loading zone")
+            .entries;
 
         let old_cache_entry = cache.insert(cache_entry_id, cache_entry);
-        let old_lru_entry = cache_lru.push(cache_entry_id, key.clone());
+        let old_lru_entry = self.lru.push(cache_entry_id, key.clone());
         assert!(old_lru_entry.is_none()); // this should always work, because we just inserted a new CacheEntryId
         assert!(old_cache_entry.is_none()); // this should always work, because we just inserted a new CacheEntryId
 
         // cache bound can be temporarily exceeded as the entry is moved form the landing zone into the cache
         // but the total of cache + landing zone is still below the bound
-        cache_size.add_bytes_allow_overflow(cache_entry_size_bytes);
+        self.cache_size
+            .add_bytes_allow_overflow(cache_entry_size_bytes);
 
         debug!(
             "Finished query {}. Cache size: {}. Cache size used: {}, Cache used percentage: {}.",
             query_id,
-            cache_size.total_byte_size(),
-            cache_size.byte_size_used(),
-            cache_size.size_used_fraction()
+            self.cache_size.total_byte_size(),
+            self.cache_size.byte_size_used(),
+            self.cache_size.size_used_fraction()
         );
 
         // We now evict elements from the cache until bound is satisfied again
@@ -408,23 +403,25 @@ impl TileCacheBackend {
             // this should always work, because otherwise it would mean the cache is not empty but the lru is.
             // the landing zone is smaller than the cache size and the entry must fit into the landing zone.
             if let Some((pop_entry_id, pop_entry_key)) = self.lru.pop_lru() {
-                let (cache, cache_size, _cache_lru) = self
-                    .cache_and_size_and_lru_mut(&pop_entry_key)
-                    .expect("There must be cache elements entry if there was an LRU entry");
+                let cache = &mut self
+                    .operator_caches
+                    .get_mut(&pop_entry_key)
+                    .expect("There must be cache elements entry if there was an LRU entry")
+                    .entries;
                 {
                     let old_cache_entry = cache
                         .remove(&pop_entry_id)
                         .expect("LRU entry must be in cache");
-                    cache_size.remove_element_bytes(&pop_entry_id);
-                    cache_size.remove_element_bytes(&old_cache_entry);
+                    self.cache_size.remove_element_bytes(&pop_entry_id);
+                    self.cache_size.remove_element_bytes(&old_cache_entry);
                 }
 
                 debug!(
                     "Evicted query {}. Cache size: {}. Cache size used: {}, Cache used percentage: {}.",
                     pop_entry_id,
-                    cache_size.total_byte_size(),
-                    cache_size.byte_size_used(),
-                    cache_size.size_used_fraction()
+                    self.cache_size.total_byte_size(),
+                    self.cache_size.byte_size_used(),
+                    self.cache_size.size_used_fraction()
                 );
             } else {
                 panic!("Cache is overfull but LRU is empty. This must not happen.");
@@ -437,12 +434,12 @@ impl TileCacheBackend {
         key: &CanonicOperatorName,
         cache_entry_ids: &[CacheEntryId],
     ) {
-        if let Some((cache, cache_size, cache_lru)) = self.cache_and_size_and_lru_mut(key) {
+        if let Some(cache) = self.operator_caches.get_mut(key).map(|c| &mut c.entries) {
             for cache_entry_id in cache_entry_ids {
-                let _old_lru_entry = cache_lru.pop_entry(cache_entry_id);
+                let _old_lru_entry = self.lru.pop_entry(cache_entry_id);
                 if let Some(old_cache_entry) = cache.remove(cache_entry_id) {
-                    cache_size.remove_element_bytes(cache_entry_id);
-                    cache_size.remove_element_bytes(&old_cache_entry);
+                    self.cache_size.remove_element_bytes(cache_entry_id);
+                    self.cache_size.remove_element_bytes(&old_cache_entry);
                 }
             }
         }
@@ -621,6 +618,23 @@ pub enum LandingZoneQueryTiles {
     F64(Vec<RasterTile2D<f64>>),
 }
 
+impl LandingZoneQueryTiles {
+    pub fn len(&self) -> usize {
+        match self {
+            LandingZoneQueryTiles::U8(v) => v.len(),
+            LandingZoneQueryTiles::U16(v) => v.len(),
+            LandingZoneQueryTiles::U32(v) => v.len(),
+            LandingZoneQueryTiles::U64(v) => v.len(),
+            LandingZoneQueryTiles::I8(v) => v.len(),
+            LandingZoneQueryTiles::I16(v) => v.len(),
+            LandingZoneQueryTiles::I32(v) => v.len(),
+            LandingZoneQueryTiles::I64(v) => v.len(),
+            LandingZoneQueryTiles::F32(v) => v.len(),
+            LandingZoneQueryTiles::F64(v) => v.len(),
+        }
+    }
+}
+
 impl ByteSize for LandingZoneQueryTiles {
     fn heap_byte_size(&self) -> usize {
         // we need to use `byte_size` instead of `heap_byte_size` here, because `Vec` stores its data on the heap
@@ -714,6 +728,27 @@ impl<T> CacheTileStream<T> {
             idx: 0,
         }
     }
+
+    pub fn count_matching_elements(&self) -> usize
+    where
+        T: Pixel,
+    {
+        self.data
+            .iter()
+            .filter(|t| {
+                let tile_bbox = t.tile_information().spatial_partition();
+
+                (tile_bbox == self.query.spatial_bounds
+                    || tile_bbox.intersects(&self.query.spatial_bounds))
+                    && (t.time == self.query.time_interval
+                        || t.time.intersects(&self.query.time_interval))
+            })
+            .count()
+    }
+
+    pub fn element_count(&self) -> usize {
+        self.data.len()
+    }
 }
 
 impl<T: Pixel> Stream for CacheTileStream<T> {
@@ -730,8 +765,8 @@ impl<T: Pixel> Stream for CacheTileStream<T> {
             let tile = &data[i];
             let tile_bbox = tile.tile_information().spatial_partition();
 
-            if tile_bbox.intersects(&query.spatial_bounds)
-                && tile.time.intersects(&query.time_interval)
+            if (tile_bbox == query.spatial_bounds || tile_bbox.intersects(&query.spatial_bounds))
+                && (tile.time == query.time_interval || tile.time.intersects(&query.time_interval))
             {
                 *idx = i + 1;
                 return std::task::Poll::Ready(Some(Ok(tile.clone())));
