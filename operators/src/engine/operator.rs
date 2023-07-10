@@ -205,6 +205,13 @@ where
     }
 }
 
+impl std::fmt::Display for CanonicOperatorName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = String::from_utf8_lossy(&self.0);
+        write!(f, "{}", s)
+    }
+}
+
 pub trait InitializedPlotOperator: Send + Sync {
     /// Get the result descriptor of the `Operator`
     fn result_descriptor(&self) -> &PlotResultDescriptor;
