@@ -11,6 +11,25 @@ identifier!(ComputationContext);
 pub struct ComputationUnit {
     pub issuer: Uuid,                // TODO: use UserId?
     pub context: ComputationContext, // TODO: introduce the concept of workflows to the operators crate and use/add it here
+    pub batch: Option<u64>,
+}
+
+impl ComputationUnit {
+    pub fn new(issuer: Uuid, context: ComputationContext) -> Self {
+        Self {
+            issuer,
+            context,
+            batch: None,
+        }
+    }
+
+    pub fn new_batch(issuer: Uuid, context: ComputationContext, batch: u64) -> Self {
+        Self {
+            issuer,
+            context,
+            batch: Some(batch),
+        }
+    }
 }
 
 /// This type holds a [`Sender`] to a channel that is used to track the computation units.
@@ -19,6 +38,8 @@ pub struct ComputationUnit {
 pub struct QuotaTracking {
     quota_sender: UnboundedSender<ComputationUnit>,
     computation: ComputationUnit,
+    batch_size: u64,
+    batch_count: u64,
 }
 
 impl QuotaTracking {
@@ -29,11 +50,40 @@ impl QuotaTracking {
         Self {
             quota_sender,
             computation,
+            batch_size: 100,
+            batch_count: 0,
         }
     }
 
-    pub fn work_unit_done(&self) {
-        let _ = self.quota_sender.send(self.computation); // ignore the Result because the quota receiver should never close the receiving end of the channel
+    pub fn work_unit_done(&mut self) {
+        self.batch_count += 1;
+        if self.batch_count >= self.batch_size {
+            let batch_cu = ComputationUnit::new_batch(
+                self.computation.issuer,
+                self.computation.context,
+                self.batch_count,
+            );
+            self.batch_count = 0;
+            let _ = self.quota_sender.send(batch_cu); // ignore the Result because the quota receiver should never close the receiving end of the channel
+        }
+    }
+
+    fn computation_done(&mut self) {
+        if self.batch_count > 0 {
+            let batch_cu = ComputationUnit::new_batch(
+                self.computation.issuer,
+                self.computation.context,
+                self.batch_count,
+            );
+            self.batch_count = 0;
+            let _ = self.quota_sender.send(batch_cu); // ignore the Result because the quota receiver should never close the receiving end of the channel
+        }
+    }
+}
+
+impl Drop for QuotaTracking {
+    fn drop(&mut self) {
+        self.computation_done();
     }
 }
 

@@ -70,7 +70,7 @@ where
         match v {
             Some(_) => {
                 *this.element_count += 1;
-                tracing::debug!(
+                tracing::trace!(
                     event = %"poll_next",
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,
@@ -80,12 +80,23 @@ where
                 (*this.quota).work_unit_done();
             }
             None => {
-                tracing::debug!(
+                tracing::trace!(
                     event = %"poll_next",
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,
                     empty = true,
                 );
+
+                if *this.element_count == 0 {
+                    tracing::warn!(
+                        event = %"poll_next",
+                        poll_next_count = *this.poll_next_count,
+                        element_count = *this.element_count,
+                        empty = true,
+                        path = ?this.path,
+                        "empty stream"
+                    );
+                }
             }
         }
         Poll::Ready(v)
@@ -116,7 +127,7 @@ mod tests {
         let (tx, mut rx) = unbounded_channel::<ComputationUnit>();
         let issuer = Uuid::new_v4();
         let context = ComputationContext::new();
-        let quota = QuotaTracking::new(tx, ComputationUnit { issuer, context });
+        let quota = QuotaTracking::new(tx, ComputationUnit::new(issuer, context));
         let mut v_stat_stream = StreamStatisticsAdapter::new(
             v_stream,
             span!(Level::TRACE, "test"),
@@ -144,7 +155,11 @@ mod tests {
 
         assert_eq!(
             rx.recv().await.unwrap(),
-            ComputationUnit { issuer, context }
+            ComputationUnit {
+                issuer,
+                context,
+                batch: None
+            }
         );
     }
 }
