@@ -727,18 +727,18 @@ mod tests {
 
     #[test]
     fn contains() {
-        let a = TimeInterval::new(1, 2).unwrap();
-        let b = TimeInterval::new(2, 3).unwrap();
-        let c = TimeInterval::new(1, 3).unwrap();
-        let d = TimeInterval::new_instant(1).unwrap();
-        let e = TimeInterval::new_instant(3).unwrap();
+        let time_interval_1 = TimeInterval::new(1, 2).unwrap();
+        let time_interval_2 = TimeInterval::new(2, 3).unwrap();
+        let time_interval_3 = TimeInterval::new(1, 3).unwrap();
+        let time_interval_4 = TimeInterval::new_instant(1).unwrap();
+        let time_interval_5 = TimeInterval::new_instant(3).unwrap();
 
-        assert!(!a.contains(&b));
-        assert!(c.contains(&a));
-        assert!(c.contains(&b));
-        assert!(c.contains(&c));
-        assert!(c.contains(&d));
-        assert!(!c.contains(&e));
+        assert!(!time_interval_1.contains(&time_interval_2));
+        assert!(time_interval_3.contains(&time_interval_1));
+        assert!(time_interval_3.contains(&time_interval_2));
+        assert!(time_interval_3.contains(&time_interval_3));
+        assert!(time_interval_3.contains(&time_interval_4));
+        assert!(!time_interval_3.contains(&time_interval_5));
     }
 
     #[test]
