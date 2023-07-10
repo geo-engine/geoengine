@@ -227,16 +227,9 @@ impl SpatialPartition2D {
 
     #[must_use]
     pub fn extended(self, other: &Self) -> Self {
-        Self {
-            upper_left_coordinate: Coordinate2D::new(
-                self.upper_left().x.min(other.upper_left().x),
-                self.upper_left().y.max(other.upper_left().y),
-            ),
-            lower_right_coordinate: Coordinate2D::new(
-                self.lower_right().x.max(other.lower_right().x),
-                self.lower_right().y.min(other.lower_right().y),
-            ),
-        }
+        let mut extended = self;
+        extended.extend(other);
+        extended
     }
 
     pub fn extend(&mut self, other: &Self) {
