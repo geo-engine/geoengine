@@ -102,7 +102,7 @@ impl TileCacheBackendSize {
     }
 
     #[inline]
-    #[allow(dead_code)] // used for tests
+    #[cfg(test)] // used for tests
     fn add_element_bytes<T: ByteSize>(&mut self, element: &T) {
         self.add_bytes(element.byte_size());
     }
