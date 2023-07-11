@@ -474,6 +474,12 @@ impl TileCache {
             });
         }
 
+        if landing_zone_ratio >= 1.0 {
+            return Err(crate::error::Error::QueryingProcessorFailed {
+                source: Box::new(CacheError::LandingZoneRatioMustBeSmallerThanOne),
+            });
+        }
+
         let cache_size_bytes =
             (cache_size_in_mb as f64 * (1.0 - landing_zone_ratio) * 1024.0 * 1024.0) as usize;
 
