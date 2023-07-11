@@ -959,6 +959,15 @@ mod tests {
     }
 
     #[test]
+    fn bounding_box_contains_self() {
+        let ll = Coordinate2D::new(1.0, 1.0);
+        let ur = Coordinate2D::new(4.0, 4.0);
+        let bbox = BoundingBox2D::new(ll, ur).unwrap();
+
+        assert!(bbox.contains_bbox(&bbox));
+    }
+
+    #[test]
     fn bounding_box_intersect_within() {
         let ll = Coordinate2D::new(1.0, 1.0);
         let ur = Coordinate2D::new(4.0, 4.0);

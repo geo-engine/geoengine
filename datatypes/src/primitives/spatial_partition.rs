@@ -167,7 +167,9 @@ impl SpatialPartition2D {
         }
     }
 
-    /// Return true if the partition contains the `other`
+    /// Return true if the partition contains the `other`.
+    /// A partition contains another partition if it contains all of its points
+    /// OR the other partition is equal to it.
     pub fn contains(&self, other: &Self) -> bool {
         self.contains_x(other) && self.contains_y(other)
     }
@@ -177,7 +179,7 @@ impl SpatialPartition2D {
             other.upper_left_coordinate.x,
             self.upper_left_coordinate.x,
             self.lower_right_coordinate.x,
-        ) && crate::util::ranges::value_in_range(
+        ) && crate::util::ranges::value_in_range_inv(
             other.lower_right_coordinate.x,
             self.upper_left_coordinate.x,
             self.lower_right_coordinate.x,
@@ -185,7 +187,7 @@ impl SpatialPartition2D {
     }
 
     fn contains_y(&self, other: &Self) -> bool {
-        crate::util::ranges::value_in_range_inv(
+        crate::util::ranges::value_in_range(
             other.lower_right_coordinate.y,
             self.lower_right_coordinate.y,
             self.upper_left_coordinate.y,
@@ -371,6 +373,12 @@ mod tests {
 
         assert!(p1.contains_coordinate(&c1));
         assert!(!p1.contains_coordinate(&c2));
+    }
+
+    #[test]
+    fn it_contains_self() {
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        assert!(p1.contains(&p1));
     }
 
     #[test]

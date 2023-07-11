@@ -541,10 +541,8 @@ impl CacheEntry {
     /// Return true if the query can be answered in full by this cache entry
     /// For this, the bbox and time has to be fully contained, and the spatial resolution has to match
     pub fn matches(&self, query: &RasterQueryRectangle) -> bool {
-        (self.query.spatial_bounds == query.spatial_bounds
-            || self.query.spatial_bounds.contains(&query.spatial_bounds))
-            && (self.query.time_interval == query.time_interval
-                || self.query.time_interval.contains(&query.time_interval))
+        self.query.spatial_bounds.contains(&query.spatial_bounds)
+            && self.query.time_interval.contains(&query.time_interval)
             && self.query.spatial_resolution == query.spatial_resolution
     }
 
