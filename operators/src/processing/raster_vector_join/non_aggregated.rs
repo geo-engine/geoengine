@@ -3,13 +3,13 @@ use crate::processing::raster_vector_join::create_feature_aggregator;
 use futures::stream::{once as once_stream, BoxStream};
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, CacheHint, FeatureDataType, Geometry, VectorQueryRectangle,
+    BoundingBox2D, CacheHint, FeatureDataType, Geometry, RasterQueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use geoengine_datatypes::raster::{GridIndexAccess, RasterTile2D};
+use geoengine_datatypes::raster::{DynamicRasterDataType, GridIndexAccess, RasterTile2D};
 use geoengine_datatypes::{
     collections::FeatureCollectionModifications, primitives::TimeInterval, raster::Pixel,
 };
@@ -93,61 +93,68 @@ where
         aggregation_method: FeatureAggregationMethod,
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
-        call_on_generic_raster_processor!(raster_processor, raster_processor => {
-            Self::process_typed_collection_chunk(collection, raster_processor, new_column_name, query, ctx, aggregation_method, ignore_no_data).await
-        })
+        if !collection.is_empty() {
+            let bbox = collection
+                .bbox()
+                .and_then(|bbox| bbox.intersection(&query.spatial_bounds));
+
+            let time = collection
+                .time_bounds()
+                .and_then(|time| time.intersect(&query.time_interval));
+
+            // TODO: also intersect with raster spatial / time bounds
+
+            if let (Some(q_bbox), Some(q_time)) = (bbox, time) {
+                let query = VectorQueryRectangle {
+                    spatial_bounds: q_bbox,
+                    time_interval: q_time,
+                    spatial_resolution: query.spatial_resolution,
+                }
+                .into();
+
+                let res_stream = call_on_generic_raster_processor!(raster_processor, raster_processor => {
+                    Self::process_typed_collection_chunk(collection, raster_processor, new_column_name, query, ctx, aggregation_method, ignore_no_data).await
+                });
+                return res_stream;
+            }
+        };
+
+        log::debug!("input collection is empty, returning empty collection, skipping raster query");
+        let data = FeatureDataType::from(raster_processor.raster_data_type())
+            .null_feature_data(collection.len());
+        let collection = collection.add_column(new_column_name, data)?;
+        let collection_stream = once_stream(async move { Ok(collection) }).boxed();
+        Ok(collection_stream)
     }
 
     async fn process_typed_collection_chunk<'a, P: Pixel>(
         collection: FeatureCollection<G>,
         raster_processor: &'a dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &'a str,
-        query: VectorQueryRectangle,
+        query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
         aggregation_method: FeatureAggregationMethod,
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
-        // make qrect smaller wrt. points
-        let bbox = collection
-            .bbox()
-            .and_then(|bbox| bbox.intersection(&query.spatial_bounds));
+        let raster_query = raster_processor.raster_query(query, ctx).await?;
 
-        let time = collection
-            .time_bounds()
-            .and_then(|time| time.intersect(&query.time_interval));
+        let collection = Arc::new(collection);
 
-        if let (Some(q_bbox), Some(q_time)) = (bbox, time) {
-            let query = VectorQueryRectangle {
-                spatial_bounds: q_bbox,
-                time_interval: q_time,
-                spatial_resolution: query.spatial_resolution,
-            };
+        let collection_stream = raster_query
+            .time_multi_fold(
+                move || Ok(VectorRasterJoiner::new(aggregation_method, ignore_no_data)),
+                move |accum, raster| {
+                    let collection = collection.clone();
+                    async move {
+                        let accum = accum?;
+                        let raster = raster?;
+                        accum.extract_raster_values(&collection, &raster)
+                    }
+                },
+            )
+            .map(move |accum| accum?.into_collection(new_column_name));
 
-            let raster_query = raster_processor.raster_query(query.into(), ctx).await?;
-
-            let collection = Arc::new(collection);
-
-            let collection_stream = raster_query
-                .time_multi_fold(
-                    move || Ok(VectorRasterJoiner::new(aggregation_method, ignore_no_data)),
-                    move |accum, raster| {
-                        let collection = collection.clone();
-                        async move {
-                            let accum = accum?;
-                            let raster = raster?;
-                            accum.extract_raster_values(&collection, &raster)
-                        }
-                    },
-                )
-                .map(move |accum| accum?.into_collection(new_column_name));
-
-            return Ok(collection_stream.boxed());
-        }
-
-        let data = FeatureDataType::from(P::TYPE).null_feature_data(collection.len());
-        let collection = collection.add_column(new_column_name, data)?;
-        let collection_stream = once_stream(async move { Ok(collection) }).boxed();
-        Ok(collection_stream)
+        return Ok(collection_stream.boxed());
     }
 }
 
@@ -256,6 +263,7 @@ where
 
     fn into_collection(self, new_column_name: &str) -> Result<FeatureCollection<G>> {
         let Some(state) = self.state else {
+            log::warn!("Empty input for vector raster join");
             return Err(Error::EmptyInput); // TODO: maybe output empty dataset or just nulls
         };
         let mut new_collection = state
@@ -288,6 +296,7 @@ where
         for (raster_processor, new_column_name) in
             self.raster_processors.iter().zip(&self.column_names)
         {
+            log::debug!("processing raster for new column {:?}", new_column_name);
             // TODO: spawn task
             stream = Self::process_collections(
                 stream,
