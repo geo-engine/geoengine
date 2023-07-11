@@ -439,13 +439,18 @@ impl TileCacheBackend {
         key: &CanonicOperatorName,
         cache_entry_ids: &[CacheEntryId],
     ) {
-        if let Some(cache) = self.operator_caches.get_mut(key).map(|c| &mut c.entries) {
+        if let Some(cache) = self.operator_caches.get_mut(key) {
+            let cache_entries = &mut cache.entries;
             for cache_entry_id in cache_entry_ids {
                 let _old_lru_entry = self.lru.pop_entry(cache_entry_id);
-                if let Some(old_cache_entry) = cache.remove(cache_entry_id) {
+                if let Some(old_cache_entry) = cache_entries.remove(cache_entry_id) {
                     self.cache_size.remove_element_bytes(cache_entry_id);
                     self.cache_size.remove_element_bytes(&old_cache_entry);
                 }
+            }
+            // if there are no more cache entries and no more landing zone entries, remove the cache
+            if cache_entries.is_empty() && cache.landing_zone.is_empty() {
+                self.operator_caches.remove(key);
             }
         }
     }
