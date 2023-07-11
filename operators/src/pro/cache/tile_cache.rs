@@ -411,10 +411,10 @@ impl TileCacheBackend {
                 let cache = &mut self
                     .operator_caches
                     .get_mut(&pop_entry_key)
-                    .expect("There must be cache elements entry if there was an LRU entry")
-                    .entries;
+                    .expect("There must be cache elements entry if there was an LRU entry");
+                let cache_entries = &mut cache.entries;
                 {
-                    let old_cache_entry = cache
+                    let old_cache_entry = cache_entries
                         .remove(&pop_entry_id)
                         .expect("LRU entry must be in cache");
                     self.cache_size.remove_element_bytes(&pop_entry_id);
@@ -428,6 +428,11 @@ impl TileCacheBackend {
                     self.cache_size.byte_size_used(),
                     self.cache_size.size_used_fraction()
                 );
+
+                // if there are no more cache entries and the landing zone is empty, remove the cache for this operator graph
+                if cache_entries.is_empty() && cache.landing_zone.is_empty() {
+                    self.operator_caches.remove(&pop_entry_key);
+                }
             } else {
                 panic!("Cache is overfull but LRU is empty. This must not happen.");
             }
@@ -448,7 +453,7 @@ impl TileCacheBackend {
                     self.cache_size.remove_element_bytes(&old_cache_entry);
                 }
             }
-            // if there are no more cache entries and no more landing zone entries, remove the cache
+            // if there are no more cache entries and no more landing zone entries, remove the cache for this operator graph
             if cache_entries.is_empty() && cache.landing_zone.is_empty() {
                 self.operator_caches.remove(key);
             }
