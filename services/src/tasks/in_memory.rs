@@ -297,11 +297,7 @@ fn run_task(
 
                 *task_handle.status.write().await = TaskStatus::failed(
                     Arc::clone(&err),
-                    TaskCleanUpStatus::Running(RunningTaskStatusInfo::new(
-                        task.task_description(),
-                        0.,
-                        ().boxed(),
-                    )),
+                    TaskCleanUpStatus::Running(RunningTaskStatusInfo::new(None, 0., ().boxed())),
                 );
 
                 if let Err(clean_up_err) =
