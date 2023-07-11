@@ -242,17 +242,20 @@ impl TileCacheBackend {
     }
 
     fn remove_query_from_landing_zone(&mut self, key: &CanonicOperatorName, query_id: &QueryId) {
-        if let Some(landing_zone) = self
-            .operator_caches
-            .get_mut(key)
-            .map(|c| &mut c.landing_zone)
-        {
+        let caches_are_empty = if let Some(operator_caches) = self.operator_caches.get_mut(key) {
+            let landing_zone = &mut operator_caches.landing_zone;
             if let Some(entry) = landing_zone.remove(query_id) {
                 self.landing_zone_size.remove_element_bytes(query_id);
                 self.landing_zone_size.remove_element_bytes(&entry);
             }
+            landing_zone.is_empty() && operator_caches.entries.is_empty()
         } else {
             debug!("Tried to remove query ({}) from landing zone, but there was no entry for the operator ({:?})!", query_id, key);
+            false
+        };
+        if caches_are_empty {
+            // there are no more entries for this operator graph, so we can remove the whole cache
+            self.operator_caches.remove(key);
         }
     }
 
