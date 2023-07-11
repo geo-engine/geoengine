@@ -980,17 +980,15 @@ mod tests {
     #[tokio::test]
     async fn it_evicts_lru() {
         // Create cache entry and landing zone entry to geht the size of both
-        //let op0 = op(0);
-
         let landing_zone_entry = LandingZoneEntry {
             query: query_rect(),
             tiles: LandingZoneQueryTiles::U8(vec![create_tile()]),
         };
         let query_id = QueryId::new();
-        let size_of_landing_zone_entry = landing_zone_entry.byte_size() + query_id.byte_size(); // +  op0.byte_size();
+        let size_of_landing_zone_entry = landing_zone_entry.byte_size() + query_id.byte_size();
         let cache_entry: CacheEntry = landing_zone_entry.into();
         let cache_entry_id = CacheEntryId::new();
-        let size_of_cache_entry = cache_entry.byte_size() + cache_entry_id.byte_size(); // + op0.byte_size();
+        let size_of_cache_entry = cache_entry.byte_size() + cache_entry_id.byte_size();
 
         // Select the max of both sizes
         // This is done because the landing zone should not be smaller then the cache
