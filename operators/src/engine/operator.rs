@@ -208,7 +208,7 @@ where
 impl std::fmt::Display for CanonicOperatorName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = String::from_utf8_lossy(&self.0);
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 

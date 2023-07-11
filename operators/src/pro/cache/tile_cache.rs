@@ -360,10 +360,8 @@ impl TileCacheBackend {
         );
 
         debug_assert!(
-            active_query.tiles.len() > 0,
-            "There must be at least one tile in the active query. CanonicOperatorName: {}, Query: {}",
-            key,
-            query_id
+            !active_query.tiles.is_empty(),
+            "There must be at least one tile in the active query. CanonicOperatorName: {key}, Query: {query_id}",
         );
 
         // move entry from landing zone into cache
@@ -408,7 +406,7 @@ impl TileCacheBackend {
             // this should always work, because otherwise it would mean the cache is not empty but the lru is.
             // the landing zone is smaller than the cache size and the entry must fit into the landing zone.
             if let Some((pop_entry_id, pop_entry_key)) = self.lru.pop_lru() {
-                let cache = &mut self
+                let cache = self
                     .operator_caches
                     .get_mut(&pop_entry_key)
                     .expect("There must be cache elements entry if there was an LRU entry");
@@ -651,6 +649,10 @@ impl LandingZoneQueryTiles {
             LandingZoneQueryTiles::F32(v) => v.len(),
             LandingZoneQueryTiles::F64(v) => v.len(),
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
