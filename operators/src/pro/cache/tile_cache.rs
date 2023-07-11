@@ -208,7 +208,7 @@ impl TileCacheBackend {
         key: &CanonicOperatorName,
         query: &RasterQueryRectangle,
     ) -> Result<QueryId, CacheError> {
-        // if there is no cache for this operator graph, we create one. However, it is not clear yet, if we will actually cache anything.
+        // if there is no cache for this operator graph, we create one. However, it is not clear yet, if we will actually cache anything. The underling query might be aborted.
         if !self.operator_caches.contains_key(key) {
             self.operator_caches.insert(key.clone(), Default::default());
             // self.cache_size.try_add_element_bytes(&key)?; // TODO: can we delete this at a later point?
@@ -233,10 +233,10 @@ impl TileCacheBackend {
             .try_add_element_bytes(&landing_zone_entry)?;
         let old_entry = landing_zone.insert(query_id, landing_zone_entry);
 
-        if let Some(old_entry) = old_entry {
-            debug!("Replacing old entry in landing zone!");
-            self.landing_zone_size.remove_element_bytes(&old_entry); // Since the old entry already was in the landing zone, we need to remove it from the size.
-        }
+        debug_assert!(
+            old_entry.is_none(),
+            "There must not be an entry for the same query id in the landing zone! This is a bug."
+        );
 
         Ok(query_id)
     }
