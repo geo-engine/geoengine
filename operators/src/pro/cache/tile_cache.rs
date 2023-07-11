@@ -305,7 +305,9 @@ impl TileCacheBackend {
             .get_mut(query_id)
             .ok_or(super::error::CacheError::QueryNotFoundInLandingZone)?;
 
-        entry.query.spatial_bounds.extend(&tile.spatial_partition()); // since the source should only produce tiles that intersect with the query, we can extend the query bounds
+        // Since we always produce whole tiles, we can extend the spatial extent of the cache entry by the spatial extent of the tile. This will result in more cache hits for queries that cover the same tiles but are not inside the area of the original query.
+        entry.query.spatial_bounds.extend(&tile.spatial_partition());
+        // The temporal extent of the query might produce tiles that have a temporal extent that is larger then the original query. We can extend the temporal extent of the query by the temporal extent of the tiles. Again this will result in more cache hits for queries that cover the same tiles but are not inside the temporal extent of the original query.
         entry.query.time_interval = entry
             .query
             .time_interval
