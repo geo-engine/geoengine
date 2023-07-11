@@ -15,7 +15,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, PlotQueryRectangle, QueryRectangle, RasterQueryRectangle,
     SpatialPartition2D, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::Pixel;
+use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel};
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 use ouroboros::self_referencing;
 
@@ -225,6 +225,23 @@ pub enum TypedRasterQueryProcessor {
     I64(Box<dyn RasterQueryProcessor<RasterType = i64>>),
     F32(Box<dyn RasterQueryProcessor<RasterType = f32>>),
     F64(Box<dyn RasterQueryProcessor<RasterType = f64>>),
+}
+
+impl DynamicRasterDataType for TypedRasterQueryProcessor {
+    fn raster_data_type(&self) -> geoengine_datatypes::raster::RasterDataType {
+        match self {
+            Self::U8(_) => geoengine_datatypes::raster::RasterDataType::U8,
+            Self::U16(_) => geoengine_datatypes::raster::RasterDataType::U16,
+            Self::U32(_) => geoengine_datatypes::raster::RasterDataType::U32,
+            Self::U64(_) => geoengine_datatypes::raster::RasterDataType::U64,
+            Self::I8(_) => geoengine_datatypes::raster::RasterDataType::I8,
+            Self::I16(_) => geoengine_datatypes::raster::RasterDataType::I16,
+            Self::I32(_) => geoengine_datatypes::raster::RasterDataType::I32,
+            Self::I64(_) => geoengine_datatypes::raster::RasterDataType::I64,
+            Self::F32(_) => geoengine_datatypes::raster::RasterDataType::F32,
+            Self::F64(_) => geoengine_datatypes::raster::RasterDataType::F64,
+        }
+    }
 }
 
 impl std::fmt::Debug for TypedRasterQueryProcessor {
