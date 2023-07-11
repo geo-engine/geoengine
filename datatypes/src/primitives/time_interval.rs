@@ -167,8 +167,7 @@ impl TimeInterval {
     /// ```
     ///
     pub fn contains(&self, other: &Self) -> bool {
-        // TODO: should contains cover equals?
-        self == other || (self.start..self.end).contains(&other.start) && self.end >= other.end
+        self == other || ((self.start..self.end).contains(&other.start) && (self.end >= other.end))
     }
 
     /// Returns whether the given interval intersects this interval
