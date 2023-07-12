@@ -93,36 +93,70 @@ where
         aggregation_method: FeatureAggregationMethod,
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
-        if !collection.is_empty() {
-            let bbox = collection
-                .bbox()
-                .and_then(|bbox| bbox.intersection(&query.spatial_bounds));
+        if collection.is_empty() {
+            log::debug!(
+                "input collection is empty, returning empty collection, skipping raster query"
+            );
 
-            let time = collection
-                .time_bounds()
-                .and_then(|time| time.intersect(&query.time_interval));
+            return Self::collection_with_new_null_column(
+                &collection,
+                new_column_name,
+                raster_processor.raster_data_type().into(),
+            );
+        }
 
-            // TODO: also intersect with raster spatial / time bounds
+        let bbox = collection
+            .bbox()
+            .and_then(|bbox| bbox.intersection(&query.spatial_bounds));
 
-            if let (Some(q_bbox), Some(q_time)) = (bbox, time) {
-                let query = VectorQueryRectangle {
-                    spatial_bounds: q_bbox,
-                    time_interval: q_time,
-                    spatial_resolution: query.spatial_resolution,
-                }
-                .into();
+        let time = collection
+            .time_bounds()
+            .and_then(|time| time.intersect(&query.time_interval));
 
-                let res_stream = call_on_generic_raster_processor!(raster_processor, raster_processor => {
-                    Self::process_typed_collection_chunk(collection, raster_processor, new_column_name, query, ctx, aggregation_method, ignore_no_data).await
-                });
-                return res_stream;
-            }
+        // TODO: also intersect with raster spatial / time bounds
+
+        let (Some(spatial_bounds), Some(time_interval)) = (bbox, time) else {
+            log::debug!(
+                "spatial or temporal intersection is empty, returning the same collection, skipping raster query"
+            );
+            
+            return Self::collection_with_new_null_column(
+                &collection,
+                new_column_name,
+                raster_processor.raster_data_type().into(),
+            );
         };
 
-        log::debug!("input collection is empty, returning empty collection, skipping raster query");
-        let data = FeatureDataType::from(raster_processor.raster_data_type())
-            .null_feature_data(collection.len());
-        let collection = collection.add_column(new_column_name, data)?;
+        let query = VectorQueryRectangle {
+            spatial_bounds,
+            time_interval,
+            spatial_resolution: query.spatial_resolution,
+        }
+        .into();
+
+        call_on_generic_raster_processor!(raster_processor, raster_processor => {
+            Self::process_typed_collection_chunk(
+                collection,
+                raster_processor,
+                new_column_name,
+                query,
+                ctx,
+                aggregation_method,
+                ignore_no_data,
+            )
+            .await
+        })
+    }
+
+    fn collection_with_new_null_column<'a>(
+        collection: &FeatureCollection<G>,
+        new_column_name: &str,
+        feature_data_type: FeatureDataType,
+    ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
+        let collection = collection.add_column(
+            new_column_name,
+            feature_data_type.null_feature_data(collection.len()),
+        )?;
         let collection_stream = once_stream(async move { Ok(collection) }).boxed();
         Ok(collection_stream)
     }
