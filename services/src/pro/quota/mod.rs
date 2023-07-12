@@ -36,6 +36,7 @@ impl QuotaTrackingFactory {
             ComputationUnit {
                 issuer: session.user.id.0,
                 context,
+                batch: None,
             },
         )
     }
@@ -69,14 +70,16 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                 //       However, currently it is possible to reuse a context for multiple queries.
                 //       Also: the operators crate knows nothing about workflows as of yet.
                 log::trace!(
-                    "Quota received. User: {}, Context: {}",
+                    "Quota received. User: {}, Context: {}, Batch: {:?}",
                     computation.issuer,
-                    computation.context
+                    computation.context,
+                    computation.batch
                 );
 
                 let user = UserId(computation.issuer);
+                let quota_used = computation.batch.unwrap_or(1);
                 // TODO: what to do if this fails (quota can't be recorded)? Try again later?
-                let r = self.user_db.increment_quota_used(&user, 1).await;
+                let r = self.user_db.increment_quota_used(&user, quota_used).await;
 
                 if r.is_err() {
                     log::error!("Could not increment quota for user {}", user);
@@ -134,7 +137,7 @@ mod tests {
 
         let quota = initialize_quota_tracking(app_ctx.session_context(admin_session.clone()).db());
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let mut tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
         tracking.work_unit_done();
         tracking.work_unit_done();

@@ -2416,7 +2416,7 @@ let ctx = app_ctx.session_context(session);
 
             let quota = initialize_quota_tracking(app_ctx.session_context(admin_session).db());
 
-            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+            let mut tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
             tracking.work_unit_done();
             tracking.work_unit_done();
@@ -2471,7 +2471,7 @@ let ctx = app_ctx.session_context(session);
 
             let quota = initialize_quota_tracking(app_ctx.session_context(admin_session).db());
 
-            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+            let mut tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
             tracking.work_unit_done();
             tracking.work_unit_done();
