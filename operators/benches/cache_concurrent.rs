@@ -48,7 +48,7 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
     let start = std::time::Instant::now();
 
     let query_id = tile_cache
-        .insert_query::<u8>(op_name.clone(), &query_rect())
+        .insert_query::<u8>(&op_name, &query_rect())
         .await
         .unwrap();
 
@@ -57,7 +57,7 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
     let start = std::time::Instant::now();
 
     tile_cache
-        .insert_tile(op_name.clone(), query_id, tile)
+        .insert_tile(&op_name, &query_id, tile)
         .await
         .unwrap();
 
@@ -66,12 +66,7 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
     let start = std::time::Instant::now();
 
     #[allow(clippy::unit_arg)]
-    black_box(
-        tile_cache
-            .finish_query(op_name.clone(), query_id)
-            .await
-            .unwrap(),
-    );
+    black_box(tile_cache.finish_query(&op_name, &query_id).await.unwrap());
 
     let finish_query_s = start.elapsed().as_millis();
 
@@ -95,7 +90,7 @@ async fn read_cache(tile_cache: &TileCache, op_no: usize) -> ReadMeasurement {
 
     let start = std::time::Instant::now();
 
-    black_box(tile_cache.query_cache::<u8>(op, &query).await);
+    black_box(tile_cache.query_cache::<u8>(&op, &query).await);
 
     let read_query_s = start.elapsed().as_millis();
 
