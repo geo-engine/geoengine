@@ -39,7 +39,7 @@ use async_trait::async_trait;
 use super::permissions::PermissionDb;
 use super::projects::ProProjectDb;
 use super::users::{RoleDb, UserAuth, UserSession};
-use super::util::config::Cache;
+use super::util::config::{Cache, QuotaTrackingMode};
 
 pub use in_memory::ProInMemoryDb;
 pub use postgres::PostgresDb;
@@ -347,13 +347,14 @@ impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
     async fn ensure_quota_available(&self) -> geoengine_operators::util::Result<()> {
         // TODO: cache the result, s.th. other operators in the same workflow can re-use it
         let quota_check_enabled =
-            crate::util::config::get_config_element::<crate::pro::util::config::User>()
+            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .map_err(
                     |e| geoengine_operators::error::Error::CreatingProcessorFailed {
                         source: Box::new(e),
                     },
                 )?
-                .quota_check;
+                .mode
+                == QuotaTrackingMode::Check;
 
         if !quota_check_enabled {
             return Ok(());

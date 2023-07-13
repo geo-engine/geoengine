@@ -14,7 +14,7 @@ use crate::pro::permissions::Role;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::{OidcRequestDb, UserAuth, UserSession};
-use crate::pro::util::config::{Cache, Oidc};
+use crate::pro::util::config::{Cache, Oidc, Quota};
 
 use crate::tasks::SimpleTaskManagerContext;
 use crate::util::config::get_config_element;
@@ -76,6 +76,7 @@ where
         tls: Tls,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
+        quota_config: Quota,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -83,7 +84,12 @@ where
         Self::update_schema(pool.get().await?).await?;
 
         let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
-        let quota = initialize_quota_tracking(db);
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
+        );
 
         Ok(PostgresContext {
             task_manager: Default::default(),
@@ -111,6 +117,7 @@ where
         query_ctx_chunk_size: ChunkByteSize,
         oidc_config: Oidc,
         cache_config: Cache,
+        quota_config: Quota,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -120,7 +127,12 @@ where
         Self::update_schema(conn).await?;
 
         let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
-        let quota = initialize_quota_tracking(db);
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
+        );
 
         let app_ctx = PostgresContext {
             task_manager: Default::default(),
@@ -778,6 +790,7 @@ mod tests {
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
     };
+    use crate::pro::util::config::QuotaTrackingMode;
     use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::projects::{
         CreateProject, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
@@ -880,6 +893,7 @@ mod tests {
                             tokio_postgres::NoTls,
                             TestDefault::test_default(),
                             TestDefault::test_default(),
+                            get_config_element::<Quota>().unwrap(),
                         )
                         .await
                         .unwrap();
@@ -2414,7 +2428,12 @@ let ctx = app_ctx.session_context(session);
 
             let admin_session = admin_login(&app_ctx).await;
 
-            let quota = initialize_quota_tracking(app_ctx.session_context(admin_session).db());
+            let quota = initialize_quota_tracking(
+                QuotaTrackingMode::Check,
+                app_ctx.session_context(admin_session).db(),
+                0,
+                60,
+            );
 
             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
@@ -2469,7 +2488,12 @@ let ctx = app_ctx.session_context(session);
                 .await
                 .unwrap();
 
-            let quota = initialize_quota_tracking(app_ctx.session_context(admin_session).db());
+            let quota = initialize_quota_tracking(
+                QuotaTrackingMode::Check,
+                app_ctx.session_context(admin_session).db(),
+                0,
+                60,
+            );
 
             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
@@ -2520,14 +2544,14 @@ let ctx = app_ctx.session_context(session);
 
             assert_eq!(
                 db.quota_available().await.unwrap(),
-                crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                     .unwrap()
                     .default_available_quota
             );
 
             assert_eq!(
                 admin_db.quota_available_by_user(&user).await.unwrap(),
-                crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                     .unwrap()
                     .default_available_quota
             );
