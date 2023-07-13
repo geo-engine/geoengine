@@ -3,9 +3,9 @@ use crate::error::{Error, Result};
 use crate::handlers;
 use crate::pro;
 use crate::pro::apidoc::ApiDoc;
-#[cfg(feature = "postgres")]
-use crate::pro::contexts::PostgresContext;
 use crate::pro::contexts::ProInMemoryContext;
+#[cfg(feature = "postgres")]
+use crate::pro::contexts::ProPostgresContext;
 use crate::util::config::{self, get_config_element, Backend};
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
@@ -276,7 +276,7 @@ async fn start_postgres(
             // fix schema by providing `search_path` option
             .options(&format!("-c search_path={}", db_config.schema));
 
-        let ctx = PostgresContext::new_with_data(
+        let ctx = ProPostgresContext::new_with_data(
             pg_config,
             NoTls,
             data_path_config.dataset_defs_path,

@@ -46,7 +46,7 @@ use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCh
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
-pub struct PostgresContext<Tls>
+pub struct ProPostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -64,7 +64,7 @@ where
     tile_cache: Arc<TileCache>,
 }
 
-impl<Tls> PostgresContext<Tls>
+impl<Tls> ProPostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -82,10 +82,10 @@ where
         let pool = Pool::builder().build(pg_mgr).await?;
         Self::update_schema(pool.get().await?).await?;
 
-        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
+        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
 
-        Ok(PostgresContext {
+        Ok(ProPostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -119,10 +119,10 @@ where
         let uninitialized = Self::schema_version(&conn).await? == 0;
         Self::update_schema(conn).await?;
 
-        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
+        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
 
-        let app_ctx = PostgresContext {
+        let app_ctx = ProPostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -583,7 +583,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> ApplicationContext for PostgresContext<Tls>
+impl<Tls> ApplicationContext for ProPostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -609,7 +609,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> ProApplicationContext for PostgresContext<Tls>
+impl<Tls> ProApplicationContext for ProPostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -630,7 +630,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     session: UserSession,
-    context: PostgresContext<Tls>,
+    context: ProPostgresContext<Tls>,
 }
 
 #[async_trait]
@@ -642,7 +642,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type Session = UserSession;
-    type GeoEngineDB = PostgresDb<Tls>;
+    type GeoEngineDB = ProPostgresDb<Tls>;
 
     type TaskContext = SimpleTaskManagerContext;
     type TaskManager = ProTaskManager; // this does not persist across restarts
@@ -650,7 +650,7 @@ where
     type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
     fn db(&self) -> Self::GeoEngineDB {
-        PostgresDb::new(self.context.pool.clone(), self.session.clone())
+        ProPostgresDb::new(self.context.pool.clone(), self.session.clone())
     }
 
     fn tasks(&self) -> Self::TaskManager {
@@ -677,7 +677,7 @@ where
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<PostgresDb<Tls>>::new(
+        Ok(ExecutionContextImpl::<ProPostgresDb<Tls>>::new(
             self.db(),
             self.context.thread_pool.clone(),
             self.context.exe_ctx_tiling_spec,
@@ -695,7 +695,7 @@ where
     }
 }
 
-pub struct PostgresDb<Tls>
+pub struct ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -706,7 +706,7 @@ where
     pub(crate) session: UserSession,
 }
 
-impl<Tls> PostgresDb<Tls>
+impl<Tls> ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -732,7 +732,7 @@ where
     }
 }
 
-impl<Tls> GeoEngineDb for PostgresDb<Tls>
+impl<Tls> GeoEngineDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -741,7 +741,7 @@ where
 {
 }
 
-impl<Tls> ProGeoEngineDb for PostgresDb<Tls>
+impl<Tls> ProGeoEngineDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -861,7 +861,7 @@ mod tests {
 
     async fn with_temp_context<F, Fut>(f: F)
     where
-        F: FnOnce(PostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+        F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
             + std::panic::UnwindSafe
             + Send
             + 'static,
@@ -875,7 +875,7 @@ mod tests {
             std::panic::catch_unwind(move || {
                 tokio::task::block_in_place(move || {
                     Handle::current().block_on(async move {
-                        let ctx = PostgresContext::new_with_context_spec(
+                        let ctx = ProPostgresContext::new_with_context_spec(
                             pg_config.clone(),
                             tokio_postgres::NoTls,
                             TestDefault::test_default(),
@@ -953,7 +953,7 @@ mod tests {
         .await;
     }
 
-    async fn set_session(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+    async fn set_session(app_ctx: &ProPostgresContext<NoTls>, projects: &[ProjectListing]) {
         let credentials = UserCredentials {
             email: "foo@example.com".into(),
             password: "secret123".into(),
@@ -964,7 +964,10 @@ mod tests {
         set_session_in_database(app_ctx, projects, session).await;
     }
 
-    async fn set_session_external(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+    async fn set_session_external(
+        app_ctx: &ProPostgresContext<NoTls>,
+        projects: &[ProjectListing],
+    ) {
         let external_user_claims = ExternalUserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -980,7 +983,7 @@ mod tests {
     }
 
     async fn set_session_in_database(
-        app_ctx: &PostgresContext<NoTls>,
+        app_ctx: &ProPostgresContext<NoTls>,
         projects: &[ProjectListing],
         session: UserSession,
     ) {
@@ -1002,7 +1005,7 @@ mod tests {
     }
 
     async fn delete_project(
-        app_ctx: &PostgresContext<NoTls>,
+        app_ctx: &ProPostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -1014,7 +1017,7 @@ mod tests {
     }
 
     async fn add_permission(
-        app_ctx: &PostgresContext<NoTls>,
+        app_ctx: &ProPostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -1060,7 +1063,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     async fn update_projects(
-        app_ctx: &PostgresContext<NoTls>,
+        app_ctx: &ProPostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -1174,7 +1177,7 @@ mod tests {
     }
 
     async fn list_projects(
-        app_ctx: &PostgresContext<NoTls>,
+        app_ctx: &ProPostgresContext<NoTls>,
         session: &UserSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
@@ -1194,7 +1197,7 @@ mod tests {
         projects
     }
 
-    async fn create_projects(app_ctx: &PostgresContext<NoTls>, session: &UserSession) {
+    async fn create_projects(app_ctx: &ProPostgresContext<NoTls>, session: &UserSession) {
         let db = app_ctx.session_context(session.clone()).db();
 
         for i in 0..10 {
@@ -1217,7 +1220,7 @@ mod tests {
         }
     }
 
-    async fn user_reg_login(app_ctx: &PostgresContext<NoTls>) -> UserId {
+    async fn user_reg_login(app_ctx: &ProPostgresContext<NoTls>) -> UserId {
         let user_registration = UserRegistration {
             email: "foo@example.com".into(),
             password: "secret123".into(),
@@ -1245,7 +1248,7 @@ mod tests {
     }
 
     //TODO: No duplicate tests for postgres and hashmap implementation possible?
-    async fn external_user_login_twice(app_ctx: &PostgresContext<NoTls>) -> UserSession {
+    async fn external_user_login_twice(app_ctx: &ProPostgresContext<NoTls>) -> UserSession {
         let external_user_claims = ExternalUserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -1301,7 +1304,7 @@ mod tests {
         result
     }
 
-    async fn anonymous(app_ctx: &PostgresContext<NoTls>) {
+    async fn anonymous(app_ctx: &ProPostgresContext<NoTls>) {
         let now: DateTime = chrono::offset::Utc::now().into();
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let then: DateTime = chrono::offset::Utc::now().into();

@@ -21,7 +21,7 @@ use geoengine_operators::pro::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 pub use in_memory::ProInMemoryContext;
 #[cfg(feature = "postgres")]
-pub use postgres::PostgresContext;
+pub use postgres::ProPostgresContext;
 use rayon::ThreadPool;
 use tokio::io::AsyncWriteExt;
 
@@ -42,7 +42,7 @@ use super::users::{RoleDb, UserAuth, UserSession};
 use super::util::config::Cache;
 
 pub use in_memory::ProInMemoryDb;
-pub use postgres::PostgresDb;
+pub use postgres::ProPostgresDb;
 
 /// A pro application contexts that extends the default context.
 pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + UserAuth {

@@ -2,7 +2,7 @@ use crate::api::model::datatypes::{DataProviderId, LayerId};
 
 use crate::error;
 use crate::layers::layer::Property;
-use crate::pro::contexts::PostgresDb;
+use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::{Permission, PermissionDb, RoleId};
 
 use crate::{
@@ -82,7 +82,7 @@ async fn _remove_layers_without_parent_collection(
 }
 
 #[async_trait]
-impl<Tls> LayerDb for PostgresDb<Tls>
+impl<Tls> LayerDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -636,7 +636,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> LayerCollectionProvider for PostgresDb<Tls>
+impl<Tls> LayerCollectionProvider for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -823,7 +823,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> LayerProviderDb for PostgresDb<Tls>
+impl<Tls> LayerProviderDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

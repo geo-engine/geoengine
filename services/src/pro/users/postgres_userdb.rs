@@ -1,6 +1,6 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
-use crate::pro::contexts::PostgresDb;
+use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::{Role, RoleId};
 use crate::pro::users::oidc::ExternalUserClaims;
 use crate::pro::users::{
@@ -8,7 +8,7 @@ use crate::pro::users::{
 };
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::Identifier;
-use crate::{error, pro::contexts::PostgresContext};
+use crate::{error, pro::contexts::ProPostgresContext};
 use async_trait::async_trait;
 
 use bb8_postgres::{
@@ -22,7 +22,7 @@ use uuid::Uuid;
 use super::userdb::{RoleDb, UserAuth};
 
 #[async_trait]
-impl<Tls> UserAuth for PostgresContext<Tls>
+impl<Tls> UserAuth for ProPostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -400,7 +400,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> UserDb for PostgresDb<Tls>
+impl<Tls> UserDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -555,7 +555,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> RoleDb for PostgresDb<Tls>
+impl<Tls> RoleDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

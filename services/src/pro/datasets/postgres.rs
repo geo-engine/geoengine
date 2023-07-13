@@ -24,7 +24,7 @@ use crate::layers::layer::ProviderLayerId;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
-use crate::pro::contexts::PostgresDb;
+use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::{Permission, PermissionDb, RoleId};
 use crate::projects::Symbology;
 use crate::util::operators::source_operator_from_dataset;
@@ -51,7 +51,7 @@ use postgres_types::{FromSql, ToSql};
 use snafu::{ensure, ResultExt};
 use uuid::Uuid;
 
-impl<Tls> DatasetDb for PostgresDb<Tls>
+impl<Tls> DatasetDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -61,7 +61,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> DatasetProvider for PostgresDb<Tls>
+impl<Tls> DatasetProvider for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -199,7 +199,7 @@ where
 #[async_trait]
 impl<Tls>
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for PostgresDb<Tls>
+    for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -224,7 +224,7 @@ where
 
 #[async_trait]
 impl<Tls> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for PostgresDb<Tls>
+    for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -291,7 +291,7 @@ where
 
 #[async_trait]
 impl<Tls> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for PostgresDb<Tls>
+    for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -374,7 +374,7 @@ pub struct DatasetMetaDataJson {
     result_descriptor: serde_json::Value,
 }
 
-impl<Tls> DatasetStorer for PostgresDb<Tls>
+impl<Tls> DatasetStorer for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -434,7 +434,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> DatasetStore for PostgresDb<Tls>
+impl<Tls> DatasetStore for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -565,7 +565,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> UploadDb for PostgresDb<Tls>
+impl<Tls> UploadDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -620,7 +620,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> DatasetLayerCollectionProvider for PostgresDb<Tls>
+impl<Tls> DatasetLayerCollectionProvider for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

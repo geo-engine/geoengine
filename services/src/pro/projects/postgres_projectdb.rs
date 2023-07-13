@@ -1,6 +1,6 @@
 use crate::error::{self, Result};
 
-use crate::pro::contexts::PostgresDb;
+use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::PermissionDb;
 use crate::pro::users::UserId;
@@ -128,7 +128,7 @@ async fn update_plots(
 }
 
 #[async_trait]
-impl<Tls> ProjectDb for PostgresDb<Tls>
+impl<Tls> ProjectDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -370,7 +370,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> ProProjectDb for PostgresDb<Tls>
+impl<Tls> ProProjectDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
