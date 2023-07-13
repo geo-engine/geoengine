@@ -201,7 +201,7 @@ impl ArrowTyped for Coordinate2D {
         DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float64, nullable)), 2)
     }
 
-    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+    fn estimate_array_memory_size(builder: &mut Self::ArrowBuilder) -> usize {
         let size = std::mem::size_of::<Self::ArrowArray>() + std::mem::size_of::<Float64Array>();
 
         let buffer_bytes = builder.values().len() * std::mem::size_of::<f64>();
@@ -209,9 +209,10 @@ impl ArrowTyped for Coordinate2D {
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
-        arrow::array::FixedSizeListBuilder::new(
+        arrow::array::FixedSizeListBuilder::with_capacity(
             arrow::array::Float64Builder::with_capacity(capacity * 2),
             2,
+            capacity,
         )
     }
 
@@ -234,7 +235,7 @@ impl ArrowTyped for Coordinate2D {
     where
         Self: Sized,
     {
-        let mut builder = Self::ArrowBuilder::new(arrow::array::Float64Builder::new(), 2);
+        let mut builder = Self::arrow_builder(data.len());
         for coordinate in data {
             builder
                 .values()
@@ -242,6 +243,7 @@ impl ArrowTyped for Coordinate2D {
             builder.append(true);
         }
 
+        // we can use `finish` instead of `finish_cloned` since we can set the optimal capacity
         Ok(builder.finish())
     }
 }
@@ -473,21 +475,23 @@ mod test {
     #[test]
     fn arrow_builder_size() {
         for i in 0..10 {
-            let mut builder = Coordinate2D::arrow_builder(i);
+            for capacity in [0, i] {
+                let mut builder = Coordinate2D::arrow_builder(capacity);
 
-            for _ in 0..i {
-                builder.values().append_values(&[1., 2.], &[true, true]);
-                builder.append(true);
+                for _ in 0..i {
+                    builder.values().append_values(&[1., 2.], &[true, true]);
+                    builder.append(true);
+                }
+
+                assert_eq!(builder.value_length(), 2);
+                assert_eq!(builder.len(), i);
+
+                let builder_byte_size = Coordinate2D::estimate_array_memory_size(&mut builder);
+
+                let array = builder.finish_cloned();
+
+                assert_eq!(builder_byte_size, array.get_array_memory_size(), "{i}");
             }
-
-            assert_eq!(builder.value_length(), 2);
-            assert_eq!(builder.len(), i);
-
-            let builder_byte_size = Coordinate2D::builder_byte_size(&mut builder);
-
-            let array = builder.finish();
-
-            assert_eq!(builder_byte_size, array.get_array_memory_size(), "{}", i);
         }
     }
 }

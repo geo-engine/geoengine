@@ -414,7 +414,7 @@ impl ArrowTyped for TimeInterval {
         DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Int64, nullable)), 2)
     }
 
-    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+    fn estimate_array_memory_size(builder: &mut Self::ArrowBuilder) -> usize {
         let size = std::mem::size_of::<Self::ArrowArray>() + std::mem::size_of::<Int64Array>();
 
         let buffer_bytes = builder.values().len() * std::mem::size_of::<i64>();
@@ -425,9 +425,10 @@ impl ArrowTyped for TimeInterval {
         // TODO: use date if dates out-of-range is fixed for us
         // arrow::array::FixedSizeListBuilder::new(arrow::array::Date64Builder::new(2 * capacity), 2)
 
-        arrow::array::FixedSizeListBuilder::new(
+        arrow::array::FixedSizeListBuilder::with_capacity(
             arrow::array::Int64Builder::with_capacity(2 * capacity),
             2,
+            capacity,
         )
     }
 
@@ -455,6 +456,7 @@ impl ArrowTyped for TimeInterval {
             new_time_intervals.append(true);
         }
 
+        // we can use `finish` instead of `finish_cloned` since we can set the optimal capacity
         Ok(new_time_intervals.finish())
     }
 
@@ -481,7 +483,8 @@ impl ArrowTyped for TimeInterval {
             new_time_intervals.append(true);
         }
 
-        Ok(new_time_intervals.finish())
+        // `finish_cloned` instead of `finish` we cannot set the capacity before filtering, so we have to shrink the capacity afterwards
+        Ok(new_time_intervals.finish_cloned())
     }
 
     fn from_vec(time_intervals: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
@@ -498,6 +501,7 @@ impl ArrowTyped for TimeInterval {
             builder.append(true);
         }
 
+        // we can use `finish` instead of `finish_cloned` since we can set the optimal capacity
         Ok(builder.finish())
     }
 }
@@ -728,21 +732,23 @@ mod tests {
     #[test]
     fn arrow_builder_size() {
         for i in 0..10 {
-            let mut builder = TimeInterval::arrow_builder(i);
+            for capacity in [0, i] {
+                let mut builder = TimeInterval::arrow_builder(capacity);
 
-            for _ in 0..i {
-                builder.values().append_values(&[1, 2], &[true, true]);
-                builder.append(true);
+                for _ in 0..i {
+                    builder.values().append_values(&[1, 2], &[true, true]);
+                    builder.append(true);
+                }
+
+                assert_eq!(builder.value_length(), 2);
+                assert_eq!(builder.len(), i);
+
+                let builder_byte_size = TimeInterval::estimate_array_memory_size(&mut builder);
+
+                let array = builder.finish_cloned();
+
+                assert_eq!(builder_byte_size, array.get_array_memory_size(), "{i}");
             }
-
-            assert_eq!(builder.value_length(), 2);
-            assert_eq!(builder.len(), i);
-
-            let builder_byte_size = TimeInterval::builder_byte_size(&mut builder);
-
-            let array = builder.finish();
-
-            assert_eq!(builder_byte_size, array.get_array_memory_size(), "{i}");
         }
     }
 }

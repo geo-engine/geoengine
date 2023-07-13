@@ -37,6 +37,16 @@ pub fn downcast_mut_array<T: Any>(array: &mut dyn ArrayBuilder) -> &mut T {
     array.as_any_mut().downcast_mut().unwrap() // must obey type
 }
 
+/// Helper function to downcast an arrow array builder to a concrete type
+///
+/// The caller must be sure of its type, otherwise it panics
+/// # Panics
+/// Panics if `array` is not of type `T`
+///
+pub fn downcast_dyn_array_builder<T: Any>(array: &dyn ArrayBuilder) -> &T {
+    array.as_any().downcast_ref().unwrap() // must obey type
+}
+
 /// Helper function to calculate the padded byte size of a buffer
 pub fn padded_buffer_size(size: usize, padding: usize) -> usize {
     if size % padding != 0 {
@@ -62,8 +72,15 @@ pub trait ArrowTyped {
         )))
     }
 
-    /// Computes the byte size of the builder
-    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize;
+    /// Estimates the memory size of the array after it is built
+    ///
+    /// # Important
+    ///
+    /// This estimate is only accurate when the array is built with `finish_cloned` since it shrinks the memory to fit.
+    /// When using `finish` instead of `finish_cloned`, the capacity of the builder must have been set optimally.
+    /// In other cases, this estimate is only a lower bound.
+    ///
+    fn estimate_array_memory_size(builder: &mut Self::ArrowBuilder) -> usize;
 
     /// Return a builder for the arrow data type
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder;

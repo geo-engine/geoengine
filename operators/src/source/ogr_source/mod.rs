@@ -1057,7 +1057,7 @@ where
                 }
             }
 
-            if !builder.is_empty() && builder.byte_size() >= chunk_byte_size {
+            if !builder.is_empty() && builder.estimate_memory_size() >= chunk_byte_size {
                 break;
             }
         }

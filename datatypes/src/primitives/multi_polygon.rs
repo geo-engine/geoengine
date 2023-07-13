@@ -179,7 +179,7 @@ impl ArrowTyped for MultiPolygon {
         MultiLineString::arrow_list_data_type()
     }
 
-    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+    fn estimate_array_memory_size(builder: &mut Self::ArrowBuilder) -> usize {
         let multi_polygon_indices_size = builder.len() * std::mem::size_of::<i32>();
 
         let ring_builder = builder.values();
@@ -191,7 +191,7 @@ impl ArrowTyped for MultiPolygon {
         let point_builder = line_builder.values();
         let point_indices_size = point_builder.len() * std::mem::size_of::<i32>();
 
-        let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
+        let coordinates_size = Coordinate2D::estimate_array_memory_size(point_builder);
 
         multi_polygon_indices_size
             + ring_indices_size

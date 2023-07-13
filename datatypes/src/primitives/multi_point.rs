@@ -120,19 +120,15 @@ impl ArrowTyped for MultiPoint {
         Coordinate2D::arrow_list_data_type()
     }
 
-    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+    fn estimate_array_memory_size(builder: &mut Self::ArrowBuilder) -> usize {
         let static_size = std::mem::size_of::<Self::ArrowArray>();
 
-        let coords_size = Coordinate2D::builder_byte_size(builder.values());
+        let coords_size = Coordinate2D::estimate_array_memory_size(builder.values());
 
         let offset_bytes = builder.offsets_slice();
         let offset_bytes_size = std::mem::size_of_val(offset_bytes);
 
-        let offset_fac: u32 = usize::BITS - usize::leading_zeros(offset_bytes.len()) + 1;
-        let pad = 64.max(2u32.pow(offset_fac) as usize);
-        let padded_o_size = padded_buffer_size(offset_bytes_size, pad);
-
-        static_size + coords_size + padded_o_size
+        static_size + coords_size + padded_buffer_size(offset_bytes_size, 64)
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
@@ -165,7 +161,7 @@ impl ArrowTyped for MultiPoint {
             }
         }
 
-        Ok(new_multipoints.finish())
+        Ok(new_multipoints.finish_cloned())
     }
 
     fn filter(
@@ -198,7 +194,7 @@ impl ArrowTyped for MultiPoint {
             }
         }
 
-        Ok(new_features.finish())
+        Ok(new_features.finish_cloned())
     }
 
     fn from_vec(multi_points: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
@@ -217,7 +213,7 @@ impl ArrowTyped for MultiPoint {
             builder.append(true);
         }
 
-        Ok(builder.finish())
+        Ok(builder.finish_cloned())
     }
 }
 
@@ -438,28 +434,72 @@ mod tests {
     }
 
     #[test]
-    fn arrow_builder_size() {
-        for i in 0..514 {
-            let mut multi_points_builder = MultiPoint::arrow_builder(i);
+    fn arrow_builder_size_points() {
+        for num_multipoints in 0..514 {
+            for capacity in [0, num_multipoints] {
+                let mut multi_points_builder = MultiPoint::arrow_builder(capacity);
 
-            for _ in 0..i {
-                multi_points_builder
-                    .values()
-                    .values()
-                    .append_values(&[1., 2.], &[true, true]);
+                for _ in 0..num_multipoints {
+                    multi_points_builder
+                        .values()
+                        .values()
+                        .append_values(&[1., 2.], &[true, true]);
 
-                multi_points_builder.values().append(true);
+                    multi_points_builder.values().append(true);
 
-                multi_points_builder.append(true);
+                    multi_points_builder.append(true);
+                }
+
+                assert_eq!(multi_points_builder.len(), num_multipoints);
+
+                let builder_byte_size =
+                    MultiPoint::estimate_array_memory_size(&mut multi_points_builder);
+
+                let array = multi_points_builder.finish_cloned();
+
+                assert_eq!(
+                    builder_byte_size,
+                    array.get_array_memory_size(),
+                    "{num_multipoints}"
+                );
             }
+        }
+    }
 
-            assert_eq!(multi_points_builder.len(), i);
+    #[test]
+    fn arrow_builder_size_multi_points() {
+        // TODO: test fewer multipoints?
+        for num_multipoints in 0..514 {
+            for capacity in [0, num_multipoints] {
+                let mut multi_points_builder = MultiPoint::arrow_builder(capacity);
 
-            let builder_byte_size = MultiPoint::builder_byte_size(&mut multi_points_builder);
+                // we have 1 point for the first multipoint, 2 for the second, etc.
+                for num_points in 0..num_multipoints {
+                    for _ in 0..num_points {
+                        multi_points_builder
+                            .values()
+                            .values()
+                            .append_values(&[1., 2.], &[true, true]);
 
-            let array = multi_points_builder.finish();
+                        multi_points_builder.values().append(true);
+                    }
 
-            assert_eq!(builder_byte_size, array.get_array_memory_size(), "{}", i);
+                    multi_points_builder.append(true);
+                }
+
+                assert_eq!(multi_points_builder.len(), num_multipoints);
+
+                let builder_byte_size =
+                    MultiPoint::estimate_array_memory_size(&mut multi_points_builder);
+
+                let array = multi_points_builder.finish_cloned();
+
+                assert_eq!(
+                    builder_byte_size,
+                    array.get_array_memory_size(),
+                    "{num_multipoints}"
+                );
+            }
         }
     }
 }
