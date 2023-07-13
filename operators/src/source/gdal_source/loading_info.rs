@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
+    CacheTtlSeconds, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
 };
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +20,8 @@ pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[async_trait]
@@ -33,6 +35,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             vec![GdalLoadingInfoTemporalSlice {
                 time: valid,
                 params: Some(self.params.clone()),
+                cache_ttl: self.cache_ttl,
             }]
             .into_iter()
         } else {
@@ -67,6 +70,8 @@ pub struct GdalMetaDataRegular {
     pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub data_time: TimeInterval,
     pub step: TimeStep,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[async_trait]
@@ -82,6 +87,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                     self.step,
                     query.time_interval,
                     self.data_time,
+                    self.cache_ttl,
                 )?,
             ),
         })
@@ -113,6 +119,8 @@ pub struct GdalMetadataNetCdfCf {
     /// A band offset specifies the first band index to use for the first point in time.
     /// All other time steps are added to this offset.
     pub band_offset: usize,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[async_trait]
@@ -132,6 +140,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                 time: Some(time),
                 params,
                 result_descriptor: self.result_descriptor.clone(),
+                cache_ttl: self.cache_ttl,
             }
             .loading_info(query)
             .await;
@@ -155,6 +164,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                     self.start,
                     self.end,
                     self.band_offset,
+                    self.cache_ttl,
                 ),
             ),
         })
@@ -190,6 +200,9 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
             .cloned()
             .collect::<Vec<_>>();
 
+        // TODO: if `parts` is empty, return a `GdalLoadingInfoTemporalSlice` with `None` as params but proper cache ttl,
+        //       otherwise the result will not be cached, because the fill adapter can't derive the ttl as there are no surrounding tiles
+
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoTemporalSliceIterator::Static {
                 parts: parts.into_iter(),
@@ -220,6 +233,7 @@ pub struct DynamicGdalLoadingInfoPartIterator {
     query_time: TimeInterval,
     data_time: TimeInterval,
     state: DynamicGdalLoadingInfoPartIteratorState,
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Debug, Clone)]
@@ -237,6 +251,7 @@ impl DynamicGdalLoadingInfoPartIterator {
         step: TimeStep,
         query_time: TimeInterval,
         data_time: TimeInterval,
+        cache_ttl: CacheTtlSeconds,
     ) -> Result<Self> {
         // TODO: maybe fail on deserialization
         if time_placeholders.is_empty()
@@ -291,6 +306,7 @@ impl DynamicGdalLoadingInfoPartIterator {
             query_time,
             data_time,
             state,
+            cache_ttl,
         })
     }
 }
@@ -309,6 +325,7 @@ impl Iterator for DynamicGdalLoadingInfoPartIterator {
                 Some(Ok(GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(TimeInstance::MIN, self.data_time.start()),
                     params: None,
+                    cache_ttl: self.cache_ttl,
                 }))
             }
             DynamicGdalLoadingInfoPartIteratorState::WithinDataTime => {
@@ -323,6 +340,7 @@ impl Iterator for DynamicGdalLoadingInfoPartIterator {
                         .map(|loading_info_part_params| GdalLoadingInfoTemporalSlice {
                             time: time_interval,
                             params: Some(loading_info_part_params),
+                            cache_ttl: self.cache_ttl,
                         })
                         .map_err(Into::into);
 
@@ -337,6 +355,7 @@ impl Iterator for DynamicGdalLoadingInfoPartIterator {
                                 TimeInstance::MAX,
                             ),
                             params: None,
+                            cache_ttl: self.cache_ttl,
                         }))
                     } else {
                         None
@@ -349,6 +368,7 @@ impl Iterator for DynamicGdalLoadingInfoPartIterator {
                 Some(Ok(GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(self.data_time.end(), TimeInstance::MAX),
                     params: None,
+                    cache_ttl: self.cache_ttl,
                 }))
             }
             DynamicGdalLoadingInfoPartIteratorState::Finished => None,
@@ -364,6 +384,7 @@ pub struct NetCdfCfGdalLoadingInfoPartIterator {
     dataset_time_start: TimeInstance,
     max_t2: TimeInstance,
     band_offset: usize,
+    cache_ttl: CacheTtlSeconds,
 }
 
 impl NetCdfCfGdalLoadingInfoPartIterator {
@@ -374,6 +395,7 @@ impl NetCdfCfGdalLoadingInfoPartIterator {
         dataset_time_start: TimeInstance,
         max_t2: TimeInstance,
         band_offset: usize,
+        cache_ttl: CacheTtlSeconds,
     ) -> Self {
         Self {
             time_step_iter,
@@ -382,6 +404,7 @@ impl NetCdfCfGdalLoadingInfoPartIterator {
             dataset_time_start,
             max_t2,
             band_offset,
+            cache_ttl,
         }
     }
 }
@@ -405,6 +428,7 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
             return Some(Ok(GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: None,
+                cache_ttl: self.cache_ttl,
             }));
         }
 
@@ -429,6 +453,7 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
         Some(Ok(GdalLoadingInfoTemporalSlice {
             time: time_interval,
             params: Some(params),
+            cache_ttl: self.cache_ttl,
         }))
     }
 }
@@ -467,6 +492,8 @@ impl Iterator for GdalLoadingInfoTemporalSliceIterator {
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[cfg(test)]
@@ -526,6 +553,7 @@ mod tests {
                 granularity: TimeGranularity::Millis,
                 step: 11,
             },
+            cache_ttl: CacheTtlSeconds::default(),
         }
     }
 
@@ -766,6 +794,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn test_meta_data_list() {
         let no_data_value = Some(0.);
@@ -796,6 +825,7 @@ mod tests {
                         allow_alphaband_as_mask: true,
                         retry: None,
                     }),
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(1, 5),
@@ -813,6 +843,7 @@ mod tests {
                         allow_alphaband_as_mask: true,
                         retry: None,
                     }),
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(5, 6),
@@ -830,6 +861,7 @@ mod tests {
                         allow_alphaband_as_mask: true,
                         retry: None,
                     }),
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
             ],
         };
@@ -912,6 +944,7 @@ mod tests {
             end: time_end,
             step: time_step,
             band_offset: 0,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let query = RasterQueryRectangle {
@@ -978,6 +1011,7 @@ mod tests {
             end: time_end,
             step: time_step,
             band_offset: 1,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let query = RasterQueryRectangle {
@@ -1044,6 +1078,7 @@ mod tests {
             end: time_end,
             step: time_step,
             band_offset: 0,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let query = RasterQueryRectangle {
@@ -1133,6 +1168,7 @@ mod tests {
             dataset_time_start: time_start,
             max_t2: time_end,
             band_offset: 0,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let step_1 = iter.next().unwrap().unwrap();
@@ -1215,6 +1251,7 @@ mod tests {
                 dataset_time_start: TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
                 max_t2: TimeInstance::from(DateTime::new_utc(2022, 1, 1, 0, 0, 0)),
                 band_offset: 0,
+                cache_ttl: CacheTtlSeconds::default(),
             }
         }
 

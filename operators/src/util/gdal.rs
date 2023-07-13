@@ -12,9 +12,9 @@ use geoengine_datatypes::{
     dataset::{DataId, DatasetId, NamedData},
     hashmap,
     primitives::{
-        BoundingBox2D, DateTimeParseFormat, FeatureDataType, Measurement, SpatialPartition2D,
-        SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-        VectorQueryRectangle,
+        BoundingBox2D, CacheTtlSeconds, DateTimeParseFormat, FeatureDataType, Measurement,
+        SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
+        TimeStep, VectorQueryRectangle,
     },
     raster::{GeoTransform, RasterDataType},
     spatial_reference::SpatialReference,
@@ -41,8 +41,12 @@ use crate::{
 };
 
 // TODO: move test helper somewhere else?
-#[allow(clippy::missing_panics_doc)]
 pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
+    create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default())
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalMetaDataRegular {
     let no_data_value = Some(0.); // TODO: is it really 0?
     GdalMetaDataRegular {
         data_time: TimeInterval::new_unchecked(
@@ -91,6 +95,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             )),
             resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
         },
+        cache_ttl,
     }
 }
 
@@ -132,6 +137,7 @@ pub fn create_ports_meta_data(
             sql_query: None,
             attribute_query: None,
             default_geometry: None,
+            cache_ttl: CacheTtlSeconds::default(),
         },
         result_descriptor: VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,
@@ -224,6 +230,29 @@ pub fn raster_descriptor_from_dataset(
 
     let spatial_ref: SpatialReference =
         dataset.spatial_ref()?.try_into().context(error::DataType)?;
+
+    let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
+        .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
+
+    let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+
+    Ok(RasterResultDescriptor {
+        data_type,
+        spatial_reference: spatial_ref.into(),
+        measurement: measurement_from_rasterband(dataset, band)?,
+        time: None,
+        bbox: None,
+        resolution: Some(geo_transfrom.spatial_resolution()),
+    })
+}
+
+// a version of `raster_descriptor_from_dataset` that does not read the sref from the dataset but takes it as an argument
+pub fn raster_descriptor_from_dataset_and_sref(
+    dataset: &Dataset,
+    band: isize,
+    spatial_ref: SpatialReference,
+) -> Result<RasterResultDescriptor> {
+    let rasterband = &dataset.rasterband(band)?;
 
     let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;

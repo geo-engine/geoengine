@@ -36,12 +36,13 @@ use flexi_logger::Logger;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::operations::image::RgbaColor;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::test_data;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-use geoengine_operators::util::gdal::create_ndvi_meta_data;
+use geoengine_operators::util::gdal::create_ndvi_meta_data_with_cache_ttl;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -84,7 +85,15 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn register_ndvi_workflow_helper(app_ctx: &InMemoryContext) -> (Workflow, WorkflowId) {
-    let (_, dataset) = add_ndvi_to_datasets(app_ctx).await;
+    register_ndvi_workflow_helper_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn register_ndvi_workflow_helper_with_cache_ttl(
+    app_ctx: &InMemoryContext,
+    cache_ttl: CacheTtlSeconds,
+) -> (Workflow, WorkflowId) {
+    let (_, dataset) = add_ndvi_to_datasets_with_cache_ttl(app_ctx, cache_ttl).await;
 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
@@ -110,6 +119,13 @@ pub async fn register_ndvi_workflow_helper(app_ctx: &InMemoryContext) -> (Workfl
 }
 
 pub async fn add_ndvi_to_datasets(app_ctx: &InMemoryContext) -> (DatasetId, NamedData) {
+    add_ndvi_to_datasets_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
+}
+
+pub async fn add_ndvi_to_datasets_with_cache_ttl(
+    app_ctx: &InMemoryContext,
+    cache_ttl: CacheTtlSeconds,
+) -> (DatasetId, NamedData) {
     let dataset_name = DatasetName {
         namespace: None,
         name: "NDVI".to_string(),
@@ -128,7 +144,9 @@ pub async fn add_ndvi_to_datasets(app_ctx: &InMemoryContext) -> (DatasetId, Name
                 uri: "http://example.org/".to_owned(),
             }]),
         },
-        meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
+        meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data_with_cache_ttl(
+            cache_ttl,
+        )),
     };
 
     let dataset_id = app_ctx
@@ -242,6 +260,7 @@ pub async fn add_land_cover_to_datasets(ctx: &InMemorySessionContext) -> Dataset
                     x: 0.1, y: 0.1,
                 }),
             },
+            cache_ttl: CacheTtlSeconds::default(),
         }.into()),
     };
 

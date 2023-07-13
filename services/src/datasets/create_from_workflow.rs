@@ -31,9 +31,11 @@ use utoipa::ToSchema;
 
 /// parameter for the dataset from workflow handler (body)
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
-#[schema(example = json!({"name": "foo", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}, "spatialResolution": {"x": 0.1, "y": 0.1}}}))]
+#[schema(example = json!({"name": "foo", "displayName": "a new dataset", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}, "spatialResolution": {"x": 0.1, "y": 0.1}}}))]
+#[serde(rename_all = "camelCase")]
 pub struct RasterDatasetFromWorkflow {
-    pub name: String,
+    pub name: Option<DatasetName>,
+    pub display_name: String,
     pub description: Option<String>,
     pub query: RasterQueryRectangle,
     #[schema(default = default_as_cog)]
@@ -232,10 +234,12 @@ async fn create_dataset<C: SessionContext>(
         let params = loading_info_slice
             .params
             .expect("datasets with exactly one timestep should have data");
+        let cache_ttl = loading_info_slice.cache_ttl;
         MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
             time,
             params,
             result_descriptor,
+            cache_ttl,
         })
     } else {
         MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
@@ -246,8 +250,8 @@ async fn create_dataset<C: SessionContext>(
 
     let dataset_definition = DatasetDefinition {
         properties: AddDataset {
-            name: None,
-            display_name: info.name,
+            name: info.name,
+            display_name: info.display_name,
             description: info.description.unwrap_or_default(),
             source_operator: "GdalSource".to_owned(),
             symbology: None,  // TODO add symbology?

@@ -238,12 +238,15 @@ mod tests {
     use crate::engine::QueryProcessor;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
+    use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
     #[test]
     fn serde() {
+        let cache_hint = CacheHint::default();
         let collection = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
@@ -254,6 +257,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            cache_hint,
         )
         .unwrap();
 
@@ -332,6 +336,7 @@ mod tests {
                         "types": {
                             "foobar": "int"
                         },
+                        "cacheHint": cache_hint
                     }],
                     "spatialReference": "EPSG:4326",
                     "measurements": null,
@@ -354,6 +359,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -384,6 +390,6 @@ mod tests {
 
         assert_eq!(collections.len(), 1);
 
-        assert_eq!(collections[0], collection);
+        assert!(collections[0].chunks_equal_ignoring_cache_hint(&collection));
     }
 }

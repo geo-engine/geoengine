@@ -12,7 +12,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 /// Merges a stream of `FeatureCollection` so that they are at least `chunk_byte_size` large.
-/// TODO: This merger outputs an empty stream if all collections are empty
+///     This merger outputs an empty collection if all collections are empty
 ///     Do we need an empty collection with column info as output instead?
 ///     Do we put the columns to the stream's `VectorQueryContext` instead?
 #[pin_project(project = FeatureCollectionChunkMergerProjection)]
@@ -25,6 +25,7 @@ where
     stream: St,
     accum: Option<FeatureCollection<G>>,
     chunk_size_bytes: usize,
+    chunks_emitted: usize,
 }
 
 impl<St, G> FeatureCollectionChunkMerger<St, G>
@@ -37,6 +38,7 @@ where
             stream,
             accum: None,
             chunk_size_bytes,
+            chunks_emitted: 0,
         }
     }
 
@@ -73,9 +75,14 @@ where
         }
     }
 
-    fn output_remaining_chunk(accum: &mut Option<FeatureCollection<G>>) -> Poll<Option<St::Item>> {
+    fn output_remaining_chunk(
+        accum: &mut Option<FeatureCollection<G>>,
+        allow_empty: bool,
+    ) -> Poll<Option<St::Item>> {
         match accum.take() {
-            Some(last_chunk) if !last_chunk.is_empty() => Poll::Ready(Some(Ok(last_chunk))),
+            Some(last_chunk) if allow_empty || !last_chunk.is_empty() => {
+                Poll::Ready(Some(Ok(last_chunk)))
+            }
             _ => Poll::Ready(None),
         }
     }
@@ -93,13 +100,14 @@ where
             mut stream,
             accum,
             chunk_size_bytes,
+            chunks_emitted,
         } = self.as_mut().project();
 
         let mut output: Option<Poll<Option<St::Item>>> = None;
 
         while output.is_none() {
             if stream.is_terminated() {
-                return Self::output_remaining_chunk(accum);
+                return Self::output_remaining_chunk(accum, *chunks_emitted == 0);
             }
 
             let next = ready!(stream.as_mut().poll_next(cx));
@@ -107,9 +115,11 @@ where
             output = if let Some(collection) = next {
                 Self::merge_and_proceed(accum, *chunk_size_bytes, collection)
             } else {
-                Some(Self::output_remaining_chunk(accum))
+                Some(Self::output_remaining_chunk(accum, *chunks_emitted == 0))
             }
         }
+
+        *chunks_emitted += 1;
 
         output.expect("checked")
     }
@@ -136,6 +146,8 @@ mod tests {
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
     use futures::{StreamExt, TryStreamExt};
+    use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval, VectorQueryRectangle,
     };
@@ -190,6 +202,7 @@ mod tests {
             MultiPoint::many(coordinates[0..5].to_vec()).unwrap(),
             vec![TimeInterval::default(); 5],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap()
         .byte_size();
@@ -205,25 +218,25 @@ mod tests {
 
         assert_eq!(collections.len(), 2);
 
-        assert_eq!(
-            collections[0],
-            MultiPointCollection::from_data(
+        assert!(collections[0].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_data(
                 MultiPoint::many(coordinates[0..6].to_vec()).unwrap(),
                 vec![TimeInterval::default(); 6],
-                Default::default()
+                Default::default(),
+                CacheHint::default()
             )
             .unwrap()
-        );
+        ));
 
-        assert_eq!(
-            collections[1],
-            MultiPointCollection::from_data(
+        assert!(collections[1].chunks_equal_ignoring_cache_hint(
+            &MultiPointCollection::from_data(
                 MultiPoint::many(coordinates[6..10].to_vec()).unwrap(),
                 vec![TimeInterval::default(); 4],
-                Default::default()
+                Default::default(),
+                CacheHint::default()
             )
             .unwrap()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -251,7 +264,9 @@ mod tests {
                 .collect::<Vec<Result<DataCollection>>>()
                 .await;
 
-        assert_eq!(collections.len(), 0);
+        assert_eq!(collections.len(), 1);
+        assert!(collections[0].is_ok());
+        assert!(collections[0].as_ref().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -261,16 +276,19 @@ mod tests {
                 MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
+                CacheHint::default(),
             ),
             MultiPointCollection::from_data(
                 vec![], // should fail
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
+                CacheHint::default(),
             ),
             MultiPointCollection::from_data(
                 MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
+                CacheHint::default(),
             ),
         ])
         .map_err(Error::from);
@@ -280,25 +298,31 @@ mod tests {
             .await;
 
         assert_eq!(merged_collections.len(), 3);
-        assert_eq!(
-            merged_collections[0].as_ref().unwrap(),
-            &MultiPointCollection::from_data(
-                MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
-                vec![TimeInterval::new(0, 1).unwrap()],
-                Default::default(),
-            )
+        assert!(merged_collections[0]
+            .as_ref()
             .unwrap()
-        );
+            .chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
+                    vec![TimeInterval::new(0, 1).unwrap()],
+                    Default::default(),
+                    CacheHint::default()
+                )
+                .unwrap()
+            ));
         assert!(merged_collections[1].is_err());
-        assert_eq!(
-            merged_collections[2].as_ref().unwrap(),
-            &MultiPointCollection::from_data(
-                MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
-                vec![TimeInterval::new(0, 1).unwrap()],
-                Default::default(),
-            )
+        assert!(merged_collections[2]
+            .as_ref()
             .unwrap()
-        );
+            .chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
+                    vec![TimeInterval::new(0, 1).unwrap()],
+                    Default::default(),
+                    CacheHint::default()
+                )
+                .unwrap()
+            ));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -310,6 +334,7 @@ mod tests {
                     MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                     vec![TimeInterval::new(0, 1).unwrap()],
                     Default::default(),
+                    CacheHint::default(),
                 )
                 .map_err(Error::from),
             )),
@@ -319,6 +344,7 @@ mod tests {
                     MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
                     vec![TimeInterval::new(0, 1).unwrap()],
                     Default::default(),
+                    CacheHint::default(),
                 )
                 .map_err(Error::from),
             )),
@@ -340,14 +366,17 @@ mod tests {
             .await;
 
         assert_eq!(merged_collections.len(), 1);
-        assert_eq!(
-            merged_collections[0].as_ref().unwrap(),
-            &MultiPointCollection::from_data(
-                MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
-                vec![TimeInterval::new(0, 1).unwrap(); 2],
-                Default::default(),
-            )
+        assert!(merged_collections[0]
+            .as_ref()
             .unwrap()
-        );
+            .chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
+                    vec![TimeInterval::new(0, 1).unwrap(); 2],
+                    Default::default(),
+                    CacheHint::default()
+                )
+                .unwrap()
+            ));
     }
 }

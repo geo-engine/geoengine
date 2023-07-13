@@ -24,7 +24,7 @@ pub use self::operations::{
 };
 pub use self::raster_tile::{
     display_raster_tile_2d, BaseTile, MaterializedRasterTile, MaterializedRasterTile2D,
-    MaterializedRasterTile3D, RasterTile, RasterTile2D, RasterTile3D,
+    MaterializedRasterTile3D, RasterTile, RasterTile2D, RasterTile3D, TilesEqualIgnoringCacheHint,
 };
 pub use self::tiling::{TileInformation, TilingSpecification, TilingStrategy};
 pub use self::typed_raster_conversion::TypedRasterConversion;

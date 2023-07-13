@@ -675,6 +675,7 @@ mod tests {
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, FeatureData, Measurement, MultiPoint, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, TimeInterval,
@@ -915,6 +916,7 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    CacheHint::default(),
                 )
                 .unwrap(),
             )
@@ -1047,6 +1049,7 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
+                    CacheHint::default(),
                 )
                 .unwrap(),
             )
@@ -1367,7 +1370,7 @@ mod tests {
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(
                 r#"{
-                "name": "foo",
+                "displayName": "foo",
                 "description": null,
                 "query": {
                     "spatialBounds": {

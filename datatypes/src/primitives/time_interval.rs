@@ -167,7 +167,7 @@ impl TimeInterval {
     /// ```
     ///
     pub fn contains(&self, other: &Self) -> bool {
-        self.start <= other.start && self.end >= other.end
+        self == other || ((self.start..self.end).contains(&other.start) && (self.end >= other.end))
     }
 
     /// Returns whether the given interval intersects this interval
@@ -727,6 +727,22 @@ mod tests {
             time_interval_extent([None, Some(TimeInterval::new(5, 6).unwrap())].into_iter()),
             None
         );
+    }
+
+    #[test]
+    fn contains() {
+        let time_interval_1 = TimeInterval::new(1, 2).unwrap();
+        let time_interval_2 = TimeInterval::new(2, 3).unwrap();
+        let time_interval_3 = TimeInterval::new(1, 3).unwrap();
+        let time_interval_4 = TimeInterval::new_instant(1).unwrap();
+        let time_interval_5 = TimeInterval::new_instant(3).unwrap();
+
+        assert!(!time_interval_1.contains(&time_interval_2));
+        assert!(time_interval_3.contains(&time_interval_1));
+        assert!(time_interval_3.contains(&time_interval_2));
+        assert!(time_interval_3.contains(&time_interval_3));
+        assert!(time_interval_3.contains(&time_interval_4));
+        assert!(!time_interval_3.contains(&time_interval_5));
     }
 
     #[test]

@@ -2,7 +2,9 @@ use std::{path::PathBuf, str::FromStr};
 
 use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle,
+};
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
@@ -41,6 +43,8 @@ pub struct EbvPortalDataProviderDefinition {
     pub path: PathBuf,
     pub base_url: Url,
     pub overviews: PathBuf,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Debug)]
@@ -61,6 +65,7 @@ impl DataProviderDefinition for EbvPortalDataProviderDefinition {
                 name: self.name,
                 path: self.path,
                 overviews: self.overviews,
+                cache_ttl: self.cache_ttl,
             },
         }))
     }
@@ -819,6 +824,7 @@ mod tests {
             path: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -956,6 +962,7 @@ mod tests {
             path: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -1121,6 +1128,7 @@ mod tests {
             path: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -1357,6 +1365,7 @@ mod tests {
             path: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await
@@ -1515,6 +1524,7 @@ mod tests {
             path: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            cache_ttl: Default::default(),
         })
         .initialize()
         .await

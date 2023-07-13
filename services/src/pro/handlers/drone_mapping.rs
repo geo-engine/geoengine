@@ -14,6 +14,7 @@ use crate::util::config::get_config_element;
 use crate::util::IdResponse;
 use actix_web::{web, FromRequest, Responder};
 use futures_util::StreamExt;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -311,6 +312,7 @@ async fn dataset_definition_from_geotiff(
                     bbox: None,       // TODO: determine bbox
                     resolution: None, // TODO: determine resolution
                 },
+                cache_ttl: CacheTtlSeconds::default(),
             }),
         })
     })
@@ -573,6 +575,7 @@ mod tests {
                     allow_alphaband_as_mask: true,
                     retry: None,
                 }),
+                cache_ttl: CacheTtlSeconds::default(),
             }
         );
 

@@ -1,5 +1,6 @@
 use crate::collections::{error, FeatureCollectionError, TypedFeatureCollection};
 use crate::collections::{FeatureCollection, VectorDataType};
+use crate::primitives::CacheHint;
 use crate::primitives::{
     Coordinate2D, FeatureDataType, Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
     TimeInterval,
@@ -31,6 +32,7 @@ pub struct RawFeatureCollectionBuilder {
     num_rings: Option<usize>,
     pub output: Option<TypedFeatureCollection>,
     pub output_type: VectorDataType,
+    cache_hint: CacheHint,
 }
 
 impl RawFeatureCollectionBuilder {
@@ -52,6 +54,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: None,
             output: None,
             output_type,
+            cache_hint: CacheHint::default(),
         }
     }
 
@@ -72,6 +75,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: None,
             output: None,
             output_type: VectorDataType::MultiPoint,
+            cache_hint: CacheHint::default(),
         }
     }
 
@@ -93,6 +97,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: None,
             output: None,
             output_type: VectorDataType::MultiLineString,
+            cache_hint: CacheHint::default(),
         }
     }
 
@@ -115,6 +120,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: Some(num_rings),
             output: None,
             output_type: VectorDataType::MultiPolygon,
+            cache_hint: CacheHint::default(),
         }
     }
 
@@ -335,6 +341,10 @@ impl RawFeatureCollectionBuilder {
         Ok(())
     }
 
+    pub fn set_cache_hint(&mut self, cache_hint: CacheHint) {
+        self.cache_hint = cache_hint;
+    }
+
     pub fn finish(&mut self) -> Result<()> {
         match self.output_type {
             VectorDataType::Data => self.finish_data(),
@@ -422,6 +432,7 @@ impl RawFeatureCollectionBuilder {
         Ok(FeatureCollection::<CollectionType>::new_from_internals(
             StructArray::try_new(columns.into(), arrays, None)?,
             self.types.clone(),
+            self.cache_hint,
         ))
     }
 }

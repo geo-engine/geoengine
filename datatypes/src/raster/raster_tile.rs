@@ -5,12 +5,13 @@ use super::{
     TileInformation,
 };
 use super::{GridIndexAccessMut, RasterProperties};
+use crate::primitives::CacheHint;
 use crate::primitives::{
     SpatialBounded, SpatialPartition2D, SpatialPartitioned, SpatialResolution, TemporalBounded,
     TimeInterval,
 };
 use crate::raster::Pixel;
-use crate::util::Result;
+use crate::util::{ByteSize, Result};
 use serde::{Deserialize, Serialize};
 
 /// A `RasterTile` is a `BaseTile` of raster data where the data is represented by `GridOrEmpty`.
@@ -44,6 +45,8 @@ pub struct BaseTile<G> {
     pub grid_array: G,
     /// Metadata for the `BaseTile`
     pub properties: RasterProperties,
+    /// Indicate how long the tile may be cached, if `None` the tile may be cached indefinitely.
+    pub cache_hint: CacheHint,
 }
 
 impl<G> BaseTile<G>
@@ -87,6 +90,81 @@ where
     }
 }
 
+impl<G> ByteSize for BaseTile<G>
+where
+    G: ByteSize,
+{
+    fn heap_byte_size(&self) -> usize {
+        self.grid_array.heap_byte_size() + self.properties.heap_byte_size()
+    }
+}
+
+/// A way to compare two `BaseTile` ignoring the `CacheHint` and only considering the actual data.
+pub trait TilesEqualIgnoringCacheHint<G: PartialEq> {
+    fn tiles_equal_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool;
+}
+
+/// Allow comparing Iterables of `BaseTile` ignoring the `CacheHint` and only considering the actual data.
+pub trait IterableBaseTile<G> {
+    fn iter_tiles(&self) -> Box<dyn Iterator<Item = &BaseTile<G>> + '_>;
+}
+
+struct SingleBaseTileIter<'a, G> {
+    tile: Option<&'a BaseTile<G>>,
+}
+
+impl<'a, G> Iterator for SingleBaseTileIter<'a, G> {
+    type Item = &'a BaseTile<G>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.tile.take()
+    }
+}
+
+impl<G: PartialEq> IterableBaseTile<G> for BaseTile<G> {
+    fn iter_tiles(&self) -> Box<dyn Iterator<Item = &BaseTile<G>> + '_> {
+        Box::new(SingleBaseTileIter { tile: Some(self) })
+    }
+}
+
+impl<G: PartialEq> IterableBaseTile<G> for Vec<BaseTile<G>> {
+    fn iter_tiles(&self) -> Box<dyn Iterator<Item = &BaseTile<G>> + '_> {
+        Box::new(self.iter())
+    }
+}
+
+impl<G: PartialEq, const N: usize> IterableBaseTile<G> for [BaseTile<G>; N] {
+    fn iter_tiles(&self) -> Box<dyn Iterator<Item = &BaseTile<G>> + '_> {
+        Box::new(self.iter())
+    }
+}
+
+impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I {
+    fn tiles_equal_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool {
+        let mut iter_self = self.iter_tiles();
+        let mut iter_other = other.iter_tiles();
+
+        loop {
+            match (iter_self.next(), iter_other.next()) {
+                (Some(a), Some(b)) => {
+                    if a.time != b.time
+                        || a.tile_position != b.tile_position
+                        || a.global_geo_transform != b.global_geo_transform
+                        || a.grid_array != b.grid_array
+                        || a.properties != b.properties
+                    {
+                        return false;
+                    }
+                }
+                // both iterators are exhausted
+                (None, None) => return true,
+                // one iterator is exhausted, the other is not, so they are not equal
+                _ => return false,
+            }
+        }
+    }
+}
+
 impl<D, T> BaseTile<GridOrEmpty<D, T>>
 where
     T: Pixel,
@@ -97,6 +175,7 @@ where
         time: TimeInterval,
         tile_info: TileInformation,
         data: GridOrEmpty<D, T>,
+        cache_hint: CacheHint,
     ) -> Self
     where
         D: GridSize,
@@ -122,6 +201,7 @@ where
             global_geo_transform: tile_info.global_geo_transform,
             grid_array: data,
             properties: Default::default(),
+            cache_hint,
         }
     }
 
@@ -131,6 +211,7 @@ where
         tile_info: TileInformation,
         data: GridOrEmpty<D, T>,
         properties: RasterProperties,
+        cache_hint: CacheHint,
     ) -> Self {
         debug_assert_eq!(
             tile_info.tile_size_in_pixels.axis_size_x(),
@@ -153,6 +234,7 @@ where
             global_geo_transform: tile_info.global_geo_transform,
             grid_array: data,
             properties,
+            cache_hint,
         }
     }
 
@@ -162,6 +244,7 @@ where
         tile_position: GridIdx2D,
         global_geo_transform: GeoTransform,
         data: GridOrEmpty<D, T>,
+        cache_hint: CacheHint,
     ) -> Self {
         Self {
             time,
@@ -169,6 +252,7 @@ where
             global_geo_transform,
             grid_array: data,
             properties: RasterProperties::default(),
+            cache_hint,
         }
     }
 
@@ -179,6 +263,7 @@ where
         global_geo_transform: GeoTransform,
         data: GridOrEmpty<D, T>,
         properties: RasterProperties,
+        cache_hint: CacheHint,
     ) -> Self {
         Self {
             time,
@@ -186,6 +271,7 @@ where
             global_geo_transform,
             grid_array: data,
             properties,
+            cache_hint,
         }
     }
 
@@ -194,6 +280,7 @@ where
         time: TimeInterval,
         global_geo_transform: GeoTransform,
         data: G,
+        cache_hint: CacheHint,
     ) -> Self
     where
         G: Into<GridOrEmpty<D, T>>,
@@ -204,6 +291,7 @@ where
             global_geo_transform,
             grid_array: data.into(),
             properties: RasterProperties::default(),
+            cache_hint,
         }
     }
 
@@ -220,6 +308,7 @@ where
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
+            cache_hint: self.cache_hint.clone_with_current_datetime(),
         }
     }
 
@@ -324,6 +413,7 @@ where
             tile_position: mat_tile.tile_position,
             time: mat_tile.time,
             properties: mat_tile.properties,
+            cache_hint: mat_tile.cache_hint,
         }
     }
 }

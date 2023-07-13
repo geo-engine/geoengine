@@ -16,6 +16,7 @@ use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, Measurement, RasterQueryRectangle,
     SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,
@@ -56,6 +57,8 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     stac_api_retries: StacApiRetries,
     #[serde(default)]
     gdal_retries: GdalRetries,
+    #[serde(default)]
+    cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -103,6 +106,7 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
             &self.zones,
             self.stac_api_retries,
             self.gdal_retries,
+            self.cache_ttl,
         )))
     }
 
@@ -150,6 +154,8 @@ pub struct SentinelS2L2aCogsDataProvider {
 
     stac_api_retries: StacApiRetries,
     gdal_retries: GdalRetries,
+
+    cache_ttl: CacheTtlSeconds,
 }
 
 impl SentinelS2L2aCogsDataProvider {
@@ -160,6 +166,7 @@ impl SentinelS2L2aCogsDataProvider {
         zones: &[Zone],
         stac_api_retries: StacApiRetries,
         gdal_retries: GdalRetries,
+        cache_ttl: CacheTtlSeconds,
     ) -> Self {
         Self {
             id,
@@ -167,6 +174,7 @@ impl SentinelS2L2aCogsDataProvider {
             datasets: Self::create_datasets(&id, bands, zones),
             stac_api_retries,
             gdal_retries,
+            cache_ttl,
         }
     }
 
@@ -336,6 +344,7 @@ pub struct SentinelS2L2aCogsMetaData {
     band: Band,
     stac_api_retries: StacApiRetries,
     gdal_retries: GdalRetries,
+    cache_ttl: CacheTtlSeconds,
 }
 
 impl SentinelS2L2aCogsMetaData {
@@ -410,7 +419,7 @@ impl SentinelS2L2aCogsMetaData {
                             band_name: self.band.name.clone(),
                         })?;
 
-                parts.push(self.create_loading_info_part(time_interval, asset)?);
+                parts.push(self.create_loading_info_part(time_interval, asset, self.cache_ttl)?);
             }
         }
         debug!("number of generated loading infos: {}", parts.len());
@@ -455,6 +464,7 @@ impl SentinelS2L2aCogsMetaData {
         &self,
         time_interval: TimeInterval,
         asset: &StacAsset,
+        cache_ttl: CacheTtlSeconds,
     ) -> Result<GdalLoadingInfoTemporalSlice> {
         let [stac_shape_y, stac_shape_x] = asset.proj_shape.ok_or(error::Error::StacInvalidBbox)?;
 
@@ -495,6 +505,7 @@ impl SentinelS2L2aCogsMetaData {
                     max_retries: self.gdal_retries.number_of_retries,
                 }),
             }),
+            cache_ttl,
         })
     }
 
@@ -694,6 +705,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             band: dataset.band.clone(),
             stac_api_retries: self.stac_api_retries,
             gdal_retries: self.gdal_retries,
+            cache_ttl: self.cache_ttl,
         }))
     }
 }
@@ -824,6 +836,7 @@ mod tests {
                 allow_alphaband_as_mask: true,
                 retry: Some(GdalRetryOptions { max_retries: 10 }),
             }),
+            cache_ttl: CacheTtlSeconds::default(),
         }];
 
         if let GdalLoadingInfoTemporalSliceIterator::Static { parts } = loading_info.info {
@@ -1146,6 +1159,7 @@ mod tests {
                 gdal_retries: GdalRetries {
                     number_of_retries: 999,
                 },
+                cache_ttl: Default::default(),
             });
 
         let provider = provider_def.initialize().await.unwrap();
@@ -1207,6 +1221,7 @@ mod tests {
                     allow_alphaband_as_mask: true,
                     retry: Some(GdalRetryOptions { max_retries: 999 }),
                 }),
+                cache_ttl: CacheTtlSeconds::default(),
             }]
         );
 
@@ -1247,6 +1262,7 @@ mod tests {
                     resolution: None,
                 },
                 params,
+                cache_ttl: CacheTtlSeconds::default(),
             }),
         );
 

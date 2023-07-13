@@ -510,7 +510,9 @@ mod tests {
 
     use super::*;
 
+    use crate::collections::feature_collection::ChunksEqualIgnoringCacheHint;
     use crate::collections::{BuilderProvider, FeatureCollectionModifications};
+    use crate::primitives::CacheHint;
     use crate::primitives::{FeatureData, FeatureDataRef, TimeInterval};
 
     #[test]
@@ -1080,10 +1082,11 @@ mod tests {
             .unwrap()],
             vec![Default::default(); 1],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(collection, from_geo);
+        assert!(collection.chunks_equal_ignoring_cache_hint(&from_geo));
     }
 
     #[test]

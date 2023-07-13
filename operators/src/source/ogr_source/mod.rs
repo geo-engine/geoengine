@@ -17,6 +17,7 @@ use futures::{ready, Stream, StreamExt};
 use futures::{Future, FutureExt};
 use gdal::vector::sql::ResultSet;
 use gdal::vector::{Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType};
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use log::debug;
 use pin_project::pin_project;
 use postgres_protocol::escape::{escape_identifier, escape_literal};
@@ -36,6 +37,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
+use crate::adapters::FeatureCollectionStreamExt;
 use crate::engine::{
     CanonicOperatorName, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
 };
@@ -110,6 +112,8 @@ pub struct OgrSourceDataset {
     pub on_error: OgrSourceErrorSpec,
     pub sql_query: Option<String>,
     pub attribute_query: Option<String>,
+    #[serde(default)]
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 impl OgrSourceDataset {
@@ -525,6 +529,7 @@ where
             self.attribute_filters.clone(),
         )
         .await?
+        .merge_chunks(ctx.chunk_byte_size().into()) // rechunk the data if necessary TODO: remove when source produces the right chunk sizes
         .boxed())
     }
 }
@@ -1062,6 +1067,8 @@ where
             }
         }
 
+        builder.cache_hint(dataset_information.cache_ttl.into());
+
         builder.build().map_err(Into::into)
     }
 
@@ -1458,10 +1465,11 @@ mod tests {
     use crate::test_data;
     use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::collections::{
-        DataCollection, FeatureCollectionInfos, GeometryCollection, MultiPointCollection,
-        MultiPolygonCollection,
+        ChunksEqualIgnoringCacheHint, DataCollection, FeatureCollectionInfos, GeometryCollection,
+        MultiPointCollection, MultiPolygonCollection,
     };
     use geoengine_datatypes::dataset::{DataId, DatasetId};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, Measurement, SpatialResolution, TimeGranularity,
     };
@@ -1508,6 +1516,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let serialized_spec = serde_json::to_value(&spec).unwrap();
@@ -1555,7 +1564,8 @@ mod tests {
                 "forceOgrSpatialFilter": false,
                 "onError": "ignore",
                 "sqlQuery": null,
-                "attributeQuery": null
+                "attributeQuery": null,
+                "cacheTtl": 0,
             })
         );
 
@@ -1625,6 +1635,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -1676,6 +1687,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -1721,6 +1733,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Abort,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
         let info = StaticMetaData {
             loading_info: dataset_information,
@@ -1770,6 +1783,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
         let info = StaticMetaData {
             loading_info: dataset_information,
@@ -1802,13 +1816,13 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 MultiPoint::many(vec![vec![(0.0, 0.1)], vec![(1.0, 1.1), (2.0, 2.1)]])?,
                 vec![Default::default(); 2],
                 HashMap::new(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -1835,6 +1849,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1900,13 +1915,13 @@ mod tests {
             (4.292_873_969, 51.927_222_22),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -1933,6 +1948,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1998,13 +2014,13 @@ mod tests {
             (4.292_873_969, 51.927_222_22),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -2034,6 +2050,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2099,13 +2116,13 @@ mod tests {
             (4.651_413_428, 51.805_833_33),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -2147,6 +2164,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2316,9 +2334,8 @@ mod tests {
             .collect(),
         );
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 10],
                 [
@@ -2331,7 +2348,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default(),
+            )?),
         );
 
         Ok(())
@@ -2359,6 +2377,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -3498,13 +3517,13 @@ mod tests {
             (-87.6, 41.88),
         ])?;
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 1081],
                 HashMap::new(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -3537,6 +3556,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -3595,9 +3615,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 2],
                 [
@@ -3620,7 +3639,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -3655,6 +3675,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -3713,9 +3734,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 MultiPoint::many(vec![vec![(1.0, 2.0)], vec![(1.0, 2.0)]]).unwrap(),
                 vec![Default::default(); 2],
                 [
@@ -3738,7 +3758,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -3766,6 +3787,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -3925,13 +3947,13 @@ mod tests {
             result.iter().zip(expected_multipoints.iter().cloned())
         {
             assert_eq!(collection.len(), 1);
-            assert_eq!(
-                collection,
-                &MultiPointCollection::from_data(
+            assert!(
+                collection.chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                     vec![expected_multi_point],
                     vec![Default::default(); 1],
                     Default::default(),
-                )?
+                    CacheHint::default()
+                )?)
             );
         }
 
@@ -3959,37 +3981,37 @@ mod tests {
         assert_eq!(result[2].len(), 25);
         assert_eq!(result[3].len(), 24);
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[0..25].to_vec(),
                 vec![Default::default(); result[0].len()],
                 Default::default(),
-            )?
+                CacheHint::default()
+            )?)
         );
-        assert_eq!(
-            result[1],
-            MultiPointCollection::from_data(
+        assert!(
+            result[1].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[25..50].to_vec(),
                 vec![Default::default(); result[1].len()],
                 Default::default(),
-            )?
+                CacheHint::default()
+            )?)
         );
-        assert_eq!(
-            result[2],
-            MultiPointCollection::from_data(
+        assert!(
+            result[2].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[50..75].to_vec(),
                 vec![Default::default(); result[2].len()],
                 Default::default(),
-            )?
+                CacheHint::default()
+            )?)
         );
-        assert_eq!(
-            result[3],
-            MultiPointCollection::from_data(
+        assert!(
+            result[3].chunks_equal_ignoring_cache_hint(&MultiPointCollection::from_data(
                 expected_multipoints[75..99].to_vec(),
                 vec![Default::default(); result[3].len()],
                 Default::default(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -4016,6 +4038,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4069,8 +4092,8 @@ mod tests {
 
         let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
 
+        // FIXME: this should be an empty collection. The ChunkMerger does not forward a single empty collection
         assert_eq!(result.len(), 1);
-
         assert!(result[0].is_empty());
     }
 
@@ -4105,6 +4128,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPolygon,
@@ -4206,6 +4230,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4291,10 +4316,11 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -4340,6 +4366,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4412,10 +4439,11 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -4463,6 +4491,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4535,10 +4564,11 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -4586,6 +4616,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4658,10 +4689,11 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -4705,6 +4737,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4777,10 +4810,11 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -4828,6 +4862,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4915,10 +4950,11 @@ mod tests {
                 map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -4955,6 +4991,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -5031,10 +5068,11 @@ mod tests {
                 map.insert("bool".into(), FeatureData::Bool(vec![true, false, true]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(result, pc);
+        assert!(result.chunks_equal_ignoring_cache_hint(&pc));
     }
 
     #[tokio::test]
@@ -5069,6 +5107,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5127,9 +5166,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 2],
                 [
@@ -5152,7 +5190,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5185,6 +5224,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5252,9 +5292,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5268,7 +5307,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5301,6 +5341,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5366,9 +5407,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5382,7 +5422,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5415,6 +5456,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5480,9 +5522,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5496,7 +5537,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5533,6 +5575,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5598,9 +5641,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5614,7 +5656,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5647,6 +5690,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5715,9 +5759,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 2],
                 [
@@ -5740,7 +5783,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5773,6 +5817,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5847,9 +5892,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5863,7 +5907,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -5896,6 +5941,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: Some("\"c\" = 'foo'".to_string()),
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -5961,9 +6007,8 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(
-            result[0],
-            DataCollection::from_data(
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(&DataCollection::from_data(
                 vec![],
                 vec![Default::default(); 1],
                 [
@@ -5977,7 +6022,8 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            )?
+                CacheHint::default()
+            )?)
         );
 
         Ok(())
@@ -6009,6 +6055,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -6098,6 +6145,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -6190,6 +6238,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: Some("\"name\" = 'Bangkok'".to_string()),
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -6279,6 +6328,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
         };
 
         let info = StaticMetaData {
@@ -6338,6 +6388,99 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         assert_eq!(result[0].len(), 67);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_attaches_cache_hint() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
+            layer_name: "ne_10m_ports".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(Csv {
+                    header: CsvHeader::Yes,
+                }),
+                x: String::new(),
+                y: None,
+                float: vec!["natlscale".to_string()],
+                int: vec![],
+                text: vec!["name".to_string()],
+                bool: vec![],
+                datetime: vec![],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+            cache_ttl: CacheTtlSeconds::max(),
+        };
+
+        let info = StaticMetaData {
+            loading_info: dataset_information,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    (
+                        "natlscale".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless,
+                        },
+                    ),
+                    (
+                        "name".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless,
+                        },
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
+        };
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            Box::new(info),
+            vec![AttributeFilter {
+                attribute: "natlscale".to_owned(),
+                ranges: vec![StringOrNumberRange::Float(75.0..=76.0)],
+                keep_nulls: false,
+            }],
+        );
+
+        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<DataCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0].cache_hint.total_ttl_seconds(),
+            CacheTtlSeconds::max()
+        );
 
         Ok(())
     }

@@ -333,11 +333,13 @@ mod tests {
     };
     use geoengine_datatypes::{
         collections::{
-            FeatureCollectionInfos, GeometryCollection, MultiLineStringCollection,
-            MultiPointCollection, MultiPolygonCollection,
+            ChunksEqualIgnoringCacheHint, FeatureCollectionInfos, GeometryCollection,
+            MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection,
         },
         dataset::{DataId, DatasetId, NamedData},
-        primitives::{FeatureData, MultiLineString, MultiPoint, TimeInterval},
+        primitives::{
+            FeatureData, MultiLineString, MultiPoint, TimeInterval, {CacheHint, CacheTtlSeconds},
+        },
         spatial_reference::SpatialReference,
         test_data,
         util::{test::TestDefault, Identifier},
@@ -464,6 +466,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -523,10 +526,11 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
-        assert_eq!(collections[0], expected);
+        assert!(collections[0].chunks_equal_ignoring_cache_hint(&expected));
     }
 
     #[tokio::test]
@@ -560,6 +564,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPolygon,

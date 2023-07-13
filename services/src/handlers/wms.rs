@@ -1,4 +1,5 @@
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use reqwest::Url;
 use serde_json::json;
@@ -20,7 +21,7 @@ use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::server::{connection_closed, not_implemented_handler};
+use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -260,7 +261,7 @@ async fn wms_map_handler<C: ApplicationContext>(
         request: &web::Query<GetMap>,
         app_ctx: web::Data<C>,
         session: C::Session,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<(Vec<u8>, CacheHint)> {
         let endpoint = workflow.into_inner();
         let layer = WorkflowId::from_str(&request.layers)?;
 
@@ -368,8 +369,9 @@ async fn wms_map_handler<C: ApplicationContext>(
     }
 
     match compute_result(req, workflow, &request, app_ctx, session).await {
-        Ok(image_bytes) => Ok(HttpResponse::Ok()
+        Ok((image_bytes, cache_hint)) => Ok(HttpResponse::Ok()
             .content_type(mime::IMAGE_PNG)
+            .append_header(cache_hint.cache_control_header())
             .body(image_bytes)),
         Err(error) => Ok(handle_wms_error(request.exceptions, &error)),
     }
@@ -479,13 +481,14 @@ mod tests {
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
-        send_test_request,
+        register_ndvi_workflow_helper_with_cache_ttl, send_test_request,
     };
     use actix_web::dev::ServiceResponse;
     use actix_web::http::header;
     use actix_web::http::Method;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
+    use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
@@ -592,7 +595,7 @@ mod tests {
         let query_partition =
             SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
-        let image_bytes = raster_stream_to_png_bytes(
+        let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
                 spatial_bounds: query_partition,
@@ -987,5 +990,60 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 200, "Operator", "Operator: DataTypeError: No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
+    }
+
+    #[tokio::test]
+    async fn it_sets_cache_control_header_no_cache() {
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+
+        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx).await;
+
+        assert_eq!(
+            response.status(),
+            200,
+            "{:?}",
+            actix_web::test::read_body(response).await
+        );
+
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-cache"
+        );
+    }
+
+    #[tokio::test]
+    async fn it_sets_cache_control_header_with_cache() {
+        let app_ctx = InMemoryContext::test_default();
+
+        let ctx = app_ctx.default_session_context().await;
+        let session_id = ctx.session().id();
+
+        let (_, id) =
+            register_ndvi_workflow_helper_with_cache_ttl(&app_ctx, CacheTtlSeconds::new(60)).await;
+
+        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx).await;
+
+        assert_eq!(
+            response.status(),
+            200,
+            "{:?}",
+            actix_web::test::read_body(response).await
+        );
+
+        let cache_header = response.headers().get(header::CACHE_CONTROL).unwrap();
+
+        // defensive check here. Between creation of the tiles and the response of the handler might be some time, so the ttl of the output may be a bit lower than the defined ttl for the dataset
+        assert!(
+            cache_header == "private, max-age=60"
+                || cache_header == "private, max-age=59"
+                || cache_header == "private, max-age=58"
+        );
     }
 }

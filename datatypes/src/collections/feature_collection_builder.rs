@@ -1,5 +1,6 @@
 use crate::collections::batch_builder::RawFeatureCollectionBuilder;
 use crate::collections::{error, FeatureCollection, FeatureCollectionError};
+use crate::primitives::CacheHint;
 use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInstance, TimeInterval};
 use crate::util::arrow::{
     downcast_dyn_array_builder, downcast_mut_array, padded_buffer_size, ArrowTyped,
@@ -49,6 +50,7 @@ where
 {
     types: HashMap<String, FeatureDataType>,
     _collection_type: PhantomData<CollectionType>,
+    cache_hint: CacheHint,
 }
 
 impl<CollectionType> FeatureCollectionBuilder<CollectionType>
@@ -96,6 +98,7 @@ where
             rows: 0,
             bool_column_nulls: Default::default(),
             _collection_type: PhantomData,
+            cache_hint: self.cache_hint.clone_with_current_datetime(),
         }
     }
 
@@ -110,6 +113,10 @@ where
             num_features,
             num_coords,
         )
+    }
+
+    pub fn cache_hint(&mut self, cache_hint: CacheHint) {
+        self.cache_hint = cache_hint;
     }
 }
 
@@ -126,6 +133,7 @@ where
     // bool builder have no access to nulls, so we have to store it externally
     // TODO: remove when possible
     bool_column_nulls: HashSet<String>,
+    cache_hint: CacheHint,
     _collection_type: PhantomData<CollectionType>,
 }
 
@@ -484,8 +492,14 @@ where
         };
 
         Ok(FeatureCollection::<CollectionType>::new_from_internals(
-            table, self.types,
+            table,
+            self.types,
+            self.cache_hint,
         ))
+    }
+
+    pub fn cache_hint(&mut self, cache_hint: CacheHint) {
+        self.cache_hint = cache_hint;
     }
 }
 
@@ -498,6 +512,7 @@ where
         Self {
             types: Default::default(),
             _collection_type: Default::default(),
+            cache_hint: CacheHint::default(),
         }
     }
 }

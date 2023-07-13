@@ -324,8 +324,10 @@ impl ReplaceRawArrayCoords for MultiPointCollection {
 mod tests {
     use super::*;
 
+    use crate::collections::feature_collection::ChunksEqualIgnoringCacheHint;
     use crate::collections::{BuilderProvider, FeatureCollectionModifications, ToGeoJson};
     use crate::operations::reproject::Reproject;
+    use crate::primitives::CacheHint;
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
         TimeInstance, TimeInterval,
@@ -363,6 +365,7 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -393,6 +396,7 @@ mod tests {
                 TimeInterval::new_unchecked(2, 3),
             ],
             HashMap::new(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -502,6 +506,7 @@ mod tests {
                 TimeInterval::new_unchecked(2, 3),
             ],
             HashMap::new(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -531,6 +536,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -550,6 +556,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -733,13 +740,14 @@ mod tests {
                 map.insert("number".into(), FeatureData::Float(vec![0., 1.]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
         let cloned = pc.clone();
 
         assert_eq!(pc.len(), cloned.len());
-        assert_eq!(pc, cloned);
+        assert!(pc.chunks_equal_ignoring_cache_hint(&cloned));
     }
 
     #[test]
@@ -755,6 +763,7 @@ mod tests {
                 map.insert("number".into(), FeatureData::Float(vec![0., 1.]));
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -786,7 +795,7 @@ mod tests {
         };
 
         assert_eq!(a.len(), b.len());
-        assert_eq!(a, b);
+        assert!(a.chunks_equal_ignoring_cache_hint(&b));
     }
 
     #[test]
@@ -853,6 +862,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -918,6 +928,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -956,6 +967,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -988,6 +1000,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1026,6 +1039,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1062,6 +1076,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1110,13 +1125,14 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
         let serialized = serde_json::to_string(&collection).unwrap();
         let deserialized: MultiPointCollection = serde_json::from_str(&serialized).unwrap();
 
-        assert_eq!(collection, deserialized);
+        assert!(collection.chunks_equal_ignoring_cache_hint(&deserialized));
     }
 
     #[test]
@@ -1142,6 +1158,7 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1185,6 +1202,7 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1209,12 +1227,13 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
         let sorted_collection = collection.sort_by_time_asc().unwrap();
 
-        assert_eq!(sorted_collection, expected_collection);
+        assert!(sorted_collection.chunks_equal_ignoring_cache_hint(&expected_collection));
     }
 
     #[test]
@@ -1250,6 +1269,7 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1302,6 +1322,7 @@ mod tests {
                 );
                 map
             },
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1364,6 +1385,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
         let mut iter = collection.into_iter();
@@ -1417,6 +1439,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
+            CacheHint::default(),
         )
         .unwrap();
 
@@ -1453,6 +1476,7 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
         let mut iter = collection.geometries();
@@ -1483,6 +1507,7 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
         let mut iter = collection.geometries();
@@ -1518,6 +1543,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
+            CacheHint::default(),
         )
         .unwrap();
 

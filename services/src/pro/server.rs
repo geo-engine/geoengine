@@ -178,7 +178,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     }
 
     if cache_config.enabled {
-        info!("Cache: enabled");
+        info!("Cache: enabled ({} MB)", cache_config.cache_size_in_mb);
     } else {
         info!("Cache: disabled");
     }

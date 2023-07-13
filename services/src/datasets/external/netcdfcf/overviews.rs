@@ -14,10 +14,12 @@ use gdal::{
     Dataset, DatasetOptions, GdalOpenFlags,
 };
 use gdal_sys::GDALGetRasterStatistics;
-use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{DateTimeParseFormat, TimeInstance, TimeInterval},
+};
+use geoengine_datatypes::{
+    primitives::CacheTtlSeconds, spatial_reference::SpatialReference, util::canonicalize_subpath,
 };
 use geoengine_operators::{
     source::{
@@ -26,6 +28,7 @@ use geoengine_operators::{
     },
     util::gdal::{
         gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
+        raster_descriptor_from_dataset_and_sref,
     },
 };
 use log::debug;
@@ -35,6 +38,7 @@ use std::{
     fs::{self, File},
     io::{BufWriter, Write},
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
@@ -469,11 +473,14 @@ fn index_subdataset<C: TaskContext>(
 
         let mut first_overview_dataset = None;
 
+        let mut subdataset_sref_string = None;
+
         for (time_idx, time_step) in time_steps.iter().enumerate() {
             let CreateSubdatasetTiffResult {
                 overview_dataset,
                 overview_destination,
                 min_max,
+                sref_string,
             } = create_subdataset_tiff(
                 *time_step,
                 conversion,
@@ -490,6 +497,10 @@ fn index_subdataset<C: TaskContext>(
             if time_idx == 0 {
                 first_overview_dataset = Some((overview_dataset, overview_destination));
             }
+
+            if let Some(sref) = sref_string {
+                subdataset_sref_string = Some(sref);
+            }
         }
 
         let Some((overview_dataset, overview_destination)) = first_overview_dataset else {
@@ -498,8 +509,12 @@ fn index_subdataset<C: TaskContext>(
             });
         };
 
-        let loading_info =
-            generate_loading_info(&overview_dataset, &overview_destination, time_coverage)?;
+        let loading_info = generate_loading_info(
+            &overview_dataset,
+            &overview_destination,
+            time_coverage,
+            subdataset_sref_string.clone(),
+        )?;
 
         let loading_info_file =
             File::create(overview_destination.with_file_name(LOADING_INFO_FILE_NAME))
@@ -528,6 +543,7 @@ struct CreateSubdatasetTiffResult {
     overview_dataset: Dataset,
     overview_destination: PathBuf,
     min_max: Option<(f64, f64)>,
+    sref_string: Option<String>,
 }
 
 fn create_subdataset_tiff(
@@ -551,6 +567,18 @@ fn create_subdataset_tiff(
         "-of".to_string(),
         "COG".to_string(),
     ];
+
+    let input_sref_string = {
+        // open the concrete dataset to get the spatial reference. This does not work on the `subdataset`.
+        let temp_ds = geoengine_operators::util::gdal::gdal_open_dataset(Path::new(&format!(
+            "{}:{}",
+            conversion.dataset_in, conversion.array_path
+        )))
+        .boxed_context(error::CannotOpenNetCdfSubdataset)?;
+
+        temp_ds.spatial_ref().unwrap().authority().ok()
+    };
+
     for raster_creation_option in raster_creation_options {
         options.push("-co".to_string());
         options.push(format!(
@@ -597,6 +625,7 @@ fn create_subdataset_tiff(
         overview_dataset,
         overview_destination: destination,
         min_max,
+        sref_string: input_sref_string,
     })
 }
 
@@ -675,11 +704,20 @@ fn generate_loading_info(
     dataset: &Dataset,
     overview_dataset_path: &Path,
     time_coverage: &TimeCoverage,
+    sref_string: Option<String>,
 ) -> Result<MetaDataDefinition> {
     const TIFF_BAND_INDEX: usize = 1;
 
-    let result_descriptor = raster_descriptor_from_dataset(dataset, 1)
-        .boxed_context(error::CannotGenerateLoadingInfo)?;
+    let result_descriptor = if let Some(sref) = sref_string {
+        let spatial_ref =
+            SpatialReference::from_str(&sref).boxed_context(error::CannotGenerateLoadingInfo)?;
+
+        raster_descriptor_from_dataset_and_sref(dataset, 1, spatial_ref)
+            .boxed_context(error::CannotGenerateLoadingInfo)?
+    } else {
+        raster_descriptor_from_dataset(dataset, 1)
+            .boxed_context(error::CannotGenerateLoadingInfo)?
+    };
 
     let mut params = gdal_parameters_from_dataset(
         dataset,
@@ -714,6 +752,7 @@ fn generate_loading_info(
                 .into_iter()
                 .collect(),
                 data_time: time_interval,
+                cache_ttl: CacheTtlSeconds::default(),
             })
         }
         TimeCoverage::List { ref time_stamps } => {
@@ -731,6 +770,7 @@ fn generate_loading_info(
                 params_list.push(GdalLoadingInfoTemporalSlice {
                     time: time_interval,
                     params: Some(params),
+                    cache_ttl: CacheTtlSeconds::default(),
                 });
             }
 
@@ -820,6 +860,7 @@ mod tests {
                     step: 1,
                 },
             },
+            None,
         )
         .unwrap();
 
@@ -867,6 +908,7 @@ mod tests {
                     DateTime::new_utc(2021, 1, 1, 0, 0, 0)
                 )
                 .unwrap(),
+                cache_ttl: CacheTtlSeconds::default(),
             })
         );
     }
@@ -962,6 +1004,7 @@ mod tests {
                     DateTime::new_utc(2003, 1, 1, 0, 0, 0)
                 )
                 .unwrap(),
+                cache_ttl: CacheTtlSeconds::default(),
             })
         );
     }
@@ -1223,6 +1266,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
+                        cache_ttl: CacheTtlSeconds::default(),
                     },
                     GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new(
@@ -1249,6 +1293,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
+                        cache_ttl: CacheTtlSeconds::default(),
                     },
                     GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new(
@@ -1275,6 +1320,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
+                        cache_ttl: CacheTtlSeconds::default(),
                     }
                 ],
             })

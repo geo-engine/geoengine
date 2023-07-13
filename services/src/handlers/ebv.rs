@@ -419,10 +419,13 @@ impl<C: SessionContext> Task<C::TaskContext> for EvbOverviewTask<C> {
                     skip: vec![file],
                     error: vec![],
                 }),
-                Err(e) => Err(NetCdfCf4DProviderError::CannotCreateOverview {
-                    dataset: file,
-                    source: Box::new(e),
-                }),
+                Err(e) => {
+                    debug!("Error during overview creation: {:?}", &e);
+                    Err(NetCdfCf4DProviderError::CannotCreateOverview {
+                        dataset: file,
+                        source: Box::new(e),
+                    })
+                }
             }
         })
         .await;
@@ -616,6 +619,7 @@ mod tests {
                 name: "test".to_string(),
                 path: test_data!("netcdf4d").to_path_buf(),
                 overviews: overview_folder.path().to_path_buf(),
+                cache_ttl: Default::default(),
             }))
             .await
             .unwrap();
@@ -707,6 +711,7 @@ mod tests {
                 name: "test".to_string(),
                 path: test_data!("netcdf4d").to_path_buf(),
                 overviews: overview_folder.path().to_path_buf(),
+                cache_ttl: Default::default(),
             }))
             .await
             .unwrap();
@@ -763,6 +768,7 @@ mod tests {
                 name: "test".to_string(),
                 path: test_data!("netcdf4d").to_path_buf(),
                 overviews: overview_folder.path().to_path_buf(),
+                cache_ttl: Default::default(),
             }))
             .await
             .unwrap();
