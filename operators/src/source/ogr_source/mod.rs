@@ -3960,7 +3960,7 @@ mod tests {
         assert!(!result.last().unwrap().is_empty());
 
         // LARGER CHUNK
-        let context = MockQueryContext::new((1_000).into());
+        let context = MockQueryContext::new((1_650).into());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
