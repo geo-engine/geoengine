@@ -85,3 +85,8 @@ harness = false
 [[bench]]
 name = "pip"
 harness = false
+
+[[bench]]
+name = "query_chunks"
+harness = false
+
