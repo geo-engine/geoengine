@@ -4,7 +4,6 @@ pub use clonable_operator::{
 };
 pub use execution_context::{
     ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
-    StatisticsWrappingMockExecutionContext,
 };
 pub use operator::{
     CanonicOperatorName, InitializedPlotOperator, InitializedRasterOperator,

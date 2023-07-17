@@ -90,4 +90,4 @@ harness = false
 [[bench]]
 name = "query_chunks"
 harness = false
-
+required-features = ["pro"]

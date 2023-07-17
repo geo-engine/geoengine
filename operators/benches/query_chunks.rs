@@ -29,12 +29,14 @@ use geoengine_operators::{
     engine::{
         ChunkByteSize, ExecutionContext, InitializedRasterOperator, MockQueryContext, QueryContext,
         QueryContextExtensions, QueryProcessor, RasterOperator, RasterQueryProcessor,
-        SingleRasterSource, SingleVectorMultipleRasterSources,
-        StatisticsWrappingMockExecutionContext, TypedRasterQueryProcessor, VectorOperator,
-        VectorQueryProcessor, WorkflowOperatorPath,
+        SingleRasterSource, SingleVectorMultipleRasterSources, TypedRasterQueryProcessor,
+        VectorOperator, VectorQueryProcessor, WorkflowOperatorPath,
     },
-    pro::meta::quota::{
-        ComputationContext, ComputationUnit, QuotaCheck, QuotaChecker, QuotaTracking,
+    pro::{
+        engine::StatisticsWrappingMockExecutionContext,
+        meta::quota::{
+            ComputationContext, ComputationUnit, QuotaCheck, QuotaChecker, QuotaTracking,
+        },
     },
     processing::{
         AggregateFunctionParams, FeatureAggregationMethod, NeighborhoodAggregate,
