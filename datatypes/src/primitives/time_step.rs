@@ -3,7 +3,6 @@ use std::{cmp::max, convert::TryInto, ops::Add};
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use snafu::{ensure, OptionExt};
 
@@ -14,8 +13,7 @@ use crate::util::Result;
 use super::{DateTime, Duration, TimeInterval};
 
 /// A time granularity.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 pub enum TimeGranularity {
     Millis,
@@ -28,8 +26,7 @@ pub enum TimeGranularity {
 }
 
 /// A step in time.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSql, FromSql)]
 pub struct TimeStep {
     pub granularity: TimeGranularity,
     pub step: u32, // TODO: ensure on deserialization it is > 0

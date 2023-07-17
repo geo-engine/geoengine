@@ -111,7 +111,6 @@ impl FromRequest for UserSession {
             Err(error) => return Box::pin(err(error)),
         };
 
-        #[cfg(feature = "postgres")]
         {
             if let Some(pg_ctx) = req.app_data::<web::Data<ProPostgresContext<NoTls>>>() {
                 let pg_ctx = pg_ctx.get_ref().clone();

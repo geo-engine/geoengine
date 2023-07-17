@@ -213,7 +213,7 @@ mod tests {
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let body = vec![("bar.txt", "bar"), ("foo.txt", "foo")];
@@ -256,7 +256,7 @@ mod tests {
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let files =

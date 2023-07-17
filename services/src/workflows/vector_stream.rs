@@ -258,7 +258,7 @@ mod tests {
             TestDefault::test_default(),
             usize::MAX.into(), // ensure that we get one chunk per input
         );
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(

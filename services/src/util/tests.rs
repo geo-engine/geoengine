@@ -51,6 +51,7 @@ pub async fn create_project_helper<C: SimpleApplicationContext>(app_ctx: &C) -> 
     app_ctx
         .default_session_context()
         .await
+        .unwrap()
         .db()
         .create_project(CreateProject {
             name: "Test".to_string(),
@@ -106,7 +107,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl(
         ),
     };
 
-    let session = app_ctx.default_session_ref().await.clone();
+    let session = app_ctx.default_session().await.unwrap();
 
     let id = app_ctx
         .session_context(session)
@@ -122,6 +123,11 @@ pub async fn add_ndvi_to_datasets(app_ctx: &InMemoryContext) -> (DatasetId, Name
     add_ndvi_to_datasets_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
 }
 
+/// .
+///
+/// # Panics
+///
+/// Panics if the default session context could not be created.
 pub async fn add_ndvi_to_datasets_with_cache_ttl(
     app_ctx: &InMemoryContext,
     cache_ttl: CacheTtlSeconds,
@@ -152,6 +158,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl(
     let dataset_id = app_ctx
         .default_session_context()
         .await
+        .unwrap()
         .db()
         .add_dataset(ndvi.properties, Box::new(ndvi.meta_data))
         .await

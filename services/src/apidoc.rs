@@ -393,7 +393,7 @@ mod tests {
             ApiDoc::openapi(),
             move || async move {
                 let ctx = InMemoryContext::test_default();
-                let session_id = ctx.default_session_ref().await.id();
+                let session_id = ctx.default_session_id().await;
                 (ctx, session_id)
             },
             send_test_request,

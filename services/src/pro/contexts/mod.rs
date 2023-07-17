@@ -1,6 +1,5 @@
 mod in_memory;
 
-#[cfg(feature = "postgres")]
 mod postgres;
 
 use std::str::FromStr;
@@ -20,7 +19,7 @@ use geoengine_operators::pro::meta::quota::QuotaCheck;
 use geoengine_operators::pro::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 pub use in_memory::ProInMemoryContext;
-#[cfg(feature = "postgres")]
+
 pub use postgres::ProPostgresContext;
 use rayon::ThreadPool;
 use tokio::io::AsyncWriteExt;

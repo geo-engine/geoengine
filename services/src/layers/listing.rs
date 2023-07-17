@@ -2,6 +2,7 @@ use std::fmt;
 
 use crate::api::model::datatypes::LayerId;
 use async_trait::async_trait;
+use postgres_types::{FromSql, ToSql};
 use utoipa::ToSchema;
 
 use crate::error::Result;
@@ -10,11 +11,7 @@ use super::layer::{Layer, LayerCollection, LayerCollectionListOptions};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema)]
-#[cfg_attr(
-    feature = "postgres",
-    derive(postgres_types::ToSql, postgres_types::FromSql)
-)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, ToSql, FromSql)]
 pub struct LayerCollectionId(pub String);
 
 impl fmt::Display for LayerCollectionId {

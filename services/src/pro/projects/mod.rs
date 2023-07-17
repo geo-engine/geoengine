@@ -1,5 +1,5 @@
 mod hashmap_projectdb;
-#[cfg(feature = "postgres")]
+
 mod postgres_projectdb;
 mod projectdb;
 

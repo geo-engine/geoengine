@@ -543,7 +543,7 @@ mod tests {
     async fn add_ogr_and_list() -> Result<()> {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,

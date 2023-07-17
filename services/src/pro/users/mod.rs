@@ -1,6 +1,6 @@
 mod hashmap_userdb;
 mod oidc;
-#[cfg(feature = "postgres")]
+
 mod postgres_userdb;
 mod session;
 mod user;

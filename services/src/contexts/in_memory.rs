@@ -13,6 +13,7 @@ use crate::layers::add_from_directory::{
 };
 use crate::layers::storage::{HashMapLayerDb, HashMapLayerProviderDbBackend};
 use crate::projects::hashmap_projectdb::HashMapProjectDbBackend;
+use crate::projects::{ProjectId, STRectangle};
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
 use crate::workflows::registry::HashMapRegistryBackend;
 use crate::{
@@ -25,7 +26,7 @@ use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use tokio::sync::RwLock;
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone)]
@@ -116,7 +117,7 @@ impl ApplicationContext for InMemoryContext {
     }
 
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {
-        let default_session = self.default_session_ref().await;
+        let default_session = self.session.read().await;
 
         if default_session.id() != session_id {
             return Err(Error::Unauthorized {
@@ -177,16 +178,26 @@ impl SessionContext for InMemorySessionContext {
 
 #[async_trait]
 impl SimpleApplicationContext for InMemoryContext {
-    fn default_session(&self) -> Db<SimpleSession> {
-        self.session.clone()
+    async fn default_session_id(&self) -> SessionId {
+        self.session.read().await.id()
     }
 
-    async fn default_session_ref(&self) -> RwLockReadGuard<SimpleSession> {
-        self.session.read().await
+    async fn default_session(&self) -> Result<SimpleSession> {
+        Ok(self.session.read().await.clone())
     }
 
-    async fn default_session_ref_mut(&self) -> RwLockWriteGuard<SimpleSession> {
-        self.session.write().await
+    async fn update_default_session_project(&self, project: ProjectId) -> Result<()> {
+        self.session.write().await.project = Some(project);
+        Ok(())
+    }
+
+    async fn update_default_session_view(&self, view: STRectangle) -> Result<()> {
+        self.session.write().await.view = Some(view);
+        Ok(())
+    }
+
+    async fn default_session_context(&self) -> Result<Self::SessionContext> {
+        Ok(self.session_context(self.session.read().await.clone()))
     }
 }
 

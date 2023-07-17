@@ -2,13 +2,13 @@ use super::datetime::DateTimeError;
 use super::{DateTime, Duration};
 use crate::primitives::error;
 use crate::util::Result;
-#[cfg(feature = "postgres")]
+
 use postgres_types::private::BytesMut;
-#[cfg(feature = "postgres")]
+
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-#[cfg(feature = "postgres")]
+
 use snafu::Error;
 use std::ops::AddAssign;
 use std::{
@@ -114,7 +114,6 @@ impl From<TimeInstance> for i64 {
     }
 }
 
-#[cfg(feature = "postgres")]
 impl ToSql for TimeInstance {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
     where
@@ -139,7 +138,6 @@ impl ToSql for TimeInstance {
     }
 }
 
-#[cfg(feature = "postgres")]
 impl<'a> FromSql<'a> for TimeInstance {
     fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         DateTime::from_sql(ty, raw).map(Into::into)

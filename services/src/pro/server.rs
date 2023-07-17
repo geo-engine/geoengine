@@ -4,7 +4,7 @@ use crate::handlers;
 use crate::pro;
 use crate::pro::apidoc::ApiDoc;
 use crate::pro::contexts::ProInMemoryContext;
-#[cfg(feature = "postgres")]
+
 use crate::pro::contexts::ProPostgresContext;
 use crate::util::config::{self, get_config_element, Backend};
 use crate::util::server::{
@@ -13,7 +13,7 @@ use crate::util::server::{
 };
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, FromRequest, HttpServer};
-#[cfg(feature = "postgres")]
+
 use bb8_postgres::tokio_postgres::NoTls;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::ChunkByteSize;
@@ -262,7 +262,6 @@ async fn start_postgres(
     web_config: config::Web,
     cache_config: crate::pro::util::config::Cache,
 ) -> Result<()> {
-    #[cfg(feature = "postgres")]
     {
         info!("Using Postgres backend");
 
@@ -299,6 +298,4 @@ async fn start_postgres(
         )
         .await
     }
-    #[cfg(not(feature = "postgres"))]
-            panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
 }

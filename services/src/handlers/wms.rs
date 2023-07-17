@@ -501,7 +501,7 @@ mod tests {
     async fn test_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let req = actix_web::test::TestRequest::default()
@@ -545,7 +545,7 @@ mod tests {
     async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -583,7 +583,7 @@ mod tests {
     async fn png_from_stream_non_full() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let exe_ctx = ctx.execution_context().unwrap();
 
         let gdal_source = GdalSourceProcessor::<u8> {
@@ -636,7 +636,7 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -668,7 +668,7 @@ mod tests {
     async fn get_map_ndvi() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -707,7 +707,7 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -760,7 +760,7 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -821,7 +821,7 @@ mod tests {
     async fn it_zoomes_very_far() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -875,7 +875,7 @@ mod tests {
     async fn default_error() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -941,7 +941,7 @@ mod tests {
     async fn json_error() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -996,7 +996,7 @@ mod tests {
     async fn it_sets_cache_control_header_no_cache() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -1021,7 +1021,7 @@ mod tests {
     async fn it_sets_cache_control_header_with_cache() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let (_, id) =

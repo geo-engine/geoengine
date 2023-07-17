@@ -238,7 +238,7 @@ mod tests {
     async fn create_test_helper(method: Method) -> ServiceResponse {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -279,7 +279,7 @@ mod tests {
     async fn create_invalid_body() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -303,7 +303,7 @@ mod tests {
     async fn create_missing_fields() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -351,7 +351,7 @@ mod tests {
     async fn list_test_helper(method: Method) -> ServiceResponse {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session = ctx.session();
         let _ = create_project_helper(&app_ctx).await;
@@ -432,7 +432,7 @@ mod tests {
     async fn load_test_helper(method: Method) -> ServiceResponse {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session = ctx.session().clone();
         let project = create_project_helper(&app_ctx).await;
@@ -487,7 +487,7 @@ mod tests {
     async fn load_not_found() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -505,7 +505,7 @@ mod tests {
     ) -> (InMemoryContext, SimpleSession, ProjectId, ServiceResponse) {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session = ctx.session().clone();
         let project = create_project_helper(&app_ctx).await;
@@ -543,7 +543,7 @@ mod tests {
     async fn update_invalid_body() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session = ctx.session().clone();
         let project = create_project_helper(&app_ctx).await;
@@ -569,7 +569,7 @@ mod tests {
     async fn update_missing_fields() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session = ctx.session().clone();
         let project = create_project_helper(&app_ctx).await;
@@ -634,7 +634,7 @@ mod tests {
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session = ctx.session().clone();
         let project = create_project_helper(&app_ctx).await;
@@ -781,7 +781,7 @@ mod tests {
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session = ctx.session().clone();
         let project = create_project_helper(&app_ctx).await;
@@ -887,7 +887,7 @@ mod tests {
     async fn delete() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session = ctx.session().clone();
         let project = create_project_helper(&app_ctx).await;
