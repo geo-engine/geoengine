@@ -32,6 +32,9 @@ pub use point_in_polygon::{
     PointInPolygonTester,
 };
 pub use raster_type_conversion::{RasterTypeConversionParams, RasterTypeConversionQueryProcessor};
+pub use raster_vector_join::{
+    FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams, TemporalAggregationMethod,
+};
 pub use reprojection::{
     InitializedRasterReprojection, InitializedVectorReprojection, Reprojection, ReprojectionParams,
 };

@@ -1,80 +1,91 @@
+//!
+//! This benchmark tests the performance of queries in the form of produced tiles or chunks.
+//!
+//! The benchmark is run with the following command:
+//!
+//! ```bash
+//! cargo bench --features pro --bench query_chunks
+//! ```
+//!
+//! For development, you can run it also in dev mode (does not change the results):
+//!
+//! ```bash
+//! cargo bench --profile=dev --features pro --bench query_chunks
+//! ```
+//!
+
 use async_trait::async_trait;
+use csv::WriterBuilder;
 use futures::StreamExt;
 use geoengine_datatypes::{
-    primitives::{QueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
+    primitives::{
+        BoundingBox2D, QueryRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        TimeInterval, VectorQueryRectangle,
+    },
+    raster::Pixel,
     util::{test::TestDefault, Identifier},
 };
 use geoengine_operators::{
     engine::{
-        ChunkByteSize, InitializedRasterOperator, MockQueryContext, QueryContextExtensions,
-        QueryProcessor, RasterOperator, SingleRasterSource, StatisticsWrappingMockExecutionContext,
-        WorkflowOperatorPath,
+        ChunkByteSize, ExecutionContext, InitializedRasterOperator, MockQueryContext, QueryContext,
+        QueryContextExtensions, QueryProcessor, RasterOperator, RasterQueryProcessor,
+        SingleRasterSource, SingleVectorMultipleRasterSources,
+        StatisticsWrappingMockExecutionContext, TypedRasterQueryProcessor, VectorOperator,
+        VectorQueryProcessor, WorkflowOperatorPath,
     },
-    pro::{
-        cache::{cache_operator::InitializedCacheOperator, tile_cache::TileCache},
-        meta::quota::{
-            ComputationContext, ComputationUnit, QuotaCheck, QuotaChecker, QuotaTracking,
-        },
+    pro::meta::quota::{
+        ComputationContext, ComputationUnit, QuotaCheck, QuotaChecker, QuotaTracking,
     },
     processing::{
-        AggregateFunctionParams, NeighborhoodAggregate, NeighborhoodAggregateParams,
-        NeighborhoodParams,
+        AggregateFunctionParams, FeatureAggregationMethod, NeighborhoodAggregate,
+        NeighborhoodAggregateParams, NeighborhoodParams, RasterVectorJoin, RasterVectorJoinParams,
+        TemporalAggregationMethod,
     },
-    source::{GdalSource, GdalSourceParameters},
-    util::{gdal::add_ndvi_dataset, Result},
+    source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
+    util::{
+        gdal::{add_ndvi_dataset, add_ports_dataset},
+        Result,
+    },
 };
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     io::Write,
-    sync::{Arc, Mutex},
 };
-use tokio::sync::mpsc::UnboundedSender;
-use tracing::{info, metadata::LevelFilter, Level};
-use tracing_subscriber::{self, prelude::__tracing_subscriber_field_MakeExt, EnvFilter};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tracing::Level;
 
-// static MY_LOGGER: MyLogger = MyLogger;
-
-// TODO: remove
-// for debugging:
-// cargo bench --profile=dev --features pro --bench query_chunks
-
-/// This benchmarks runs a workflow twice to see the impact of the cache
-/// Run it with `cargo bench --bench cache --features pro`
-#[tokio::main]
-async fn main() {
+fn main() {
+    // DATA
     let mut exe_ctx = StatisticsWrappingMockExecutionContext::test_default();
-
-    let ndvi_id = add_ndvi_dataset(&mut exe_ctx.inner);
-
-    let operator = NeighborhoodAggregate {
-        params: NeighborhoodAggregateParams {
-            neighborhood: NeighborhoodParams::WeightsMatrix {
-                weights: vec![vec![1., 2., 3.], vec![4., 5., 6.], vec![7., 8., 9.]],
-            },
-            aggregate_function: AggregateFunctionParams::Sum,
-        },
-        sources: SingleRasterSource {
-            raster: GdalSource {
-                params: GdalSourceParameters { data: ndvi_id },
-            }
-            .boxed(),
-        },
-    }
-    .boxed()
-    .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-    .await
-    .unwrap();
-
-    let processor = operator.query_processor().unwrap().get_u8().unwrap();
-
     let query_ctx = MockQueryContext::new_with_query_extensions(
         ChunkByteSize::test_default(),
         create_necessary_extensions(),
     );
+    let ndvi_id = add_ndvi_dataset(&mut exe_ctx.inner);
+    let ports_id = add_ports_dataset(&mut exe_ctx.inner);
 
-    let stream = processor
-        .query(
-            QueryRectangle {
+    // BENCHMARKS
+    let benchmarks = vec![
+        Benchmark::Raster {
+            name: "neighborhood_aggregate".to_string(),
+            operator: NeighborhoodAggregate {
+                params: NeighborhoodAggregateParams {
+                    neighborhood: NeighborhoodParams::WeightsMatrix {
+                        weights: vec![vec![1., 2., 3.], vec![4., 5., 6.], vec![7., 8., 9.]],
+                    },
+                    aggregate_function: AggregateFunctionParams::Sum,
+                },
+                sources: SingleRasterSource {
+                    raster: GdalSource {
+                        params: GdalSourceParameters {
+                            data: ndvi_id.clone(),
+                        },
+                    }
+                    .boxed(),
+                },
+            }
+            .boxed(),
+            query_rectangle: QueryRectangle {
                 spatial_bounds: SpatialPartition2D::new_unchecked(
                     [-180., -90.].into(),
                     [180., 90.].into(),
@@ -82,138 +93,224 @@ async fn main() {
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
             },
-            &query_ctx,
-        )
-        .await
+        },
+        Benchmark::Vector {
+            name: "raster_vector_join".to_string(),
+            operator: RasterVectorJoin {
+                params: RasterVectorJoinParams {
+                    names: vec!["ndvi".to_string()],
+                    feature_aggregation: FeatureAggregationMethod::Mean,
+                    feature_aggregation_ignore_no_data: true,
+                    temporal_aggregation: TemporalAggregationMethod::Mean,
+                    temporal_aggregation_ignore_no_data: true,
+                },
+                sources: SingleVectorMultipleRasterSources {
+                    vector: OgrSource {
+                        params: OgrSourceParameters {
+                            data: ports_id,
+                            attribute_projection: None,
+                            attribute_filters: None,
+                        },
+                    }
+                    .boxed(),
+                    rasters: vec![GdalSource {
+                        params: GdalSourceParameters { data: ndvi_id },
+                    }
+                    .boxed()],
+                },
+            }
+            .boxed(),
+            query_rectangle: QueryRectangle {
+                spatial_bounds: BoundingBox2D::new_unchecked(
+                    [-180., -90.].into(),
+                    [180., 90.].into(),
+                ),
+                time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::zero_point_one(),
+            },
+        },
+    ];
+
+    // RUN
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
         .unwrap();
 
-    // log::set_logger(&MY_LOGGER).unwrap();
-    // log::set_max_level(LevelFilter::Trace);
+    let mut results: Vec<(String, HashMap<String, u64>)> = Vec::with_capacity(benchmarks.len());
+    let mut element_headers = BTreeSet::new();
+    for benchmark in benchmarks {
+        let name = benchmark.name().to_string();
+        let result = run_benchmark(&runtime, &exe_ctx, &query_ctx, benchmark);
 
-    let filter = EnvFilter::default()
-        // .add_directive("my_crate::module=trace".parse().unwrap())
-        // .add_directive(LevelFilter::DEBUG.into())
-        .add_directive(
-            "geoengine_operators::pro::adapters::stream_statistics_adapter=debug"
-                .parse()
-                .unwrap(),
-        );
+        // eprintln!("{name} -> {results:#?}");
 
-    let poll_next_writer = PollNextWriterWrapper::new();
+        for header in result.keys() {
+            element_headers.insert(header.to_string());
+        }
 
-    let writer_clone = poll_next_writer.clone();
+        results.push((name, result));
+    }
+
+    // CSV
+    let mut csv = WriterBuilder::new().has_headers(true).from_writer(vec![]);
+
+    csv.write_field("name").unwrap();
+    for header in &element_headers {
+        csv.write_field(header).unwrap();
+    }
+    csv.write_record(None::<&[u8]>).unwrap();
+
+    for (name, result) in results {
+        csv.write_field(name).unwrap();
+        for header in &element_headers {
+            if let Some(element_count) = result.get(header) {
+                csv.write_field(element_count.to_string()).unwrap();
+            } else {
+                csv.write_field([]).unwrap();
+            }
+        }
+        csv.write_record(None::<&[u8]>).unwrap();
+    }
+
+    csv.flush().unwrap();
+    let csv = csv.into_inner().unwrap();
+    println!("{}", String::from_utf8(csv).unwrap());
+}
+
+fn run_benchmark(
+    runtime: &tokio::runtime::Runtime,
+    exe_ctx: &dyn ExecutionContext,
+    query_ctx: &dyn QueryContext,
+    benchmark: Benchmark,
+) -> HashMap<String, u64> {
+    let (poll_next_sender, poll_next_receiver) = tokio::sync::mpsc::unbounded_channel::<Record>();
 
     let collector = tracing_subscriber::fmt()
         .json()
         // filter spans/events with level TRACE or higher.
         .with_max_level(Level::TRACE)
-        // .with_env_filter(filter)
         .with_current_span(true)
-        .with_writer(move || writer_clone.clone())
-        // .flatten_event(true)
+        .with_writer(move || PollNextForwarder::new(poll_next_sender.clone()))
         // .with_span_list(true)
-        // .map_fmt_fields(|f| f.debug_alt())
         // build but do not install the subscriber.
         .finish();
 
-    tracing::subscriber::set_global_default(collector).unwrap();
+    match benchmark {
+        Benchmark::Raster {
+            name: _,
+            operator,
+            query_rectangle,
+        } => {
+            let operator = runtime.block_on(async {
+                operator
+                    .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+                    .await
+                    .unwrap()
+            });
 
-    info!("This will be logged to stdout");
+            let processor = operator.query_processor().unwrap();
 
-    // let runtime = tokio::runtime::Handle::current();
+            match processor {
+                TypedRasterQueryProcessor::U8(processor) => {
+                    collect_raster_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                TypedRasterQueryProcessor::U16(processor) => {
+                    collect_raster_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                TypedRasterQueryProcessor::U32(processor) => {
+                    collect_raster_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                TypedRasterQueryProcessor::U64(processor) => {
+                    collect_raster_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                TypedRasterQueryProcessor::I8(processor) => {
+                    collect_raster_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                TypedRasterQueryProcessor::I16(processor) => {
+                    collect_raster_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                TypedRasterQueryProcessor::I32(processor) => {
+                    collect_raster_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                TypedRasterQueryProcessor::I64(processor) => {
+                    collect_raster_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                TypedRasterQueryProcessor::F32(processor) => {
+                    collect_raster_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                TypedRasterQueryProcessor::F64(processor) => {
+                    collect_raster_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+            }
+        }
+        Benchmark::Vector {
+            name: _,
+            operator,
+            query_rectangle,
+        } => {
+            let operator = runtime.block_on(async {
+                operator
+                    .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+                    .await
+                    .unwrap()
+            });
 
-    // tracing::subscriber::with_default(collector, move || {
-    //     info!("This will be logged to stdout");
+            let processor = operator.query_processor().unwrap();
 
-    //     // TODO: does this make sense?
-    //     // tokio::runtime::Runtime::.unwrap().block_on(async {
-    //     //     let tiles = stream.collect::<Vec<_>>().await;
-    //     // });
+            match processor {
+                geoengine_operators::engine::TypedVectorQueryProcessor::Data(processor) => {
+                    collect_vector_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                geoengine_operators::engine::TypedVectorQueryProcessor::MultiPoint(processor) => {
+                    collect_vector_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                geoengine_operators::engine::TypedVectorQueryProcessor::MultiLineString(
+                    processor,
+                ) => {
+                    collect_vector_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+                geoengine_operators::engine::TypedVectorQueryProcessor::MultiPolygon(processor) => {
+                    collect_vector_query(runtime, query_ctx, collector, processor, query_rectangle)
+                }
+            }
+        }
+    }
 
-    //     runtime.spawn(async move {
-    //         let tiles = stream.collect::<Vec<_>>().await;
-    //     });
-    // });
-
-    // TODO: remove
-    // info!("hello log");
-    // warn!("warning");
-    // error!("oops");
-    // eprintln!("hello stderr");
-
-    let tiles = stream.collect::<Vec<_>>().await;
-
-    dbg!(&poll_next_writer.inner.lock().unwrap().element_counts);
-
-    // println!("First run: {:?}", start.elapsed());
-
-    // let tiles = tiles.into_iter().collect::<Result<Vec<_>>>().unwrap();
-
-    // let start = std::time::Instant::now();
-
-    // let stream_from_cache = processor
-    //     .query(
-    //         QueryRectangle {
-    //             spatial_bounds: SpatialPartition2D::new_unchecked(
-    //                 [-180., -90.].into(),
-    //                 [180., 90.].into(),
-    //             ),
-    //             time_interval: TimeInterval::default(),
-    //             spatial_resolution: SpatialResolution::zero_point_one(),
-    //         },
-    //         &query_ctx,
-    //     )
-    //     .await
-    //     .unwrap();
-
-    // let tiles_from_cache = stream_from_cache.collect::<Vec<_>>().await;
-
-    // println!("From cache: {:?}", start.elapsed());
-
-    // let tiles_from_cache = tiles_from_cache
-    //     .into_iter()
-    //     .collect::<Result<Vec<_>>>()
-    //     .unwrap();
-
-    // assert!(tiles.tiles_equal_ignoring_cache_hint(&tiles_from_cache));
+    // TODO: it would be better to run this in parallel with `_tiles`,
+    // but the tracing collector must be dropped in order for this to complete
+    runtime.block_on(async { gather_poll_nexts(poll_next_receiver).await })
 }
 
-// struct MyLogger;
+fn collect_raster_query<P: Pixel>(
+    runtime: &tokio::runtime::Runtime,
+    query_ctx: &dyn QueryContext,
+    collector: impl tracing::Subscriber + Send + Sync + 'static,
+    processor: Box<dyn RasterQueryProcessor<RasterType = P>>,
+    query_rectangle: RasterQueryRectangle,
+) {
+    let stream =
+        runtime.block_on(async { processor.query(query_rectangle, query_ctx).await.unwrap() });
 
-// impl log::Log for MyLogger {
-//     fn enabled(&self, _metadata: &Metadata) -> bool {
-//         true
-//     }
+    let _tiles = tracing::subscriber::with_default(collector, || {
+        runtime.block_on(stream.collect::<Vec<_>>())
+    });
+}
 
-//     fn log(&self, record: &Record) {
-//         if record.level() != Level::Trace {
-//             return;
-//         }
+fn collect_vector_query<G: 'static>(
+    runtime: &tokio::runtime::Runtime,
+    query_ctx: &dyn QueryContext,
+    collector: impl tracing::Subscriber + Send + Sync + 'static,
+    processor: Box<dyn VectorQueryProcessor<VectorType = G>>,
+    query_rectangle: VectorQueryRectangle,
+) {
+    let stream =
+        runtime.block_on(async { processor.query(query_rectangle, query_ctx).await.unwrap() });
 
-//         // if !record.target().contains("poll_next") {
-//         //     return;
-//         // }
-
-//         let args = record.args().to_string();
-//         if args.contains("spawn_blocking")
-//             || args.contains("cache key")
-//             || args.contains("Inserted tile for query")
-//         {
-//             return;
-//         }
-
-//         // if self.enabled(record.metadata()) {
-//         eprintln!(
-//             "{} - {} - {}",
-//             record.level(),
-//             record.args(),
-//             record.target()
-//         );
-
-//         // }
-//     }
-//     fn flush(&self) {}
-// }
+    let _chunks = tracing::subscriber::with_default(collector, || {
+        runtime.block_on(stream.collect::<Vec<_>>())
+    });
+}
 
 struct MockQuotaChecker;
 
@@ -244,52 +341,55 @@ fn create_necessary_extensions() -> QueryContextExtensions {
     extensions
 }
 
-struct PollNextWriter {
-    element_counts: HashMap<String, u64>,
-}
+async fn gather_poll_nexts(mut receiver: UnboundedReceiver<Record>) -> HashMap<String, u64> {
+    let mut element_counts = HashMap::new();
 
-impl PollNextWriter {
-    fn new() -> Self {
-        Self {
-            element_counts: HashMap::new(),
-        }
+    while let Some(record) = receiver.recv().await {
+        let entry = element_counts.entry(record.operator).or_insert(0);
+        *entry += record.element_count;
     }
+
+    element_counts
 }
 
-impl Write for PollNextWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        // eprintln!("hallo!");
+struct Record {
+    operator: String,
+    element_count: u64,
+}
 
-        let record: serde_json::Value = serde_json::from_slice(buf).unwrap();
+struct PollNextForwarder {
+    sender: UnboundedSender<Record>,
+}
 
+impl PollNextForwarder {
+    fn new(sender: UnboundedSender<Record>) -> Self {
+        Self { sender }
+    }
+
+    fn process_input(&mut self, record: serde_json::Value) {
         if record["level"] != "DEBUG"
             || record["target"] != "geoengine_operators::pro::adapters::stream_statistics_adapter"
             || record["fields"]["empty"] != false
             // how can this be?
             || record["span"]["name"].is_null()
         {
-            return Ok(buf.len());
+            return;
         }
 
-        let operator = record["span"]["name"].to_string();
-        let element_count = record["fields"]["element_count"].as_u64().unwrap();
+        let result = Record {
+            operator: record["span"]["name"].as_str().unwrap().to_string(),
+            element_count: record["fields"]["element_count"].as_u64().unwrap(),
+        };
 
-        let entry = self.element_counts.entry(operator).or_insert(0);
-        *entry += element_count;
+        self.sender.send(result).unwrap();
+    }
+}
 
-        // let s = std::str::from_utf8(buf).unwrap();
-        // if s.contains("poll_next") {
-        //     return Ok(0);
-        // }
-        // eprintln!("Event: {}", record["fields"]["event"]);
-        // eprintln!("Elements: {}", record["fields"]["element_count"]);
-        // eprintln!("Operator: {}", record["span"]["name"]);
-        // eprintln!("Target: {}", record["target"]);
-        // eprintln!();
-        // eprintln!("{record}");
-        // eprintln!();
+impl Write for PollNextForwarder {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.process_input(serde_json::from_slice(buf).unwrap());
 
-        // pretend that we read everything
+        // just pretend that we read everything
         Ok(buf.len())
     }
 
@@ -298,25 +398,24 @@ impl Write for PollNextWriter {
     }
 }
 
-#[derive(Clone)]
-struct PollNextWriterWrapper {
-    inner: Arc<Mutex<PollNextWriter>>,
+enum Benchmark {
+    Raster {
+        name: String,
+        operator: Box<dyn RasterOperator>,
+        query_rectangle: RasterQueryRectangle,
+    },
+    Vector {
+        name: String,
+        operator: Box<dyn VectorOperator>,
+        query_rectangle: VectorQueryRectangle,
+    },
 }
 
-impl PollNextWriterWrapper {
-    fn new() -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(PollNextWriter::new())),
+impl Benchmark {
+    fn name(&self) -> &str {
+        match self {
+            Benchmark::Raster { name, .. } => name,
+            Benchmark::Vector { name, .. } => name,
         }
-    }
-}
-
-impl Write for PollNextWriterWrapper {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.inner.lock().unwrap().write(buf)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
     }
 }
