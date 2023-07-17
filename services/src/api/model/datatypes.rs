@@ -11,7 +11,7 @@ use std::{
     fmt::{Debug, Formatter},
     str::FromStr,
 };
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 identifier!(DataProviderId);
 
@@ -196,7 +196,7 @@ impl<'a> ToSchema<'a> for NamedData {
 
 /// A (optionally namespaced) name for a `Dataset`.
 /// It can be resolved into a [`DataId`] if you know the data provider.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, IntoParams)]
 #[cfg_attr(
     feature = "postgres",
     derive(postgres_types::ToSql, postgres_types::FromSql)
