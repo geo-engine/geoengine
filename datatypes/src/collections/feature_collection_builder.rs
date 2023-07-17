@@ -7,11 +7,11 @@ use crate::util::arrow::{
 };
 use crate::util::Result;
 use arrow::array::{
-    ArrayBuilder, BooleanArray, BooleanBuilder, Date64Array, Date64Builder, Float64Array,
-    Float64Builder, Int16Array, Int64Builder, StringArray, StringBuilder, StructArray,
-    StructBuilder, UInt8Array, UInt8Builder,
+    ArrayBuilder, BooleanArray, BooleanBuilder, Date64Builder, Float64Builder, Int64Builder,
+    PrimitiveArray, PrimitiveBuilder, StringArray, StringBuilder, StructArray, StructBuilder,
+    UInt8Builder,
 };
-use arrow::datatypes::Field;
+use arrow::datatypes::{ArrowPrimitiveType, Date64Type, Field, Float64Type, Int64Type, UInt8Type};
 use snafu::ensure;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
@@ -322,41 +322,11 @@ where
             .iter()
             .map(|(name, builder)| {
                 let values_size = if builder.as_any().is::<Float64Builder>() {
-                    // Float
-                    let builder: &Float64Builder = downcast_dyn_array_builder(builder.as_ref());
-
-                    let static_size = std::mem::size_of::<Float64Array>();
-                    let buffer_size = builder.len() * std::mem::size_of::<f64>();
-                    let null_buffer_size =
-                        builder.validity_slice().map_or(0, std::mem::size_of_val);
-
-                    static_size
-                        + padded_buffer_size(buffer_size, 64)
-                        + padded_buffer_size(null_buffer_size, 64)
+                    estimate_primite_arrow_array_size::<Float64Type>(builder.as_ref())
                 } else if builder.as_any().is::<Int64Builder>() {
-                    // Int
-                    let builder: &Int64Builder = downcast_dyn_array_builder(builder.as_ref());
-
-                    let static_size = std::mem::size_of::<Int16Array>();
-                    let buffer_size = builder.len() * std::mem::size_of::<i64>();
-                    let null_buffer_size =
-                        builder.validity_slice().map_or(0, std::mem::size_of_val);
-
-                    static_size
-                        + padded_buffer_size(buffer_size, 64)
-                        + padded_buffer_size(null_buffer_size, 64)
+                    estimate_primite_arrow_array_size::<Int64Type>(builder.as_ref())
                 } else if builder.as_any().is::<UInt8Builder>() {
-                    // Category
-                    let builder: &UInt8Builder = downcast_dyn_array_builder(builder.as_ref());
-
-                    let static_size = std::mem::size_of::<UInt8Array>();
-                    let buffer_size = builder.len() * std::mem::size_of::<u8>();
-                    let null_buffer_size =
-                        builder.validity_slice().map_or(0, std::mem::size_of_val);
-
-                    static_size
-                        + padded_buffer_size(buffer_size, 64)
-                        + padded_buffer_size(null_buffer_size, 64)
+                    estimate_primite_arrow_array_size::<UInt8Type>(builder.as_ref())
                 } else if builder.as_any().is::<StringBuilder>() {
                     // Text
                     let builder: &StringBuilder = downcast_dyn_array_builder(builder.as_ref());
@@ -390,17 +360,7 @@ where
                         + padded_buffer_size(buffer_size, 64)
                         + padded_buffer_size(null_buffer_size, 64)
                 } else if builder.as_any().is::<Date64Builder>() {
-                    // DateTime
-                    let builder: &Date64Builder = downcast_dyn_array_builder(builder.as_ref());
-
-                    let static_size = std::mem::size_of::<Date64Array>();
-                    let buffer_size = builder.len() * std::mem::size_of::<i64>();
-                    let null_buffer_size =
-                        builder.validity_slice().map_or(0, std::mem::size_of_val);
-
-                    static_size
-                        + padded_buffer_size(buffer_size, 64)
-                        + padded_buffer_size(null_buffer_size, 64)
+                    estimate_primite_arrow_array_size::<Date64Type>(builder.as_ref())
                 } else {
                     debug_assert!(
                         false,
@@ -515,6 +475,16 @@ where
             cache_hint: CacheHint::default(),
         }
     }
+}
+
+fn estimate_primite_arrow_array_size<T: ArrowPrimitiveType>(builder: &dyn ArrayBuilder) -> usize {
+    let builder: &PrimitiveBuilder<T> = downcast_dyn_array_builder(builder);
+
+    let static_size = std::mem::size_of::<PrimitiveArray<T>>();
+    let buffer_size = builder.len() * std::mem::size_of::<T::Native>();
+    let null_buffer_size = builder.validity_slice().map_or(0, std::mem::size_of_val);
+
+    static_size + padded_buffer_size(buffer_size, 64) + padded_buffer_size(null_buffer_size, 64)
 }
 
 #[cfg(test)]
