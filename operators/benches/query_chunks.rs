@@ -367,6 +367,9 @@ impl PollNextForwarder {
     }
 
     fn process_input(&mut self, record: serde_json::Value) {
+        // comment this in for seeing all tracing logs
+        // dbg!(&record);
+
         if record["level"] != "DEBUG"
             || record["target"] != "geoengine_operators::pro::adapters::stream_statistics_adapter"
             || record["fields"]["empty"] != false
