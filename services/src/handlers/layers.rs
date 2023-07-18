@@ -628,7 +628,8 @@ async fn layer_to_dataset<C: ApplicationContext>(
     };
 
     let from_workflow = RasterDatasetFromWorkflow {
-        name: layer.name,
+        name: None,
+        display_name: layer.name,
         description: Some(layer.description),
         query: qr,
         as_cog: true,
