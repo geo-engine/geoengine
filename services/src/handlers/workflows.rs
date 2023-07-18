@@ -1370,7 +1370,7 @@ mod tests {
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(
                 r#"{
-                "name": "foo",
+                "displayName": "foo",
                 "description": null,
                 "query": {
                     "spatialBounds": {
