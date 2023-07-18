@@ -322,11 +322,11 @@ where
             .iter()
             .map(|(name, builder)| {
                 let values_size = if builder.as_any().is::<Float64Builder>() {
-                    estimate_primite_arrow_array_size::<Float64Type>(builder.as_ref())
+                    estimate_primitive_arrow_array_size::<Float64Type>(builder.as_ref())
                 } else if builder.as_any().is::<Int64Builder>() {
-                    estimate_primite_arrow_array_size::<Int64Type>(builder.as_ref())
+                    estimate_primitive_arrow_array_size::<Int64Type>(builder.as_ref())
                 } else if builder.as_any().is::<UInt8Builder>() {
-                    estimate_primite_arrow_array_size::<UInt8Type>(builder.as_ref())
+                    estimate_primitive_arrow_array_size::<UInt8Type>(builder.as_ref())
                 } else if builder.as_any().is::<StringBuilder>() {
                     // Text
                     let builder: &StringBuilder = downcast_dyn_array_builder(builder.as_ref());
@@ -360,7 +360,7 @@ where
                         + padded_buffer_size(buffer_size, 64)
                         + padded_buffer_size(null_buffer_size, 64)
                 } else if builder.as_any().is::<Date64Builder>() {
-                    estimate_primite_arrow_array_size::<Date64Type>(builder.as_ref())
+                    estimate_primitive_arrow_array_size::<Date64Type>(builder.as_ref())
                 } else {
                     debug_assert!(
                         false,
@@ -477,7 +477,7 @@ where
     }
 }
 
-fn estimate_primite_arrow_array_size<T: ArrowPrimitiveType>(builder: &dyn ArrayBuilder) -> usize {
+fn estimate_primitive_arrow_array_size<T: ArrowPrimitiveType>(builder: &dyn ArrayBuilder) -> usize {
     let builder: &PrimitiveBuilder<T> = downcast_dyn_array_builder(builder);
 
     let static_size = std::mem::size_of::<PrimitiveArray<T>>();
