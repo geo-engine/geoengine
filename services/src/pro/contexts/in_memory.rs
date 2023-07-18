@@ -24,7 +24,7 @@ use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
-use geoengine_operators::pro::cache::tile_cache::TileCache;
+use geoengine_operators::pro::cache::tile_cache::SharedCache;
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
@@ -46,7 +46,7 @@ pub struct ProInMemoryContext {
     task_manager: Arc<ProTaskManagerBackend>,
     quota: QuotaTrackingFactory,
     volumes: Volumes,
-    tile_cache: Arc<TileCache>,
+    tile_cache: Arc<SharedCache>,
 }
 
 impl TestDefault for ProInMemoryContext {
@@ -61,7 +61,7 @@ impl TestDefault for ProInMemoryContext {
             oidc_request_db: Arc::new(None),
             quota: TestDefault::test_default(),
             volumes: Default::default(),
-            tile_cache: Arc::new(TileCache::test_default()),
+            tile_cache: Arc::new(SharedCache::test_default()),
         }
     }
 }
@@ -93,7 +93,7 @@ impl ProInMemoryContext {
             quota,
             volumes: Default::default(),
             tile_cache: Arc::new(
-                TileCache::new(
+                SharedCache::new(
                     cache_config.cache_size_in_mb,
                     cache_config.landing_zone_ratio,
                 )
@@ -138,7 +138,7 @@ impl ProInMemoryContext {
             quota,
             volumes: Default::default(),
             tile_cache: Arc::new(
-                TileCache::new(
+                SharedCache::new(
                     cache_config.cache_size_in_mb,
                     cache_config.landing_zone_ratio,
                 )
@@ -163,7 +163,7 @@ impl ProInMemoryContext {
             quota,
             volumes: Default::default(),
             tile_cache: Arc::new(
-                TileCache::new(
+                SharedCache::new(
                     cache_config.cache_size_in_mb,
                     cache_config.landing_zone_ratio,
                 )

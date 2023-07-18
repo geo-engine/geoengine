@@ -9,8 +9,11 @@ pub enum CacheError {
     NotEnoughSpaceInLandingZone,
     NotEnoughSpaceInCache,
     QueryNotFoundInLandingZone,
+    OperatorCacheEntryNotFound,
     InvalidRasterDataTypeForInsertion,
     TileExpiredBeforeInsertion,
     NegativeSizeOfLandingZone,
     NegativeSizeOfCache,
+    QueryIdAlreadyInLandingZone,
+    CacheEntryIdAlreadyInCache,
 }

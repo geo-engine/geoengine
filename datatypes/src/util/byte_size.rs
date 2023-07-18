@@ -1,5 +1,6 @@
 use crate::raster::Pixel;
 use std::collections::{hash_map::RandomState, HashMap};
+use std::sync::Arc;
 
 /// A trait for types that have a size in bytes
 /// that it takes up in memory
@@ -24,12 +25,6 @@ pub trait ByteSize: Sized {
 impl ByteSize for String {
     fn heap_byte_size(&self) -> usize {
         self.capacity()
-    }
-}
-
-impl ByteSize for Option<String> {
-    fn heap_byte_size(&self) -> usize {
-        self.as_ref().map_or(0, ByteSize::heap_byte_size)
     }
 }
 
@@ -62,7 +57,16 @@ where
 
 impl<P> ByteSize for P where P: Pixel {}
 
-impl<P> ByteSize for Option<P> where P: Pixel {}
+impl<P> ByteSize for Option<P>
+where
+    P: ByteSize,
+{
+    fn heap_byte_size(&self) -> usize {
+        self.as_ref().map_or(0, ByteSize::heap_byte_size)
+    }
+}
+
+impl<T> ByteSize for Arc<T> where T: ByteSize {}
 
 #[cfg(test)]
 mod tests {
