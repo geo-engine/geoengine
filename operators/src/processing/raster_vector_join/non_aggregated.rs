@@ -296,8 +296,7 @@ where
     }
 
     fn into_collection(self, new_column_name: &str) -> Result<FeatureCollection<G>> {
-        let Some(state) = self.state else {
-            log::warn!("Empty input for vector raster join");
+        let Some(state) = self.state else {            
             return Err(Error::EmptyInput); // TODO: maybe output empty dataset or just nulls
         };
         let mut new_collection = state
