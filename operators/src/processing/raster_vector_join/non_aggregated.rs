@@ -94,9 +94,7 @@ where
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
         if collection.is_empty() {
-            log::debug!(
-                "input collection is empty, returning empty collection, skipping raster query"
-            );
+            log::debug!("input collection is empty, returning empty collection, skipping raster query");
 
             return Self::collection_with_new_null_column(
                 &collection,
