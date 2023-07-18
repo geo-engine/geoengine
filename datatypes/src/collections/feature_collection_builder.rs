@@ -2,16 +2,19 @@ use crate::collections::batch_builder::RawFeatureCollectionBuilder;
 use crate::collections::{error, FeatureCollection, FeatureCollectionError};
 use crate::primitives::CacheHint;
 use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInstance, TimeInterval};
-use crate::util::arrow::{downcast_mut_array, ArrowTyped};
+use crate::util::arrow::{
+    downcast_dyn_array_builder, downcast_mut_array, padded_buffer_size, ArrowTyped,
+};
 use crate::util::Result;
 use arrow::array::{
-    ArrayBuilder, BooleanBuilder, Date64Builder, Float64Builder, Int64Builder, StringBuilder,
-    StructBuilder, UInt8Builder,
+    ArrayBuilder, BooleanArray, BooleanBuilder, Date64Builder, Float64Builder, Int64Builder,
+    PrimitiveArray, PrimitiveBuilder, StringArray, StringBuilder, StructArray, StructBuilder,
+    UInt8Builder,
 };
-use arrow::datatypes::Field;
+use arrow::datatypes::{ArrowPrimitiveType, Date64Type, Field, Float64Type, Int64Type, UInt8Type};
 use snafu::ensure;
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::iter;
 use std::marker::PhantomData;
 
@@ -93,7 +96,7 @@ where
                 .collect(),
             types: self.types,
             rows: 0,
-            string_bytes: 0,
+            bool_column_nulls: Default::default(),
             _collection_type: PhantomData,
             cache_hint: self.cache_hint.clone_with_current_datetime(),
         }
@@ -127,9 +130,11 @@ where
     builders: HashMap<String, Box<dyn ArrayBuilder>>,
     types: HashMap<String, FeatureDataType>,
     rows: usize,
-    _collection_type: PhantomData<CollectionType>,
-    string_bytes: usize, // TODO: remove when `StringBuilder` is able to output those
+    // bool builder have no access to nulls, so we have to store it externally
+    // TODO: remove when possible
+    bool_column_nulls: HashSet<String>,
     cache_hint: CacheHint,
+    _collection_type: PhantomData<CollectionType>,
 }
 
 impl<CollectionType> FeatureCollectionRowBuilder<CollectionType>
@@ -177,14 +182,10 @@ where
                 float_builder.append_option(value);
             }
             FeatureDataValue::Text(value) => {
-                self.string_bytes += value.as_bytes().len();
-
                 let string_builder: &mut StringBuilder = downcast_mut_array(data_builder.as_mut());
                 string_builder.append_value(&value);
             }
             FeatureDataValue::NullableText(value) => {
-                self.string_bytes += value.as_ref().map_or(0, |s| s.as_bytes().len());
-
                 let string_builder: &mut StringBuilder = downcast_mut_array(data_builder.as_mut());
                 if let Some(v) = &value {
                     string_builder.append_value(v);
@@ -215,6 +216,10 @@ where
             FeatureDataValue::NullableBool(value) => {
                 let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
                 bool_builder.append_option(value);
+
+                if value.is_none() && !self.bool_column_nulls.contains(column) {
+                    self.bool_column_nulls.insert(column.to_string());
+                }
             }
             FeatureDataValue::DateTime(value) => {
                 let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
@@ -261,6 +266,10 @@ where
             FeatureDataType::Bool => {
                 let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
                 bool_builder.append_null();
+
+                if !self.bool_column_nulls.contains(column) {
+                    self.bool_column_nulls.insert(column.to_string());
+                }
             }
             FeatureDataType::DateTime => {
                 let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
@@ -286,43 +295,91 @@ where
         self.len() == 0
     }
 
-    /// Outputs the number of bytes that is occupied in the builder buffers
+    /// Outputs the memory size in bytes that the feature collection will have after building
     ///
     /// # Panics
     /// * if the data type is unknown or unexpected which must not be the case
     ///
-    pub fn byte_size(&mut self) -> usize {
-        let geometry_size = CollectionType::builder_byte_size(&mut self.geometries_builder);
-        let time_intervals_size = TimeInterval::builder_byte_size(&mut self.time_intervals_builder);
+    pub fn estimate_memory_size(&mut self) -> usize {
+        // TODO: store information? avoid re-calculation?
+        let map_size = std::mem::size_of_val(&self.types)
+            + self
+                .types
+                .iter()
+                .map(|(k, v)| {
+                    std::mem::size_of_val(k) + k.as_bytes().len() + std::mem::size_of_val(v)
+                })
+                .sum::<usize>();
+
+        let geometry_size =
+            CollectionType::estimate_array_memory_size(&mut self.geometries_builder);
+
+        let time_intervals_size =
+            TimeInterval::estimate_array_memory_size(&mut self.time_intervals_builder);
 
         let attributes_size = self
             .builders
-            .values()
-            .map(|builder| {
+            .iter()
+            .map(|(name, builder)| {
                 let values_size = if builder.as_any().is::<Float64Builder>() {
-                    builder.len() * std::mem::size_of::<f64>()
+                    estimate_primitive_arrow_array_size::<Float64Type>(builder.as_ref())
                 } else if builder.as_any().is::<Int64Builder>() {
-                    builder.len() * std::mem::size_of::<i64>()
+                    estimate_primitive_arrow_array_size::<Int64Type>(builder.as_ref())
                 } else if builder.as_any().is::<UInt8Builder>() {
-                    builder.len() * std::mem::size_of::<u8>()
+                    estimate_primitive_arrow_array_size::<UInt8Type>(builder.as_ref())
                 } else if builder.as_any().is::<StringBuilder>() {
-                    0 // TODO: how to get this dynamic value
+                    // Text
+                    let builder: &StringBuilder = downcast_dyn_array_builder(builder.as_ref());
+
+                    let static_size = std::mem::size_of::<StringArray>();
+                    let buffer_size = std::mem::size_of_val(builder.values_slice());
+                    let offsets_size = std::mem::size_of_val(builder.offsets_slice());
+                    let null_buffer_size =
+                        builder.validity_slice().map_or(0, std::mem::size_of_val);
+
+                    static_size
+                        + padded_buffer_size(buffer_size, 64)
+                        + padded_buffer_size(offsets_size, 64)
+                        + padded_buffer_size(null_buffer_size, 64)
                 } else if builder.as_any().is::<BooleanBuilder>() {
+                    // Bool
+                    let builder: &BooleanBuilder = downcast_dyn_array_builder(builder.as_ref());
+
+                    let static_size = std::mem::size_of::<BooleanArray>();
                     // arrow buffer internally packs 8 bools in 1 byte
-                    arrow::util::bit_util::ceil(builder.len(), 8)
+                    let buffer_size = arrow::util::bit_util::ceil(builder.len(), 8);
+
+                    // `BooleanBuilder` has no access to nulls
+                    // TODO: replace if possible
+                    let null_buffer_size = self
+                        .bool_column_nulls
+                        .get(name)
+                        .map_or(0, |_| builder.len() / 8);
+
+                    static_size
+                        + padded_buffer_size(buffer_size, 64)
+                        + padded_buffer_size(null_buffer_size, 64)
                 } else if builder.as_any().is::<Date64Builder>() {
-                    builder.len() * std::mem::size_of::<i64>()
+                    estimate_primitive_arrow_array_size::<Date64Type>(builder.as_ref())
                 } else {
-                    unreachable!("This type is not an attribute type");
+                    debug_assert!(
+                        false,
+                        "Unknown attribute builder type: {:?}",
+                        builder.type_id()
+                    );
+                    0
                 };
 
-                let null_size_estimate = builder.len() / 8;
-
-                values_size + null_size_estimate + self.string_bytes
+                values_size
             })
             .sum::<usize>();
 
-        geometry_size + time_intervals_size + attributes_size
+        let arrow_struct_size = std::mem::size_of::<StructArray>()
+            + geometry_size
+            + time_intervals_size
+            + attributes_size;
+
+        map_size + arrow_struct_size
     }
 
     /// Build the feature collection
@@ -390,7 +447,8 @@ where
                 struct_builder.append(true);
             }
 
-            struct_builder.finish()
+            // we use `finish_cloned` here instead of `finish`, because we want to shrink the memory to fit
+            struct_builder.finish_cloned()
         };
 
         Ok(FeatureCollection::<CollectionType>::new_from_internals(
@@ -416,5 +474,168 @@ where
             _collection_type: Default::default(),
             cache_hint: CacheHint::default(),
         }
+    }
+}
+
+fn estimate_primitive_arrow_array_size<T: ArrowPrimitiveType>(builder: &dyn ArrayBuilder) -> usize {
+    let builder: &PrimitiveBuilder<T> = downcast_dyn_array_builder(builder);
+
+    let static_size = std::mem::size_of::<PrimitiveArray<T>>();
+    let buffer_size = builder.len() * std::mem::size_of::<T::Native>();
+    let null_buffer_size = builder.validity_slice().map_or(0, std::mem::size_of_val);
+
+    static_size + padded_buffer_size(buffer_size, 64) + padded_buffer_size(null_buffer_size, 64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{collections::FeatureCollectionInfos, primitives::MultiPoint};
+
+    #[test]
+    fn test_estimate_multi_point_collection_size() {
+        let builder = FeatureCollectionBuilder::<MultiPoint>::default();
+
+        let mut builder = builder.finish_header();
+
+        for _ in 0..20 {
+            builder.push_geometry(MultiPoint::new(vec![(0., 0.).into()]).unwrap());
+            builder.push_time_interval(TimeInterval::new(0, 1).unwrap());
+            builder.finish_row();
+        }
+
+        let estimated_size = builder.estimate_memory_size();
+
+        let feature_collection = builder.build().unwrap();
+
+        assert_eq!(feature_collection.byte_size(), estimated_size);
+    }
+
+    #[test]
+    fn test_estimate_multi_point_collection_size_with_columns_no_nulls() {
+        let mut builder = FeatureCollectionBuilder::<MultiPoint>::default();
+
+        builder
+            .add_column("a".into(), FeatureDataType::Category)
+            .unwrap();
+        builder
+            .add_column("b".into(), FeatureDataType::Int)
+            .unwrap();
+        builder
+            .add_column("c".into(), FeatureDataType::Float)
+            .unwrap();
+        builder
+            .add_column("d".into(), FeatureDataType::Text)
+            .unwrap();
+        builder
+            .add_column("e".into(), FeatureDataType::Bool)
+            .unwrap();
+        builder
+            .add_column("f".into(), FeatureDataType::DateTime)
+            .unwrap();
+
+        let mut builder = builder.finish_header();
+
+        for _ in 0..20 {
+            builder.push_geometry(MultiPoint::new(vec![(0., 0.).into()]).unwrap());
+            builder.push_time_interval(TimeInterval::new(0, 1).unwrap());
+
+            builder
+                .push_data("a", FeatureDataValue::Category(0))
+                .unwrap();
+            builder.push_data("b", FeatureDataValue::Int(0)).unwrap();
+            builder.push_data("c", FeatureDataValue::Float(0.)).unwrap();
+            builder
+                .push_data("d", FeatureDataValue::Text("foobar".into()))
+                .unwrap();
+            builder
+                .push_data("e", FeatureDataValue::Bool(true))
+                .unwrap();
+            builder
+                .push_data(
+                    "f",
+                    FeatureDataValue::DateTime(TimeInstance::from_millis_unchecked(0)),
+                )
+                .unwrap();
+
+            builder.finish_row();
+        }
+
+        let estimated_size = builder.estimate_memory_size();
+
+        let feature_collection = builder.build().unwrap();
+
+        assert_eq!(feature_collection.byte_size(), estimated_size);
+    }
+
+    #[test]
+    fn test_estimate_multi_point_collection_size_with_columns_with_nulls() {
+        let mut builder = FeatureCollectionBuilder::<MultiPoint>::default();
+
+        builder
+            .add_column("a".into(), FeatureDataType::Category)
+            .unwrap();
+        builder
+            .add_column("b".into(), FeatureDataType::Int)
+            .unwrap();
+        builder
+            .add_column("c".into(), FeatureDataType::Float)
+            .unwrap();
+        builder
+            .add_column("d".into(), FeatureDataType::Text)
+            .unwrap();
+        builder
+            .add_column("e".into(), FeatureDataType::Bool)
+            .unwrap();
+        builder
+            .add_column("f".into(), FeatureDataType::DateTime)
+            .unwrap();
+
+        let mut builder = builder.finish_header();
+
+        for _ in 0..10 {
+            builder.push_geometry(MultiPoint::new(vec![(0., 0.).into()]).unwrap());
+            builder.push_time_interval(TimeInterval::new(0, 1).unwrap());
+
+            builder
+                .push_data("a", FeatureDataValue::Category(0))
+                .unwrap();
+            builder.push_data("b", FeatureDataValue::Int(0)).unwrap();
+            builder.push_data("c", FeatureDataValue::Float(0.)).unwrap();
+            builder
+                .push_data("d", FeatureDataValue::Text("foobar".into()))
+                .unwrap();
+            builder
+                .push_data("e", FeatureDataValue::Bool(true))
+                .unwrap();
+            builder
+                .push_data(
+                    "f",
+                    FeatureDataValue::DateTime(TimeInstance::from_millis_unchecked(0)),
+                )
+                .unwrap();
+
+            builder.finish_row();
+        }
+
+        for _ in 0..10 {
+            builder.push_geometry(MultiPoint::new(vec![(0., 0.).into()]).unwrap());
+            builder.push_time_interval(TimeInterval::new(0, 1).unwrap());
+
+            builder.push_null("a").unwrap();
+            builder.push_null("b").unwrap();
+            builder.push_null("c").unwrap();
+            builder.push_null("d").unwrap();
+            builder.push_null("e").unwrap();
+            builder.push_null("f").unwrap();
+
+            builder.finish_row();
+        }
+
+        let estimated_size = builder.estimate_memory_size();
+
+        let feature_collection = builder.build().unwrap();
+
+        assert_eq!(feature_collection.byte_size(), estimated_size);
     }
 }
