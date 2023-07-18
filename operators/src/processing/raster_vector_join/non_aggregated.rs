@@ -94,7 +94,9 @@ where
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
         if collection.is_empty() {
-            log::debug!("input collection is empty, returning empty collection, skipping raster query");
+            log::debug!(
+                "input collection is empty, returning empty collection, skipping raster query"
+            );
 
             return Self::collection_with_new_null_column(
                 &collection,
@@ -117,7 +119,7 @@ where
             log::debug!(
                 "spatial or temporal intersection is empty, returning the same collection, skipping raster query"
             );
-            
+
             return Self::collection_with_new_null_column(
                 &collection,
                 new_column_name,
@@ -294,7 +296,7 @@ where
     }
 
     fn into_collection(self, new_column_name: &str) -> Result<FeatureCollection<G>> {
-        let Some(state) = self.state else {            
+        let Some(state) = self.state else {
             return Err(Error::EmptyInput); // TODO: maybe output empty dataset or just nulls
         };
         let mut new_collection = state
