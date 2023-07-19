@@ -83,7 +83,7 @@ impl UserAuth for ProInMemoryContext {
 
         backend.quota_available.insert(
             id,
-            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
                 .default_available_quota,
         );
 
@@ -107,7 +107,7 @@ impl UserAuth for ProInMemoryContext {
 
         backend.quota_available.insert(
             id,
-            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
                 .default_available_quota,
         );
 
@@ -181,7 +181,7 @@ impl UserAuth for ProInMemoryContext {
 
                 backend.quota_available.insert(
                     id,
-                    crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                    crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
                         .default_available_quota,
                 );
                 id

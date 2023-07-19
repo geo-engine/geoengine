@@ -13,19 +13,28 @@ pub struct ComputationUnit {
     pub context: ComputationContext, // TODO: introduce the concept of workflows to the operators crate and use/add it here
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuotaMessage {
+    ComputationUnit(ComputationUnit),
+    Flush,
+}
+
+impl From<ComputationUnit> for QuotaMessage {
+    fn from(value: ComputationUnit) -> Self {
+        Self::ComputationUnit(value)
+    }
+}
+
 /// This type holds a [`Sender`] to a channel that is used to track the computation units.
 /// It is passed to the [`StreamStatisticsAdapter`] via the [`QueryContext`].
 #[derive(Clone)]
 pub struct QuotaTracking {
-    quota_sender: UnboundedSender<ComputationUnit>,
+    quota_sender: UnboundedSender<QuotaMessage>,
     computation: ComputationUnit,
 }
 
 impl QuotaTracking {
-    pub fn new(
-        quota_sender: UnboundedSender<ComputationUnit>,
-        computation: ComputationUnit,
-    ) -> Self {
+    pub fn new(quota_sender: UnboundedSender<QuotaMessage>, computation: ComputationUnit) -> Self {
         Self {
             quota_sender,
             computation,
@@ -33,7 +42,7 @@ impl QuotaTracking {
     }
 
     pub fn work_unit_done(&self) {
-        let _ = self.quota_sender.send(self.computation); // ignore the Result because the quota receiver should never close the receiving end of the channel
+        let _ = self.quota_sender.send(self.computation.into()); // ignore the Result because the quota receiver should never close the receiving end of the channel
     }
 }
 
