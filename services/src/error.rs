@@ -433,6 +433,8 @@ pub enum Error {
     InvalidPath,
 
     InvalidWorkflowOutputType,
+
+    NotImplemented,
 }
 
 impl actix_web::error::ResponseError for Error {

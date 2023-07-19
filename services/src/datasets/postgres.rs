@@ -75,14 +75,14 @@ where
             .prepare(
                 "
             SELECT 
-                d.id,
-                d.name,
-                d.display_name,
-                d.description,
-                d.tags,
-                d.source_operator,
-                d.result_descriptor,
-                d.symbology
+                id,
+                name,
+                display_name,
+                description,
+                tags,
+                source_operator,
+                result_descriptor,
+                symbology
             FROM 
                 datasets;",
             )
@@ -124,7 +124,8 @@ where
                 provenance
             FROM 
                 datasets
-            WHERE id = $ 1
+            WHERE 
+                id = $1
             LIMIT 
                 1",
             )

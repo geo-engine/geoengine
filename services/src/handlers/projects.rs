@@ -11,6 +11,7 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
+    // TODO: add project versions now that the free backend supports it
     cfg.service(web::resource("/project").route(web::post().to(create_project_handler::<C>)))
         .service(web::resource("/projects").route(web::get().to(list_projects_handler::<C>)))
         .service(

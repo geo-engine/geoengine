@@ -36,7 +36,6 @@ use crate::util::path_with_base_path;
 use async_trait::async_trait;
 
 use super::permissions::PermissionDb;
-use super::projects::ProProjectDb;
 use super::users::{RoleDb, UserAuth, UserSession};
 use super::util::config::Cache;
 
@@ -48,7 +47,7 @@ pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + Use
     fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
 }
 
-pub trait ProGeoEngineDb: GeoEngineDb + ProProjectDb + UserDb + PermissionDb + RoleDb {}
+pub trait ProGeoEngineDb: GeoEngineDb + UserDb + PermissionDb + RoleDb {}
 
 pub struct ExecutionContextImpl<D>
 where

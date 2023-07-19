@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::DatasetName;
-use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId};
+use crate::contexts::{ApplicationContext, PostgresContext, QueryContextImpl, SessionId};
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::datasets::upload::{Volume, Volumes};
@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
     bb8::PooledConnection,
-    tokio_postgres::{error::SqlState, tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
+    tokio_postgres::{tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
 use geoengine_datatypes::raster::TilingSpecification;
@@ -80,7 +80,11 @@ where
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
-        Self::update_schema(pool.get().await?).await?;
+
+        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
+        if created_schema {
+            Self::create_pro_schema(pool.get().await?).await?;
+        }
 
         let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
@@ -115,9 +119,11 @@ where
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
-        let conn = pool.get().await?;
-        let uninitialized = Self::schema_version(&conn).await? == 0;
-        Self::update_schema(conn).await?;
+
+        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
+        if created_schema {
+            Self::create_pro_schema(pool.get().await?).await?;
+        }
 
         let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(db);
@@ -140,7 +146,7 @@ where
             ),
         };
 
-        if uninitialized {
+        if created_schema {
             info!("Populating database with initial data...");
 
             let mut db = app_ctx.session_context(UserSession::admin_session()).db();
@@ -161,424 +167,187 @@ where
         Ok(app_ctx)
     }
 
-    async fn schema_version(
-        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<i32> {
-        let stmt = match conn.prepare("SELECT version from version").await {
-            Ok(stmt) => stmt,
-            Err(e) => {
-                if let Some(code) = e.code() {
-                    if *code == SqlState::UNDEFINED_TABLE {
-                        info!("Version table not found. Initializing schema.");
-                        return Ok(0);
-                    }
-                }
-                return Err(error::Error::TokioPostgres { source: e });
-            }
-        };
-
-        let row = conn.query_one(&stmt, &[]).await?;
-
-        Ok(row.get(0))
-    }
-
     #[allow(clippy::too_many_lines)]
-    /// Updates the schema, returns the new schema version
-    async fn update_schema(
+    /// Creates the database schema. Returns true if the schema was created, false if it already existed.
+    pub(crate) async fn create_pro_schema(
         conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<i32> {
-        let mut version = Self::schema_version(&conn).await?;
+    ) -> Result<()> {
+        let user_config = get_config_element::<crate::pro::util::config::User>()?;
 
-        loop {
-            match version {
-                0 => {
-                    let user_config = get_config_element::<crate::pro::util::config::User>()?;
+        conn.batch_execute(
+            &format!(r#"
+            -- TODO: distinguish between roles that are (correspond to) users and roles that are not
+            -- TODO: integrity constraint for roles that correspond to users + DELETE CASCADE
+            CREATE TABLE roles (
+                id UUID PRIMARY KEY,
+                name text UNIQUE NOT NULL
+            );
 
-                    conn.batch_execute(
-                        &format!(r#"
-                        CREATE TABLE version (
-                            version INT
-                        );
-                        INSERT INTO version VALUES (1);
+            INSERT INTO roles (id, name) VALUES
+                ({admin_role_id}, 'admin'),
+                ({user_role_id}, 'user'),
+                ({anonymous_role_id}, 'anonymous');
 
-                        -- TODO: distinguish between roles that are (correspond to) users and roles that are not
-                        -- TODO: integrity constraint for roles that correspond to users + DELETE CASCADE
-                        CREATE TABLE roles (
-                            id UUID PRIMARY KEY,
-                            name text UNIQUE NOT NULL
-                        );
+            CREATE TABLE users (
+                id UUID PRIMARY KEY REFERENCES roles(id),
+                email character varying (256) UNIQUE,
+                password_hash character varying (256),
+                real_name character varying (256),
+                active boolean NOT NULL,
+                quota_available bigint NOT NULL DEFAULT 0,
+                quota_used bigint NOT NULL DEFAULT 0, -- TODO: rename to total_quota_used?
+                CONSTRAINT users_anonymous_ck CHECK (
+                    (email IS NULL AND password_hash IS NULL AND real_name IS NULL) OR 
+                    (email IS NOT NULL AND password_hash IS NOT NULL AND 
+                    real_name IS NOT NULL) 
+                ),
+                CONSTRAINT users_quota_used_ck CHECK (quota_used >= 0)
+            );
 
-                        INSERT INTO roles (id, name) VALUES
-                            ({admin_role_id}, 'admin'),
-                            ({user_role_id}, 'user'),
-                            ({anonymous_role_id}, 'anonymous');
+            INSERT INTO users (
+                id, 
+                email,
+                password_hash,
+                real_name,
+                active)
+            VALUES (
+                {admin_role_id}, 
+                {admin_email},
+                {admin_password},
+                'admin',
+                true
+            );
 
-                        CREATE TABLE users (
-                            id UUID PRIMARY KEY REFERENCES roles(id),
-                            email character varying (256) UNIQUE,
-                            password_hash character varying (256),
-                            real_name character varying (256),
-                            active boolean NOT NULL,
-                            quota_available bigint NOT NULL DEFAULT 0,
-                            quota_used bigint NOT NULL DEFAULT 0, -- TODO: rename to total_quota_used?
-                            CONSTRAINT users_anonymous_ck CHECK (
-                               (email IS NULL AND password_hash IS NULL AND real_name IS NULL) OR 
-                               (email IS NOT NULL AND password_hash IS NOT NULL AND 
-                                real_name IS NOT NULL) 
-                            ),
-                            CONSTRAINT users_quota_used_ck CHECK (quota_used >= 0)
-                        );
+            -- relation between users and roles
+            -- all users have a default role where role_id = user_id
+            CREATE TABLE user_roles (
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+                role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
+                PRIMARY KEY (user_id, role_id)
+            );
 
-                        INSERT INTO users (
-                            id, 
-                            email,
-                            password_hash,
-                            real_name,
-                            active)
-                        VALUES (
-                            {admin_role_id}, 
-                            {admin_email},
-                            {admin_password},
-                            'admin',
-                            true
-                        );
+            -- admin user role
+            INSERT INTO user_roles 
+                (user_id, role_id)
+            VALUES 
+                ({admin_role_id}, 
+                {admin_role_id});    
+            
+            CREATE TABLE user_sessions (
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+                session_id UUID REFERENCES sessions(id) ON DELETE CASCADE NOT NULL,
+                created timestamp with time zone NOT NULL,
+                valid_until timestamp with time zone NOT NULL,
+                PRIMARY KEY (user_id, session_id)
+            );   
 
-                        -- relation between users and roles
-                        -- all users have a default role where role_id = user_id
-                        CREATE TABLE user_roles (
-                            user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-                            role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
-                            PRIMARY KEY (user_id, role_id)
-                        );
+            CREATE TABLE project_version_authors (
+                project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+                PRIMARY KEY (project_version_id, user_id)
+            );
 
-                        -- admin user role
-                        INSERT INTO user_roles 
-                            (user_id, role_id)
-                        VALUES 
-                            ({admin_role_id}, 
-                            {admin_role_id});
+            CREATE TABLE user_uploads (
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+                upload_id UUID REFERENCES uploads(id) ON DELETE CASCADE NOT NULL,
+                PRIMARY KEY (user_id, upload_id)
+            );          
 
-                        CREATE TYPE "SpatialReferenceAuthority" AS ENUM (
-                            'Epsg', 'SrOrg', 'Iau2000', 'Esri'
-                        );
 
-                        CREATE TYPE "SpatialReference" AS (
-                            authority "SpatialReferenceAuthority", 
-                            code OID
-                        );
+            CREATE TYPE "Permission" AS ENUM (
+                'Read', 'Owner'
+            );  
 
-                        CREATE TYPE "Coordinate2D" AS (
-                            x double precision, 
-                            y double precision
-                        );
+            -- TODO: uploads, providers permissions
 
-                        CREATE TYPE "BoundingBox2D" AS (
-                            lower_left_coordinate "Coordinate2D", 
-                            upper_right_coordinate "Coordinate2D"
-                        );
+            -- TODO: relationship between uploads and datasets?
 
-                        CREATE TYPE "TimeInterval" AS (                                                      
-                            start timestamp with time zone,
-                            "end" timestamp with time zone
-                        );
+            CREATE TABLE external_users (
+                id UUID PRIMARY KEY REFERENCES users(id),
+                external_id character varying (256) UNIQUE,
+                email character varying (256),
+                real_name character varying (256),
+                active boolean NOT NULL
+            );
 
-                        CREATE TYPE "STRectangle" AS (
-                            spatial_reference "SpatialReference",
-                            bounding_box "BoundingBox2D",
-                            time_interval "TimeInterval"
-                        );
-                        
-                        CREATE TYPE "TimeGranularity" AS ENUM (
-                            'Millis', 'Seconds', 'Minutes', 'Hours',
-                            'Days',  'Months', 'Years'
-                        );
-                        
-                        CREATE TYPE "TimeStep" AS (
-                            granularity "TimeGranularity",
-                            step OID
-                        );
+            CREATE TABLE permissions (
+                -- resource_type "ResourceType" NOT NULL,
+                role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
+                permission "Permission" NOT NULL,
+                dataset_id UUID REFERENCES datasets(id) ON DELETE CASCADE,
+                layer_id UUID REFERENCES layers(id) ON DELETE CASCADE,
+                layer_collection_id UUID REFERENCES layer_collections(id) ON DELETE CASCADE,
+                project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+                check(
+                    (
+                        (dataset_id is not null)::integer +
+                        (layer_id is not null)::integer +
+                        (layer_collection_id is not null)::integer +
+                        (project_id is not null)::integer 
+                    ) = 1
+                )
+            );
 
-                        CREATE TABLE projects (
-                            id UUID PRIMARY KEY
-                        );        
-                        
-                        CREATE TABLE sessions (
-                            id UUID PRIMARY KEY,
-                            user_id UUID REFERENCES users(id),
-                            created timestamp with time zone NOT NULL,
-                            valid_until timestamp with time zone NOT NULL,
-                            project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
-                            view "STRectangle"
-                        );                
+            CREATE UNIQUE INDEX ON permissions (role_id, permission, dataset_id);
+            CREATE UNIQUE INDEX ON permissions (role_id, permission, layer_id);
+            CREATE UNIQUE INDEX ON permissions (role_id, permission, layer_collection_id);
+            CREATE UNIQUE INDEX ON permissions (role_id, permission, project_id);   
 
-                        CREATE TABLE project_versions (
-                            id UUID PRIMARY KEY,
-                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
-                            name character varying (256) NOT NULL,
-                            description text NOT NULL,
-                            bounds "STRectangle" NOT NULL,
-                            time_step "TimeStep" NOT NULL,
-                            changed timestamp with time zone,
-                            author_user_id UUID REFERENCES users(id) NOT NULL
-                        );
+            CREATE VIEW user_permitted_datasets AS
+                SELECT 
+                    r.user_id,
+                    p.dataset_id,
+                    p.permission
+                FROM 
+                    user_roles r JOIN permissions p ON (r.role_id = p.role_id AND dataset_id IS NOT NULL);
 
-                        CREATE INDEX project_version_idx
-                        ON project_versions (project_id, changed DESC, author_user_id DESC);
+            CREATE VIEW user_permitted_projects AS
+                SELECT 
+                    r.user_id,
+                    p.project_id,
+                    p.permission
+                FROM 
+                    user_roles r JOIN permissions p ON (r.role_id = p.role_id AND project_id IS NOT NULL); 
 
-                        CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
-                        
-                        CREATE TYPE "LayerVisibility" AS (
-                            data BOOLEAN,
-                            legend BOOLEAN
-                        );
+            CREATE VIEW user_permitted_layer_collections AS
+                SELECT 
+                    r.user_id,
+                    p.layer_collection_id,
+                    p.permission
+                FROM 
+                    user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_collection_id IS NOT NULL); 
 
-                        CREATE TABLE project_version_layers (
-                            layer_index integer NOT NULL,
-                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
-                            project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
-                            name character varying (256) NOT NULL,
-                            workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
-                            symbology json,
-                            visibility "LayerVisibility" NOT NULL,
-                            PRIMARY KEY (project_id, project_version_id, layer_index)            
-                        );
-                        
-                        CREATE TABLE project_version_plots (
-                            plot_index integer NOT NULL,
-                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
-                            project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
-                            name character varying (256) NOT NULL,
-                            workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
-                            PRIMARY KEY (project_id, project_version_id, plot_index)            
-                        );
+            CREATE VIEW user_permitted_layers AS
+                SELECT 
+                    r.user_id,
+                    p.layer_id,
+                    p.permission
+                FROM 
+                    user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_id IS NOT NULL); 
 
-                        CREATE TABLE workflows (
-                            id UUID PRIMARY KEY,
-                            workflow json NOT NULL
-                        );
+            --- permission for unsorted layers and root layer collection
+            INSERT INTO permissions
+                (role_id, layer_collection_id, permission)  
+            VALUES 
+                ({admin_role_id}, {root_layer_collection_id}, 'Owner'),
+                ({user_role_id}, {root_layer_collection_id}, 'Read'),
+                ({anonymous_role_id}, {root_layer_collection_id}, 'Read'),
+                ({admin_role_id}, {unsorted_layer_collection_id}, 'Owner'),
+                ({user_role_id}, {unsorted_layer_collection_id}, 'Read'),
+                ({anonymous_role_id}, {unsorted_layer_collection_id}, 'Read');
+            "#
+        ,
+        admin_role_id = escape_literal(&Role::admin_role_id().to_string()),
+        admin_email = escape_literal(&user_config.admin_email),
+        admin_password = escape_literal(&bcrypt::hash(user_config.admin_password).expect("Admin password hash should be valid")),
+        user_role_id = escape_literal(&Role::registered_user_role_id().to_string()),
+        anonymous_role_id = escape_literal(&Role::anonymous_role_id().to_string()),
+        root_layer_collection_id = escape_literal(&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
+        unsorted_layer_collection_id = escape_literal(&UNSORTED_COLLECTION_ID.to_string())))
+        .await?;
+        debug!("Created pro database schema");
 
-                        -- TODO: add constraint not null
-                        -- TODO: add length constraints
-                        CREATE TYPE "DatasetName" AS (
-                            namespace text,
-                            name text
-                        );
-
-                        CREATE TABLE datasets (
-                            id UUID PRIMARY KEY,
-                            name "DatasetName" UNIQUE NOT NULL,
-                            display_name text NOT NULL,
-                            description text NOT NULL, 
-                            tags text[], 
-                            source_operator text NOT NULL,
-
-                            result_descriptor json NOT NULL,
-                            meta_data json NOT NULL,
-
-                            symbology json,
-                            provenance json
-                        );
-
-                        -- TODO: add constraint not null
-                        -- TODO: add constaint byte_size >= 0
-                        CREATE TYPE "FileUpload" AS (
-                            id UUID,
-                            name text,
-                            byte_size bigint
-                        );
-
-                        -- TODO: store user
-                        -- TODO: time of creation and last update
-                        -- TODO: upload directory that is not directly derived from id
-                        CREATE TABLE uploads (
-                            id UUID PRIMARY KEY,
-                            user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-                            files "FileUpload"[] NOT NULL
-                        );
-
-                        CREATE TYPE "Permission" AS ENUM (
-                            'Read', 'Owner'
-                        );  
-
-                        CREATE TYPE "PropertyType" AS (
-                            key text,
-                            value text
-                        );
-
-                        CREATE TABLE layer_collections (
-                            id UUID PRIMARY KEY,
-                            name text NOT NULL,
-                            description text NOT NULL,
-                            properties "PropertyType"[] NOT NULL
-                        );
-
-                        -- insert the root layer collection
-                        INSERT INTO layer_collections (
-                            id,
-                            name,
-                            description,
-                            properties
-                        ) VALUES (
-                            {root_layer_collection_id},
-                            'Layers',
-                            'All available Geo Engine layers',
-                            ARRAY[]::"PropertyType"[]
-                        );
-
-                        -- insert the unsorted layer collection
-                        INSERT INTO layer_collections (
-                            id,
-                            name,
-                            description,
-                            properties
-                        ) VALUES (
-                            {unsorted_layer_collection_id},
-                            'Unsorted',
-                            'Unsorted Layers',
-                            ARRAY[]::"PropertyType"[]
-                        );
-    
-
-                        CREATE TABLE layers (
-                            id UUID PRIMARY KEY,
-                            name text NOT NULL,
-                            description text NOT NULL,
-                            workflow json NOT NULL,
-                            symbology json,
-                            properties "PropertyType"[] NOT NULL,
-                            metadata json NOT NULL
-                        );
-
-                        CREATE TABLE collection_layers (
-                            collection UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
-                            layer UUID REFERENCES layers(id) ON DELETE CASCADE NOT NULL,
-                            PRIMARY KEY (collection, layer)
-                        );
-
-                        CREATE TABLE collection_children (
-                            parent UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
-                            child UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
-                            PRIMARY KEY (parent, child)
-                        );
-
-                        -- add unsorted layers to root layer collection
-                        INSERT INTO collection_children (parent, child) VALUES
-                        ({root_layer_collection_id}, {unsorted_layer_collection_id});
-
-                        -- TODO: should name be unique (per user)?
-                        CREATE TABLE layer_providers (
-                            id UUID PRIMARY KEY,
-                            type_name text NOT NULL,
-                            name text NOT NULL,
-
-                            definition json NOT NULL
-                        );
-
-                        -- TODO: uploads, providers permissions
-
-                        -- TODO: relationship between uploads and datasets?
-
-                        CREATE TABLE external_users (
-                            id UUID PRIMARY KEY REFERENCES users(id),
-                            external_id character varying (256) UNIQUE,
-                            email character varying (256),
-                            real_name character varying (256),
-                            active boolean NOT NULL
-                        );
-
-                        CREATE TABLE permissions (
-                            -- resource_type "ResourceType" NOT NULL,
-                            role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
-                            permission "Permission" NOT NULL,
-                            dataset_id UUID REFERENCES datasets(id) ON DELETE CASCADE,
-                            layer_id UUID REFERENCES layers(id) ON DELETE CASCADE,
-                            layer_collection_id UUID REFERENCES layer_collections(id) ON DELETE CASCADE,
-                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-                            check(
-                                (
-                                    (dataset_id is not null)::integer +
-                                    (layer_id is not null)::integer +
-                                    (layer_collection_id is not null)::integer +
-                                    (project_id is not null)::integer 
-                                ) = 1
-                            )
-                        );
-
-                        CREATE UNIQUE INDEX ON permissions (role_id, permission, dataset_id);
-                        CREATE UNIQUE INDEX ON permissions (role_id, permission, layer_id);
-                        CREATE UNIQUE INDEX ON permissions (role_id, permission, layer_collection_id);
-                        CREATE UNIQUE INDEX ON permissions (role_id, permission, project_id);   
-
-                        CREATE VIEW user_permitted_datasets AS
-                            SELECT 
-                                r.user_id,
-                                p.dataset_id,
-                                p.permission
-                            FROM 
-                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND dataset_id IS NOT NULL);
-
-                        CREATE VIEW user_permitted_projects AS
-                            SELECT 
-                                r.user_id,
-                                p.project_id,
-                                p.permission
-                            FROM 
-                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND project_id IS NOT NULL); 
-
-                        CREATE VIEW user_permitted_layer_collections AS
-                            SELECT 
-                                r.user_id,
-                                p.layer_collection_id,
-                                p.permission
-                            FROM 
-                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_collection_id IS NOT NULL); 
-
-                        CREATE VIEW user_permitted_layers AS
-                            SELECT 
-                                r.user_id,
-                                p.layer_id,
-                                p.permission
-                            FROM 
-                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_id IS NOT NULL); 
-
-                        --- permission for unsorted layers and root layer collection
-                        INSERT INTO permissions
-                            (role_id, layer_collection_id, permission)  
-                        VALUES 
-                            ({admin_role_id}, {root_layer_collection_id}, 'Owner'),
-                            ({user_role_id}, {root_layer_collection_id}, 'Read'),
-                            ({anonymous_role_id}, {root_layer_collection_id}, 'Read'),
-                            ({admin_role_id}, {unsorted_layer_collection_id}, 'Owner'),
-                            ({user_role_id}, {unsorted_layer_collection_id}, 'Read'),
-                            ({anonymous_role_id}, {unsorted_layer_collection_id}, 'Read');
-                        "#
-                    ,
-                    admin_role_id = escape_literal(&Role::admin_role_id().to_string()),
-                    admin_email = escape_literal(&user_config.admin_email),
-                    admin_password = escape_literal(&bcrypt::hash(user_config.admin_password).expect("Admin password hash should be valid")),
-                    user_role_id = escape_literal(&Role::registered_user_role_id().to_string()),
-                    anonymous_role_id = escape_literal(&Role::anonymous_role_id().to_string()),
-                    root_layer_collection_id = escape_literal(&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
-                    unsorted_layer_collection_id = escape_literal(&UNSORTED_COLLECTION_ID.to_string())))
-                    .await?;
-                    debug!("Updated user database to schema version {}", version + 1);
-                }
-                // 1 => {
-                // next version
-                // conn.batch_execute(
-                //     "\
-                //     ALTER TABLE users ...
-                //
-                //     UPDATE version SET version = 2;\
-                //     ",
-                // )
-                // .await?;
-                // eprintln!("Updated user database to schema version {}", version + 1);
-                // }
-                _ => return Ok(version),
-            }
-            version += 1;
-        }
+        Ok(())
     }
 }
 
@@ -774,15 +543,14 @@ mod tests {
         INTERNAL_PROVIDER_ID,
     };
     use crate::pro::permissions::{Permission, PermissionDb};
-    use crate::pro::projects::{LoadVersion, ProProjectDb};
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
     };
     use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::projects::{
-        CreateProject, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
-        ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
-        UpdateProject,
+        CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
+        ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
+        STRectangle, UpdateProject,
     };
     use crate::util::config::{get_config_element, Postgres};
     use crate::workflows::registry::WorkflowRegistry;

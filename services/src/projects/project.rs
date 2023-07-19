@@ -24,6 +24,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
 identifier!(ProjectId);
@@ -602,6 +603,19 @@ impl ProjectVersion {
             id: ProjectVersionId::new(),
             changed: DateTime::now(),
         }
+    }
+}
+
+pub enum LoadVersion {
+    Version(ProjectVersionId),
+    Latest,
+}
+
+impl From<Option<Uuid>> for LoadVersion {
+    fn from(id: Option<Uuid>) -> Self {
+        id.map_or(LoadVersion::Latest, |id| {
+            LoadVersion::Version(ProjectVersionId(id))
+        })
     }
 }
 

@@ -8,6 +8,8 @@ use crate::projects::{
 use async_trait::async_trait;
 use std::collections::HashMap;
 
+use super::{LoadVersion, ProjectVersion};
+
 #[derive(Default)]
 pub struct HashMapProjectDbBackend {
     projects: HashMap<ProjectId, Project>,
@@ -106,6 +108,22 @@ impl ProjectDb for InMemoryDb {
             .remove(&project)
             .map(|_| ())
             .ok_or(error::Error::ProjectDeleteFailed)
+    }
+
+    /// Load the the `version` of the `project` for the `user`
+    async fn load_project_version(
+        &self,
+        _project: ProjectId,
+        _version: LoadVersion,
+    ) -> Result<Project> {
+        // not implemented, because the in memory db is deprecated
+        Err(error::Error::NotImplemented)
+    }
+
+    /// List all versions of the `project` if given `user` has at least read permission
+    async fn list_project_versions(&self, _project: ProjectId) -> Result<Vec<ProjectVersion>> {
+        // not implemented, because the in memory db is deprecated
+        Err(error::Error::NotImplemented)
     }
 }
 

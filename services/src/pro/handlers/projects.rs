@@ -4,8 +4,8 @@ use crate::error::Result;
 use crate::handlers;
 use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
-use crate::pro::projects::LoadVersion;
-use crate::pro::projects::ProProjectDb;
+use crate::projects::LoadVersion;
+use crate::projects::ProjectDb;
 use crate::projects::{ProjectId, ProjectVersionId};
 
 use actix_web::FromRequest;

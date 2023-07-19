@@ -527,7 +527,7 @@ where
                 "
         SELECT DISTINCT name, description, properties
         FROM layer_collections
-        WHERE layer_collection_id = $1;",
+        WHERE id = $1;",
             )
             .await?;
 
@@ -549,7 +549,7 @@ where
                 properties, 
                 FALSE AS is_layer
             FROM layer_collections
-                JOIN collection_children cc ON (layer_collection_id = cc.child)
+                JOIN collection_children cc ON (id = cc.child)
             WHERE cc.parent = $1
         ) u UNION (
             SELECT 
@@ -559,8 +559,8 @@ where
                 properties, 
                 TRUE AS is_layer
             FROM layers uc
-                JOIN collection_layers cl ON (layer_id = cl.layer)
-            WHERE AND cl.collection = $1
+                JOIN collection_layers cl ON (id = cl.layer)
+            WHERE cl.collection = $1
         )
         ORDER BY is_layer ASC, name ASC
         LIMIT $2 

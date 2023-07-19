@@ -34,8 +34,6 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         info!("Fixed Session Token: {session_token}");
     }
 
-    // info!("Using in memory backend");
-
     let data_path_config: config::DataProvider = get_config_element()?;
 
     let chunk_byte_size = config::get_config_element::<config::QueryContext>()?
@@ -46,39 +44,46 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     register_gdal_drivers_from_list(config::get_config_element::<config::Gdal>()?.allowed_drivers);
 
-    // let ctx = InMemoryContext::new_with_data(
-    //     data_path_config.dataset_defs_path,
-    //     data_path_config.provider_defs_path,
-    //     data_path_config.layer_defs_path,
-    //     data_path_config.layer_collection_defs_path,
-    //     tiling_spec,
-    //     chunk_byte_size,
-    // )
-    // .await;
+    let ctx = match web_config.backend {
+        Backend::InMemory => {
+            info!("Using in memory backend");
 
-    info!("Using Postgres backend");
+            InMemoryContext::new_with_data(
+                data_path_config.dataset_defs_path,
+                data_path_config.provider_defs_path,
+                data_path_config.layer_defs_path,
+                data_path_config.layer_collection_defs_path,
+                tiling_spec,
+                chunk_byte_size,
+            )
+            .await
+        }
+        Backend::Postgres => {
+            info!("Using Postgres backend");
 
-    let db_config = config::get_config_element::<config::Postgres>()?;
-    let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
-    pg_config
-        .user(&db_config.user)
-        .password(&db_config.password)
-        .host(&db_config.host)
-        .dbname(&db_config.database)
-        // fix schema by providing `search_path` option
-        .options(&format!("-c search_path={}", db_config.schema));
+            let db_config = config::get_config_element::<config::Postgres>()?;
+            let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
+            pg_config
+                .user(&db_config.user)
+                .password(&db_config.password)
+                .host(&db_config.host)
+                .dbname(&db_config.database)
+                // fix schema by providing `search_path` option
+                .options(&format!("-c search_path={}", db_config.schema));
 
-    let ctx = PostgresContext::new_with_data(
-        pg_config,
-        tokio_postgres::NoTls,
-        data_path_config.dataset_defs_path,
-        data_path_config.provider_defs_path,
-        data_path_config.layer_defs_path,
-        data_path_config.layer_collection_defs_path,
-        tiling_spec,
-        chunk_byte_size,
-    )
-    .await?;
+            PostgresContext::new_with_data(
+                pg_config,
+                tokio_postgres::NoTls,
+                data_path_config.dataset_defs_path,
+                data_path_config.provider_defs_path,
+                data_path_config.layer_defs_path,
+                data_path_config.layer_collection_defs_path,
+                tiling_spec,
+                chunk_byte_size,
+            )
+            .await?
+        }
+    };
 
     start(
         static_files_dir,

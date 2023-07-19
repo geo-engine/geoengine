@@ -9,7 +9,6 @@ use crate::api::model::operators::GdalDatasetParameters;
 use crate::api::model::operators::GdalMetaDataStatic;
 use crate::api::model::operators::RasterResultDescriptor;
 use crate::api::model::services::AddDataset;
-use crate::contexts::ApplicationContext;
 use crate::contexts::InMemorySessionContext;
 use crate::contexts::SimpleApplicationContext;
 use crate::datasets::listing::Provenance;
@@ -26,7 +25,7 @@ use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
-    contexts::{InMemoryContext, SessionContext},
+    contexts::SessionContext,
     datasets::storage::{DatasetDefinition, MetaDataDefinition},
     handlers,
 };
@@ -85,13 +84,15 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper(app_ctx: &InMemoryContext) -> (Workflow, WorkflowId) {
+pub async fn register_ndvi_workflow_helper<A: SimpleApplicationContext>(
+    app_ctx: &A,
+) -> (Workflow, WorkflowId) {
     register_ndvi_workflow_helper_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper_with_cache_ttl(
-    app_ctx: &InMemoryContext,
+pub async fn register_ndvi_workflow_helper_with_cache_ttl<A: SimpleApplicationContext>(
+    app_ctx: &A,
     cache_ttl: CacheTtlSeconds,
 ) -> (Workflow, WorkflowId) {
     let (_, dataset) = add_ndvi_to_datasets_with_cache_ttl(app_ctx, cache_ttl).await;
@@ -119,7 +120,9 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl(
     (workflow, id)
 }
 
-pub async fn add_ndvi_to_datasets(app_ctx: &InMemoryContext) -> (DatasetId, NamedData) {
+pub async fn add_ndvi_to_datasets<A: SimpleApplicationContext>(
+    app_ctx: &A,
+) -> (DatasetId, NamedData) {
     add_ndvi_to_datasets_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
 }
 
@@ -128,8 +131,8 @@ pub async fn add_ndvi_to_datasets(app_ctx: &InMemoryContext) -> (DatasetId, Name
 /// # Panics
 ///
 /// Panics if the default session context could not be created.
-pub async fn add_ndvi_to_datasets_with_cache_ttl(
-    app_ctx: &InMemoryContext,
+pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
+    app_ctx: &A,
     cache_ttl: CacheTtlSeconds,
 ) -> (DatasetId, NamedData) {
     let dataset_name = DatasetName {
@@ -155,12 +158,9 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl(
         )),
     };
 
-    let dataset_id = app_ctx
-        .default_session_context()
-        .await
-        .unwrap()
-        .db()
-        .add_dataset(ndvi.properties, Box::new(ndvi.meta_data))
+    let db = &app_ctx.default_session_context().await.unwrap().db();
+    let dataset_id = db
+        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
         .await
         .expect("dataset db access")
         .id;

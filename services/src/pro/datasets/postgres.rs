@@ -573,12 +573,15 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn load_upload(&self, upload: UploadId) -> Result<Upload> {
-        // TODO: check permissions
-
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
-            .prepare("SELECT id, files FROM uploads WHERE id = $1 AND user_id = $2")
+            .prepare(
+                "
+            SELECT u.id, u.files 
+            FROM uploads u JOIN user_uploads uu ON(u.id = uu.upload_id)
+            WHERE u.id = $1 AND uu.user_id = $2",
+            )
             .await?;
 
         let row = conn
@@ -596,17 +599,17 @@ where
     }
 
     async fn create_upload(&self, upload: Upload) -> Result<()> {
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
 
-        let stmt = conn
-            .prepare("INSERT INTO uploads (id, user_id, files) VALUES ($1, $2, $3)")
+        let stmt = tx
+            .prepare("INSERT INTO uploads (id, files) VALUES ($1, $2)")
             .await?;
 
-        conn.execute(
+        tx.execute(
             &stmt,
             &[
                 &upload.id,
-                &self.session.user.id,
                 &upload
                     .files
                     .iter()
@@ -615,6 +618,16 @@ where
             ],
         )
         .await?;
+
+        let stmt = tx
+            .prepare("INSERT INTO user_uploads (user_id, upload_id) VALUES ($1, $2)")
+            .await?;
+
+        tx.execute(&stmt, &[&self.session.user.id, &upload.id])
+            .await?;
+
+        tx.commit().await?;
+
         Ok(())
     }
 }
