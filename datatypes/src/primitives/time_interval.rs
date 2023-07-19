@@ -1,8 +1,8 @@
 use crate::primitives::TimeInstance;
-use crate::util::arrow::{downcast_array, ArrowTyped};
+use crate::util::arrow::{downcast_array, padded_buffer_size, ArrowTyped};
 use crate::util::Result;
 use crate::{error, util::ranges::value_in_range};
-use arrow::array::{Array, ArrayBuilder, BooleanArray};
+use arrow::array::{Array, ArrayBuilder, BooleanArray, Int64Array};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
 #[cfg(feature = "postgres")]
@@ -414,17 +414,21 @@ impl ArrowTyped for TimeInterval {
         DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Int64, nullable)), 2)
     }
 
-    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
-        builder.values().len() * std::mem::size_of::<i64>()
+    fn estimate_array_memory_size(builder: &mut Self::ArrowBuilder) -> usize {
+        let size = std::mem::size_of::<Self::ArrowArray>() + std::mem::size_of::<Int64Array>();
+
+        let buffer_bytes = builder.values().len() * std::mem::size_of::<i64>();
+        size + padded_buffer_size(buffer_bytes, 64)
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
         // TODO: use date if dates out-of-range is fixed for us
         // arrow::array::FixedSizeListBuilder::new(arrow::array::Date64Builder::new(2 * capacity), 2)
 
-        arrow::array::FixedSizeListBuilder::new(
+        arrow::array::FixedSizeListBuilder::with_capacity(
             arrow::array::Int64Builder::with_capacity(2 * capacity),
             2,
+            capacity,
         )
     }
 
@@ -435,7 +439,6 @@ impl ArrowTyped for TimeInterval {
         {
             // TODO: use date if dates out-of-range is fixed for us
             // use arrow::array::Date64Array;
-            use arrow::array::Int64Array;
 
             let int_builder = new_time_intervals.values();
 
@@ -453,6 +456,7 @@ impl ArrowTyped for TimeInterval {
             new_time_intervals.append(true);
         }
 
+        // we can use `finish` instead of `finish_cloned` since we can set the optimal capacity
         Ok(new_time_intervals.finish())
     }
 
@@ -462,7 +466,6 @@ impl ArrowTyped for TimeInterval {
     ) -> Result<Self::ArrowArray, ArrowError> {
         // TODO: use date if dates out-of-range is fixed for us
         // use arrow::array::Date64Array;
-        use arrow::array::Int64Array;
 
         let mut new_time_intervals = Self::arrow_builder(0);
 
@@ -480,7 +483,8 @@ impl ArrowTyped for TimeInterval {
             new_time_intervals.append(true);
         }
 
-        Ok(new_time_intervals.finish())
+        // `finish_cloned` instead of `finish` we cannot set the capacity before filtering, so we have to shrink the capacity afterwards
+        Ok(new_time_intervals.finish_cloned())
     }
 
     fn from_vec(time_intervals: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
@@ -497,6 +501,7 @@ impl ArrowTyped for TimeInterval {
             builder.append(true);
         }
 
+        // we can use `finish` instead of `finish_cloned` since we can set the optimal capacity
         Ok(builder.finish())
     }
 }
@@ -742,17 +747,24 @@ mod tests {
 
     #[test]
     fn arrow_builder_size() {
-        let mut builder = TimeInterval::arrow_builder(2);
-        let v = builder.values();
-        v.append_values(&[1, 2], &[true, true]);
-        v.append_values(&[3, 4], &[true, true]);
+        for i in 0..10 {
+            for capacity in [0, i] {
+                let mut builder = TimeInterval::arrow_builder(capacity);
 
-        assert_eq!(builder.value_length(), 2);
-        assert_eq!(builder.values().len(), 4);
+                for _ in 0..i {
+                    builder.values().append_values(&[1, 2], &[true, true]);
+                    builder.append(true);
+                }
 
-        assert_eq!(
-            TimeInterval::builder_byte_size(&mut builder),
-            4 * std::mem::size_of::<i64>()
-        );
+                assert_eq!(builder.value_length(), 2);
+                assert_eq!(builder.len(), i);
+
+                let builder_byte_size = TimeInterval::estimate_array_memory_size(&mut builder);
+
+                let array = builder.finish_cloned();
+
+                assert_eq!(builder_byte_size, array.get_array_memory_size(), "{i}");
+            }
+        }
     }
 }

@@ -48,7 +48,7 @@ impl ArrowTyped for NoGeometry {
         unreachable!("There is no data type since there is no geometry")
     }
 
-    fn builder_byte_size(_builder: &mut Self::ArrowBuilder) -> usize {
+    fn estimate_array_memory_size(_builder: &mut Self::ArrowBuilder) -> usize {
         0
     }
 
