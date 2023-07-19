@@ -142,7 +142,10 @@ mod tests {
         pro::{
             contexts::ProInMemoryContext,
             users::UserAuth,
-            util::tests::{admin_login, send_pro_test_request},
+            util::{
+                config::Quota,
+                tests::{admin_login, send_pro_test_request},
+            },
         },
         util::{
             tests::{SetMultipartBody, TestDataUploads},
@@ -328,6 +331,7 @@ mod tests {
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
             TestDefault::test_default(),
+            get_config_element::<Quota>().unwrap(),
         );
 
         let session = app_ctx.create_anonymous_session().await.unwrap();

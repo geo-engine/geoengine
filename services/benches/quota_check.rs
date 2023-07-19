@@ -17,7 +17,10 @@ use geoengine_services::{
     pro::{
         contexts::ProInMemoryContext,
         users::{UserAuth, UserDb},
-        util::tests::{add_ndvi_to_datasets, send_pro_test_request},
+        util::{
+            config::QuotaTrackingMode,
+            tests::{add_ndvi_to_datasets, send_pro_test_request},
+        },
     },
     util::config,
     workflows::{registry::WorkflowRegistry, workflow::Workflow},
@@ -115,9 +118,10 @@ async fn bench() {
 async fn main() {
     println!(
         "Starting benchmark, quota check enabled: {}",
-        config::get_config_element::<geoengine_services::pro::util::config::User>()
+        config::get_config_element::<geoengine_services::pro::util::config::Quota>()
             .unwrap()
-            .quota_check
+            .mode
+            == QuotaTrackingMode::Check
     );
     for i in 0..4 {
         let start = Instant::now();
