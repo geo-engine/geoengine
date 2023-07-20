@@ -64,16 +64,18 @@ where
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Result<Self> {
-        let session = &SimpleSession::default();
-
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
         let created_schema = Self::create_schema(pool.get().await?).await?;
 
-        if created_schema {
+        let session = if created_schema {
+            let session = SimpleSession::default();
             Self::create_default_session(pool.get().await?, session.id()).await?;
-        }
+            session
+        } else {
+            Self::load_default_session(pool.get().await?).await?
+        };
 
         Ok(PostgresContext {
             default_session_id: session.id(),
@@ -98,16 +100,18 @@ where
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
     ) -> Result<Self> {
-        let session = SimpleSession::default();
-
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
         let created_schema = Self::create_schema(pool.get().await?).await?;
 
-        if created_schema {
+        let session = if created_schema {
+            let session = SimpleSession::default();
             Self::create_default_session(pool.get().await?, session.id()).await?;
-        }
+            session
+        } else {
+            Self::load_default_session(pool.get().await?).await?
+        };
 
         let app_ctx = PostgresContext {
             default_session_id: session.id(),
@@ -152,7 +156,7 @@ where
             }
         };
 
-        let _row = conn.query_one(&stmt, &[]).await?;
+        let _row = conn.query(&stmt, &[]).await?;
 
         Ok(true)
     }
@@ -402,6 +406,17 @@ where
 
         Ok(())
     }
+    async fn load_default_session(
+        conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<SimpleSession> {
+        let stmt = conn
+            .prepare("SELECT id, project_id, view FROM sessions LIMIT 1;")
+            .await?;
+
+        let row = conn.query_one(&stmt, &[]).await?;
+
+        Ok(SimpleSession::new(row.get(0), row.get(1), row.get(2)))
+    }
 }
 
 #[async_trait]
@@ -417,7 +432,7 @@ where
     }
 
     async fn default_session(&self) -> Result<SimpleSession> {
-        self.session_by_id(self.default_session_id).await
+        Self::load_default_session(self.pool.get().await?).await
     }
 
     async fn update_default_session_project(&self, project: ProjectId) -> Result<()> {
