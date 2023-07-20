@@ -377,7 +377,7 @@ fn gather_poll_nexts(receiver: &mut UnboundedReceiver<Record>) -> BenchmarkEleme
     // poll everything from the receiver until it is empty
     while let Ok(record) = receiver.try_recv() {
         let entry = element_counts.entry(record.operator).or_insert(0);
-        *entry += record.element_count;
+        *entry += 1;
     }
 
     element_counts
@@ -385,7 +385,6 @@ fn gather_poll_nexts(receiver: &mut UnboundedReceiver<Record>) -> BenchmarkEleme
 
 struct Record {
     operator: String,
-    element_count: u64,
 }
 
 struct PollNextForwarder {
@@ -411,7 +410,6 @@ impl PollNextForwarder {
 
         let result = Record {
             operator: record["span"]["name"].as_str().unwrap().to_string(),
-            element_count: record["fields"]["element_count"].as_u64().unwrap(),
         };
 
         self.sender.send(result).unwrap();
