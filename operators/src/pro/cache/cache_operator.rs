@@ -6,7 +6,7 @@ use crate::engine::{
     CanonicOperatorName, InitializedRasterOperator, QueryContext, QueryProcessor,
     RasterResultDescriptor, TypedRasterQueryProcessor,
 };
-use crate::pro::cache::tile_cache::{AsyncCache, SharedCache};
+use crate::pro::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -16,7 +16,7 @@ use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::{pin_project, pinned_drop};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
-use super::tile_cache::CachableSubType;
+use super::shared_cache::CachableSubType;
 
 /// A cache operator that caches the results of its source operator
 pub struct InitializedCacheOperator<S> {
@@ -134,11 +134,6 @@ where
         if let Ok(Some(cache_result)) = cache_result {
             // cache hit
             log::debug!("cache hit for operator {}", self.cache_key);
-            // check that the hit contains elements
-            debug_assert!(
-                cache_result.count_matching_elements() > 0,
-                "cache hit must contain matching elements. Element count: {}, matching elements: {}", cache_result.element_count(), cache_result.count_matching_elements()
-            );
 
             return Ok(Box::pin(cache_result));
         }

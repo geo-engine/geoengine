@@ -29,7 +29,7 @@ use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
-use geoengine_operators::pro::cache::tile_cache::SharedCache;
+use geoengine_operators::pro::cache::shared_cache::SharedCache;
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, info};

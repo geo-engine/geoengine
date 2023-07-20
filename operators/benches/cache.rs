@@ -12,7 +12,7 @@ use geoengine_operators::{
         QueryContextExtensions, QueryProcessor, RasterOperator, SingleRasterSource,
         WorkflowOperatorPath,
     },
-    pro::cache::{cache_operator::InitializedCacheOperator, tile_cache::SharedCache},
+    pro::cache::{cache_operator::InitializedCacheOperator, shared_cache::SharedCache},
     processing::{
         AggregateFunctionParams, NeighborhoodAggregate, NeighborhoodAggregateParams,
         NeighborhoodParams,

@@ -1,7 +1,6 @@
 use super::{
     cache_chunks::{CachedFeatures, LandingZoneQueryFeatures},
-    cache_tile_stream::TypedCacheTileStream,
-    cache_tiles::{CachedTiles, LandingZoneQueryTiles},
+    cache_tiles::{CachedTiles, LandingZoneQueryTiles, TypedCacheTileStream},
     error::CacheError,
     util::CacheSize,
 };

@@ -13,7 +13,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::CanonicOperatorName,
-    pro::cache::tile_cache::{AsyncCache, SharedCache},
+    pro::cache::shared_cache::{AsyncCache, SharedCache},
 };
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};

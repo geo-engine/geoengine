@@ -1,25 +1,24 @@
-use std::sync::Arc;
-
+use super::shared_cache::CachableSubType;
+use super::shared_cache::{
+    CacheElement, CacheElementsContainer, CacheElementsContainerInfos, LandingZoneElementsContainer,
+};
+use crate::util::Result;
+use futures::Stream;
+use geoengine_datatypes::primitives::NoGeometry;
 use geoengine_datatypes::{
     collections::{
-        FeatureCollection, FeatureCollectionInfos, GeometryCollection, MultiLineStringCollection,
-        MultiPointCollection, MultiPolygonCollection,
+        DataCollection, FeatureCollection, FeatureCollectionInfos, GeometryCollection,
+        MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection,
     },
     primitives::{Geometry, MultiLineString, MultiPoint, MultiPolygon, VectorQueryRectangle},
     util::{arrow::ArrowTyped, ByteSize},
 };
-
-use super::tile_cache::{
-    CacheElement, CacheElementsContainer, CacheElementsContainerInfos, LandingZoneElementsContainer,
-};
-use super::{
-    cache_chunk_stream::{CacheChunkStream, TypedCacheChunkStream},
-    tile_cache::CachableSubType,
-};
+use pin_project::pin_project;
+use std::{pin::Pin, sync::Arc};
 
 #[derive(Debug)]
 pub enum CachedFeatures {
-    // NoGeometry(Arc<Vec<DataCollection>>),
+    NoGeometry(Arc<Vec<DataCollection>>),
     MultiPoint(Arc<Vec<MultiPointCollection>>),
     MultiLineString(Arc<Vec<MultiLineStringCollection>>),
     MultiPolygon(Arc<Vec<MultiPolygonCollection>>),
@@ -28,7 +27,7 @@ pub enum CachedFeatures {
 impl CachedFeatures {
     pub fn len(&self) -> usize {
         match self {
-            //CachedFeatures::NoGeometry(v) => v.len(),
+            CachedFeatures::NoGeometry(v) => v.len(),
             CachedFeatures::MultiPoint(v) => v.len(),
             CachedFeatures::MultiLineString(v) => v.len(),
             CachedFeatures::MultiPolygon(v) => v.len(),
@@ -41,7 +40,7 @@ impl CachedFeatures {
 
     pub fn is_expired(&self) -> bool {
         match self {
-            //CachedFeatures::NoGeometry(v) => v.iter().any(|c| c.cache_hint.is_expired()),
+            CachedFeatures::NoGeometry(v) => v.iter().any(|c| c.cache_hint.is_expired()),
             CachedFeatures::MultiPoint(v) => v.iter().any(|c| c.cache_hint.is_expired()),
             CachedFeatures::MultiLineString(v) => v.iter().any(|c| c.cache_hint.is_expired()),
             CachedFeatures::MultiPolygon(v) => v.iter().any(|c| c.cache_hint.is_expired()),
@@ -50,9 +49,9 @@ impl CachedFeatures {
 
     pub fn chunk_stream(&self, query: &VectorQueryRectangle) -> TypedCacheChunkStream {
         match self {
-            //CachedFeatures::NoGeometry(v) => {
-            //    TypedCacheChunkStream::Data(CacheChunkStream::new(Arc::clone(v), *query))
-            //}
+            CachedFeatures::NoGeometry(v) => {
+                TypedCacheChunkStream::NoGeometry(CacheChunkStream::new(Arc::clone(v), *query))
+            }
             CachedFeatures::MultiPoint(v) => {
                 TypedCacheChunkStream::MultiPoint(CacheChunkStream::new(Arc::clone(v), *query))
             }
@@ -70,7 +69,7 @@ impl ByteSize for CachedFeatures {
     fn heap_byte_size(&self) -> usize {
         // we need to use `byte_size` instead of `heap_byte_size` here, because `Vec` stores its data on the heap
         match self {
-            // CachedFeatures::NoGeometry(v) => v.iter().map(FeatureCollectionInfos::byte_size).sum(),
+            CachedFeatures::NoGeometry(v) => v.iter().map(FeatureCollectionInfos::byte_size).sum(),
             CachedFeatures::MultiPoint(v) => v.iter().map(FeatureCollectionInfos::byte_size).sum(),
             CachedFeatures::MultiLineString(v) => {
                 v.iter().map(FeatureCollectionInfos::byte_size).sum()
@@ -84,7 +83,7 @@ impl ByteSize for CachedFeatures {
 
 #[derive(Debug)]
 pub enum LandingZoneQueryFeatures {
-    // NoGeometry(Vec<DataCollection>),
+    NoGeometry(Vec<DataCollection>),
     MultiPoint(Vec<MultiPointCollection>),
     MultiLineString(Vec<MultiLineStringCollection>),
     MultiPolygon(Vec<MultiPolygonCollection>),
@@ -93,7 +92,7 @@ pub enum LandingZoneQueryFeatures {
 impl LandingZoneQueryFeatures {
     pub fn len(&self) -> usize {
         match self {
-            //LandingZoneQueryFeatures::NoGeometry(v) => v.len(),
+            LandingZoneQueryFeatures::NoGeometry(v) => v.len(),
             LandingZoneQueryFeatures::MultiPoint(v) => v.len(),
             LandingZoneQueryFeatures::MultiLineString(v) => v.len(),
             LandingZoneQueryFeatures::MultiPolygon(v) => v.len(),
@@ -109,9 +108,9 @@ impl ByteSize for LandingZoneQueryFeatures {
     fn heap_byte_size(&self) -> usize {
         // we need to use `byte_size` instead of `heap_byte_size` here, because `Vec` stores its data on the heap
         match self {
-            // LandingZoneQueryFeatures::NoGeometry(v) => {
-            //     v.iter().map(FeatureCollectionInfos::byte_size).sum()
-            // }
+            LandingZoneQueryFeatures::NoGeometry(v) => {
+                v.iter().map(FeatureCollectionInfos::byte_size).sum()
+            }
             LandingZoneQueryFeatures::MultiPoint(v) => {
                 v.iter().map(FeatureCollectionInfos::byte_size).sum()
             }
@@ -128,7 +127,7 @@ impl ByteSize for LandingZoneQueryFeatures {
 impl From<LandingZoneQueryFeatures> for CachedFeatures {
     fn from(value: LandingZoneQueryFeatures) -> Self {
         match value {
-            // LandingZoneQueryFeatures::NoGeometry(v) => CachedFeatures::Data(Arc::new(v)),
+            LandingZoneQueryFeatures::NoGeometry(v) => CachedFeatures::NoGeometry(Arc::new(v)),
             LandingZoneQueryFeatures::MultiPoint(v) => CachedFeatures::MultiPoint(Arc::new(v)),
             LandingZoneQueryFeatures::MultiLineString(v) => {
                 CachedFeatures::MultiLineString(Arc::new(v))
@@ -147,7 +146,7 @@ impl CacheElementsContainerInfos<VectorQueryRectangle> for CachedFeatures {
 impl<G> CacheElementsContainer<VectorQueryRectangle, FeatureCollection<G>> for CachedFeatures
 where
     G: CachableSubType<CacheElementType = FeatureCollection<G>> + Geometry + ArrowTyped,
-    FeatureCollection<G>: GeometryCollection,
+    FeatureCollection<G>: CacheElementHitCheck,
 {
     type ResultStream = CacheChunkStream<G>;
 
@@ -159,7 +158,7 @@ where
 impl<G> LandingZoneElementsContainer<FeatureCollection<G>> for LandingZoneQueryFeatures
 where
     G: CachableSubType<CacheElementType = FeatureCollection<G>> + Geometry + ArrowTyped,
-    FeatureCollection<G>: GeometryCollection,
+    FeatureCollection<G>: CacheElementHitCheck,
 {
     fn insert_element(
         &mut self,
@@ -176,7 +175,7 @@ where
 impl<G> CacheElement for FeatureCollection<G>
 where
     G: Geometry + ArrowTyped + CachableSubType<CacheElementType = Self> + ArrowTyped + Sized,
-    FeatureCollection<G>: GeometryCollection,
+    FeatureCollection<G>: CacheElementHitCheck,
 {
     type Query = VectorQueryRectangle;
     type LandingZoneContainer = LandingZoneQueryFeatures;
@@ -189,8 +188,8 @@ where
 
     fn typed_canonical_operator_name(
         key: crate::engine::CanonicOperatorName,
-    ) -> super::tile_cache::TypedCanonicOperatorName {
-        super::tile_cache::TypedCanonicOperatorName::Vector(key)
+    ) -> super::shared_cache::TypedCanonicOperatorName {
+        super::shared_cache::TypedCanonicOperatorName::Vector(key)
     }
 }
 
@@ -234,3 +233,96 @@ macro_rules! impl_cache_element_subtype_magic {
 impl_cache_element_subtype_magic!(MultiPoint, MultiPoint);
 impl_cache_element_subtype_magic!(MultiLineString, MultiLineString);
 impl_cache_element_subtype_magic!(MultiPolygon, MultiPolygon);
+
+/// Our own tile stream that "owns" the data (more precisely a reference to the data)
+#[pin_project(project = CacheChunkStreamProjection)]
+pub struct CacheChunkStream<G> {
+    data: Arc<Vec<FeatureCollection<G>>>,
+    query: VectorQueryRectangle,
+    idx: usize,
+}
+
+impl<G> CacheChunkStream<G>
+where
+    G: Geometry,
+    FeatureCollection<G>: FeatureCollectionInfos,
+{
+    pub fn new(data: Arc<Vec<FeatureCollection<G>>>, query: VectorQueryRectangle) -> Self {
+        Self {
+            data,
+            query,
+            idx: 0,
+        }
+    }
+
+    pub fn element_count(&self) -> usize {
+        self.data.len()
+    }
+}
+
+impl<G: Geometry> Stream for CacheChunkStream<G>
+where
+    FeatureCollection<G>: CacheElementHitCheck,
+{
+    type Item = Result<FeatureCollection<G>>;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let CacheChunkStreamProjection { data, query, idx } = self.as_mut().project();
+
+        // return the next tile that is contained in the query, skip all tiles that are not contained
+        for i in *idx..data.len() {
+            let chunk = &data[i];
+            if chunk.cache_element_hit(query) {
+                *idx = i + 1;
+                return std::task::Poll::Ready(Some(Ok(chunk.clone())));
+            }
+        }
+
+        std::task::Poll::Ready(None)
+    }
+}
+
+pub enum TypedCacheChunkStream {
+    NoGeometry(CacheChunkStream<NoGeometry>),
+    MultiPoint(CacheChunkStream<MultiPoint>),
+    MultiLineString(CacheChunkStream<MultiLineString>),
+    MultiPolygon(CacheChunkStream<MultiPolygon>),
+}
+
+trait CacheElementHitCheck {
+    fn cache_element_hit(&self, query_rect: &VectorQueryRectangle) -> bool;
+}
+
+impl CacheElementHitCheck for FeatureCollection<NoGeometry> {
+    fn cache_element_hit(&self, query_rect: &VectorQueryRectangle) -> bool {
+        let Some(time_bounds) = self.time_bounds() else {
+            return false;
+        };
+
+        time_bounds == query_rect.time_interval || time_bounds.intersects(&query_rect.time_interval)
+    }
+}
+
+macro_rules! impl_cache_result_check {
+    ($t:ty) => {
+        impl CacheElementHitCheck for FeatureCollection<$t> {
+            fn cache_element_hit(&self, query_rect: &VectorQueryRectangle) -> bool {
+                let Some(bbox) = self.bbox() else {return false;};
+
+                let Some(time_bounds) = self.time_bounds() else {return false;};
+
+                (bbox == query_rect.spatial_bounds
+                    || bbox.intersects_bbox(&query_rect.spatial_bounds))
+                    && (time_bounds == query_rect.time_interval
+                        || time_bounds.intersects(&query_rect.time_interval))
+            }
+        }
+    };
+}
+
+impl_cache_result_check!(MultiPoint);
+impl_cache_result_check!(MultiLineString);
+impl_cache_result_check!(MultiPolygon);
