@@ -675,6 +675,7 @@ mod tests {
         send_pro_test_request,
     };
     use crate::pro::{contexts::ProInMemoryContext, users::UserId};
+    use crate::util::config::get_config_element;
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
 
     use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb, UserAuth};
@@ -1255,7 +1256,11 @@ mod tests {
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_request_db(server_url);
 
-        let ctx = ProInMemoryContext::new_with_oidc(request_db, TestDefault::test_default());
+        let ctx = ProInMemoryContext::new_with_oidc(
+            request_db,
+            TestDefault::test_default(),
+            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
+        );
         let res = oidc_init_test_helper(Method::POST, ctx).await;
 
         assert_eq!(res.status(), 200);
@@ -1286,7 +1291,11 @@ mod tests {
             ),
         );
 
-        let ctx = ProInMemoryContext::new_with_oidc(request_db, TestDefault::test_default());
+        let ctx = ProInMemoryContext::new_with_oidc(
+            request_db,
+            TestDefault::test_default(),
+            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
+        );
         let res = oidc_init_test_helper(Method::POST, ctx).await;
 
         ErrorResponse::assert(
@@ -1336,7 +1345,11 @@ mod tests {
             state: SINGLE_STATE.to_string(),
         };
 
-        let ctx = ProInMemoryContext::new_with_oidc(request_db, TestDefault::test_default());
+        let ctx = ProInMemoryContext::new_with_oidc(
+            request_db,
+            TestDefault::test_default(),
+            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
+        );
         let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
 
         assert_eq!(res.status(), 200);
@@ -1356,7 +1369,11 @@ mod tests {
             state: SINGLE_STATE.to_string(),
         };
 
-        let ctx = ProInMemoryContext::new_with_oidc(request_db, TestDefault::test_default());
+        let ctx = ProInMemoryContext::new_with_oidc(
+            request_db,
+            TestDefault::test_default(),
+            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
+        );
         let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
 
         ErrorResponse::assert(
@@ -1399,7 +1416,11 @@ mod tests {
             state: SINGLE_STATE.to_string(),
         };
 
-        let ctx = ProInMemoryContext::new_with_oidc(request_db, TestDefault::test_default());
+        let ctx = ProInMemoryContext::new_with_oidc(
+            request_db,
+            TestDefault::test_default(),
+            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
+        );
         let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
 
         ErrorResponse::assert(
@@ -1578,7 +1599,7 @@ mod tests {
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(
             quota.available,
-            crate::util::config::get_config_element::<crate::pro::util::config::User>()
+            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .unwrap()
                 .default_available_quota
         );

@@ -12,7 +12,7 @@ use std::{
     fmt::{Debug, Formatter},
     str::FromStr,
 };
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 identifier!(DataProviderId);
 
@@ -197,7 +197,7 @@ impl<'a> ToSchema<'a> for NamedData {
 
 /// A (optionally namespaced) name for a `Dataset`.
 /// It can be resolved into a [`DataId`] if you know the data provider.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, ToSql, FromSql)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, IntoParams, ToSql, FromSql)]
 pub struct DatasetName {
     pub namespace: Option<String>,
     pub name: String,

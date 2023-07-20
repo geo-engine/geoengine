@@ -286,7 +286,7 @@ where
 
             // there could be the degenerated case that one left feature matches with
             // many features of the right side and is twice as large as the chunk byte size
-            if !builder.is_empty() && builder.byte_size() > self.chunk_byte_size {
+            if !builder.is_empty() && builder.estimate_memory_size() > self.chunk_byte_size {
                 break;
             }
         }

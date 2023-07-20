@@ -150,6 +150,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let web_config: crate::util::config::Web = get_config_element()?;
     let open_telemetry: crate::pro::util::config::OpenTelemetry = get_config_element()?;
     let cache_config: crate::pro::util::config::Cache = get_config_element()?;
+    let quota_config: crate::pro::util::config::Quota = get_config_element()?;
 
     if user_config.user_registration {
         info!("User Registration: enabled");
@@ -183,6 +184,8 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         info!("Cache: disabled");
     }
 
+    info!("QuotaTracking: {:?}", quota_config.mode);
+
     let data_path_config: config::DataProvider = get_config_element()?;
 
     let chunk_byte_size = config::get_config_element::<config::QueryContext>()?
@@ -203,6 +206,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                 static_files_dir,
                 web_config,
                 cache_config,
+                quota_config,
             )
             .await
         }
@@ -215,12 +219,14 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                 static_files_dir,
                 web_config,
                 cache_config,
+                quota_config,
             )
             .await
         }
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn start_in_memory(
     data_path_config: config::DataProvider,
     tiling_spec: TilingSpecification,
@@ -229,6 +235,7 @@ async fn start_in_memory(
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
     cache_config: crate::pro::util::config::Cache,
+    quota_config: crate::pro::util::config::Quota,
 ) -> Result<()> {
     info!("Using in memory backend");
     let ctx = ProInMemoryContext::new_with_data(
@@ -240,6 +247,7 @@ async fn start_in_memory(
         chunk_byte_size,
         oidc_config,
         cache_config,
+        quota_config,
     )
     .await;
 
@@ -253,6 +261,7 @@ async fn start_in_memory(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn start_postgres(
     data_path_config: config::DataProvider,
     tiling_spec: TilingSpecification,
@@ -261,6 +270,7 @@ async fn start_postgres(
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
     cache_config: crate::pro::util::config::Cache,
+    quota_config: crate::pro::util::config::Quota,
 ) -> Result<()> {
     {
         info!("Using Postgres backend");
@@ -286,6 +296,7 @@ async fn start_postgres(
             chunk_byte_size,
             oidc_config,
             cache_config,
+            quota_config,
         )
         .await?;
 

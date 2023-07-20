@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
-use utoipa::{Modify, OpenApi, ToSchema};
+use utoipa::{IntoParams, Modify, OpenApi, ToSchema};
 
 pub const EBV_OVERVIEW_TASK_TYPE: &str = "ebv-overview";
 pub const EBV_MULTI_OVERVIEW_TASK_TYPE: &str = "ebv-multi-overview";
@@ -349,6 +349,10 @@ struct CreateOverviewParams {
     resampling_method: Option<ResamplingMethod>,
 }
 
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(names("path"))]
+struct EbvPath(PathBuf);
+
 /// Creates overview for a single NetCDF file
 #[utoipa::path(
     tag = "Overviews",
@@ -373,14 +377,14 @@ struct CreateOverviewParams {
 async fn create_overview<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    path: web::Path<PathBuf>,
+    path: web::Path<EbvPath>,
     params: Option<web::Json<CreateOverviewParams>>,
 ) -> Result<impl Responder> {
     let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
     let task = EvbOverviewTask::<C::SessionContext> {
         ctx: ctx.clone(),
-        file: path.into_inner(),
+        file: path.into_inner().0,
         params: params.map(web::Json::into_inner).unwrap_or_default(),
     }
     .boxed();
@@ -459,7 +463,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EvbOverviewTask<C> {
 
 impl TaskStatusInfo for NetCdfCfOverviewResponse {}
 
-#[derive(Debug, Deserialize, Default, ToSchema)]
+#[derive(Debug, Deserialize, Default, ToSchema, IntoParams)]
 #[schema(example = json!({
     "force": "false"
 }))]
@@ -493,14 +497,14 @@ struct RemoveOverviewParams {
 async fn remove_overview<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    path: web::Path<PathBuf>,
+    path: web::Path<EbvPath>,
     params: web::Query<RemoveOverviewParams>,
 ) -> Result<impl Responder> {
     let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
     let task = EvbRemoveOverviewTask::<C::SessionContext> {
         ctx: ctx.clone(),
-        file: path.into_inner(),
+        file: path.into_inner().0,
         params: params.into_inner(),
     }
     .boxed();

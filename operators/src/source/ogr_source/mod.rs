@@ -1062,7 +1062,7 @@ where
                 }
             }
 
-            if !builder.is_empty() && builder.byte_size() >= chunk_byte_size {
+            if !builder.is_empty() && builder.estimate_memory_size() >= chunk_byte_size {
                 break;
             }
         }
@@ -3960,7 +3960,7 @@ mod tests {
         assert!(!result.last().unwrap().is_empty());
 
         // LARGER CHUNK
-        let context = MockQueryContext::new((1_000).into());
+        let context = MockQueryContext::new((1_650).into());
         let query = query_processor
             .query(
                 VectorQueryRectangle {
