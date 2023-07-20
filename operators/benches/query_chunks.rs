@@ -200,11 +200,8 @@ fn write_csv(
     for (name, result) in results {
         csv.write_field(name).unwrap();
         for header in &element_headers {
-            if let Some(element_count) = result.get(header) {
-                csv.write_field(element_count.to_string()).unwrap();
-            } else {
-                csv.write_field([]).unwrap();
-            }
+            csv.write_field(result.get(header).unwrap_or(&0).to_string())
+                .unwrap();
         }
         csv.write_record(None::<&[u8]>).unwrap();
     }
