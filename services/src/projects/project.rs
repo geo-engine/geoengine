@@ -606,6 +606,7 @@ impl ProjectVersion {
     }
 }
 
+#[derive(PartialEq)]
 pub enum LoadVersion {
     Version(ProjectVersionId),
     Latest,

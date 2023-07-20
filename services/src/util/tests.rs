@@ -10,6 +10,7 @@ use crate::api::model::operators::GdalMetaDataStatic;
 use crate::api::model::operators::RasterResultDescriptor;
 use crate::api::model::services::AddDataset;
 use crate::contexts::InMemorySessionContext;
+use crate::contexts::PostgresContext;
 use crate::contexts::SimpleApplicationContext;
 use crate::datasets::listing::Provenance;
 use crate::datasets::storage::DatasetStore;
@@ -31,7 +32,10 @@ use crate::{
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{http, http::header, http::Method, middleware, test, web, App};
+use bb8_postgres::bb8::ManageConnection;
+use bb8_postgres::PostgresConnectionManager;
 use flexi_logger::Logger;
+use futures_util::Future;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::operations::image::RgbaColor;
@@ -39,11 +43,18 @@ use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::test_data;
+use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use geoengine_operators::util::gdal::create_ndvi_meta_data_with_cache_ttl;
+use rand::RngCore;
 use std::io::Write;
 use std::path::PathBuf;
+use tokio::runtime::Handle;
+use tokio_postgres::NoTls;
+
+use super::config::get_config_element;
+use super::config::Postgres;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper<C: SimpleApplicationContext>(app_ctx: &C) -> ProjectId {
@@ -435,5 +446,85 @@ impl SetMultipartBody for test::TestRequest {
                 "multipart/form-data; boundary=10196671711503402186283068890",
             ))
             .set_payload(body)
+    }
+}
+
+/// Setup database schema and return its name.
+async fn setup_db() -> (tokio_postgres::Config, String) {
+    let mut db_config = get_config_element::<Postgres>().unwrap();
+    db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
+
+    let mut pg_config = tokio_postgres::Config::new();
+    pg_config
+        .user(&db_config.user)
+        .password(&db_config.password)
+        .host(&db_config.host)
+        .dbname(&db_config.database);
+
+    // generate schema with prior connection
+    PostgresConnectionManager::new(pg_config.clone(), NoTls)
+        .connect()
+        .await
+        .unwrap()
+        .batch_execute(&format!("CREATE SCHEMA {};", &db_config.schema))
+        .await
+        .unwrap();
+
+    // fix schema by providing `search_path` option
+    pg_config.options(&format!("-c search_path={}", db_config.schema));
+
+    (pg_config, db_config.schema)
+}
+
+/// Tear down database schema.
+async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
+    // generate schema with prior connection
+    PostgresConnectionManager::new(pg_config, NoTls)
+        .connect()
+        .await
+        .unwrap()
+        .batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
+        .await
+        .unwrap();
+}
+
+///
+/// # Panics
+///
+pub async fn with_temp_context<F, Fut>(f: F)
+where
+    F: FnOnce(PostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+        + std::panic::UnwindSafe
+        + Send
+        + 'static,
+    Fut: Future<Output = ()>,
+{
+    let (pg_config, schema) = setup_db().await;
+
+    // catch all panics and clean up first…
+    let executed_fn = {
+        let pg_config = pg_config.clone();
+        std::panic::catch_unwind(move || {
+            tokio::task::block_in_place(move || {
+                Handle::current().block_on(async move {
+                    let ctx = PostgresContext::new_with_context_spec(
+                        pg_config.clone(),
+                        tokio_postgres::NoTls,
+                        TestDefault::test_default(),
+                        TestDefault::test_default(),
+                    )
+                    .await
+                    .unwrap();
+                    f(ctx, pg_config.clone()).await;
+                });
+            });
+        })
+    };
+
+    tear_down_db(pg_config, &schema).await;
+
+    // then throw errors afterwards
+    if let Err(err) = executed_fn {
+        std::panic::resume_unwind(err);
     }
 }

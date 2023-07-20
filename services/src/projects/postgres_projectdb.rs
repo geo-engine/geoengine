@@ -354,7 +354,7 @@ where
                 p.changed
             FROM 
                 project_versions p
-            WHERE p.project_id = $1 AND p.project_version = $2",
+            WHERE p.project_id = $1 AND p.id = $2",
                 )
                 .await?;
 

@@ -113,9 +113,13 @@ impl ProjectDb for InMemoryDb {
     /// Load the the `version` of the `project` for the `user`
     async fn load_project_version(
         &self,
-        _project: ProjectId,
-        _version: LoadVersion,
+        project: ProjectId,
+        version: LoadVersion,
     ) -> Result<Project> {
+        if version == LoadVersion::Latest {
+            return self.load_project(project).await;
+        }
+
         // not implemented, because the in memory db is deprecated
         Err(error::Error::NotImplemented)
     }

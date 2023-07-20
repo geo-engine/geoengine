@@ -417,7 +417,7 @@ where
                 a.user_id
             FROM 
                 project_versions p JOIN project_version_authors a ON (p.id = a.project_version_id)
-            WHERE p.project_id = $1 AND p.project_version = $2",
+            WHERE p.project_id = $1 AND p.id = $2",
                 )
                 .await?;
 
