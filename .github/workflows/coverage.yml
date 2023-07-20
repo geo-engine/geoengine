@@ -2,6 +2,8 @@ name: coverage
 
 on:
   pull_request:
+  # Creates a coverage of the main branch and reflects changes in coverage within PRs
+  push:
   merge_group:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -104,7 +106,7 @@ jobs:
             --lcov \
             --output-path lcov.info
       - name: Upload coverage to Coveralls
-        uses: coverallsapp/github-action@v1.1.1
+        uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: lcov.info
