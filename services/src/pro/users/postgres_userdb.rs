@@ -50,7 +50,7 @@ where
             .await?;
 
         let quota_available =
-            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
                 .default_available_quota;
 
         tx.execute(
@@ -96,7 +96,7 @@ where
             .await?;
 
         let quota_available =
-            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
                 .default_available_quota;
 
         let stmt = tx
@@ -253,7 +253,7 @@ where
                 tx.execute(&stmt, &[&user_id, &user.email]).await?;
 
                 let quota_available =
-                    crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                    crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
                         .default_available_quota;
 
                 //TODO: Inconsistent to hashmap implementation, where an external user is not part of the user database.

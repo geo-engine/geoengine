@@ -105,7 +105,7 @@ mod tests {
     use tracing::{span, Level};
     use uuid::Uuid;
 
-    use crate::pro::meta::quota::{ComputationContext, ComputationUnit};
+    use crate::pro::meta::quota::{ComputationContext, ComputationUnit, QuotaMessage};
 
     use super::*;
 
@@ -113,7 +113,7 @@ mod tests {
     async fn simple() {
         let v = vec![1, 2, 3];
         let v_stream = futures::stream::iter(v);
-        let (tx, mut rx) = unbounded_channel::<ComputationUnit>();
+        let (tx, mut rx) = unbounded_channel::<QuotaMessage>();
         let issuer = Uuid::new_v4();
         let context = ComputationContext::new();
         let quota = QuotaTracking::new(tx, ComputationUnit { issuer, context });
@@ -144,7 +144,7 @@ mod tests {
 
         assert_eq!(
             rx.recv().await.unwrap(),
-            ComputationUnit { issuer, context }
+            ComputationUnit { issuer, context }.into()
         );
     }
 }

@@ -15,7 +15,7 @@ use crate::pro::projects::ProHashMapProjectDbBackend;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::{HashMapUserDbBackend, OidcRequestDb, UserAuth, UserSession};
-use crate::pro::util::config::{Cache, Oidc};
+use crate::pro::util::config::{Cache, Oidc, Quota};
 use crate::tasks::SimpleTaskManagerContext;
 use crate::workflows::registry::HashMapRegistryBackend;
 use crate::{datasets::add_from_directory::add_providers_from_directory, error::Result};
@@ -76,12 +76,18 @@ impl ProInMemoryContext {
         query_ctx_chunk_size: ChunkByteSize,
         oidc_config: Oidc,
         cache_config: Cache,
+        quota_config: Quota,
     ) -> Self {
         let db_backend = Arc::new(ProInMemoryDbBackend::default());
 
         let session = UserSession::admin_session();
         let db = ProInMemoryDb::new(db_backend.clone(), session.clone());
-        let quota = initialize_quota_tracking(db);
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
+        );
 
         let app_ctx = Self {
             db: db_backend,
@@ -122,11 +128,17 @@ impl ProInMemoryContext {
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
         cache_config: Cache,
+        quota_config: Quota,
     ) -> Self {
         let db_backend = Arc::new(ProInMemoryDbBackend::default());
 
         let db = ProInMemoryDb::new(db_backend.clone(), UserSession::admin_session());
-        let quota = initialize_quota_tracking(db);
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
+        );
 
         Self {
             db: db_backend,
@@ -147,11 +159,16 @@ impl ProInMemoryContext {
         }
     }
 
-    pub fn new_with_oidc(oidc_db: OidcRequestDb, cache_config: Cache) -> Self {
+    pub fn new_with_oidc(oidc_db: OidcRequestDb, cache_config: Cache, quota_config: Quota) -> Self {
         let db_backend = Arc::new(ProInMemoryDbBackend::default());
 
         let db = ProInMemoryDb::new(db_backend.clone(), UserSession::admin_session());
-        let quota = initialize_quota_tracking(db);
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
+        );
 
         Self {
             db: db_backend,
