@@ -10,7 +10,8 @@ pub enum CacheError {
     NotEnoughSpaceInCache,
     QueryNotFoundInLandingZone,
     OperatorCacheEntryNotFound,
-    InvalidRasterDataTypeForInsertion,
+    InvalidTypeForInsertion,
+    #[snafu(display("The Element inserted into the cache is already expired"))]
     TileExpiredBeforeInsertion,
     NegativeSizeOfLandingZone,
     NegativeSizeOfCache,

@@ -1,6 +1,5 @@
 use std::{pin::Pin, sync::Arc};
 
-use super::{error::CacheError, tile_cache::LandingZoneQueryTiles};
 use crate::util::Result;
 use futures::Stream;
 use geoengine_datatypes::{
@@ -86,53 +85,3 @@ pub enum TypedCacheTileStream {
     F32(CacheTileStream<f32>),
     F64(CacheTileStream<f64>),
 }
-
-/// A helper trait that allows converting between enums variants and generic structs
-pub trait Cachable: Sized {
-    fn stream(b: TypedCacheTileStream) -> Option<CacheTileStream<Self>>;
-
-    fn insert_tile(
-        tiles: &mut LandingZoneQueryTiles,
-        tile: RasterTile2D<Self>,
-    ) -> Result<(), CacheError>;
-
-    fn create_active_query_tiles() -> LandingZoneQueryTiles;
-}
-
-macro_rules! impl_tile_streamer {
-    ($t:ty, $variant:ident) => {
-        impl Cachable for $t {
-            fn stream(t: TypedCacheTileStream) -> Option<CacheTileStream<$t>> {
-                if let TypedCacheTileStream::$variant(s) = t {
-                    return Some(s);
-                }
-                None
-            }
-
-            fn insert_tile(
-                tiles: &mut LandingZoneQueryTiles,
-                tile: RasterTile2D<Self>,
-            ) -> Result<(), CacheError> {
-                if let LandingZoneQueryTiles::$variant(ref mut tiles) = tiles {
-                    tiles.push(tile);
-                    return Ok(());
-                }
-                Err(super::error::CacheError::InvalidRasterDataTypeForInsertion.into())
-            }
-
-            fn create_active_query_tiles() -> LandingZoneQueryTiles {
-                LandingZoneQueryTiles::$variant(Vec::new())
-            }
-        }
-    };
-}
-impl_tile_streamer!(i8, I8);
-impl_tile_streamer!(u8, U8);
-impl_tile_streamer!(i16, I16);
-impl_tile_streamer!(u16, U16);
-impl_tile_streamer!(i32, I32);
-impl_tile_streamer!(u32, U32);
-impl_tile_streamer!(i64, I64);
-impl_tile_streamer!(u64, U64);
-impl_tile_streamer!(f32, F32);
-impl_tile_streamer!(f64, F64);

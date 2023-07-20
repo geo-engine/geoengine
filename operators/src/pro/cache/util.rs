@@ -43,7 +43,7 @@ impl CacheSize {
 
     #[inline]
     pub fn can_fit_bytes(&self, bytes: usize) -> bool {
-        !self.is_overfull() && self.byte_size_free() >= bytes
+        !self.is_overflowing() && self.byte_size_free() >= bytes
     }
 
     #[inline]
@@ -52,7 +52,7 @@ impl CacheSize {
     }
 
     #[inline]
-    pub fn is_overfull(&self) -> bool {
+    pub fn is_overflowing(&self) -> bool {
         self.byte_size_used > self.byte_size_total
     }
 
@@ -123,7 +123,7 @@ impl CacheSize {
     #[inline]
     pub fn add_bytes_allow_overflow(&mut self, bytes: usize) {
         self.byte_size_used += bytes;
-        if self.byte_size_used > self.byte_size_total {
+        if self.is_overflowing() {
             log::trace!(
                 "overflowing cache size by {} bytes, total size: {}, added bytes: {}",
                 self.byte_size_used - self.byte_size_total,
@@ -187,7 +187,7 @@ mod tests {
         assert_eq!(size.total_byte_size(), 100);
         assert_eq!(size.byte_size_used(), 110);
         assert_eq!(size.byte_size_free(), 0);
-        assert!(size.is_overfull());
+        assert!(size.is_overflowing());
 
         size.remove_bytes(110);
         assert_eq!(size.byte_size_total, 100);
@@ -196,7 +196,7 @@ mod tests {
         assert_eq!(size.byte_size_used(), 0);
         assert_eq!(size.byte_size_free(), 100);
         assert_eq!(size.size_used_fraction(), 0.0);
-        assert!(!size.is_overfull());
+        assert!(!size.is_overflowing());
     }
 
     #[test]

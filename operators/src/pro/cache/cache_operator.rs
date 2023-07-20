@@ -6,7 +6,7 @@ use crate::engine::{
     CanonicOperatorName, InitializedRasterOperator, QueryContext, QueryProcessor,
     RasterResultDescriptor, TypedRasterQueryProcessor,
 };
-use crate::pro::cache::tile_cache::SharedCache;
+use crate::pro::cache::tile_cache::{AsyncCache, SharedCache};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -16,7 +16,7 @@ use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::{pin_project, pinned_drop};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
-use super::cache_chunk_stream::Cachable;
+use super::tile_cache::CachableSubType;
 
 /// A cache operator that caches the results of its source operator
 pub struct InitializedCacheOperator<S> {
@@ -112,7 +112,9 @@ where
 impl<Q, T> QueryProcessor for CacheQueryProcessor<Q, T>
 where
     Q: QueryProcessor<Output = RasterTile2D<T>, SpatialBounds = SpatialPartition2D> + Sized,
-    T: Pixel + Cachable,
+    T: Pixel + CachableSubType<CacheElementType = RasterTile2D<T>>,
+    RasterTile2D<T>: Send,
+    SpatialPartition2D: Send,
 {
     type Output = RasterTile2D<T>;
     type SpatialBounds = SpatialPartition2D;
@@ -127,7 +129,7 @@ where
             .get::<Arc<SharedCache>>()
             .expect("`TileCache` extension should be set during `ProContext` creation");
 
-        let cache_result = tile_cache.query_cache(&self.cache_key, &query).await;
+        let cache_result = tile_cache.query_cache::<T>(&self.cache_key, &query).await;
 
         if let Ok(Some(cache_result)) = cache_result {
             // cache hit
@@ -145,9 +147,7 @@ where
         log::debug!("cache miss for operator {}", self.cache_key);
         let source_stream = self.processor.query(query, ctx).await?;
 
-        let query_id = tile_cache
-            .insert_query::<RasterTile2D<T>>(&self.cache_key, &query)
-            .await;
+        let query_id = tile_cache.insert_query::<T>(&self.cache_key, &query).await;
 
         if let Err(e) = query_id {
             log::debug!("could not insert query into cache: {}", e);
@@ -166,7 +166,7 @@ where
                 match event {
                     SourceStreamEvent::Tile(tile) => {
                         let result = tile_cache
-                            .insert_query_element(&cache_key, &query_id, tile)
+                            .insert_query_element::<T>(&cache_key, &query_id, tile)
                             .await;
                         log::trace!(
                             "inserted tile into cache for cache key {} and query id {}. result: {:?}",
@@ -176,9 +176,7 @@ where
                         );
                     }
                     SourceStreamEvent::Abort => {
-                        tile_cache
-                            .abort_query::<RasterTile2D<T>>(&cache_key, &query_id)
-                            .await;
+                        tile_cache.abort_query::<T>(&cache_key, &query_id).await;
                         log::debug!(
                             "aborted cache insertion for cache key {} and query id {}",
                             cache_key,
@@ -186,9 +184,7 @@ where
                         );
                     }
                     SourceStreamEvent::Finished => {
-                        let result = tile_cache
-                            .finish_query::<RasterTile2D<T>>(&cache_key, &query_id)
-                            .await;
+                        let result = tile_cache.finish_query::<T>(&cache_key, &query_id).await;
                         log::debug!(
                             "finished cache insertion for cache key {} and query id {}, result: {:?}",
                             cache_key,query_id,

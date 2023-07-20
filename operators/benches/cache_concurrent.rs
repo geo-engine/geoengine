@@ -11,7 +11,10 @@ use geoengine_datatypes::{
     raster::{Grid, RasterTile2D},
     util::test::TestDefault,
 };
-use geoengine_operators::{engine::CanonicOperatorName, pro::cache::tile_cache::SharedCache};
+use geoengine_operators::{
+    engine::CanonicOperatorName,
+    pro::cache::tile_cache::{AsyncCache, SharedCache},
+};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde_json::json;
@@ -48,7 +51,7 @@ async fn write_cache(tile_cache: &SharedCache, op_name: CanonicOperatorName) -> 
     let start = std::time::Instant::now();
 
     let query_id = tile_cache
-        .insert_query::<RasterTile2D<u8>>(&op_name, &query_rect())
+        .insert_query::<u8>(&op_name, &query_rect())
         .await
         .unwrap();
 
@@ -57,7 +60,7 @@ async fn write_cache(tile_cache: &SharedCache, op_name: CanonicOperatorName) -> 
     let start = std::time::Instant::now();
 
     tile_cache
-        .insert_query_element::<RasterTile2D<u8>>(&op_name, &query_id, tile)
+        .insert_query_element::<u8>(&op_name, &query_id, tile)
         .await
         .unwrap();
 
@@ -68,7 +71,7 @@ async fn write_cache(tile_cache: &SharedCache, op_name: CanonicOperatorName) -> 
     #[allow(clippy::unit_arg)]
     black_box(
         tile_cache
-            .finish_query::<RasterTile2D<u8>>(&op_name, &query_id)
+            .finish_query::<u8>(&op_name, &query_id)
             .await
             .unwrap(),
     );
@@ -95,11 +98,7 @@ async fn read_cache(tile_cache: &SharedCache, op_no: usize) -> ReadMeasurement {
 
     let start = std::time::Instant::now();
 
-    let res = black_box(
-        tile_cache
-            .query_cache::<RasterTile2D<u8>>(&op, &query)
-            .await,
-    );
+    let res = black_box(tile_cache.query_cache::<u8>(&op, &query).await);
     res.unwrap();
 
     let read_query_s = start.elapsed().as_millis();

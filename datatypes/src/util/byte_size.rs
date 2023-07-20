@@ -1,6 +1,6 @@
+use crate::collections::{FeatureCollection, FeatureCollectionInfos};
 use crate::raster::Pixel;
 use std::collections::{hash_map::RandomState, HashMap};
-use std::sync::Arc;
 
 /// A trait for types that have a size in bytes
 /// that it takes up in memory
@@ -66,7 +66,14 @@ where
     }
 }
 
-impl<T> ByteSize for Arc<T> where T: ByteSize {}
+impl<G> ByteSize for FeatureCollection<G>
+where
+    FeatureCollection<G>: FeatureCollectionInfos,
+{
+    fn byte_size(&self) -> usize {
+        FeatureCollectionInfos::byte_size(self)
+    }
+}
 
 #[cfg(test)]
 mod tests {
