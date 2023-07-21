@@ -60,6 +60,7 @@ geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 httptest = "0.15.2"
 ndarray = "0.15"
 rand = "0.8"
+tracing-subscriber = { version = "0.3", features = ["json"] }
 
 [[bench]]
 name = "cache"
@@ -86,3 +87,8 @@ harness = false
 [[bench]]
 name = "pip"
 harness = false
+
+[[bench]]
+name = "query_chunks"
+harness = false
+required-features = ["pro"]
