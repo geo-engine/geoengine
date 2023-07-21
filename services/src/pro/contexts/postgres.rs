@@ -33,7 +33,6 @@ use geoengine_operators::pro::cache::tile_cache::TileCache;
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, info};
-use postgres_protocol::escape::escape_literal;
 use pwhash::bcrypt;
 use rayon::ThreadPool;
 use snafu::{ensure, ResultExt};
@@ -182,40 +181,37 @@ where
     #[allow(clippy::too_many_lines)]
     /// Creates the database schema. Returns true if the schema was created, false if it already existed.
     pub(crate) async fn create_pro_schema(
-        conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
+        mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
     ) -> Result<()> {
         let user_config = get_config_element::<crate::pro::util::config::User>()?;
 
-        conn.batch_execute(
-            &format!(r#"
-            -- TODO: distinguish between roles that are (correspond to) users and roles that are not
-            -- TODO: integrity constraint for roles that correspond to users + DELETE CASCADE
-            CREATE TABLE roles (
-                id UUID PRIMARY KEY,
-                name text UNIQUE NOT NULL
-            );
+        let tx = conn.build_transaction().start().await?;
 
+        tx.batch_execute(include_str!("schema.sql")).await?;
+
+        let stmt = tx
+            .prepare(
+                r#"
             INSERT INTO roles (id, name) VALUES
-                ({admin_role_id}, 'admin'),
-                ({user_role_id}, 'user'),
-                ({anonymous_role_id}, 'anonymous');
+                ($1, 'admin'),
+                ($2, 'user'),
+                ($3, 'anonymous');"#,
+            )
+            .await?;
 
-            CREATE TABLE users (
-                id UUID PRIMARY KEY REFERENCES roles(id),
-                email character varying (256) UNIQUE,
-                password_hash character varying (256),
-                real_name character varying (256),
-                active boolean NOT NULL,
-                quota_available bigint NOT NULL DEFAULT 0,
-                quota_used bigint NOT NULL DEFAULT 0, -- TODO: rename to total_quota_used?
-                CONSTRAINT users_anonymous_ck CHECK (
-                    (email IS NULL AND password_hash IS NULL AND real_name IS NULL) OR 
-                    (email IS NOT NULL AND password_hash IS NOT NULL AND 
-                    real_name IS NOT NULL) 
-                ),
-                CONSTRAINT users_quota_used_ck CHECK (quota_used >= 0)
-            );
+        tx.execute(
+            &stmt,
+            &[
+                &Role::admin_role_id(),
+                &Role::registered_user_role_id(),
+                &Role::anonymous_role_id(),
+            ],
+        )
+        .await?;
 
+        let stmt = tx
+            .prepare(
+                r#"
             INSERT INTO users (
                 id, 
                 email,
@@ -223,140 +219,67 @@ where
                 real_name,
                 active)
             VALUES (
-                {admin_role_id}, 
-                {admin_email},
-                {admin_password},
+                $1, 
+                $2,
+                $3,
                 'admin',
                 true
-            );
+            );"#,
+            )
+            .await?;
 
-            -- relation between users and roles
-            -- all users have a default role where role_id = user_id
-            CREATE TABLE user_roles (
-                user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-                role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
-                PRIMARY KEY (user_id, role_id)
-            );
+        tx.execute(
+            &stmt,
+            &[
+                &Role::admin_role_id(),
+                &user_config.admin_email,
+                &bcrypt::hash(user_config.admin_password)
+                    .expect("Admin password hash should be valid"),
+            ],
+        )
+        .await?;
 
-            -- admin user role
+        let stmt = tx
+            .prepare(
+                r#"
             INSERT INTO user_roles 
                 (user_id, role_id)
             VALUES 
-                ({admin_role_id}, 
-                {admin_role_id});    
-            
-            CREATE TABLE user_sessions (
-                user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-                session_id UUID REFERENCES sessions(id) ON DELETE CASCADE NOT NULL,
-                created timestamp with time zone NOT NULL,
-                valid_until timestamp with time zone NOT NULL,
-                PRIMARY KEY (user_id, session_id)
-            );   
+                ($1, $1);"#,
+            )
+            .await?;
 
-            CREATE TABLE project_version_authors (
-                project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,
-                user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-                PRIMARY KEY (project_version_id, user_id)
-            );
+        tx.execute(&stmt, &[&Role::admin_role_id()]).await?;
 
-            CREATE TABLE user_uploads (
-                user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-                upload_id UUID REFERENCES uploads(id) ON DELETE CASCADE NOT NULL,
-                PRIMARY KEY (user_id, upload_id)
-            );          
-
-
-            CREATE TYPE "Permission" AS ENUM (
-                'Read', 'Owner'
-            );  
-
-            -- TODO: uploads, providers permissions
-
-            -- TODO: relationship between uploads and datasets?
-
-            CREATE TABLE external_users (
-                id UUID PRIMARY KEY REFERENCES users(id),
-                external_id character varying (256) UNIQUE,
-                email character varying (256),
-                real_name character varying (256),
-                active boolean NOT NULL
-            );
-
-            CREATE TABLE permissions (
-                -- resource_type "ResourceType" NOT NULL,
-                role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
-                permission "Permission" NOT NULL,
-                dataset_id UUID REFERENCES datasets(id) ON DELETE CASCADE,
-                layer_id UUID REFERENCES layers(id) ON DELETE CASCADE,
-                layer_collection_id UUID REFERENCES layer_collections(id) ON DELETE CASCADE,
-                project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-                check(
-                    (
-                        (dataset_id is not null)::integer +
-                        (layer_id is not null)::integer +
-                        (layer_collection_id is not null)::integer +
-                        (project_id is not null)::integer 
-                    ) = 1
-                )
-            );
-
-            CREATE UNIQUE INDEX ON permissions (role_id, permission, dataset_id);
-            CREATE UNIQUE INDEX ON permissions (role_id, permission, layer_id);
-            CREATE UNIQUE INDEX ON permissions (role_id, permission, layer_collection_id);
-            CREATE UNIQUE INDEX ON permissions (role_id, permission, project_id);   
-
-            CREATE VIEW user_permitted_datasets AS
-                SELECT 
-                    r.user_id,
-                    p.dataset_id,
-                    p.permission
-                FROM 
-                    user_roles r JOIN permissions p ON (r.role_id = p.role_id AND dataset_id IS NOT NULL);
-
-            CREATE VIEW user_permitted_projects AS
-                SELECT 
-                    r.user_id,
-                    p.project_id,
-                    p.permission
-                FROM 
-                    user_roles r JOIN permissions p ON (r.role_id = p.role_id AND project_id IS NOT NULL); 
-
-            CREATE VIEW user_permitted_layer_collections AS
-                SELECT 
-                    r.user_id,
-                    p.layer_collection_id,
-                    p.permission
-                FROM 
-                    user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_collection_id IS NOT NULL); 
-
-            CREATE VIEW user_permitted_layers AS
-                SELECT 
-                    r.user_id,
-                    p.layer_id,
-                    p.permission
-                FROM 
-                    user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_id IS NOT NULL); 
-
-            --- permission for unsorted layers and root layer collection
+        let stmt = tx
+            .prepare(
+                r#"
             INSERT INTO permissions
-                (role_id, layer_collection_id, permission)  
+             (role_id, layer_collection_id, permission)  
             VALUES 
-                ({admin_role_id}, {root_layer_collection_id}, 'Owner'),
-                ({user_role_id}, {root_layer_collection_id}, 'Read'),
-                ({anonymous_role_id}, {root_layer_collection_id}, 'Read'),
-                ({admin_role_id}, {unsorted_layer_collection_id}, 'Owner'),
-                ({user_role_id}, {unsorted_layer_collection_id}, 'Read'),
-                ({anonymous_role_id}, {unsorted_layer_collection_id}, 'Read');
-            "#
-        ,
-        admin_role_id = escape_literal(&Role::admin_role_id().to_string()),
-        admin_email = escape_literal(&user_config.admin_email),
-        admin_password = escape_literal(&bcrypt::hash(user_config.admin_password).expect("Admin password hash should be valid")),
-        user_role_id = escape_literal(&Role::registered_user_role_id().to_string()),
-        anonymous_role_id = escape_literal(&Role::anonymous_role_id().to_string()),
-        root_layer_collection_id = escape_literal(&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
-        unsorted_layer_collection_id = escape_literal(&UNSORTED_COLLECTION_ID.to_string())))
+                ($1, $4, 'Owner'),
+                ($2, $4, 'Read'),
+                ($3, $4, 'Read'),
+                ($1, $5, 'Owner'),
+                ($2, $5, 'Read'),
+                ($3, $5, 'Read');"#,
+            )
+            .await?;
+
+        tx.execute(
+            &stmt,
+            &[
+                &Role::admin_role_id(),
+                &Role::registered_user_role_id(),
+                &Role::anonymous_role_id(),
+                &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+                &UNSORTED_COLLECTION_ID,
+            ],
+        )
         .await?;
+
+        tx.commit().await?;
+
         debug!("Created pro database schema");
 
         Ok(())

@@ -40,7 +40,7 @@ where
     }
 
     async fn load_workflow(&self, id: &WorkflowId) -> Result<Workflow> {
-        // TODO: authorization
+        // TODO: add authorization beyond the fact that you can only access workflows if you happen to know the id.
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT workflow FROM workflows WHERE id = $1")
