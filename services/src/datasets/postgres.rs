@@ -4,6 +4,7 @@ use std::str::FromStr;
 use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId};
 use crate::api::model::responses::datasets::DatasetIdAndName;
 use crate::api::model::services::AddDataset;
+use crate::contexts::PostgresDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
 use crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID;
@@ -12,7 +13,7 @@ use crate::datasets::storage::{
 };
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
-use crate::error::{self, Error, Result};
+use crate::error::{self, Result};
 use crate::layers::layer::CollectionItem;
 use crate::layers::layer::Layer;
 use crate::layers::layer::LayerCollection;
@@ -24,8 +25,6 @@ use crate::layers::layer::ProviderLayerId;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
-use crate::pro::contexts::ProPostgresDb;
-use crate::pro::permissions::{Permission, PermissionDb, RoleId};
 use crate::projects::Symbology;
 use crate::util::operators::source_operator_from_dataset;
 use crate::workflows::workflow::Workflow;
@@ -48,10 +47,10 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 use postgres_types::{FromSql, ToSql};
-use snafu::{ensure, ResultExt};
+use snafu::ResultExt;
 use uuid::Uuid;
 
-impl<Tls> DatasetDb for ProPostgresDb<Tls>
+impl<Tls> DatasetDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -61,7 +60,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> DatasetProvider for ProPostgresDb<Tls>
+impl<Tls> DatasetProvider for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -76,23 +75,20 @@ where
             .prepare(
                 "
             SELECT 
-                d.id,
-                d.name,
-                d.display_name,
-                d.description,
-                d.tags,
-                d.source_operator,
-                d.result_descriptor,
-                d.symbology
+                id,
+                name,
+                display_name,
+                description,
+                tags,
+                source_operator,
+                result_descriptor,
+                symbology
             FROM 
-                user_permitted_datasets p JOIN datasets d 
-                    ON (p.dataset_id = d.id)
-            WHERE 
-                p.user_id = $1",
+                datasets;",
             )
             .await?;
 
-        let rows = conn.query(&stmt, &[&self.session.user.id]).await?;
+        let rows = conn.query(&stmt, &[]).await?;
 
         Ok(rows
             .iter()
@@ -118,28 +114,25 @@ where
             .prepare(
                 "
             SELECT
-                d.id,
-                d.name,
-                d.display_name,
-                d.description,
-                d.result_descriptor,
-                d.source_operator,
-                d.symbology,
-                d.provenance
+                id,
+                name,
+                display_name,
+                description,
+                result_descriptor,
+                source_operator,
+                symbology,
+                provenance
             FROM 
-                user_permitted_datasets p JOIN datasets d 
-                    ON (p.dataset_id = d.id)
+                datasets
             WHERE 
-                p.user_id = $1 AND d.id = $2
+                id = $1
             LIMIT 
                 1",
             )
             .await?;
 
-        // TODO: throw proper dataset does not exist/no permission error
-        let row = conn
-            .query_one(&stmt, &[&self.session.user.id, dataset])
-            .await?;
+        // TODO: throw proper dataset does not exist
+        let row = conn.query_one(&stmt, &[dataset]).await?;
 
         Ok(Dataset {
             id: row.get(0),
@@ -160,18 +153,15 @@ where
             .prepare(
                 "
             SELECT 
-                d.provenance 
+                provenance 
             FROM 
-                user_permitted_datasets p JOIN datasets d
-                    ON(p.dataset_id = d.id)
-            WHERE 
-                p.user_id = $1 AND d.id = $2",
+                datasets
+            WHERE
+                id = $1;",
             )
             .await?;
 
-        let row = conn
-            .query_one(&stmt, &[&self.session.user.id, dataset])
-            .await?;
+        let row = conn.query_one(&stmt, &[dataset]).await?;
 
         Ok(ProvenanceOutput {
             data: (*dataset).into(),
@@ -199,7 +189,7 @@ where
 #[async_trait]
 impl<Tls>
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for ProPostgresDb<Tls>
+    for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -224,7 +214,7 @@ where
 
 #[async_trait]
 impl<Tls> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for ProPostgresDb<Tls>
+    for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -241,16 +231,6 @@ where
             .internal()
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
 
-        if !self
-            .has_permission(DatasetId::from(id), Permission::Read)
-            .await
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            })?
-        {
-            return Err(geoengine_operators::error::Error::PermissionDenied);
-        };
-
         let conn = self.conn_pool.get().await.map_err(|e| {
             geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -260,24 +240,22 @@ where
             .prepare(
                 "
         SELECT
-            d.meta_data
+            meta_data
         FROM
-            user_permitted_datasets p JOIN datasets d
-                ON (p.dataset_id = d.id)
+            datasets
         WHERE
-            d.id = $1 AND p.user_id = $2",
+            id = $1",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
             })?;
 
-        let row = conn
-            .query_one(&stmt, &[&id, &self.session.user.id])
-            .await
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
+        let row = conn.query_one(&stmt, &[&id]).await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
-            })?;
+            }
+        })?;
 
         let meta_data: StaticMetaData<
             OgrSourceDataset,
@@ -291,7 +269,7 @@ where
 
 #[async_trait]
 impl<Tls> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for ProPostgresDb<Tls>
+    for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -308,16 +286,6 @@ where
             .internal()
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
 
-        if !self
-            .has_permission(DatasetId::from(id), Permission::Read)
-            .await
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            })?
-        {
-            return Err(geoengine_operators::error::Error::PermissionDenied);
-        };
-
         let conn = self.conn_pool.get().await.map_err(|e| {
             geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -327,24 +295,22 @@ where
             .prepare(
                 "
             SELECT
-                d.meta_data
+                meta_data
             FROM
-                user_permitted_datasets p JOIN datasets d
-                    ON (p.dataset_id = d.id)
+               datasets
             WHERE
-                d.id = $1 AND p.user_id = $2",
+                id = $1;",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
             })?;
 
-        let row = conn
-            .query_one(&stmt, &[&id, &self.session.user.id])
-            .await
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
+        let row = conn.query_one(&stmt, &[&id]).await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
-            })?;
+            }
+        })?;
 
         let meta_data: MetaDataDefinition = serde_json::from_value(row.get(0))?;
 
@@ -374,7 +340,7 @@ pub struct DatasetMetaDataJson {
     result_descriptor: serde_json::Value,
 }
 
-impl<Tls> DatasetStorer for ProPostgresDb<Tls>
+impl<Tls> DatasetStorer for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -434,7 +400,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> DatasetStore for ProPostgresDb<Tls>
+impl<Tls> DatasetStore for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -448,21 +414,19 @@ where
     ) -> Result<DatasetIdAndName> {
         let id = DatasetId::new();
         let name = dataset.name.unwrap_or_else(|| DatasetName {
-            namespace: Some(self.session.user.id.to_string()),
+            namespace: None,
             name: id.to_string(),
         });
 
-        self.check_namespace(&name)?;
+        Self::check_namespace(&name)?;
 
         let meta_data_json = meta_data.to_json()?;
 
-        let mut conn = self.conn_pool.get().await?;
-
-        let tx = conn.build_transaction().start().await?;
+        let conn = self.conn_pool.get().await?;
 
         // unique constraint on `id` checks if dataset with same id exists
 
-        let stmt = tx
+        let stmt = conn
             .prepare(
                 "
                 INSERT INTO datasets (
@@ -480,7 +444,7 @@ where
             )
             .await?;
 
-        tx.execute(
+        conn.execute(
             &stmt,
             &[
                 &id,
@@ -496,65 +460,15 @@ where
         )
         .await?;
 
-        let stmt = tx
-            .prepare(
-                "
-            INSERT INTO permissions (
-                role_id,
-                dataset_id,
-                permission
-            )
-            VALUES ($1, $2, $3)",
-            )
-            .await?;
-
-        tx.execute(
-            &stmt,
-            &[&RoleId::from(self.session.user.id), &id, &Permission::Owner],
-        )
-        .await?;
-
-        tx.commit().await?;
-
         Ok(DatasetIdAndName { id, name })
     }
 
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {
-        ensure!(
-            self.has_permission(dataset_id, Permission::Owner).await?,
-            error::PermissionDenied
-        );
+        let conn = self.conn_pool.get().await?;
 
-        let mut conn = self.conn_pool.get().await?;
+        let stmt = conn.prepare("DELETE FROM datasets WHERE id = $1;").await?;
 
-        let tx = conn.build_transaction().start().await?;
-
-        let stmt = tx
-            .prepare(
-                "
-        SELECT 
-            TRUE
-        FROM 
-            user_permitted_datasets p JOIN datasets d 
-                ON (p.dataset_id = d.id)
-        WHERE 
-            d.id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
-            )
-            .await?;
-
-        let rows = tx
-            .query(&stmt, &[&dataset_id, &self.session.user.id])
-            .await?;
-
-        if rows.is_empty() {
-            return Err(Error::OperationRequiresOwnerPermission);
-        }
-
-        let stmt = tx.prepare("DELETE FROM datasets WHERE id = $1;").await?;
-
-        tx.execute(&stmt, &[&dataset_id]).await?;
-
-        tx.commit().await?;
+        conn.execute(&stmt, &[&dataset_id]).await?;
 
         Ok(())
     }
@@ -565,7 +479,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> UploadDb for ProPostgresDb<Tls>
+impl<Tls> UploadDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -573,20 +487,15 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn load_upload(&self, upload: UploadId) -> Result<Upload> {
+        // TODO: check permissions
+
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
-            .prepare(
-                "
-            SELECT u.id, u.files 
-            FROM uploads u JOIN user_uploads uu ON(u.id = uu.upload_id)
-            WHERE u.id = $1 AND uu.user_id = $2",
-            )
+            .prepare("SELECT id, files FROM uploads WHERE id = $1;")
             .await?;
 
-        let row = conn
-            .query_one(&stmt, &[&upload, &self.session.user.id])
-            .await?;
+        let row = conn.query_one(&stmt, &[&upload]).await?;
 
         Ok(Upload {
             id: row.get(0),
@@ -599,14 +508,13 @@ where
     }
 
     async fn create_upload(&self, upload: Upload) -> Result<()> {
-        let mut conn = self.conn_pool.get().await?;
-        let tx = conn.build_transaction().start().await?;
+        let conn = self.conn_pool.get().await?;
 
-        let stmt = tx
+        let stmt = conn
             .prepare("INSERT INTO uploads (id, files) VALUES ($1, $2)")
             .await?;
 
-        tx.execute(
+        conn.execute(
             &stmt,
             &[
                 &upload.id,
@@ -618,22 +526,12 @@ where
             ],
         )
         .await?;
-
-        let stmt = tx
-            .prepare("INSERT INTO user_uploads (user_id, upload_id) VALUES ($1, $2)")
-            .await?;
-
-        tx.execute(&stmt, &[&self.session.user.id, &upload.id])
-            .await?;
-
-        tx.commit().await?;
-
         Ok(())
     }
 }
 
 #[async_trait]
-impl<Tls> DatasetLayerCollectionProvider for ProPostgresDb<Tls>
+impl<Tls> DatasetLayerCollectionProvider for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -651,28 +549,21 @@ where
             .prepare(
                 "
                 SELECT 
-                    concat(d.id, ''), 
-                    d.display_name, 
-                    d.description
+                    concat(id, '') AS id, 
+                    display_name, 
+                    description
                 FROM 
-                    user_permitted_datasets p JOIN datasets d 
-                        ON (p.dataset_id = d.id)
-                WHERE 
-                    p.user_id = $1
-                ORDER BY d.name ASC
-                LIMIT $2
-                OFFSET $3;",
+                   datasets
+                ORDER BY name ASC
+                LIMIT $1
+                OFFSET $2;",
             )
             .await?;
 
         let rows = conn
             .query(
                 &stmt,
-                &[
-                    &self.session.user.id,
-                    &i64::from(options.limit),
-                    &i64::from(options.offset),
-                ],
+                &[&i64::from(options.limit), &i64::from(options.offset)],
             )
             .await?;
 
@@ -710,26 +601,19 @@ where
     }
 
     async fn load_dataset_layer(&self, id: &LayerId) -> Result<Layer> {
-        let dataset_id = DatasetId::from_str(&id.0)?;
-
-        ensure!(
-            self.has_permission(dataset_id, Permission::Read).await?,
-            error::PermissionDenied
-        );
-
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
             .prepare(
                 "
                 SELECT 
-                    d.name, 
-                    d.display_name,
-                    d.description,
-                    d.source_operator,
-                    d.symbology
+                    name, 
+                    display_name,
+                    description,
+                    source_operator,
+                    symbology
                 FROM 
-                    datasets d
+                    datasets
                 WHERE id = $1;",
             )
             .await?;

@@ -2,18 +2,15 @@ use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::ProInMemoryDb;
 use crate::pro::permissions::{Permission, PermissionDb};
-use crate::pro::projects::ProProjectDb;
 
 use crate::projects::{
-    CreateProject, OrderBy, Project, ProjectDb, ProjectFilter, ProjectId, ProjectListOptions,
-    ProjectListing, ProjectVersion, UpdateProject,
+    CreateProject, LoadVersion, OrderBy, Project, ProjectDb, ProjectFilter, ProjectId,
+    ProjectListOptions, ProjectListing, ProjectVersion, UpdateProject,
 };
 use async_trait::async_trait;
 use futures::{stream, StreamExt};
 use snafu::ensure;
 use std::collections::HashMap;
-
-use super::LoadVersion;
 
 #[derive(Default)]
 pub struct ProHashMapProjectDbBackend {
@@ -132,10 +129,7 @@ impl ProjectDb for ProInMemoryDb {
         self.load_project_version(project, LoadVersion::Latest)
             .await
     }
-}
 
-#[async_trait]
-impl ProProjectDb for ProInMemoryDb {
     /// Load a project
     async fn load_project_version(
         &self,

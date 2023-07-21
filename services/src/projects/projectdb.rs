@@ -5,6 +5,8 @@ use crate::projects::project::{
 
 use async_trait::async_trait;
 
+use super::{LoadVersion, ProjectVersion};
+
 /// Storage of user projects
 #[async_trait]
 pub trait ProjectDb: Send + Sync {
@@ -22,4 +24,14 @@ pub trait ProjectDb: Send + Sync {
 
     /// Delete the `project` if `user` is an owner
     async fn delete_project(&self, project: ProjectId) -> Result<()>;
+
+    /// Load the the `version` of the `project` for the `user`
+    async fn load_project_version(
+        &self,
+        project: ProjectId,
+        version: LoadVersion,
+    ) -> Result<Project>;
+
+    /// List all versions of the `project` if given `user` has at least read permission
+    async fn list_project_versions(&self, project: ProjectId) -> Result<Vec<ProjectVersion>>;
 }

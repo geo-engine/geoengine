@@ -1,6 +1,5 @@
 mod in_memory;
 
-#[cfg(feature = "postgres")]
 mod postgres;
 
 use std::str::FromStr;
@@ -20,8 +19,8 @@ use geoengine_operators::pro::meta::quota::QuotaCheck;
 use geoengine_operators::pro::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 pub use in_memory::ProInMemoryContext;
-#[cfg(feature = "postgres")]
-pub use postgres::PostgresContext;
+
+pub use postgres::ProPostgresContext;
 use rayon::ThreadPool;
 use tokio::io::AsyncWriteExt;
 
@@ -37,19 +36,18 @@ use crate::util::path_with_base_path;
 use async_trait::async_trait;
 
 use super::permissions::PermissionDb;
-use super::projects::ProProjectDb;
 use super::users::{RoleDb, UserAuth, UserSession};
 use super::util::config::{Cache, QuotaTrackingMode};
 
 pub use in_memory::ProInMemoryDb;
-pub use postgres::PostgresDb;
+pub use postgres::ProPostgresDb;
 
 /// A pro application contexts that extends the default context.
 pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + UserAuth {
     fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
 }
 
-pub trait ProGeoEngineDb: GeoEngineDb + ProProjectDb + UserDb + PermissionDb + RoleDb {}
+pub trait ProGeoEngineDb: GeoEngineDb + UserDb + PermissionDb + RoleDb {}
 
 pub struct ExecutionContextImpl<D>
 where

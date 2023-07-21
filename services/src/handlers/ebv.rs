@@ -560,7 +560,7 @@ mod tests {
     use super::*;
 
     use crate::{
-        contexts::{InMemoryContext, Session, SimpleApplicationContext},
+        contexts::{InMemoryContext, SimpleApplicationContext},
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
         tasks::util::test::wait_for_task_to_finish,
         util::server::{configure_extractors, render_404, render_405},
@@ -610,11 +610,9 @@ mod tests {
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let overview_folder = tempfile::tempdir().unwrap();
 
@@ -703,10 +701,8 @@ mod tests {
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
-        let session = app_ctx.default_session_ref().await.clone();
-
-        let session_id = session.id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = app_ctx.default_session_id().await;
 
         let overview_folder = tempfile::tempdir().unwrap();
 
@@ -760,10 +756,8 @@ mod tests {
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
-        let session = app_ctx.default_session_ref().await.clone();
-
-        let session_id = session.id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = app_ctx.default_session_id().await;
 
         let overview_folder = tempfile::tempdir().unwrap();
 
