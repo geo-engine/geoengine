@@ -836,7 +836,7 @@ mod tests {
                 allow_alphaband_as_mask: true,
                 retry: Some(GdalRetryOptions { max_retries: 10 }),
             }),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: CacheTtlSeconds::new(86_400),
         }];
 
         if let GdalLoadingInfoTemporalSliceIterator::Static { parts } = loading_info.info {
