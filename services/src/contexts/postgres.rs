@@ -31,9 +31,9 @@ use std::sync::Arc;
 
 use super::{ExecutionContextImpl, Session, SimpleApplicationContext};
 
-// TODO: do not report postgres error details to user
+// TODO: distinguish user-facing errors from system-facing error messages
 
-/// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
+/// A context with references to Postgres backends of the database.
 #[derive(Clone)]
 pub struct PostgresContext<Tls>
 where
@@ -46,8 +46,8 @@ where
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
-    pub(crate) task_manager: Arc<SimpleTaskManagerBackend>,
-    pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
+    task_manager: Arc<SimpleTaskManagerBackend>,
+    pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
 }
 

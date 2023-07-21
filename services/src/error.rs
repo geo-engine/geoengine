@@ -434,7 +434,10 @@ pub enum Error {
 
     InvalidWorkflowOutputType,
 
-    NotImplemented,
+    #[snafu(display("Functionality is not implemented: '{}'", message))]
+    NotImplemented {
+        message: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

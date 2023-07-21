@@ -488,8 +488,11 @@ async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
         .unwrap();
 }
 
+/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
 ///
 /// # Panics
+///
+/// Panics if the `PostgresContext` could not be created.
 ///
 pub async fn with_temp_context<F, Fut>(f: F)
 where

@@ -1,6 +1,5 @@
 mod hashmap_userdb;
 mod oidc;
-
 mod postgres_userdb;
 mod session;
 mod user;

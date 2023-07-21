@@ -121,13 +121,19 @@ impl ProjectDb for InMemoryDb {
         }
 
         // not implemented, because the in memory db is deprecated
-        Err(error::Error::NotImplemented)
+        Err(error::Error::NotImplemented {
+            message:
+                "Loading a specific version of a project is not implemented for the in memory db, because it is deprecated."
+                    .to_string(),
+        })
     }
 
     /// List all versions of the `project` if given `user` has at least read permission
     async fn list_project_versions(&self, _project: ProjectId) -> Result<Vec<ProjectVersion>> {
         // not implemented, because the in memory db is deprecated
-        Err(error::Error::NotImplemented)
+        Err(error::Error::NotImplemented{
+            message: "Listing all versions of a project is not implemented for the in memory db, because it is deprecated.".to_string(),
+        })
     }
 }
 
