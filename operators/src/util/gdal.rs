@@ -191,14 +191,11 @@ pub fn create_ports_meta_data(
     }
 }
 
-pub fn add_ports_dataset(ctx: &mut MockExecutionContext) -> DataId {
+pub fn add_ports_dataset(ctx: &mut MockExecutionContext) -> NamedData {
     let id: DataId = DatasetId::new().into();
-    ctx.add_meta_data(
-        id.clone(),
-        NamedData::with_system_name("ne_10m_ports"),
-        Box::new(create_ports_meta_data()),
-    );
-    id
+    let name = NamedData::with_system_name("ne_10m_ports");
+    ctx.add_meta_data(id, name.clone(), Box::new(create_ports_meta_data()));
+    name
 }
 
 /// Opens a Gdal Dataset with the given `path`.
