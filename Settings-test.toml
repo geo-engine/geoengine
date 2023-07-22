@@ -39,3 +39,10 @@ default_available_quota = 9999
 increment_quota_buffer_size = 0 # number of quota updates to buffer before sending them to the database
 increment_quota_buffer_timeout_seconds = 60 # number of seconds after which the quota updates are sent to the database
 
+[cache]
+enabled = false
+# storage limit for the cache
+cache_size_in_mb = 1_000 # 1 GB
+# storage limit for collecting query results before insertion into the cache in 
+landing_zone_ratio = 0.1 # 10% of total cache size
+

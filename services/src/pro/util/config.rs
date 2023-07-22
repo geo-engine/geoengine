@@ -83,8 +83,8 @@ impl TestDefault for Cache {
     fn test_default() -> Self {
         Self {
             enabled: false,
-            cache_size_in_mb: usize::MAX,
-            landing_zone_ratio: 0.5,
+            cache_size_in_mb: 1_000, // 1 GB
+            landing_zone_ratio: 0.1, // 10% of cache size
         }
     }
 }
