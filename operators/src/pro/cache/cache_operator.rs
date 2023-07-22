@@ -3,20 +3,19 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use crate::engine::{
-    CanonicOperatorName, InitializedRasterOperator, QueryContext, QueryProcessor,
-    RasterResultDescriptor, TypedRasterQueryProcessor,
+    CanonicOperatorName, InitializedRasterOperator, InitializedVectorOperator, QueryContext,
+    QueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
 };
 use crate::pro::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{ready, Stream};
-use geoengine_datatypes::primitives::{QueryRectangle, SpatialPartition2D};
-use geoengine_datatypes::raster::{Pixel, RasterTile2D};
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle};
 use pin_project::{pin_project, pinned_drop};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
-use super::shared_cache::CachableSubType;
+use super::shared_cache::{CacheElement, CacheElementSubType};
 
 /// A cache operator that caches the results of its source operator
 pub struct InitializedCacheOperator<S> {
@@ -85,22 +84,69 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
     }
 }
 
+impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedVectorOperator>> {
+    fn result_descriptor(&self) -> &crate::engine::VectorResultDescriptor {
+        self.source.result_descriptor()
+    }
+
+    fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
+        let processor_result = self.source.query_processor();
+        match processor_result {
+            Ok(p) => {
+                let res_processor = match p {
+                    crate::engine::TypedVectorQueryProcessor::Data(p) => {
+                        crate::engine::TypedVectorQueryProcessor::Data(Box::new(
+                            CacheQueryProcessor::new(p, self.source.canonic_name()),
+                        ))
+                    }
+                    crate::engine::TypedVectorQueryProcessor::MultiPoint(p) => {
+                        crate::engine::TypedVectorQueryProcessor::MultiPoint(Box::new(
+                            CacheQueryProcessor::new(p, self.source.canonic_name()),
+                        ))
+                    }
+                    crate::engine::TypedVectorQueryProcessor::MultiLineString(p) => {
+                        crate::engine::TypedVectorQueryProcessor::MultiLineString(Box::new(
+                            CacheQueryProcessor::new(p, self.source.canonic_name()),
+                        ))
+                    }
+                    crate::engine::TypedVectorQueryProcessor::MultiPolygon(p) => {
+                        crate::engine::TypedVectorQueryProcessor::MultiPolygon(Box::new(
+                            CacheQueryProcessor::new(p, self.source.canonic_name()),
+                        ))
+                    }
+                };
+                tracing::debug!(event = "query processor created");
+
+                Ok(res_processor)
+            }
+            Err(err) => {
+                tracing::debug!(event = "query processor failed");
+                Err(err)
+            }
+        }
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.source.canonic_name()
+    }
+}
+
 /// A cache operator that caches the results of its source operator
-struct CacheQueryProcessor<Q, T>
+struct CacheQueryProcessor<P, E, Q>
 where
-    Q: QueryProcessor<Output = RasterTile2D<T>, SpatialBounds = SpatialPartition2D>,
-    T: Pixel,
+    E: CacheElement + Send + Sync + 'static,
+    P: QueryProcessor<Output = E, SpatialBounds = Q>,
 {
-    processor: Q,
+    processor: P,
     cache_key: CanonicOperatorName,
 }
 
-impl<Q, T> CacheQueryProcessor<Q, T>
+impl<P, E, Q> CacheQueryProcessor<P, E, Q>
 where
-    Q: QueryProcessor<Output = RasterTile2D<T>, SpatialBounds = SpatialPartition2D> + Sized,
-    T: Pixel,
+    E: CacheElement + Send + Sync + 'static,
+    P: QueryProcessor<Output = E, SpatialBounds = Q> + Sized,
 {
-    pub fn new(processor: Q, cache_key: CanonicOperatorName) -> Self {
+    pub fn new(processor: P, cache_key: CanonicOperatorName) -> Self {
         CacheQueryProcessor {
             processor,
             cache_key,
@@ -109,27 +155,33 @@ where
 }
 
 #[async_trait]
-impl<Q, T> QueryProcessor for CacheQueryProcessor<Q, T>
+impl<P, S, E, Q> QueryProcessor for CacheQueryProcessor<P, E, Q>
 where
-    Q: QueryProcessor<Output = RasterTile2D<T>, SpatialBounds = SpatialPartition2D> + Sized,
-    T: Pixel + CachableSubType<CacheElementType = RasterTile2D<T>>,
-    RasterTile2D<T>: Send,
-    SpatialPartition2D: Send,
+    P: QueryProcessor<Output = E, SpatialBounds = Q> + Sized,
+    E: CacheElement<CacheElementSubType = S, Query = QueryRectangle<Q>>
+        + Send
+        + Sync
+        + Clone
+        + 'static,
+    S: CacheElementSubType<CacheElementType = E> + Send + Sync + 'static,
+    Q: AxisAlignedRectangle + Send + Sync + 'static,
+    E::ResultStream: Stream<Item = Result<E>> + Send + Sync + 'static,
+    SharedCache: AsyncCache<E>,
 {
-    type Output = RasterTile2D<T>;
-    type SpatialBounds = SpatialPartition2D;
+    type Output = E;
+    type SpatialBounds = Q;
 
     async fn _query<'a>(
         &'a self,
         query: QueryRectangle<Self::SpatialBounds>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let tile_cache = ctx
+        let shared_cache = ctx
             .extensions()
             .get::<Arc<SharedCache>>()
             .expect("`TileCache` extension should be set during `ProContext` creation");
 
-        let cache_result = tile_cache.query_cache::<T>(&self.cache_key, &query).await;
+        let cache_result = shared_cache.query_cache::<S>(&self.cache_key, &query).await;
 
         if let Ok(Some(cache_result)) = cache_result {
             // cache hit
@@ -142,7 +194,9 @@ where
         log::debug!("cache miss for operator {}", self.cache_key);
         let source_stream = self.processor.query(query, ctx).await?;
 
-        let query_id = tile_cache.insert_query::<T>(&self.cache_key, &query).await;
+        let query_id = shared_cache
+            .insert_query::<S>(&self.cache_key, &query)
+            .await;
 
         if let Err(e) = query_id {
             log::debug!("could not insert query into cache: {}", e);
@@ -155,13 +209,13 @@ where
         let (stream_event_sender, mut stream_event_receiver) = unbounded_channel();
 
         let cache_key = self.cache_key.clone();
-        let tile_cache = tile_cache.clone();
+        let tile_cache = shared_cache.clone();
         crate::util::spawn(async move {
             while let Some(event) = stream_event_receiver.recv().await {
                 match event {
-                    SourceStreamEvent::Tile(tile) => {
+                    SourceStreamEvent::Element(tile) => {
                         let result = tile_cache
-                            .insert_query_element::<T>(&cache_key, &query_id, tile)
+                            .insert_query_element::<S>(&cache_key, &query_id, tile)
                             .await;
                         log::trace!(
                             "inserted tile into cache for cache key {} and query id {}. result: {:?}",
@@ -171,7 +225,7 @@ where
                         );
                     }
                     SourceStreamEvent::Abort => {
-                        tile_cache.abort_query::<T>(&cache_key, &query_id).await;
+                        tile_cache.abort_query::<S>(&cache_key, &query_id).await;
                         log::debug!(
                             "aborted cache insertion for cache key {} and query id {}",
                             cache_key,
@@ -179,7 +233,7 @@ where
                         );
                     }
                     SourceStreamEvent::Finished => {
-                        let result = tile_cache.finish_query::<T>(&cache_key, &query_id).await;
+                        let result = tile_cache.finish_query::<S>(&cache_key, &query_id).await;
                         log::debug!(
                             "finished cache insertion for cache key {} and query id {}, result: {:?}",
                             cache_key,query_id,
@@ -202,44 +256,45 @@ where
 }
 
 #[allow(clippy::large_enum_variant)] // TODO: Box instead?
-enum SourceStreamEvent<T> {
-    Tile(RasterTile2D<T>),
+enum SourceStreamEvent<E: CacheElement> {
+    Element(E),
     Abort,
     Finished,
 }
 
 /// Custom stream that lazily puts the produced tile in the cache and finishes the cache entry when the source stream completes
 #[pin_project(PinnedDrop, project = CacheOutputStreamProjection)]
-struct CacheOutputStream<S, T>
+struct CacheOutputStream<S, E>
 where
-    S: Stream<Item = Result<RasterTile2D<T>>>,
+    S: Stream<Item = Result<E>>,
+    E: CacheElement,
 {
     #[pin]
     source: S,
-    stream_event_sender: UnboundedSender<SourceStreamEvent<T>>,
+    stream_event_sender: UnboundedSender<SourceStreamEvent<E>>,
     finished: bool,
     pristine: bool,
 }
 
-impl<S, T> Stream for CacheOutputStream<S, T>
+impl<S, E> Stream for CacheOutputStream<S, E>
 where
-    S: Stream<Item = Result<RasterTile2D<T>>>,
-    T: Pixel,
+    S: Stream<Item = Result<E>>,
+    E: CacheElement + Clone,
 {
-    type Item = Result<RasterTile2D<T>>;
+    type Item = Result<E>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
 
         let next = ready!(this.source.poll_next(cx));
 
-        if let Some(tile) = &next {
+        if let Some(element) = &next {
             *this.pristine = false;
-            if let Ok(tile) = tile {
+            if let Ok(element) = element {
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let r = this
                     .stream_event_sender
-                    .send(SourceStreamEvent::Tile(tile.clone()));
+                    .send(SourceStreamEvent::Element(element.clone()));
                 if let Err(e) = r {
                     log::warn!("could not send tile to cache: {}", e.to_string());
                 }
@@ -274,9 +329,10 @@ where
 
 /// On drop, trigger the removal of the cache entry if it hasn't been finished yet
 #[pinned_drop]
-impl<S, T> PinnedDrop for CacheOutputStream<S, T>
+impl<S, E> PinnedDrop for CacheOutputStream<S, E>
 where
-    S: Stream<Item = Result<RasterTile2D<T>>>,
+    S: Stream<Item = Result<E>>,
+    E: CacheElement,
 {
     fn drop(self: Pin<&mut Self>) {
         if !self.finished {
@@ -293,7 +349,7 @@ where
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{SpatialResolution, TimeInterval},
+        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilesEqualIgnoringCacheHint,
         util::test::TestDefault,
     };

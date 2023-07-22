@@ -1,5 +1,5 @@
 use super::shared_cache::{
-    CachableSubType, CacheElement, CacheElementsContainer, CacheElementsContainerInfos,
+    CacheElement, CacheElementSubType, CacheElementsContainer, CacheElementsContainerInfos,
     LandingZoneElementsContainer,
 };
 use crate::util::Result;
@@ -173,7 +173,7 @@ impl CacheElementsContainerInfos<RasterQueryRectangle> for CachedTiles {
 
 impl<T> CacheElementsContainer<RasterQueryRectangle, RasterTile2D<T>> for CachedTiles
 where
-    T: CachableSubType<CacheElementType = RasterTile2D<T>> + Pixel,
+    T: CacheElementSubType<CacheElementType = RasterTile2D<T>> + Pixel,
 {
     type ResultStream = CacheTileStream<T>;
 
@@ -184,7 +184,7 @@ where
 
 impl<T> LandingZoneElementsContainer<RasterTile2D<T>> for LandingZoneQueryTiles
 where
-    T: CachableSubType<CacheElementType = RasterTile2D<T>> + Pixel,
+    T: CacheElementSubType<CacheElementType = RasterTile2D<T>> + Pixel,
 {
     fn insert_element(&mut self, element: RasterTile2D<T>) -> Result<(), super::error::CacheError> {
         T::insert_element_into_landing_zone(self, element)
@@ -197,12 +197,13 @@ where
 
 impl<T> CacheElement for RasterTile2D<T>
 where
-    T: Pixel + CachableSubType<CacheElementType = Self>,
+    T: Pixel + CacheElementSubType<CacheElementType = Self>,
 {
     type Query = RasterQueryRectangle;
     type LandingZoneContainer = LandingZoneQueryTiles;
     type CacheContainer = CachedTiles;
     type ResultStream = CacheTileStream<T>;
+    type CacheElementSubType = T;
 
     fn cache_hint(&self) -> geoengine_datatypes::primitives::CacheHint {
         self.cache_hint
@@ -217,7 +218,7 @@ where
 
 macro_rules! impl_cache_element_subtype_magic {
     ($t:ty, $variant:ident) => {
-        impl CachableSubType for $t {
+        impl CacheElementSubType for $t {
             type CacheElementType = RasterTile2D<$t>;
 
             fn insert_element_into_landing_zone(

@@ -26,7 +26,17 @@ impl Geometry for NoGeometry {
     }
 }
 
-impl GeometryRef for NoGeometry {}
+impl GeometryRef for NoGeometry {
+    type GeometryType = NoGeometry;
+
+    fn as_geometry(&self) -> Self::GeometryType {
+        NoGeometry
+    }
+
+    fn bbox(&self) -> Option<BoundingBox2D> {
+        None
+    }
+}
 
 impl TryFrom<TypedGeometry> for NoGeometry {
     type Error = Error;

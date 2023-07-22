@@ -22,7 +22,12 @@ pub trait Geometry: Clone + Debug + Send + Sync + TryFrom<TypedGeometry, Error =
     fn intersects_bbox(&self, bbox: &BoundingBox2D) -> bool;
 }
 
-pub trait GeometryRef: Into<geojson::Geometry> + ToWkt<f64> {}
+pub trait GeometryRef: Into<geojson::Geometry> + ToWkt<f64> {
+    type GeometryType: Geometry;
+
+    fn as_geometry(&self) -> Self::GeometryType;
+    fn bbox(&self) -> Option<BoundingBox2D>;
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TypedGeometry {

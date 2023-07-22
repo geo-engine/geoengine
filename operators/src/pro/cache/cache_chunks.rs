@@ -1,16 +1,19 @@
-use super::shared_cache::CachableSubType;
+use super::error::CacheError;
+use super::shared_cache::CacheElementSubType;
 use super::shared_cache::{
     CacheElement, CacheElementsContainer, CacheElementsContainerInfos, LandingZoneElementsContainer,
 };
 use crate::util::Result;
 use futures::Stream;
-use geoengine_datatypes::primitives::NoGeometry;
 use geoengine_datatypes::{
     collections::{
-        DataCollection, FeatureCollection, FeatureCollectionInfos, GeometryCollection,
-        MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection,
+        DataCollection, FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+        GeometryCollection, IntoGeometryIterator, MultiLineStringCollection, MultiPointCollection,
+        MultiPolygonCollection,
     },
-    primitives::{Geometry, MultiLineString, MultiPoint, MultiPolygon, VectorQueryRectangle},
+    primitives::{
+        Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, VectorQueryRectangle,
+    },
     util::{arrow::ArrowTyped, ByteSize},
 };
 use pin_project::pin_project;
@@ -145,7 +148,7 @@ impl CacheElementsContainerInfos<VectorQueryRectangle> for CachedFeatures {
 
 impl<G> CacheElementsContainer<VectorQueryRectangle, FeatureCollection<G>> for CachedFeatures
 where
-    G: CachableSubType<CacheElementType = FeatureCollection<G>> + Geometry + ArrowTyped,
+    G: CacheElementSubType<CacheElementType = FeatureCollection<G>> + Geometry + ArrowTyped,
     FeatureCollection<G>: CacheElementHitCheck,
 {
     type ResultStream = CacheChunkStream<G>;
@@ -157,7 +160,7 @@ where
 
 impl<G> LandingZoneElementsContainer<FeatureCollection<G>> for LandingZoneQueryFeatures
 where
-    G: CachableSubType<CacheElementType = FeatureCollection<G>> + Geometry + ArrowTyped,
+    G: CacheElementSubType<CacheElementType = FeatureCollection<G>> + Geometry + ArrowTyped,
     FeatureCollection<G>: CacheElementHitCheck,
 {
     fn insert_element(
@@ -174,13 +177,14 @@ where
 
 impl<G> CacheElement for FeatureCollection<G>
 where
-    G: Geometry + ArrowTyped + CachableSubType<CacheElementType = Self> + ArrowTyped + Sized,
+    G: Geometry + ArrowTyped + CacheElementSubType<CacheElementType = Self> + ArrowTyped + Sized,
     FeatureCollection<G>: CacheElementHitCheck,
 {
     type Query = VectorQueryRectangle;
     type LandingZoneContainer = LandingZoneQueryFeatures;
     type CacheContainer = CachedFeatures;
     type ResultStream = CacheChunkStream<G>;
+    type CacheElementSubType = G;
 
     fn cache_hint(&self) -> geoengine_datatypes::primitives::CacheHint {
         self.cache_hint
@@ -195,7 +199,7 @@ where
 
 macro_rules! impl_cache_element_subtype_magic {
     ($g:ty, $variant:ident) => {
-        impl CachableSubType for $g {
+        impl CacheElementSubType for $g {
             type CacheElementType = FeatureCollection<$g>;
 
             fn insert_element_into_landing_zone(
@@ -230,6 +234,7 @@ macro_rules! impl_cache_element_subtype_magic {
         }
     };
 }
+impl_cache_element_subtype_magic!(NoGeometry, NoGeometry);
 impl_cache_element_subtype_magic!(MultiPoint, MultiPoint);
 impl_cache_element_subtype_magic!(MultiLineString, MultiLineString);
 impl_cache_element_subtype_magic!(MultiPolygon, MultiPolygon);
@@ -263,6 +268,7 @@ where
 impl<G: Geometry> Stream for CacheChunkStream<G>
 where
     FeatureCollection<G>: CacheElementHitCheck,
+    G: ArrowTyped,
 {
     type Item = Result<FeatureCollection<G>>;
 
@@ -276,8 +282,22 @@ where
         for i in *idx..data.len() {
             let chunk = &data[i];
             if chunk.cache_element_hit(query) {
+                // TODO: we really should cache the elements bbox somewhere
+                let Ok(chunk) = chunk.filter_cache_element_entries(query) else {
+                    // This should not happen, since we already checked that the element is contained in the query
+                    log::error!("Could not filter cache element entries");
+                    continue;
+                };
+
+                // if the chunk is empty, we can skip it
+                if chunk.is_empty() {
+                    log::trace!("Skipping empty chunk after filtering for query rectangle");
+                    continue;
+                }
+
+                // set the index to the next element
                 *idx = i + 1;
-                return std::task::Poll::Ready(Some(Ok(chunk.clone())));
+                return std::task::Poll::Ready(Some(Ok(chunk)));
             }
         }
 
@@ -292,8 +312,15 @@ pub enum TypedCacheChunkStream {
     MultiPolygon(CacheChunkStream<MultiPolygon>),
 }
 
-trait CacheElementHitCheck {
+pub trait CacheElementHitCheck {
     fn cache_element_hit(&self, query_rect: &VectorQueryRectangle) -> bool;
+
+    fn filter_cache_element_entries(
+        &self,
+        query_rect: &VectorQueryRectangle,
+    ) -> Result<Self, CacheError>
+    where
+        Self: Sized;
 }
 
 impl CacheElementHitCheck for FeatureCollection<NoGeometry> {
@@ -304,11 +331,26 @@ impl CacheElementHitCheck for FeatureCollection<NoGeometry> {
 
         time_bounds == query_rect.time_interval || time_bounds.intersects(&query_rect.time_interval)
     }
+    fn filter_cache_element_entries(
+        &self,
+        query_rect: &VectorQueryRectangle,
+    ) -> Result<Self, CacheError> {
+        let time_filter_bools = self
+            .time_intervals()
+            .iter()
+            .map(|t| t.intersects(&query_rect.time_interval))
+            .collect::<Vec<bool>>();
+        self.filter(time_filter_bools)
+            .map_err(|_err| CacheError::CouldNotFilterResults)
+    }
 }
 
 macro_rules! impl_cache_result_check {
     ($t:ty) => {
-        impl CacheElementHitCheck for FeatureCollection<$t> {
+        impl<'a> CacheElementHitCheck for FeatureCollection<$t>
+        where
+            FeatureCollection<$t>: GeometryCollection,
+        {
             fn cache_element_hit(&self, query_rect: &VectorQueryRectangle) -> bool {
                 let Some(bbox) = self.bbox() else {return false;};
 
@@ -318,6 +360,30 @@ macro_rules! impl_cache_result_check {
                     || bbox.intersects_bbox(&query_rect.spatial_bounds))
                     && (time_bounds == query_rect.time_interval
                         || time_bounds.intersects(&query_rect.time_interval))
+            }
+
+            fn filter_cache_element_entries(
+                &self,
+                query_rect: &VectorQueryRectangle,
+            ) -> Result<Self, CacheError> {
+                let geoms_filter_bools = self.geometries().map(|g| {
+                    g.bbox()
+                        .map(|bbox| bbox.intersects_bbox(&query_rect.spatial_bounds))
+                        .unwrap_or(false)
+                });
+
+                let time_filter_bools = self
+                    .time_intervals()
+                    .iter()
+                    .map(|t| t.intersects(&query_rect.time_interval));
+
+                let filter_bools = geoms_filter_bools
+                    .zip(time_filter_bools)
+                    .map(|(g, t)| g && t)
+                    .collect::<Vec<bool>>();
+
+                self.filter(filter_bools)
+                    .map_err(|_err| CacheError::CouldNotFilterResults)
             }
         }
     };

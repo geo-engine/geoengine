@@ -5,7 +5,7 @@ use snafu::Snafu;
 #[snafu(context(suffix(false)))]
 pub enum CacheError {
     LandingZoneRatioMustBeLargerThanZero,
-    LandingZoneRatioMustBeSmallerThanOne,
+    LandingZoneRatioMustBeSmallerThenHalfCacheSize,
     NotEnoughSpaceInLandingZone,
     NotEnoughSpaceInCache,
     QueryNotFoundInLandingZone,
@@ -17,4 +17,5 @@ pub enum CacheError {
     NegativeSizeOfCache,
     QueryIdAlreadyInLandingZone,
     CacheEntryIdAlreadyInCache,
+    CouldNotFilterResults,
 }

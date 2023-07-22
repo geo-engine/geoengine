@@ -282,7 +282,17 @@ pub struct MultiLineStringRef<'g> {
     point_coordinates: Vec<&'g [Coordinate2D]>,
 }
 
-impl<'r> GeometryRef for MultiLineStringRef<'r> {}
+impl<'r> GeometryRef for MultiLineStringRef<'r> {
+    type GeometryType = MultiLineString;
+
+    fn as_geometry(&self) -> Self::GeometryType {
+        self.into()
+    }
+
+    fn bbox(&self) -> Option<BoundingBox2D> {
+        self.bbox()
+    }
+}
 
 impl<'g> MultiLineStringRef<'g> {
     pub fn new(coordinates: Vec<&'g [Coordinate2D]>) -> Result<Self> {
@@ -295,6 +305,17 @@ impl<'g> MultiLineStringRef<'g> {
         Self {
             point_coordinates: coordinates,
         }
+    }
+
+    pub fn bbox(&self) -> Option<BoundingBox2D> {
+        self.lines().iter().fold(None, |bbox, line| {
+            let lbox = BoundingBox2D::from_coord_ref_iter(line.iter());
+            match (bbox, lbox) {
+                (None, Some(lbox)) => Some(lbox),
+                (Some(bbox), Some(lbox)) => Some(bbox.union(&lbox)),
+                (bbox, None) => bbox,
+            }
+        })
     }
 }
 

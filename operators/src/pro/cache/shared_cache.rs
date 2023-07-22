@@ -1,5 +1,5 @@
 use super::{
-    cache_chunks::{CachedFeatures, LandingZoneQueryFeatures},
+    cache_chunks::{CacheElementHitCheck, CachedFeatures, LandingZoneQueryFeatures},
     cache_tiles::{CachedTiles, LandingZoneQueryTiles, TypedCacheTileStream},
     error::CacheError,
     util::CacheSize,
@@ -9,10 +9,11 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::Stream;
 use geoengine_datatypes::{
+    collections::FeatureCollection,
     identifier,
-    primitives::{CacheHint, RasterQueryRectangle, VectorQueryRectangle},
+    primitives::{CacheHint, Geometry, RasterQueryRectangle, VectorQueryRectangle},
     raster::{Pixel, RasterTile2D},
-    util::{test::TestDefault, ByteSize, Identifier},
+    util::{arrow::ArrowTyped, test::TestDefault, ByteSize, Identifier},
 };
 use log::debug;
 use lru::LruCache;
@@ -235,6 +236,7 @@ where
             .ok_or(CacheError::QueryNotFoundInLandingZone)?;
 
         if landing_zone_element.cache_hint().is_expired() {
+            log::trace!("Element is already expired");
             return Err(CacheError::TileExpiredBeforeInsertion);
         };
 
@@ -538,13 +540,33 @@ where
 
 impl<T> Cache<RasterTile2D<T>> for CacheBackend
 where
-    T: Pixel + CachableSubType<CacheElementType = RasterTile2D<T>>,
+    T: Pixel + CacheElementSubType<CacheElementType = RasterTile2D<T>>,
 {
     fn operator_cache_view_mut(
         &mut self,
         key: &CanonicOperatorName,
     ) -> Option<OperatorCacheEntryView<RasterTile2D<T>>> {
         self.raster_caches
+            .get_mut(key)
+            .map(|op| OperatorCacheEntryView {
+                operator_cache: op,
+                cache_size: &mut self.cache_size,
+                landing_zone_size: &mut self.landing_zone_size,
+                lru: &mut self.lru,
+            })
+    }
+}
+
+impl<T> Cache<FeatureCollection<T>> for CacheBackend
+where
+    T: Geometry + CacheElementSubType<CacheElementType = FeatureCollection<T>> + ArrowTyped,
+    FeatureCollection<T>: CacheElementHitCheck,
+{
+    fn operator_cache_view_mut(
+        &mut self,
+        key: &CanonicOperatorName,
+    ) -> Option<OperatorCacheEntryView<FeatureCollection<T>>> {
+        self.vector_caches
             .get_mut(key)
             .map(|op| OperatorCacheEntryView {
                 operator_cache: op,
@@ -580,6 +602,7 @@ where
     type CacheContainer: CacheElementsContainer<Self::Query, Self, ResultStream = Self::ResultStream>
         + From<Self::LandingZoneContainer>;
     type ResultStream;
+    type CacheElementSubType: CacheElementSubType<CacheElementType = Self>;
 
     fn move_into_landing_zone(
         self,
@@ -593,7 +616,7 @@ where
     fn typed_canonical_operator_name(key: CanonicOperatorName) -> TypedCanonicOperatorName;
 }
 
-pub trait CachableSubType {
+pub trait CacheElementSubType {
     type CacheElementType: CacheElement;
 
     fn insert_element_into_landing_zone(
@@ -622,13 +645,11 @@ impl SharedCache {
             });
         }
 
-        if landing_zone_ratio >= 1.0 {
+        if landing_zone_ratio >= 0.5 {
             return Err(crate::error::Error::QueryingProcessorFailed {
-                source: Box::new(CacheError::LandingZoneRatioMustBeSmallerThanOne),
+                source: Box::new(CacheError::LandingZoneRatioMustBeSmallerThenHalfCacheSize),
             });
         }
-
-        // TODO: landing zone < 50% of cache size
 
         let cache_size_bytes =
             (cache_size_in_mb as f64 * (1.0 - landing_zone_ratio) * 1024.0 * 1024.0) as usize;
@@ -860,32 +881,32 @@ impl From<VectorLandingQueryEntry> for VectorCacheQueryEntry {
 
 #[async_trait]
 pub trait AsyncCache<C: CacheElement> {
-    async fn query_cache<S: CachableSubType<CacheElementType = C>>(
+    async fn query_cache<S: CacheElementSubType<CacheElementType = C>>(
         &self,
         key: &CanonicOperatorName,
         query: &C::Query,
     ) -> Result<Option<C::ResultStream>, CacheError>;
 
-    async fn insert_query<S: CachableSubType<CacheElementType = C>>(
+    async fn insert_query<S: CacheElementSubType<CacheElementType = C>>(
         &self,
         key: &CanonicOperatorName,
         query: &C::Query,
     ) -> Result<QueryId, CacheError>;
 
-    async fn insert_query_element<S: CachableSubType<CacheElementType = C>>(
+    async fn insert_query_element<S: CacheElementSubType<CacheElementType = C>>(
         &self,
         key: &CanonicOperatorName,
         query_id: &QueryId,
         landing_zone_element: S::CacheElementType,
     ) -> Result<(), CacheError>;
 
-    async fn abort_query<S: CachableSubType<CacheElementType = C>>(
+    async fn abort_query<S: CacheElementSubType<CacheElementType = C>>(
         &self,
         key: &CanonicOperatorName,
         query_id: &QueryId,
     );
 
-    async fn finish_query<S: CachableSubType<CacheElementType = C>>(
+    async fn finish_query<S: CacheElementSubType<CacheElementType = C>>(
         &self,
         key: &CanonicOperatorName,
         query_id: &QueryId,
@@ -904,7 +925,7 @@ where
         From<CacheQueryEntry<C::Query, C::LandingZoneContainer>>,
 {
     /// Query the cache and on hit create a stream of cache elements
-    async fn query_cache<S: CachableSubType<CacheElementType = C>>(
+    async fn query_cache<S: CacheElementSubType<CacheElementType = C>>(
         &self,
         key: &CanonicOperatorName,
         query: &C::Query,
@@ -915,7 +936,7 @@ where
 
     /// When inserting a new query, we first register the query and then insert the elements as they are produced
     /// This is to avoid confusing different queries on the same operator and query rectangle
-    async fn insert_query<S: CachableSubType<CacheElementType = C>>(
+    async fn insert_query<S: CacheElementSubType<CacheElementType = C>>(
         &self,
         key: &CanonicOperatorName,
         query: &C::Query,
@@ -927,7 +948,7 @@ where
     /// Insert a cachable element for a given query. The query has to be inserted first.
     /// The element is inserted into the landing zone and only moved to the cache when the query is finished.
     /// If the landing zone is full or the element size would cause the landing zone size to overflow, the caching of the query is aborted.
-    async fn insert_query_element<S: CachableSubType<CacheElementType = C>>(
+    async fn insert_query_element<S: CacheElementSubType<CacheElementType = C>>(
         &self,
         key: &CanonicOperatorName,
         query_id: &QueryId,
@@ -938,7 +959,7 @@ where
     }
 
     /// Abort the query and remove already inserted elements from the caches landing zone
-    async fn abort_query<S: CachableSubType<CacheElementType = C>>(
+    async fn abort_query<S: CacheElementSubType<CacheElementType = C>>(
         &self,
         key: &CanonicOperatorName,
         query_id: &QueryId,
@@ -948,7 +969,7 @@ where
     }
 
     /// Finish the query and make the inserted elements available in the cache
-    async fn finish_query<S: CachableSubType<CacheElementType = C>>(
+    async fn finish_query<S: CacheElementSubType<CacheElementType = C>>(
         &self,
         key: &CanonicOperatorName,
         query_id: &QueryId,
