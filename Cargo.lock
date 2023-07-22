@@ -2287,6 +2287,7 @@ dependencies = [
  "pest_derive",
  "pin-project",
  "postgres-protocol",
+ "postgres-types",
  "proc-macro2",
  "quote",
  "rand",

@@ -935,10 +935,9 @@ mod tests {
     async fn test_add_layer_to_collection() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -986,10 +985,9 @@ mod tests {
     async fn test_add_existing_layer_to_collection() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1051,10 +1049,9 @@ mod tests {
     async fn test_add_layer_collection() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1081,10 +1078,9 @@ mod tests {
     async fn test_add_existing_collection_to_collection() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1136,10 +1132,9 @@ mod tests {
     async fn test_remove_layer_from_collection() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1202,10 +1197,9 @@ mod tests {
     async fn test_remove_collection() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1248,10 +1242,9 @@ mod tests {
     async fn test_remove_collection_from_collection() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1405,7 +1398,7 @@ mod tests {
         }
 
         async fn create_layer_in_context(&self, app_ctx: &InMemoryContext) -> Layer {
-            let ctx = app_ctx.default_session_context().await;
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
             let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1535,7 +1528,7 @@ mod tests {
             mock_source.tiling_specification,
             TestDefault::test_default(),
         );
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
         let response =
@@ -1589,7 +1582,7 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let session_id = app_ctx.default_session_ref().await.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
@@ -1612,7 +1605,7 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let session_id = app_ctx.default_session_ref().await.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
@@ -1635,7 +1628,7 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let session_id = app_ctx.default_session_ref().await.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
 

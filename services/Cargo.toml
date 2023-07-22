@@ -12,12 +12,11 @@ build = "build.rs"
 [features]
 nature40 = ["xml"]
 xml = ["quick-xml"]
-postgres = ["postgres-types", "bb8-postgres"]
 odm = ["pro"]
-nfdi = ["postgres", "geoengine-datatypes/postgres", "aruna-rust-api", "pro"]
+nfdi = ["aruna-rust-api", "pro"]
 ebv = []
 # This compiles Geo Engine Pro
-pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
+pro = ["geoengine-operators/pro", "geoengine-datatypes/pro"]
 xgboost = ["pro", "geoengine-operators/xgboost"]
 
 
@@ -33,7 +32,7 @@ actix-web-httpauth = "0.8"
 aruna-rust-api = { version = "1.0.0-rc.6", optional = true }
 async-trait = "0.1"
 base64 = "0.21"
-bb8-postgres = { version = "0.8", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"], optional = true }
+bb8-postgres = { version = "0.8", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"] }
 bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.13"
@@ -59,12 +58,13 @@ opentelemetry-jaeger = "0.18"
 ordered-float = { version= "3.0", features = ["serde"] }
 num-traits = "0.2"
 paste = "1.0"
-postgres-types = { version = "0.2", features = ["derive"], optional = true }
+postgres-types = { version = "0.2", features = ["derive"] }
 postgres-protocol = "0.6"
 proj = "0.22"
 proj-sys = "0.19"
 pwhash = "1.0"
 quick-xml = { version = "0.28", optional = true }
+rand = "0.8"
 rayon = "1.5"
 regex = "1.5"
 reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
@@ -101,7 +101,6 @@ assert_cmd = "2.0"
 httptest = "0.15.2"
 hyper = "0.14"
 prost = "0.11"
-rand = "0.8.4"
 serial_test = "2.0"
 tempfile = "3.1"
 xml-rs = "0.8"

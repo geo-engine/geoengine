@@ -1077,9 +1077,7 @@ mod tests {
     use crate::api::model::datatypes::{DatasetName, NamedData};
     use crate::api::model::responses::datasets::{DatasetIdAndName, DatasetNameResponse};
     use crate::api::model::services::DatasetDefinition;
-    use crate::contexts::{
-        ApplicationContext, InMemoryContext, Session, SessionId, SimpleApplicationContext,
-    };
+    use crate::contexts::{InMemoryContext, Session, SessionId, SimpleApplicationContext};
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
     use crate::error::Result;
@@ -1115,9 +1113,9 @@ mod tests {
     async fn test_list_datasets() -> Result<()> {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session_id = app_ctx.default_session_ref().await.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,
@@ -1418,10 +1416,9 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
-        let ctx = app_ctx.session_context(session);
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
@@ -1482,7 +1479,7 @@ mod tests {
     async fn it_creates_system_dataset() -> Result<()> {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -2024,7 +2021,7 @@ mod tests {
     async fn get_dataset() -> Result<()> {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -2111,7 +2108,7 @@ mod tests {
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let body = vec![(
@@ -2248,11 +2245,9 @@ mod tests {
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
@@ -2283,7 +2278,7 @@ mod tests {
     async fn it_deletes_system_dataset() -> Result<()> {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let volume = VolumeName("test_data".to_string());
 
@@ -2307,12 +2302,12 @@ mod tests {
             },
         };
 
-        let session = app_ctx.default_session_ref().await;
+        let session_id = app_ctx.default_session_id().await;
 
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
         let res = send_test_request(req, app_ctx.clone()).await;
@@ -2326,7 +2321,7 @@ mod tests {
         let req = actix_web::test::TestRequest::delete()
             .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
 
         let res = send_test_request(req, app_ctx.clone()).await;

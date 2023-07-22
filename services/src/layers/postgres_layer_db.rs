@@ -1,9 +1,7 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 
-use crate::error;
+use crate::contexts::PostgresDb;
 use crate::layers::layer::Property;
-use crate::pro::contexts::ProPostgresDb;
-use crate::pro::permissions::{Permission, PermissionDb, RoleId};
 
 use crate::{
     error::Result,
@@ -28,7 +26,7 @@ use bb8_postgres::tokio_postgres::{
     Socket,
 };
 
-use snafu::{ensure, ResultExt};
+use snafu::ResultExt;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -82,7 +80,7 @@ async fn _remove_layers_without_parent_collection(
 }
 
 #[async_trait]
-impl<Tls> LayerDb for ProPostgresDb<Tls>
+impl<Tls> LayerDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -90,12 +88,6 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn add_layer(&self, layer: AddLayer, collection: &LayerCollectionId) -> Result<LayerId> {
-        ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
         let collection_id =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -145,28 +137,6 @@ where
 
         trans.execute(&stmt, &[&collection_id, &layer_id]).await?;
 
-        // TODO: `ON CONFLICT DO NOTHING` means, we do not get an error if the permission already exists.
-        //       Do we want that, or should we report an error and let the caller decide whether to ignore it?
-        //       We should decide that and adjust all places where `ON CONFILCT DO NOTHING` is used.
-        let stmt = trans
-            .prepare(
-                "
-        INSERT INTO permissions (role_id, permission, layer_id)
-        VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &RoleId::from(self.session.user.id),
-                    &Permission::Owner,
-                    &layer_id,
-                ],
-            )
-            .await?;
-
         trans.commit().await?;
 
         Ok(LayerId(layer_id.to_string()))
@@ -178,12 +148,6 @@ where
         layer: AddLayer,
         collection: &LayerCollectionId,
     ) -> Result<()> {
-        ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
         let layer_id =
             Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -237,25 +201,6 @@ where
 
         trans.execute(&stmt, &[&collection_id, &layer_id]).await?;
 
-        let stmt = trans
-            .prepare(
-                "
-            INSERT INTO permissions (role_id, permission, layer_id)
-            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &RoleId::from(self.session.user.id),
-                    &Permission::Owner,
-                    &layer_id,
-                ],
-            )
-            .await?;
-
         trans.commit().await?;
 
         Ok(())
@@ -266,12 +211,6 @@ where
         layer: &LayerId,
         collection: &LayerCollectionId,
     ) -> Result<()> {
-        ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
         let layer_id =
             Uuid::from_str(&layer.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: layer.0.clone(),
@@ -302,12 +241,6 @@ where
         collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId> {
-        ensure!(
-            self.has_permission(parent.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
         let parent =
             Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: parent.0.clone(),
@@ -351,25 +284,6 @@ where
 
         trans.execute(&stmt, &[&parent, &collection_id]).await?;
 
-        let stmt = trans
-            .prepare(
-                "
-            INSERT INTO permissions (role_id, permission, layer_collection_id)
-            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &RoleId::from(self.session.user.id),
-                    &Permission::Owner,
-                    &collection_id,
-                ],
-            )
-            .await?;
-
         trans.commit().await?;
 
         Ok(LayerCollectionId(collection_id.to_string()))
@@ -381,12 +295,6 @@ where
         collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<()> {
-        ensure!(
-            self.has_permission(parent.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
         let collection_id =
             Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: id.0.clone(),
@@ -431,25 +339,6 @@ where
 
         trans.execute(&stmt, &[&parent, &collection_id]).await?;
 
-        let stmt = trans
-            .prepare(
-                "
-            INSERT INTO permissions (role_id, permission, layer_collection_id)
-            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &RoleId::from(self.session.user.id),
-                    &Permission::Owner,
-                    &collection_id,
-                ],
-            )
-            .await?;
-
         trans.commit().await?;
 
         Ok(())
@@ -460,12 +349,6 @@ where
         collection: &LayerCollectionId,
         parent: &LayerCollectionId,
     ) -> Result<()> {
-        ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
         let collection =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -492,12 +375,6 @@ where
     }
 
     async fn remove_layer_collection(&self, collection: &LayerCollectionId) -> Result<()> {
-        ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
         let collection =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -535,12 +412,6 @@ where
         layer: &LayerId,
         collection: &LayerCollectionId,
     ) -> Result<()> {
-        ensure!(
-            self.has_permission(layer.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
         let collection_uuid =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -586,12 +457,6 @@ where
         collection: &LayerCollectionId,
         parent: &LayerCollectionId,
     ) -> Result<()> {
-        ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
         let collection_uuid =
             Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: collection.0.clone(),
@@ -636,7 +501,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> LayerCollectionProvider for ProPostgresDb<Tls>
+impl<Tls> LayerCollectionProvider for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -649,11 +514,6 @@ where
         collection_id: &LayerCollectionId,
         options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
-        ensure!(
-            self.has_permission(collection_id.clone(), Permission::Read)
-                .await?,
-            error::PermissionDenied
-        );
         let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
             crate::error::Error::IdStringMustBeUuid {
                 found: collection_id.0.clone(),
@@ -666,15 +526,12 @@ where
             .prepare(
                 "
         SELECT DISTINCT name, description, properties
-        FROM user_permitted_layer_collections p 
-            JOIN layer_collections c ON (p.layer_collection_id = c.id) 
-        WHERE p.user_id = $1 AND layer_collection_id = $2;",
+        FROM layer_collections
+        WHERE id = $1;",
             )
             .await?;
 
-        let row = conn
-            .query_one(&stmt, &[&self.session.user.id, &collection])
-            .await?;
+        let row = conn.query_one(&stmt, &[&collection]).await?;
 
         let name: String = row.get(0);
         let description: String = row.get(1);
@@ -691,10 +548,9 @@ where
                 description, 
                 properties, 
                 FALSE AS is_layer
-            FROM user_permitted_layer_collections u 
-                JOIN layer_collections lc ON (u.layer_collection_id = lc.id)
-                JOIN collection_children cc ON (layer_collection_id = cc.child)
-            WHERE u.user_id = $4 AND cc.parent = $1
+            FROM layer_collections
+                JOIN collection_children cc ON (id = cc.child)
+            WHERE cc.parent = $1
         ) u UNION (
             SELECT 
                 concat(id, '') AS id, 
@@ -702,10 +558,9 @@ where
                 description, 
                 properties, 
                 TRUE AS is_layer
-            FROM user_permitted_layers ul
-                JOIN layers uc ON (ul.layer_id = uc.id) 
-                JOIN collection_layers cl ON (layer_id = cl.layer)
-            WHERE ul.user_id = $4 AND cl.collection = $1
+            FROM layers uc
+                JOIN collection_layers cl ON (id = cl.layer)
+            WHERE cl.collection = $1
         )
         ORDER BY is_layer ASC, name ASC
         LIMIT $2 
@@ -721,7 +576,6 @@ where
                     &collection,
                     &i64::from(options.limit),
                     &i64::from(options.offset),
-                    &self.session.user.id,
                 ],
             )
             .await?;
@@ -775,11 +629,6 @@ where
     }
 
     async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
-        ensure!(
-            self.has_permission(id.clone(), Permission::Read).await?,
-            error::PermissionDenied
-        );
-
         let layer_id =
             Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
                 found: id.0.clone(),
@@ -797,8 +646,8 @@ where
                 symbology,
                 properties,
                 metadata
-            FROM layers l
-            WHERE l.id = $1;",
+            FROM layers
+            WHERE id = $1;",
             )
             .await?;
 
@@ -823,7 +672,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> LayerProviderDb for ProPostgresDb<Tls>
+impl<Tls> LayerProviderDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -834,8 +683,6 @@ where
         &self,
         provider: Box<dyn DataProviderDefinition>,
     ) -> Result<DataProviderId> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
-
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn

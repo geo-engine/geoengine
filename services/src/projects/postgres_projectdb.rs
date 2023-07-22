@@ -1,16 +1,12 @@
+use crate::contexts::PostgresDb;
 use crate::error::{self, Result};
 
-use crate::pro::contexts::ProPostgresDb;
-use crate::pro::permissions::Permission;
-use crate::pro::permissions::PermissionDb;
-use crate::pro::users::UserId;
-
+use crate::projects::Plot;
 use crate::projects::ProjectLayer;
 use crate::projects::{
     CreateProject, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject,
 };
-use crate::projects::{LoadVersion, Plot};
 
 use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
@@ -23,7 +19,8 @@ use snafu::ResultExt;
 
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Transaction;
-use snafu::ensure;
+
+use super::LoadVersion;
 
 async fn list_plots<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
@@ -125,7 +122,7 @@ async fn update_plots(
 }
 
 #[async_trait]
-impl<Tls> ProjectDb for ProPostgresDb<Tls>
+impl<Tls> ProjectDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -140,14 +137,13 @@ where
         let stmt = conn
             .prepare(&format!(
                 "
-        SELECT p.id, p.project_id, p.name, p.description, p.changed 
-        FROM user_permitted_projects u JOIN project_versions p ON (u.project_id = p.project_id)
+        SELECT p.id, p.project_id, p.name, p.description, p.changed
+        FROM project_versions p
         WHERE
-            u.user_id = $1
-            AND p.changed >= ALL (SELECT changed FROM project_versions WHERE project_id = p.project_id)
+            p.changed >= ALL (SELECT changed FROM project_versions WHERE project_id = p.project_id)
         ORDER BY p.{}
-        LIMIT $2
-        OFFSET $3;",
+        LIMIT $1
+        OFFSET $2;",
                 options.order.to_sql_string()
             ))
             .await?;
@@ -155,11 +151,7 @@ where
         let project_rows = conn
             .query(
                 &stmt,
-                &[
-                    &self.session.user.id,
-                    &i64::from(options.limit),
-                    &i64::from(options.offset),
-                ],
+                &[&i64::from(options.limit), &i64::from(options.offset)],
             )
             .await?;
 
@@ -238,32 +230,6 @@ where
             )
             .await?;
 
-        let stmt = trans
-            .prepare(
-                "INSERT INTO 
-                    project_version_authors (project_version_id, user_id) 
-                VALUES 
-                    ($1, $2);",
-            )
-            .await?;
-
-        trans
-            .execute(&stmt, &[&version_id, &self.session.user.id])
-            .await?;
-
-        let stmt = trans
-            .prepare(
-                "INSERT INTO permissions (role_id, permission, project_id) VALUES ($1, $2, $3);",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[&self.session.user.id, &Permission::Owner, &project.id],
-            )
-            .await?;
-
         trans.commit().await?;
 
         Ok(project.id)
@@ -279,11 +245,6 @@ where
         let update = update;
 
         let mut conn = self.conn_pool.get().await?;
-
-        ensure!(
-            self.has_permission(update.id, Permission::Owner).await?,
-            error::PermissionDenied
-        );
 
         let trans = conn.build_transaction().start().await?;
 
@@ -318,19 +279,6 @@ where
                     &project.time_step,
                 ],
             )
-            .await?;
-
-        let stmt = trans
-            .prepare(
-                "INSERT INTO 
-                    project_version_authors (project_version_id, user_id) 
-                VALUES 
-                    ($1, $2);",
-            )
-            .await?;
-
-        trans
-            .execute(&stmt, &[&project.version.id, &self.session.user.id])
             .await?;
 
         for (idx, layer) in project.layers.iter().enumerate() {
@@ -377,11 +325,6 @@ where
     async fn delete_project(&self, project: ProjectId) -> Result<()> {
         let conn = self.conn_pool.get().await?;
 
-        ensure!(
-            self.has_permission(project, Permission::Owner).await?,
-            error::PermissionDenied
-        );
-
         let stmt = conn.prepare("DELETE FROM projects WHERE id = $1;").await?;
 
         conn.execute(&stmt, &[&project]).await?;
@@ -397,11 +340,6 @@ where
     ) -> Result<Project> {
         let conn = self.conn_pool.get().await?;
 
-        ensure!(
-            self.has_permission(project, Permission::Read).await?,
-            error::PermissionDenied
-        );
-
         let row = if let LoadVersion::Version(version) = version {
             let stmt = conn
                 .prepare(
@@ -413,10 +351,9 @@ where
                 p.description,
                 p.bounds,
                 p.time_step,
-                p.changed,
-                a.user_id
+                p.changed
             FROM 
-                project_versions p JOIN project_version_authors a ON (p.id = a.project_version_id)
+                project_versions p
             WHERE p.project_id = $1 AND p.id = $2",
                 )
                 .await?;
@@ -433,10 +370,9 @@ where
                 p.description,
                 p.bounds,
                 p.time_step,
-                p.changed,
-                a.user_id
+                p.changed
             FROM 
-                project_versions p JOIN project_version_authors a ON (p.id = a.project_version_id)
+                project_versions p
             WHERE project_id = $1 AND p.changed >= ALL(
                 SELECT changed FROM project_versions WHERE project_id = $1
             )",
@@ -453,7 +389,6 @@ where
         let bounds = row.get(4);
         let time_step = row.get(5);
         let changed = row.get(6);
-        let _author_id = UserId(row.get(7));
 
         let stmt = conn
             .prepare(
@@ -496,22 +431,17 @@ where
     async fn list_project_versions(&self, project: ProjectId) -> Result<Vec<ProjectVersion>> {
         let conn = self.conn_pool.get().await?;
 
-        ensure!(
-            self.has_permission(project, Permission::Read).await?,
-            error::PermissionDenied
-        );
-
         let stmt = conn
             .prepare(
                 "
                 SELECT 
-                    p.id, p.changed, a.user_id
+                    id, changed
                 FROM 
-                    project_versions p JOIN project_version_authors a ON (p.id = a.project_version_id)
+                    project_versions
                 WHERE 
                     project_id = $1 
                 ORDER BY 
-                    p.changed DESC, a.user_id DESC",
+                    changed DESC",
             )
             .await?;
 

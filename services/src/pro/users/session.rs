@@ -1,7 +1,7 @@
 use crate::contexts::{ApplicationContext, MockableSession, Session, SessionId};
 use crate::error;
 use crate::handlers::get_token;
-use crate::pro::contexts::{PostgresContext, ProInMemoryContext};
+use crate::pro::contexts::{ProInMemoryContext, ProPostgresContext};
 use crate::pro::permissions::{Role, RoleId};
 use crate::pro::users::UserId;
 use crate::projects::{ProjectId, STRectangle};
@@ -111,9 +111,8 @@ impl FromRequest for UserSession {
             Err(error) => return Box::pin(err(error)),
         };
 
-        #[cfg(feature = "postgres")]
         {
-            if let Some(pg_ctx) = req.app_data::<web::Data<PostgresContext<NoTls>>>() {
+            if let Some(pg_ctx) = req.app_data::<web::Data<ProPostgresContext<NoTls>>>() {
                 let pg_ctx = pg_ctx.get_ref().clone();
                 return async move { pg_ctx.session_by_id(token).await.map_err(Into::into) }
                     .boxed_local();

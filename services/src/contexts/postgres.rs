@@ -1,69 +1,56 @@
 use crate::api::model::datatypes::DatasetName;
-use crate::contexts::{ApplicationContext, PostgresContext, QueryContextImpl, SessionId};
+use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId, SimpleSession};
 use crate::contexts::{GeoEngineDb, SessionContext};
-use crate::datasets::add_from_directory::add_providers_from_directory;
+use crate::datasets::add_from_directory::{
+    add_datasets_from_directory, add_providers_from_directory,
+};
 use crate::datasets::upload::{Volume, Volumes};
 use crate::error::{self, Error, Result};
-use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
-use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
-use crate::pro::datasets::add_datasets_from_directory;
-use crate::pro::layers::add_from_directory::{
-    add_layer_collections_from_directory, add_layers_from_directory,
+use crate::layers::add_from_directory::{
+    add_layer_collections_from_directory, add_layers_from_directory, UNSORTED_COLLECTION_ID,
 };
-use crate::pro::permissions::Role;
-use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
-use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
-use crate::pro::users::{OidcRequestDb, UserAuth, UserSession};
-use crate::pro::util::config::{Cache, Oidc, Quota};
+use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 
-use crate::tasks::SimpleTaskManagerContext;
-use crate::util::config::get_config_element;
+use crate::projects::{ProjectId, STRectangle};
+use crate::tasks::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
     bb8::PooledConnection,
-    tokio_postgres::{tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
+    tokio_postgres::{error::SqlState, tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
 use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_datatypes::util::test::TestDefault;
-use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
-use geoengine_operators::pro::cache::shared_cache::SharedCache;
-use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
+use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, info};
-use pwhash::bcrypt;
 use rayon::ThreadPool;
-use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
+use super::{ExecutionContextImpl, Session, SimpleApplicationContext};
 
-// TODO: do not report postgres error details to user
+// TODO: distinguish user-facing errors from system-facing error messages
 
-/// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
+/// A context with references to Postgres backends of the database.
 #[derive(Clone)]
-pub struct ProPostgresContext<Tls>
+pub struct PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    default_session_id: SessionId,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
-    task_manager: Arc<ProTaskManagerBackend>,
-    oidc_request_db: Arc<Option<OidcRequestDb>>,
-    quota: QuotaTrackingFactory,
-    pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
+    task_manager: Arc<SimpleTaskManagerBackend>,
+    pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
-    tile_cache: Arc<SharedCache>,
 }
 
-impl<Tls> ProPostgresContext<Tls>
+impl<Tls> PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -75,35 +62,28 @@ where
         tls: Tls,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
-        quota_config: Quota,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
+        let created_schema = Self::create_schema(pool.get().await?).await?;
 
-        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
-        if created_schema {
-            Self::create_pro_schema(pool.get().await?).await?;
-        }
+        let session = if created_schema {
+            let session = SimpleSession::default();
+            Self::create_default_session(pool.get().await?, session.id()).await?;
+            session
+        } else {
+            Self::load_default_session(pool.get().await?).await?
+        };
 
-        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
-        let quota = initialize_quota_tracking(
-            quota_config.mode,
-            db,
-            quota_config.increment_quota_buffer_size,
-            quota_config.increment_quota_buffer_timeout_seconds,
-        );
-
-        Ok(ProPostgresContext {
+        Ok(PostgresContext {
+            default_session_id: session.id(),
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            oidc_request_db: Arc::new(None),
-            quota,
             pool,
             volumes: Default::default(),
-            tile_cache: Arc::new(SharedCache::test_default()),
         })
     }
 
@@ -118,72 +98,76 @@ where
         layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
-        oidc_config: Oidc,
-        cache_config: Cache,
-        quota_config: Quota,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
+        let created_schema = Self::create_schema(pool.get().await?).await?;
 
-        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
-        if created_schema {
-            Self::create_pro_schema(pool.get().await?).await?;
-        }
+        let session = if created_schema {
+            let session = SimpleSession::default();
+            Self::create_default_session(pool.get().await?, session.id()).await?;
+            session
+        } else {
+            Self::load_default_session(pool.get().await?).await?
+        };
 
-        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
-        let quota = initialize_quota_tracking(
-            quota_config.mode,
-            db,
-            quota_config.increment_quota_buffer_size,
-            quota_config.increment_quota_buffer_timeout_seconds,
-        );
-
-        let app_ctx = ProPostgresContext {
+        let app_ctx = PostgresContext {
+            default_session_id: session.id(),
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
-            quota,
             pool,
             volumes: Default::default(),
-            tile_cache: Arc::new(
-                SharedCache::new(
-                    cache_config.cache_size_in_mb,
-                    cache_config.landing_zone_ratio,
-                )
-                .expect("tile cache creation should work because the config is valid"),
-            ),
         };
 
         if created_schema {
             info!("Populating database with initial data...");
 
-            let mut db = app_ctx.session_context(UserSession::admin_session()).db();
+            let ctx = app_ctx.session_context(session);
 
+            let mut db = ctx.db();
             add_layers_from_directory(&mut db, layer_defs_path).await;
             add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
 
             add_datasets_from_directory(&mut db, dataset_defs_path).await;
 
-            add_providers_from_directory(
-                &mut db,
-                provider_defs_path.clone(),
-                &[provider_defs_path.join("pro")],
-            )
-            .await;
+            add_providers_from_directory(&mut db, provider_defs_path, &[]).await;
         }
 
         Ok(app_ctx)
     }
 
+    async fn is_schema_initialized(
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<bool> {
+        let stmt = match conn.prepare("SELECT TRUE from geoengine;").await {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                if let Some(code) = e.code() {
+                    if *code == SqlState::UNDEFINED_TABLE {
+                        info!("Initializing schema.");
+                        return Ok(false);
+                    }
+                }
+                return Err(error::Error::TokioPostgres { source: e });
+            }
+        };
+
+        let _row = conn.query(&stmt, &[]).await?;
+
+        Ok(true)
+    }
+
     #[allow(clippy::too_many_lines)]
     /// Creates the database schema. Returns true if the schema was created, false if it already existed.
-    pub(crate) async fn create_pro_schema(
+    pub(crate) async fn create_schema(
         mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<()> {
-        let user_config = get_config_element::<crate::pro::util::config::User>()?;
+    ) -> Result<bool> {
+        if Self::is_schema_initialized(&conn).await? {
+            return Ok(false);
+        }
 
         let tx = conn.build_transaction().start().await?;
 
@@ -192,86 +176,52 @@ where
         let stmt = tx
             .prepare(
                 r#"
-            INSERT INTO roles (id, name) VALUES
-                ($1, 'admin'),
-                ($2, 'user'),
-                ($3, 'anonymous');"#,
-            )
-            .await?;
-
-        tx.execute(
-            &stmt,
-            &[
-                &Role::admin_role_id(),
-                &Role::registered_user_role_id(),
-                &Role::anonymous_role_id(),
-            ],
-        )
-        .await?;
-
-        let stmt = tx
-            .prepare(
-                r#"
-            INSERT INTO users (
-                id, 
-                email,
-                password_hash,
-                real_name,
-                active)
-            VALUES (
-                $1, 
-                $2,
-                $3,
-                'admin',
-                true
+            INSERT INTO layer_collections (
+                id,
+                name,
+                description,
+                properties
+            ) VALUES (
+                $1,
+                'Layers',
+                'All available Geo Engine layers',
+                ARRAY[]::"PropertyType"[]
             );"#,
             )
             .await?;
 
-        tx.execute(
-            &stmt,
-            &[
-                &Role::admin_role_id(),
-                &user_config.admin_email,
-                &bcrypt::hash(user_config.admin_password)
-                    .expect("Admin password hash should be valid"),
-            ],
-        )
-        .await?;
+        tx.execute(&stmt, &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID])
+            .await?;
 
         let stmt = tx
             .prepare(
-                r#"
-            INSERT INTO user_roles 
-                (user_id, role_id)
-            VALUES 
-                ($1, $1);"#,
+                r#"INSERT INTO layer_collections (
+                id,
+                name,
+                description,
+                properties
+            ) VALUES (
+                $1,
+                'Unsorted',
+                'Unsorted Layers',
+                ARRAY[]::"PropertyType"[]
+            );"#,
             )
             .await?;
 
-        tx.execute(&stmt, &[&Role::admin_role_id()]).await?;
+        tx.execute(&stmt, &[&UNSORTED_COLLECTION_ID]).await?;
 
         let stmt = tx
             .prepare(
                 r#"
-            INSERT INTO permissions
-             (role_id, layer_collection_id, permission)  
-            VALUES 
-                ($1, $4, 'Owner'),
-                ($2, $4, 'Read'),
-                ($3, $4, 'Read'),
-                ($1, $5, 'Owner'),
-                ($2, $5, 'Read'),
-                ($3, $5, 'Read');"#,
+            INSERT INTO collection_children (parent, child) 
+            VALUES ($1, $2);"#,
             )
             .await?;
 
         tx.execute(
             &stmt,
             &[
-                &Role::admin_role_id(),
-                &Role::registered_user_role_id(),
-                &Role::anonymous_role_id(),
                 &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
                 &UNSORTED_COLLECTION_ID,
             ],
@@ -280,14 +230,85 @@ where
 
         tx.commit().await?;
 
-        debug!("Created pro database schema");
+        debug!("Created database schema");
+
+        Ok(true)
+    }
+
+    async fn create_default_session(
+        conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
+        session_id: SessionId,
+    ) -> Result<()> {
+        let stmt = conn
+            .prepare("INSERT INTO sessions (id, project_id, view) VALUES ($1, NULL ,NULL);")
+            .await?;
+
+        conn.execute(&stmt, &[&session_id]).await?;
 
         Ok(())
+    }
+    async fn load_default_session(
+        conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<SimpleSession> {
+        let stmt = conn
+            .prepare("SELECT id, project_id, view FROM sessions LIMIT 1;")
+            .await?;
+
+        let row = conn.query_one(&stmt, &[]).await?;
+
+        Ok(SimpleSession::new(row.get(0), row.get(1), row.get(2)))
     }
 }
 
 #[async_trait]
-impl<Tls> ApplicationContext for ProPostgresContext<Tls>
+impl<Tls> SimpleApplicationContext for PostgresContext<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn default_session_id(&self) -> SessionId {
+        self.default_session_id
+    }
+
+    async fn default_session(&self) -> Result<SimpleSession> {
+        Self::load_default_session(self.pool.get().await?).await
+    }
+
+    async fn update_default_session_project(&self, project: ProjectId) -> Result<()> {
+        let conn = self.pool.get().await?;
+
+        let stmt = conn
+            .prepare("UPDATE sessions SET project_id = $1 WHERE id = $2;")
+            .await?;
+
+        conn.execute(&stmt, &[&project, &self.default_session_id])
+            .await?;
+
+        Ok(())
+    }
+
+    async fn update_default_session_view(&self, view: STRectangle) -> Result<()> {
+        let conn = self.pool.get().await?;
+
+        let stmt = conn
+            .prepare("UPDATE sessions SET view = $1 WHERE id = $2;")
+            .await?;
+
+        conn.execute(&stmt, &[&view, &self.default_session_id])
+            .await?;
+
+        Ok(())
+    }
+
+    async fn default_session_context(&self) -> Result<Self::SessionContext> {
+        Ok(self.session_context(self.session_by_id(self.default_session_id).await?))
+    }
+}
+
+#[async_trait]
+impl<Tls> ApplicationContext for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -295,7 +316,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type SessionContext = PostgresSessionContext<Tls>;
-    type Session = UserSession;
+    type Session = SimpleSession;
 
     fn session_context(&self, session: Self::Session) -> Self::SessionContext {
         PostgresSessionContext {
@@ -305,23 +326,27 @@ where
     }
 
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {
-        self.user_session_by_id(session_id)
-            .await
-            .map_err(Box::new)
-            .context(error::Unauthorized)
-    }
-}
+        let mut conn = self.pool.get().await?;
 
-#[async_trait]
-impl<Tls> ProApplicationContext for ProPostgresContext<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
-        self.oidc_request_db.as_ref().as_ref()
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT           
+                project_id,
+                view
+            FROM sessions
+            WHERE id = $1;",
+            )
+            .await?;
+
+        let row = tx
+            .query_one(&stmt, &[&session_id])
+            .await
+            .map_err(|_error| error::Error::InvalidSession)?;
+
+        Ok(SimpleSession::new(session_id, row.get(0), row.get(1)))
     }
 }
 
@@ -333,8 +358,8 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    session: UserSession,
-    context: ProPostgresContext<Tls>,
+    session: SimpleSession,
+    context: PostgresContext<Tls>,
 }
 
 #[async_trait]
@@ -345,43 +370,31 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    type Session = UserSession;
-    type GeoEngineDB = ProPostgresDb<Tls>;
+    type Session = SimpleSession;
+    type GeoEngineDB = PostgresDb<Tls>;
 
     type TaskContext = SimpleTaskManagerContext;
-    type TaskManager = ProTaskManager; // this does not persist across restarts
+    type TaskManager = SimpleTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
     fn db(&self) -> Self::GeoEngineDB {
-        ProPostgresDb::new(self.context.pool.clone(), self.session.clone())
+        PostgresDb::new(self.context.pool.clone())
     }
 
     fn tasks(&self) -> Self::TaskManager {
-        ProTaskManager::new(self.context.task_manager.clone(), self.session.clone())
+        SimpleTaskManager::new(self.context.task_manager.clone())
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
-        // TODO: load config only once
-
-        let mut extensions = QueryContextExtensions::default();
-        extensions.insert(
-            self.context
-                .quota
-                .create_quota_tracking(&self.session, ComputationContext::new()),
-        );
-        extensions.insert(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker);
-        extensions.insert(self.context.tile_cache.clone());
-
-        Ok(QueryContextImpl::new_with_extensions(
+        Ok(QueryContextImpl::new(
             self.context.query_ctx_chunk_size,
             self.context.thread_pool.clone(),
-            extensions,
         ))
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<ProPostgresDb<Tls>>::new(
+        Ok(ExecutionContextImpl::<PostgresDb<Tls>>::new(
             self.db(),
             self.context.thread_pool.clone(),
             self.context.exe_ctx_tiling_spec,
@@ -389,8 +402,6 @@ where
     }
 
     fn volumes(&self) -> Result<Vec<Volume>> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
-
         Ok(self.context.volumes.volumes.clone())
     }
 
@@ -399,7 +410,7 @@ where
     }
 }
 
-pub struct ProPostgresDb<Tls>
+pub struct PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -407,28 +418,24 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     pub(crate) conn_pool: Pool<PostgresConnectionManager<Tls>>,
-    pub(crate) session: UserSession,
 }
 
-impl<Tls> ProPostgresDb<Tls>
+impl<Tls> PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>, session: UserSession) -> Self {
-        Self { conn_pool, session }
+    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
+        Self { conn_pool }
     }
 
     /// Check whether the namepsace of the given dataset is allowed for insertion
-    pub(crate) fn check_namespace(&self, id: &DatasetName) -> Result<()> {
-        let is_ok = match &id.namespace {
-            Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
-            None => self.session.is_admin(),
-        };
-
-        if is_ok {
+    /// Check whether the namepsace of the given dataset is allowed for insertion
+    pub(crate) fn check_namespace(id: &DatasetName) -> Result<()> {
+        // due to a lack of users, etc., we only allow one namespace for now
+        if id.namespace.is_none() {
             Ok(())
         } else {
             Err(Error::InvalidDatasetIdNamespace)
@@ -436,16 +443,7 @@ where
     }
 }
 
-impl<Tls> GeoEngineDb for ProPostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-}
-
-impl<Tls> ProGeoEngineDb for ProPostgresDb<Tls>
+impl<Tls> GeoEngineDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -477,34 +475,26 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
-    use crate::pro::permissions::{Permission, PermissionDb};
-    use crate::pro::users::{
-        ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
-    };
-    use crate::pro::util::config::QuotaTrackingMode;
-    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::projects::{
         CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
         ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
         STRectangle, UpdateProject,
     };
-    use crate::util::config::{get_config_element, Postgres};
+    use crate::util::tests::register_ndvi_workflow_helper;
+    use crate::util::tests::with_temp_context;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
-    use bb8_postgres::bb8::ManageConnection;
-    use bb8_postgres::tokio_postgres::{self, NoTls};
-    use futures::{join, Future};
+    use bb8_postgres::tokio_postgres::NoTls;
+    use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
-        RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
-        TimeStep, VectorQueryRectangle,
+        BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, RasterQueryRectangle,
+        SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+        VectorQueryRectangle,
     };
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-    use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
         RasterResultDescriptor, StaticMetaData, TypedOperator, TypedResultDescriptor,
@@ -519,199 +509,29 @@ mod tests {
         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
     };
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
-    use openidconnect::SubjectIdentifier;
-    use rand::RngCore;
     use serde_json::json;
-    use tokio::runtime::Handle;
-
-    /// Setup database schema and return its name.
-    async fn setup_db() -> (tokio_postgres::Config, String) {
-        let mut db_config = get_config_element::<Postgres>().unwrap();
-        db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
-
-        let mut pg_config = tokio_postgres::Config::new();
-        pg_config
-            .user(&db_config.user)
-            .password(&db_config.password)
-            .host(&db_config.host)
-            .dbname(&db_config.database);
-
-        // generate schema with prior connection
-        PostgresConnectionManager::new(pg_config.clone(), NoTls)
-            .connect()
-            .await
-            .unwrap()
-            .batch_execute(&format!("CREATE SCHEMA {};", &db_config.schema))
-            .await
-            .unwrap();
-
-        // fix schema by providing `search_path` option
-        pg_config.options(&format!("-c search_path={}", db_config.schema));
-
-        (pg_config, db_config.schema)
-    }
-
-    /// Tear down database schema.
-    async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
-        // generate schema with prior connection
-        PostgresConnectionManager::new(pg_config, NoTls)
-            .connect()
-            .await
-            .unwrap()
-            .batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
-            .await
-            .unwrap();
-    }
-
-    async fn with_temp_context<F, Fut>(f: F)
-    where
-        F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
-            + std::panic::UnwindSafe
-            + Send
-            + 'static,
-        Fut: Future<Output = ()> + Send,
-    {
-        let (pg_config, schema) = setup_db().await;
-
-        // catch all panics and clean up first…
-        let executed_fn = {
-            let pg_config = pg_config.clone();
-            std::panic::catch_unwind(move || {
-                tokio::task::block_in_place(move || {
-                    Handle::current().block_on(async move {
-                        let ctx = ProPostgresContext::new_with_context_spec(
-                            pg_config.clone(),
-                            tokio_postgres::NoTls,
-                            TestDefault::test_default(),
-                            TestDefault::test_default(),
-                            get_config_element::<Quota>().unwrap(),
-                        )
-                        .await
-                        .unwrap();
-                        f(ctx, pg_config.clone()).await;
-                    });
-                });
-            })
-        };
-
-        tear_down_db(pg_config, &schema).await;
-
-        // then throw errors afterwards
-        if let Err(err) = executed_fn {
-            std::panic::resume_unwind(err);
-        }
-    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test() {
         with_temp_context(|app_ctx, _| async move {
-            anonymous(&app_ctx).await;
-
-            let _user_id = user_reg_login(&app_ctx).await;
-
-            let session = app_ctx
-                .login(UserCredentials {
-                    email: "foo@example.com".into(),
-                    password: "secret123".into(),
-                })
-                .await
-                .unwrap();
+            let session = app_ctx.default_session().await.unwrap();
 
             create_projects(&app_ctx, &session).await;
 
             let projects = list_projects(&app_ctx, &session).await;
 
-            set_session(&app_ctx, &projects).await;
-
             let project_id = projects[0].id;
 
             update_projects(&app_ctx, &session, project_id).await;
 
-            add_permission(&app_ctx, &session, project_id).await;
-
             delete_project(&app_ctx, &session, project_id).await;
         })
         .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_external() {
-        with_temp_context(|app_ctx, _| async move {
-            anonymous(&app_ctx).await;
-
-            let session = external_user_login_twice(&app_ctx).await;
-
-            create_projects(&app_ctx, &session).await;
-
-            let projects = list_projects(&app_ctx, &session).await;
-
-            set_session_external(&app_ctx, &projects).await;
-
-            let project_id = projects[0].id;
-
-            update_projects(&app_ctx, &session, project_id).await;
-
-            add_permission(&app_ctx, &session, project_id).await;
-
-            delete_project(&app_ctx, &session, project_id).await;
-        })
-        .await;
-    }
-
-    async fn set_session(app_ctx: &ProPostgresContext<NoTls>, projects: &[ProjectListing]) {
-        let credentials = UserCredentials {
-            email: "foo@example.com".into(),
-            password: "secret123".into(),
-        };
-
-        let session = app_ctx.login(credentials).await.unwrap();
-
-        set_session_in_database(app_ctx, projects, session).await;
-    }
-
-    async fn set_session_external(
-        app_ctx: &ProPostgresContext<NoTls>,
-        projects: &[ProjectListing],
-    ) {
-        let external_user_claims = ExternalUserClaims {
-            external_id: SubjectIdentifier::new("Foo bar Id".into()),
-            email: "foo@bar.de".into(),
-            real_name: "Foo Bar".into(),
-        };
-
-        let session = app_ctx
-            .login_external(external_user_claims, Duration::minutes(10))
-            .await
-            .unwrap();
-
-        set_session_in_database(app_ctx, projects, session).await;
-    }
-
-    async fn set_session_in_database(
-        app_ctx: &ProPostgresContext<NoTls>,
-        projects: &[ProjectListing],
-        session: UserSession,
-    ) {
-        let db = app_ctx.session_context(session.clone()).db();
-
-        db.set_session_project(projects[0].id).await.unwrap();
-
-        assert_eq!(
-            app_ctx.session_by_id(session.id).await.unwrap().project,
-            Some(projects[0].id)
-        );
-
-        let rect = STRectangle::new_unchecked(SpatialReference::epsg_4326(), 0., 1., 2., 3., 1, 2);
-        db.set_session_view(rect.clone()).await.unwrap();
-        assert_eq!(
-            app_ctx.session_by_id(session.id).await.unwrap().view,
-            Some(rect)
-        );
     }
 
     async fn delete_project(
-        app_ctx: &ProPostgresContext<NoTls>,
-        session: &UserSession,
+        app_ctx: &PostgresContext<NoTls>,
+        session: &SimpleSession,
         project_id: ProjectId,
     ) {
         let db = app_ctx.session_context(session.clone()).db();
@@ -721,55 +541,10 @@ mod tests {
         assert!(db.load_project(project_id).await.is_err());
     }
 
-    async fn add_permission(
-        app_ctx: &ProPostgresContext<NoTls>,
-        session: &UserSession,
-        project_id: ProjectId,
-    ) {
-        let db = app_ctx.session_context(session.clone()).db();
-
-        assert!(db
-            .has_permission(project_id, Permission::Owner)
-            .await
-            .unwrap());
-
-        let user2 = app_ctx
-            .register_user(UserRegistration {
-                email: "user2@example.com".into(),
-                password: "12345678".into(),
-                real_name: "User2".into(),
-            })
-            .await
-            .unwrap();
-
-        let session2 = app_ctx
-            .login(UserCredentials {
-                email: "user2@example.com".into(),
-                password: "12345678".into(),
-            })
-            .await
-            .unwrap();
-
-        let db2 = app_ctx.session_context(session2.clone()).db();
-        assert!(!db2
-            .has_permission(project_id, Permission::Owner)
-            .await
-            .unwrap());
-
-        db.add_permission(user2.into(), project_id, Permission::Read)
-            .await
-            .unwrap();
-
-        assert!(db2
-            .has_permission(project_id, Permission::Read)
-            .await
-            .unwrap());
-    }
-
     #[allow(clippy::too_many_lines)]
     async fn update_projects(
-        app_ctx: &ProPostgresContext<NoTls>,
-        session: &UserSession,
+        app_ctx: &PostgresContext<NoTls>,
+        session: &SimpleSession,
         project_id: ProjectId,
     ) {
         let db = app_ctx.session_context(session.clone()).db();
@@ -882,8 +657,8 @@ mod tests {
     }
 
     async fn list_projects(
-        app_ctx: &ProPostgresContext<NoTls>,
-        session: &UserSession,
+        app_ctx: &PostgresContext<NoTls>,
+        session: &SimpleSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
             filter: ProjectFilter::None,
@@ -902,7 +677,7 @@ mod tests {
         projects
     }
 
-    async fn create_projects(app_ctx: &ProPostgresContext<NoTls>, session: &UserSession) {
+    async fn create_projects(app_ctx: &PostgresContext<NoTls>, session: &SimpleSession) {
         let db = app_ctx.session_context(session.clone()).db();
 
         for i in 0..10 {
@@ -925,107 +700,6 @@ mod tests {
         }
     }
 
-    async fn user_reg_login(app_ctx: &ProPostgresContext<NoTls>) -> UserId {
-        let user_registration = UserRegistration {
-            email: "foo@example.com".into(),
-            password: "secret123".into(),
-            real_name: "Foo Bar".into(),
-        };
-
-        let user_id = app_ctx.register_user(user_registration).await.unwrap();
-
-        let credentials = UserCredentials {
-            email: "foo@example.com".into(),
-            password: "secret123".into(),
-        };
-
-        let session = app_ctx.login(credentials).await.unwrap();
-
-        let db = app_ctx.session_context(session.clone()).db();
-
-        app_ctx.session_by_id(session.id).await.unwrap();
-
-        db.logout().await.unwrap();
-
-        assert!(app_ctx.session_by_id(session.id).await.is_err());
-
-        user_id
-    }
-
-    //TODO: No duplicate tests for postgres and hashmap implementation possible?
-    async fn external_user_login_twice(app_ctx: &ProPostgresContext<NoTls>) -> UserSession {
-        let external_user_claims = ExternalUserClaims {
-            external_id: SubjectIdentifier::new("Foo bar Id".into()),
-            email: "foo@bar.de".into(),
-            real_name: "Foo Bar".into(),
-        };
-        let duration = Duration::minutes(30);
-
-        //NEW
-        let login_result = app_ctx
-            .login_external(external_user_claims.clone(), duration)
-            .await;
-        assert!(login_result.is_ok());
-
-        let session_1 = login_result.unwrap();
-        let user_id = session_1.user.id; //TODO: Not a deterministic test.
-
-        let db1 = app_ctx.session_context(session_1.clone()).db();
-
-        assert!(session_1.user.email.is_some());
-        assert_eq!(session_1.user.email.unwrap(), "foo@bar.de");
-        assert!(session_1.user.real_name.is_some());
-        assert_eq!(session_1.user.real_name.unwrap(), "Foo Bar");
-
-        let expected_duration = session_1.created + duration;
-        assert_eq!(session_1.valid_until, expected_duration);
-
-        assert!(app_ctx.session_by_id(session_1.id).await.is_ok());
-
-        assert!(db1.logout().await.is_ok());
-
-        assert!(app_ctx.session_by_id(session_1.id).await.is_err());
-
-        let duration = Duration::minutes(10);
-        let login_result = app_ctx
-            .login_external(external_user_claims.clone(), duration)
-            .await;
-        assert!(login_result.is_ok());
-
-        let session_2 = login_result.unwrap();
-        let result = session_2.clone();
-
-        assert!(session_2.user.email.is_some()); //TODO: Technically, user details could change for each login. For simplicity, this is not covered yet.
-        assert_eq!(session_2.user.email.unwrap(), "foo@bar.de");
-        assert!(session_2.user.real_name.is_some());
-        assert_eq!(session_2.user.real_name.unwrap(), "Foo Bar");
-        assert_eq!(session_2.user.id, user_id);
-
-        let expected_duration = session_2.created + duration;
-        assert_eq!(session_2.valid_until, expected_duration);
-
-        assert!(app_ctx.session_by_id(session_2.id).await.is_ok());
-
-        result
-    }
-
-    async fn anonymous(app_ctx: &ProPostgresContext<NoTls>) {
-        let now: DateTime = chrono::offset::Utc::now().into();
-        let session = app_ctx.create_anonymous_session().await.unwrap();
-        let then: DateTime = chrono::offset::Utc::now().into();
-
-        assert!(session.created >= now && session.created <= then);
-        assert!(session.valid_until > session.created);
-
-        let session = app_ctx.session_by_id(session.id).await.unwrap();
-
-        let db = app_ctx.session_context(session.clone()).db();
-
-        db.logout().await.unwrap();
-
-        assert!(app_ctx.session_by_id(session.id).await.is_err());
-    }
-
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_workflows() {
         with_temp_context(|app_ctx, _pg_config| async move {
@@ -1040,8 +714,8 @@ mod tests {
                 ),
             };
 
-            let session = app_ctx.create_anonymous_session().await.unwrap();
-let ctx = app_ctx.session_context(session);
+            let session = app_ctx.default_session().await.unwrap();
+        let ctx = app_ctx.session_context(session);
 
             let db = ctx
                 .db();
@@ -1119,9 +793,9 @@ let ctx = app_ctx.session_context(session);
                 phantom: Default::default(),
             });
 
-            let session = app_ctx.create_anonymous_session().await.unwrap();
+            let session = app_ctx.default_session().await.unwrap();
 
-            let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
+            let dataset_name = DatasetName::new(None, "my_dataset");
 
             let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
@@ -1236,7 +910,7 @@ let ctx = app_ctx.session_context(session);
                 }],
             };
 
-            let session = app_ctx.create_anonymous_session().await.unwrap();
+            let session = app_ctx.default_session().await.unwrap();
 
             let db = app_ctx.session_context(session.clone()).db();
 
@@ -1253,7 +927,7 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_layer_providers() {
         with_temp_context(|app_ctx, _| async move {
-            let db = app_ctx.session_context(UserSession::admin_session()).db();
+            let db = app_ctx.default_session_context().await.unwrap().db();
 
             let provider_id =
                 DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
@@ -1370,341 +1044,11 @@ let ctx = app_ctx.session_context(session);
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_lists_only_permitted_datasets() {
-        with_temp_context(|app_ctx, _| async move {
-            let session1 = app_ctx.create_anonymous_session().await.unwrap();
-            let session2 = app_ctx.create_anonymous_session().await.unwrap();
-
-            let db1 = app_ctx.session_context(session1.clone()).db();
-            let db2 = app_ctx.session_context(session2.clone()).db();
-
-            let descriptor = VectorResultDescriptor {
-                data_type: VectorDataType::Data,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-                time: None,
-                bbox: None,
-            };
-
-            let ds = AddDataset {
-                name: None,
-                display_name: "OgrDataset".to_string(),
-                description: "My Ogr dataset".to_string(),
-                source_operator: "OgrSource".to_string(),
-                symbology: None,
-                provenance: None,
-            };
-
-            let meta = StaticMetaData {
-                loading_info: OgrSourceDataset {
-                    file_name: Default::default(),
-                    layer_name: String::new(),
-                    data_type: None,
-                    time: Default::default(),
-                    default_geometry: None,
-                    columns: None,
-                    force_ogr_time_filter: false,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: None,
-                    attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
-                },
-                result_descriptor: descriptor.clone(),
-                phantom: Default::default(),
-            };
-
-            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-            let _id = db1.add_dataset(ds, meta).await.unwrap();
-
-            let list1 = db1
-                .list_datasets(DatasetListOptions {
-                    filter: None,
-                    order: crate::datasets::listing::OrderBy::NameAsc,
-                    offset: 0,
-                    limit: 1,
-                })
-                .await
-                .unwrap();
-
-            assert_eq!(list1.len(), 1);
-
-            let list2 = db2
-                .list_datasets(DatasetListOptions {
-                    filter: None,
-                    order: crate::datasets::listing::OrderBy::NameAsc,
-                    offset: 0,
-                    limit: 1,
-                })
-                .await
-                .unwrap();
-
-            assert_eq!(list2.len(), 0);
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_shows_only_permitted_provenance() {
-        with_temp_context(|app_ctx, _| async move {
-            let session1 = app_ctx.create_anonymous_session().await.unwrap();
-            let session2 = app_ctx.create_anonymous_session().await.unwrap();
-
-            let db1 = app_ctx.session_context(session1.clone()).db();
-            let db2 = app_ctx.session_context(session2.clone()).db();
-
-            let descriptor = VectorResultDescriptor {
-                data_type: VectorDataType::Data,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-                time: None,
-                bbox: None,
-            };
-
-            let ds = AddDataset {
-                name: None,
-                display_name: "OgrDataset".to_string(),
-                description: "My Ogr dataset".to_string(),
-                source_operator: "OgrSource".to_string(),
-                symbology: None,
-                provenance: None,
-            };
-
-            let meta = StaticMetaData {
-                loading_info: OgrSourceDataset {
-                    file_name: Default::default(),
-                    layer_name: String::new(),
-                    data_type: None,
-                    time: Default::default(),
-                    default_geometry: None,
-                    columns: None,
-                    force_ogr_time_filter: false,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: None,
-                    attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
-                },
-                result_descriptor: descriptor.clone(),
-                phantom: Default::default(),
-            };
-
-            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-            let id = db1.add_dataset(ds, meta).await.unwrap().id;
-
-            assert!(db1.load_provenance(&id).await.is_ok());
-
-            assert!(db2.load_provenance(&id).await.is_err());
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_updates_permissions() {
-        with_temp_context(|app_ctx, _| async move {
-            let session1 = app_ctx.create_anonymous_session().await.unwrap();
-            let session2 = app_ctx.create_anonymous_session().await.unwrap();
-
-            let db1 = app_ctx.session_context(session1.clone()).db();
-            let db2 = app_ctx.session_context(session2.clone()).db();
-
-            let descriptor = VectorResultDescriptor {
-                data_type: VectorDataType::Data,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-                time: None,
-                bbox: None,
-            };
-
-            let ds = AddDataset {
-                name: None,
-                display_name: "OgrDataset".to_string(),
-                description: "My Ogr dataset".to_string(),
-                source_operator: "OgrSource".to_string(),
-                symbology: None,
-                provenance: None,
-            };
-
-            let meta = StaticMetaData {
-                loading_info: OgrSourceDataset {
-                    file_name: Default::default(),
-                    layer_name: String::new(),
-                    data_type: None,
-                    time: Default::default(),
-                    default_geometry: None,
-                    columns: None,
-                    force_ogr_time_filter: false,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: None,
-                    attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
-                },
-                result_descriptor: descriptor.clone(),
-                phantom: Default::default(),
-            };
-
-            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-            let id = db1.add_dataset(ds, meta).await.unwrap().id;
-
-            assert!(db1.load_dataset(&id).await.is_ok());
-
-            assert!(db2.load_dataset(&id).await.is_err());
-
-            db1.add_permission(session2.user.id.into(), id, Permission::Read)
-                .await
-                .unwrap();
-
-            assert!(db2.load_dataset(&id).await.is_ok());
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_uses_roles_for_permissions() {
-        with_temp_context(|app_ctx, _| async move {
-            let session1 = app_ctx.create_anonymous_session().await.unwrap();
-            let session2 = app_ctx.create_anonymous_session().await.unwrap();
-
-            let db1 = app_ctx.session_context(session1.clone()).db();
-            let db2 = app_ctx.session_context(session2.clone()).db();
-
-            let descriptor = VectorResultDescriptor {
-                data_type: VectorDataType::Data,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-                time: None,
-                bbox: None,
-            };
-
-            let ds = AddDataset {
-                name: None,
-                display_name: "OgrDataset".to_string(),
-                description: "My Ogr dataset".to_string(),
-                source_operator: "OgrSource".to_string(),
-                symbology: None,
-                provenance: None,
-            };
-
-            let meta = StaticMetaData {
-                loading_info: OgrSourceDataset {
-                    file_name: Default::default(),
-                    layer_name: String::new(),
-                    data_type: None,
-                    time: Default::default(),
-                    default_geometry: None,
-                    columns: None,
-                    force_ogr_time_filter: false,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: None,
-                    attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
-                },
-                result_descriptor: descriptor.clone(),
-                phantom: Default::default(),
-            };
-
-            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-            let id = db1.add_dataset(ds, meta).await.unwrap().id;
-
-            assert!(db1.load_dataset(&id).await.is_ok());
-
-            assert!(db2.load_dataset(&id).await.is_err());
-
-            db1.add_permission(session2.user.id.into(), id, Permission::Read)
-                .await
-                .unwrap();
-
-            assert!(db2.load_dataset(&id).await.is_ok());
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_secures_meta_data() {
-        with_temp_context(|app_ctx, _| async move {
-            let session1 = app_ctx.create_anonymous_session().await.unwrap();
-            let session2 = app_ctx.create_anonymous_session().await.unwrap();
-
-            let db1 = app_ctx.session_context(session1.clone()).db();
-            let db2 = app_ctx.session_context(session2.clone()).db();
-
-            let descriptor = VectorResultDescriptor {
-                data_type: VectorDataType::Data,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-                time: None,
-                bbox: None,
-            };
-
-            let ds = AddDataset {
-                name: None,
-                display_name: "OgrDataset".to_string(),
-                description: "My Ogr dataset".to_string(),
-                source_operator: "OgrSource".to_string(),
-                symbology: None,
-                provenance: None,
-            };
-
-            let meta = StaticMetaData {
-                loading_info: OgrSourceDataset {
-                    file_name: Default::default(),
-                    layer_name: String::new(),
-                    data_type: None,
-                    time: Default::default(),
-                    default_geometry: None,
-                    columns: None,
-                    force_ogr_time_filter: false,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: None,
-                    attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
-                },
-                result_descriptor: descriptor.clone(),
-                phantom: Default::default(),
-            };
-
-            let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-            let id = db1.add_dataset(ds, meta).await.unwrap().id;
-
-            let meta: geoengine_operators::util::Result<
-                Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = db1.meta_data(&id.into()).await;
-
-            assert!(meta.is_ok());
-
-            let meta: geoengine_operators::util::Result<
-                Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = db2.meta_data(&id.into()).await;
-
-            assert!(meta.is_err());
-
-            db1.add_permission(session2.user.id.into(), id, Permission::Read)
-                .await
-                .unwrap();
-
-            let meta: geoengine_operators::util::Result<
-                Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-            > = db2.meta_data(&id.into()).await;
-
-            assert!(meta.is_ok());
-        })
-        .await;
-    }
-
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_loads_all_meta_data_types() {
         with_temp_context(|app_ctx, _| async move {
-            let session = app_ctx.create_anonymous_session().await.unwrap();
+            let session = app_ctx.default_session().await.unwrap();
 
             let db = app_ctx.session_context(session.clone()).db();
 
@@ -1871,40 +1215,11 @@ let ctx = app_ctx.session_context(session);
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_secures_uploads() {
-        with_temp_context(|app_ctx, _| async move {
-            let session1 = app_ctx.create_anonymous_session().await.unwrap();
-            let session2 = app_ctx.create_anonymous_session().await.unwrap();
-
-            let db1 = app_ctx.session_context(session1.clone()).db();
-            let db2 = app_ctx.session_context(session2.clone()).db();
-
-            let upload_id = UploadId::new();
-
-            let upload = Upload {
-                id: upload_id,
-                files: vec![FileUpload {
-                    id: FileId::new(),
-                    name: "test.bin".to_owned(),
-                    byte_size: 1024,
-                }],
-            };
-
-            db1.create_upload(upload).await.unwrap();
-
-            assert!(db1.load_upload(upload_id).await.is_ok());
-
-            assert!(db2.load_upload(upload_id).await.is_err());
-        })
-        .await;
-    }
-
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_collects_layers() {
         with_temp_context(|app_ctx, _| async move {
-            let session = admin_login(&app_ctx).await;
+            let session = app_ctx.default_session().await.unwrap();
 
             let layer_db = app_ctx.session_context(session).db();
 
@@ -2100,173 +1415,11 @@ let ctx = app_ctx.session_context(session);
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_tracks_used_quota_in_postgres() {
-        with_temp_context(|app_ctx, _| async move {
-            let _user = app_ctx
-                .register_user(UserRegistration {
-                    email: "foo@example.com".to_string(),
-                    password: "secret1234".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                })
-                .await
-                .unwrap();
-
-            let session = app_ctx
-                .login(UserCredentials {
-                    email: "foo@example.com".to_string(),
-                    password: "secret1234".to_string(),
-                })
-                .await
-                .unwrap();
-
-            let admin_session = admin_login(&app_ctx).await;
-
-            let quota = initialize_quota_tracking(
-                QuotaTrackingMode::Check,
-                app_ctx.session_context(admin_session).db(),
-                0,
-                60,
-            );
-
-            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
-
-            tracking.work_unit_done();
-            tracking.work_unit_done();
-
-            let db = app_ctx.session_context(session).db();
-
-            // wait for quota to be recorded
-            let mut success = false;
-            for _ in 0..10 {
-                let used = db.quota_used().await.unwrap();
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-                if used == 2 {
-                    success = true;
-                    break;
-                }
-            }
-
-            assert!(success);
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_tracks_available_quota() {
-        with_temp_context(|app_ctx, _| async move {
-            let user = app_ctx
-                .register_user(UserRegistration {
-                    email: "foo@example.com".to_string(),
-                    password: "secret1234".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                })
-                .await
-                .unwrap();
-
-            let session = app_ctx
-                .login(UserCredentials {
-                    email: "foo@example.com".to_string(),
-                    password: "secret1234".to_string(),
-                })
-                .await
-                .unwrap();
-
-            let admin_session = admin_login(&app_ctx).await;
-
-            app_ctx
-                .session_context(admin_session.clone())
-                .db()
-                .update_quota_available_by_user(&user, 1)
-                .await
-                .unwrap();
-
-            let quota = initialize_quota_tracking(
-                QuotaTrackingMode::Check,
-                app_ctx.session_context(admin_session).db(),
-                0,
-                60,
-            );
-
-            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
-
-            tracking.work_unit_done();
-            tracking.work_unit_done();
-
-            let db = app_ctx.session_context(session).db();
-
-            // wait for quota to be recorded
-            let mut success = false;
-            for _ in 0..10 {
-                let available = db.quota_available().await.unwrap();
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-                if available == -1 {
-                    success = true;
-                    break;
-                }
-            }
-
-            assert!(success);
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_updates_quota_in_postgres() {
-        with_temp_context(|app_ctx, _| async move {
-            let user = app_ctx
-                .register_user(UserRegistration {
-                    email: "foo@example.com".to_string(),
-                    password: "secret1234".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                })
-                .await
-                .unwrap();
-
-            let session = app_ctx
-                .login(UserCredentials {
-                    email: "foo@example.com".to_string(),
-                    password: "secret1234".to_string(),
-                })
-                .await
-                .unwrap();
-
-            let db = app_ctx.session_context(session.clone()).db();
-            let admin_db = app_ctx.session_context(UserSession::admin_session()).db();
-
-            assert_eq!(
-                db.quota_available().await.unwrap(),
-                crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
-                    .unwrap()
-                    .default_available_quota
-            );
-
-            assert_eq!(
-                admin_db.quota_available_by_user(&user).await.unwrap(),
-                crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
-                    .unwrap()
-                    .default_available_quota
-            );
-
-            admin_db
-                .update_quota_available_by_user(&user, 123)
-                .await
-                .unwrap();
-
-            assert_eq!(db.quota_available().await.unwrap(), 123);
-
-            assert_eq!(admin_db.quota_available_by_user(&user).await.unwrap(), 123);
-        })
-        .await;
-    }
-
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_removes_layer_collections() {
         with_temp_context(|app_ctx, _| async move {
-            let session = admin_login(&app_ctx).await;
+            let session = app_ctx.default_session().await.unwrap();
 
             let layer_db = app_ctx.session_context(session).db();
 
@@ -2436,7 +1589,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     async fn it_removes_collections_from_collections() {
         with_temp_context(|app_ctx, _| async move {
-            let session = admin_login(&app_ctx).await;
+            let session = app_ctx.default_session().await.unwrap();
 
             let db = app_ctx.session_context(session).db();
 
@@ -2520,7 +1673,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     async fn it_removes_layers_from_collections() {
         with_temp_context(|app_ctx, _| async move {
-            let session = admin_login(&app_ctx).await;
+            let session = app_ctx.default_session().await.unwrap();
 
             let db = app_ctx.session_context(session).db();
 
@@ -2702,9 +1855,9 @@ let ctx = app_ctx.session_context(session);
                 phantom: Default::default(),
             });
 
-            let session = app_ctx.create_anonymous_session().await.unwrap();
+            let session = app_ctx.default_session().await.unwrap();
 
-            let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
+            let dataset_name = DatasetName::new(None, "my_dataset");
 
             let db = app_ctx.session_context(session.clone()).db();
             let wrap = db.wrap_meta_data(meta_data);
@@ -2798,7 +1951,7 @@ let ctx = app_ctx.session_context(session);
                 phantom: Default::default(),
             });
 
-            let session = admin_login(&app_ctx).await;
+            let session = app_ctx.default_session().await.unwrap();
 
             let db = app_ctx.session_context(session).db();
             let wrap = db.wrap_meta_data(meta_data);
@@ -2834,7 +1987,7 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_missing_layer_dataset_in_collection_listing() {
         with_temp_context(|app_ctx, _| async move {
-            let session = admin_login(&app_ctx).await;
+            let session = app_ctx.default_session().await.unwrap();
             let db = app_ctx.session_context(session).db();
 
             let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
@@ -2891,241 +2044,9 @@ let ctx = app_ctx.session_context(session);
 
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_restricts_layer_permissions() {
-        with_temp_context(|app_ctx, _| async move {
-            let admin_session = admin_login(&app_ctx).await;
-            let session1 = app_ctx.create_anonymous_session().await.unwrap();
-
-            let admin_db = app_ctx.session_context(admin_session.clone()).db();
-            let db1 = app_ctx.session_context(session1.clone()).db();
-
-            let root = admin_db.get_root_layer_collection_id().await.unwrap();
-
-            // add new collection as admin
-            let new_collection_id = admin_db
-                .add_layer_collection(
-                    AddLayerCollection {
-                        name: "admin collection".to_string(),
-                        description: String::new(),
-                        properties: Default::default(),
-                    },
-                    &root,
-                )
-                .await
-                .unwrap();
-
-            // load as regular user, not visible
-            let collection = db1
-                .load_layer_collection(
-                    &root,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    },
-                )
-                .await
-                .unwrap();
-            assert!(!collection.items.iter().any(|c| match c {
-                CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
-                CollectionItem::Layer(_) => false,
-            }));
-
-            // give user read permission
-            admin_db
-                .add_permission(
-                    session1.user.id.into(),
-                    new_collection_id.clone(),
-                    Permission::Read,
-                )
-                .await
-                .unwrap();
-
-            // now visible
-            let collection = db1
-                .load_layer_collection(
-                    &root,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert!(collection.items.iter().any(|c| match c {
-                CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
-                CollectionItem::Layer(_) => false,
-            }));
-
-            // add new layer in the collection as user, fails because only read permission
-            let result = db1
-                .add_layer_collection(
-                    AddLayerCollection {
-                        name: "user layer".to_string(),
-                        description: String::new(),
-                        properties: Default::default(),
-                    },
-                    &new_collection_id,
-                )
-                .await;
-
-            assert!(result.is_err());
-
-            // give user owner permission
-            admin_db
-                .add_permission(
-                    session1.user.id.into(),
-                    new_collection_id.clone(),
-                    Permission::Owner,
-                )
-                .await
-                .unwrap();
-
-            // add now works
-            db1.add_layer_collection(
-                AddLayerCollection {
-                    name: "user layer".to_string(),
-                    description: String::new(),
-                    properties: Default::default(),
-                },
-                &new_collection_id,
-            )
-            .await
-            .unwrap();
-
-            // remove permissions again
-            admin_db
-                .remove_permission(
-                    session1.user.id.into(),
-                    new_collection_id.clone(),
-                    Permission::Read,
-                )
-                .await
-                .unwrap();
-            admin_db
-                .remove_permission(
-                    session1.user.id.into(),
-                    new_collection_id.clone(),
-                    Permission::Owner,
-                )
-                .await
-                .unwrap();
-
-            // access is gone now
-            let result = db1
-                .add_layer_collection(
-                    AddLayerCollection {
-                        name: "user layer".to_string(),
-                        description: String::new(),
-                        properties: Default::default(),
-                    },
-                    &root,
-                )
-                .await;
-
-            assert!(result.is_err());
-
-            let collection = db1
-                .load_layer_collection(
-                    &root,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert!(!collection.items.iter().any(|c| match c {
-                CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
-                CollectionItem::Layer(_) => false,
-            }));
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_handles_user_roles() {
-        with_temp_context(|app_ctx, _| async move {
-            let admin_session = admin_login(&app_ctx).await;
-            let user_id = app_ctx
-                .register_user(UserRegistration {
-                    email: "foo@example.com".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                })
-                .await
-                .unwrap();
-
-            let admin_db = app_ctx.session_context(admin_session.clone()).db();
-
-            // create a new role
-            let role_id = admin_db.add_role("foo").await.unwrap();
-
-            let user_session = app_ctx
-                .login(UserCredentials {
-                    email: "foo@example.com".to_string(),
-                    password: "secret123".to_string(),
-                })
-                .await
-                .unwrap();
-
-            // user does not have the role yet
-
-            assert!(!user_session.roles.contains(&role_id));
-
-            // we assign the role to the user
-            admin_db.assign_role(&role_id, &user_id).await.unwrap();
-
-            let user_session = app_ctx
-                .login(UserCredentials {
-                    email: "foo@example.com".to_string(),
-                    password: "secret123".to_string(),
-                })
-                .await
-                .unwrap();
-
-            // should be present now
-            assert!(user_session.roles.contains(&role_id));
-
-            // we revoke it
-            admin_db.revoke_role(&role_id, &user_id).await.unwrap();
-
-            let user_session = app_ctx
-                .login(UserCredentials {
-                    email: "foo@example.com".to_string(),
-                    password: "secret123".to_string(),
-                })
-                .await
-                .unwrap();
-
-            // the role is gone now
-            assert!(!user_session.roles.contains(&role_id));
-
-            // assign it again and then delete the whole role, should not be present at user
-
-            admin_db.assign_role(&role_id, &user_id).await.unwrap();
-
-            admin_db.remove_role(&role_id).await.unwrap();
-
-            let user_session = app_ctx
-                .login(UserCredentials {
-                    email: "foo@example.com".to_string(),
-                    password: "secret123".to_string(),
-                })
-                .await
-                .unwrap();
-
-            assert!(!user_session.roles.contains(&role_id));
-        })
-        .await;
-    }
-
-    #[allow(clippy::too_many_lines)]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_updates_project_layer_symbology() {
         with_temp_context(|app_ctx, _| async move {
-            let session = app_ctx.create_anonymous_session().await.unwrap();
+            let session = app_ctx.default_session().await.unwrap();
 
             let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -3427,8 +2348,8 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     async fn it_resolves_dataset_names_to_ids() {
         with_temp_context(|app_ctx, _| async move {
-            let admin_session = UserSession::admin_session();
-            let db = app_ctx.session_context(admin_session.clone()).db();
+            let session = app_ctx.default_session().await.unwrap();
+            let db = app_ctx.session_context(session.clone()).db();
 
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
@@ -3507,38 +2428,9 @@ let ctx = app_ctx.session_context(session);
                 .await
                 .unwrap();
 
-            let DatasetIdAndName {
-                id: dataset_id2,
-                name: dataset_name2,
-            } = db
-                .add_dataset(
-                    AddDataset {
-                        name: Some(DatasetName::new(
-                            Some(admin_session.user.id.to_string()),
-                            "my_dataset".to_owned(),
-                        )),
-                        display_name: "Ogr Test".to_owned(),
-                        description: "desc".to_owned(),
-                        source_operator: "OgrSource".to_owned(),
-                        symbology: None,
-                        provenance: Some(vec![Provenance {
-                            citation: "citation".to_owned(),
-                            license: "license".to_owned(),
-                            uri: "uri".to_owned(),
-                        }]),
-                    },
-                    db.wrap_meta_data(meta_data),
-                )
-                .await
-                .unwrap();
-
             assert_eq!(
                 db.resolve_dataset_name_to_id(&dataset_name1).await.unwrap(),
                 dataset_id1
-            );
-            assert_eq!(
-                db.resolve_dataset_name_to_id(&dataset_name2).await.unwrap(),
-                dataset_id2
             );
         })
         .await;

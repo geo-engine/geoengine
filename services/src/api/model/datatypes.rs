@@ -4,6 +4,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
 use ordered_float::NotNan;
+use postgres_types::{FromSql, ToSql};
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use snafu::ResultExt;
 use std::{
@@ -196,11 +197,7 @@ impl<'a> ToSchema<'a> for NamedData {
 
 /// A (optionally namespaced) name for a `Dataset`.
 /// It can be resolved into a [`DataId`] if you know the data provider.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, IntoParams)]
-#[cfg_attr(
-    feature = "postgres",
-    derive(postgres_types::ToSql, postgres_types::FromSql)
-)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, IntoParams, ToSql, FromSql)]
 pub struct DatasetName {
     pub namespace: Option<String>,
     pub name: String,
@@ -381,11 +378,7 @@ impl<'a> ToSchema<'a> for DatasetName {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema)]
-#[cfg_attr(
-    feature = "postgres",
-    derive(postgres_types::ToSql, postgres_types::FromSql)
-)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, ToSql, FromSql)]
 pub struct LayerId(pub String); // TODO: differentiate between internal layer ids (UUID) and external layer ids (String)
 
 impl From<LayerId> for geoengine_datatypes::dataset::LayerId {

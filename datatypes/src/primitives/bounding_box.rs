@@ -4,13 +4,12 @@ use super::{AxisAlignedRectangle, Coordinate2D, SpatialBounded};
 use crate::error;
 use crate::util::Result;
 use float_cmp::ApproxEq;
-#[cfg(feature = "postgres")]
+
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, ToSql, FromSql)]
 #[repr(C)]
 #[serde(rename_all = "camelCase")]
 /// A bounding box that includes all border points.
