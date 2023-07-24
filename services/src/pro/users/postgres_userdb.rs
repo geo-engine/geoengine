@@ -509,6 +509,33 @@ where
         Ok(())
     }
 
+    async fn bulk_increment_quota_used(&self, quota_used: &[(UserId, u64)]) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        // collect the user ids and quotas into separate vectors to pass them as parameters to the query
+        let mut users: Vec<UserId> = vec![];
+        let mut quotas: Vec<i64> = vec![];
+        for (user, quota) in quota_used {
+            users.push(*user);
+            quotas.push(*quota as i64);
+        }
+
+        let query = "
+            UPDATE users
+            SET quota_available = quota_available - quota_changes.quota, 
+                quota_used = quota_used + quota_changes.quota
+            FROM 
+                (SELECT * FROM UNNEST($1::uuid[], $2::bigint[]) AS t(id, quota)) AS quota_changes
+            WHERE users.id = quota_changes.id;
+        ";
+
+        conn.execute(query, &[&users, &quotas]).await?;
+
+        Ok(())
+    }
+
     async fn quota_used(&self) -> Result<u64> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn

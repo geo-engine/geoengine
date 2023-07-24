@@ -106,6 +106,15 @@ pub trait UserDb: Send + Sync {
     // TODO: move this method to some AdminDb?
     async fn increment_quota_used(&self, user: &UserId, quota_used: u64) -> Result<()>;
 
+    /// Increments multiple users quota by the given amount
+    ///
+    /// # Errors
+    ///
+    /// This call fails if database cannot be accessed
+    ///
+    // TODO: move this method to some AdminDb?
+    async fn bulk_increment_quota_used(&self, quota_used: &[(UserId, u64)]) -> Result<()>;
+
     /// Gets a specific users used quota
     ///
     /// # Errors

@@ -3543,4 +3543,45 @@ let ctx = app_ctx.session_context(session);
         })
         .await;
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_bulk_updates_quota() {
+        with_temp_context(|app_ctx, _| async move {
+            let admin_session = UserSession::admin_session();
+            let db = app_ctx.session_context(admin_session.clone()).db();
+
+            let user1 = app_ctx
+                .register_user(UserRegistration {
+                    email: "user1@example.com".into(),
+                    password: "12345678".into(),
+                    real_name: "User1".into(),
+                })
+                .await
+                .unwrap();
+
+            let user2 = app_ctx
+                .register_user(UserRegistration {
+                    email: "user2@example.com".into(),
+                    password: "12345678".into(),
+                    real_name: "User2".into(),
+                })
+                .await
+                .unwrap();
+
+            // single item in bulk
+            db.bulk_increment_quota_used(&[(user1, 1)]).await.unwrap();
+
+            assert_eq!(db.quota_used_by_user(&user1).await.unwrap(), 1);
+
+            // multiple items in bulk
+            db.bulk_increment_quota_used(&[(user1, 1), (user2, 3)])
+                .await
+                .unwrap();
+
+            assert_eq!(db.quota_used_by_user(&user1).await.unwrap(), 2);
+            assert_eq!(db.quota_used_by_user(&user2).await.unwrap(), 3);
+        })
+        .await;
+    }
 }
