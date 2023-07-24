@@ -195,6 +195,10 @@ where
     ) -> super::shared_cache::TypedCanonicOperatorName {
         super::shared_cache::TypedCanonicOperatorName::Vector(key)
     }
+
+    fn update_stored_query(&self, _query: &mut Self::Query) -> Result<(), CacheError> {
+        Ok(())
+    }
 }
 
 macro_rules! impl_cache_element_subtype_magic {

@@ -246,6 +246,10 @@ where
             return Err(CacheError::NotEnoughSpaceInLandingZone);
         }
 
+        // new entries might update the query bounds stored for this entry
+        landing_zone_element.update_stored_query(&mut landing_zone_entry.query)?;
+
+        // acctually insert the element into the landing zone
         landing_zone_entry.insert_element(landing_zone_element)?;
 
         // we add the bytes size of the element to the landing zone size after we have inserted it.
@@ -610,6 +614,8 @@ where
     ) -> Result<(), CacheError> {
         landing_zone.insert_element(self)
     }
+
+    fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError>;
 
     fn cache_hint(&self) -> CacheHint;
 

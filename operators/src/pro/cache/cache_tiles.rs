@@ -1,3 +1,4 @@
+use super::error::CacheError;
 use super::shared_cache::{
     CacheElement, CacheElementSubType, CacheElementsContainer, CacheElementsContainerInfos,
     LandingZoneElementsContainer,
@@ -214,6 +215,15 @@ where
     ) -> super::shared_cache::TypedCanonicOperatorName {
         super::shared_cache::TypedCanonicOperatorName::Raster(key)
     }
+
+    fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError> {
+        query.spatial_bounds.extend(&self.spatial_partition());
+        query.time_interval = query
+            .time_interval
+            .union(&self.time)
+            .map_err(|_| CacheError::ElementAndQueryDoNotIntersect)?;
+        Ok(())
+    }
 }
 
 macro_rules! impl_cache_element_subtype_magic {
@@ -298,10 +308,10 @@ impl<T: Pixel> Stream for CacheTileStream<T> {
         // return the next tile that is contained in the query, skip all tiles that are not contained
         for i in *idx..data.len() {
             let tile = &data[i];
-            let tile_bbox = tile.tile_information().spatial_partition();
+            let tile_bbox = tile.spatial_partition();
 
-            if (tile_bbox == query.spatial_bounds || tile_bbox.intersects(&query.spatial_bounds))
-                && (tile.time == query.time_interval || tile.time.intersects(&query.time_interval))
+            if tile_bbox.intersects(&query.spatial_bounds)
+                && tile.time.intersects(&query.time_interval)
             {
                 *idx = i + 1;
                 return std::task::Poll::Ready(Some(Ok(tile.clone())));

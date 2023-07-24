@@ -6,6 +6,7 @@ use snafu::Snafu;
 pub enum CacheError {
     LandingZoneRatioMustBeLargerThanZero,
     LandingZoneRatioMustBeSmallerThenHalfCacheSize,
+    ElementAndQueryDoNotIntersect,
     NotEnoughSpaceInLandingZone,
     NotEnoughSpaceInCache,
     QueryNotFoundInLandingZone,
