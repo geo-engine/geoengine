@@ -335,24 +335,6 @@ where
         Ok(cache_entry_id)
     }
 
-    /*
-    fn insert_cache_entry(
-        &mut self,
-        cache_entry: CacheQueryEntry<C::Query, C::CacheContainer>,
-        key: CanonicOperatorName,
-    ) -> Result<CacheEntryId, CacheError> {
-        let cache_entry_id = CacheEntryId::new();
-        self.cache_size.try_add_element_bytes(&cache_entry)?;
-        self.cache_size.try_add_element_bytes(&cache_entry_id)?;
-        self.operator_cache
-            .insert_cache_entry(cache_entry_id, cache_entry)?;
-        self.lru
-            .push(cache_entry_id, C::typed_canonical_operator_name(key));
-
-        Ok(cache_entry_id)
-    }
-    */
-
     /// This method finds a cache entry in the cache that matches the query.
     /// It will also collect all expired cache entries.
     /// The cache entry is returned together with the expired ids.
