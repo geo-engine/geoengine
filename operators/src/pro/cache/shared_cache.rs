@@ -514,7 +514,7 @@ where
     /// This method returns an error if the cache entry is already in the cache.
     /// This method returns an error if the cache is full and the least recently used entries cannot be evicted to make room for the new entry.
     ///
-    fn move_query_from_landing_to_cache(
+    fn move_query_from_landing_zone_to_cache(
         &mut self,
         key: &CanonicOperatorName,
         query_id: &QueryId,
@@ -981,7 +981,7 @@ where
         query_id: &QueryId,
     ) -> Result<CacheEntryId, CacheError> {
         let mut backend = self.backend.write().await;
-        backend.move_query_from_landing_to_cache(key, query_id)
+        backend.move_query_from_landing_zone_to_cache(key, query_id)
     }
 }
 
