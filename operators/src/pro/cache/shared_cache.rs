@@ -119,6 +119,7 @@ pub trait CacheView<C, L>: CacheEvictUntilFit {
     ) -> &mut HashMap<CanonicOperatorName, OperatorCacheEntry<C, L>>;
 
     fn create_operator_cache_if_needed(&mut self, key: CanonicOperatorName) {
+        // TODO: add size of the OperatorCacheEntry to the cache size?
         self.operator_caches_mut()
             .entry(key)
             .or_insert_with(|| OperatorCacheEntry::new());
@@ -128,7 +129,7 @@ pub trait CacheView<C, L>: CacheEvictUntilFit {
         &mut self,
         key: &CanonicOperatorName,
     ) -> Option<OperatorCacheEntry<C, L>> {
-        // TODO: maybe remove the size of the OperatorCacheEntry to the cache size?
+        // TODO: remove the size of the OperatorCacheEntry to the cache size?
         self.operator_caches_mut().remove(key)
     }
 }
