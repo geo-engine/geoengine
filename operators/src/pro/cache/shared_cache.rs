@@ -280,12 +280,30 @@ where
         let landing_zone_entry = CacheQueryEntry::create_empty::<C>(query.clone());
         let query_id = QueryId::new();
 
-        self.landing_zone_size.try_add_element_bytes(&query_id)?;
-        self.landing_zone_size
-            .try_add_element_bytes(&landing_zone_entry)?;
+        let query_id_bytes_size = query_id.byte_size();
+        let landing_zone_entry_bytes_size = landing_zone_entry.byte_size();
 
-        self.operator_cache
-            .insert_landing_zone_entry(query_id, landing_zone_entry)?;
+        self.landing_zone_size.try_add_bytes(query_id_bytes_size)?;
+
+        // if this fails, we have to remove the query id size again
+        if let Err(e) = self
+            .landing_zone_size
+            .try_add_bytes(landing_zone_entry_bytes_size)
+        {
+            self.landing_zone_size.remove_bytes(query_id_bytes_size);
+            return Err(e);
+        }
+
+        // if this fails, we have to remove the query id size and the landing zone entry size again
+        if let Err(e) = self
+            .operator_cache
+            .insert_landing_zone_entry(query_id, landing_zone_entry)
+        {
+            self.landing_zone_size.remove_bytes(query_id_bytes_size);
+            self.landing_zone_size
+                .remove_bytes(landing_zone_entry_bytes_size);
+            return Err(e);
+        }
 
         // debug output
         log::trace!(
