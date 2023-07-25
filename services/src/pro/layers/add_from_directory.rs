@@ -99,7 +99,7 @@ pub async fn add_layer_collections_from_directory<
         let collection = AddLayerCollection {
             name: def.name.clone(),
             description: def.description.clone(),
-            properties: Default::default(),
+            properties: def.properties.clone(),
         };
 
         db.add_layer_collection_with_id(
