@@ -168,11 +168,11 @@ impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C
         Some(self.upload.to_string())
     }
 
-    fn task_description(&self) -> Option<String> {
-        Some(format!(
+    fn task_description(&self) -> String {
+        format!(
             "Creating dataset {} from {}",
             self.info.name, self.source_name
-        ))
+        )
     }
 }
 

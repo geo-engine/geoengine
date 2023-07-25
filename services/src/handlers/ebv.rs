@@ -203,7 +203,7 @@ async fn create_overviews<C: ApplicationContext>(
 ) -> Result<impl Responder> {
     let ctx = Arc::new(app_ctx.into_inner().session_context(session.clone()));
 
-    let task = EvbMultiOverviewTask::<C::SessionContext> {
+    let task = EbvMultiOverviewTask::<C::SessionContext> {
         ctx: ctx.clone(),
         resampling_method: params.as_ref().and_then(|p| p.resampling_method),
         current_subtask_id: Arc::new(Mutex::new(None)),
@@ -215,13 +215,13 @@ async fn create_overviews<C: ApplicationContext>(
     Ok(web::Json(TaskResponse::new(task_id)))
 }
 
-struct EvbMultiOverviewTask<C: SessionContext> {
+struct EbvMultiOverviewTask<C: SessionContext> {
     ctx: Arc<C>,
     resampling_method: Option<ResamplingMethod>,
     current_subtask_id: Arc<Mutex<Option<TaskId>>>,
 }
 
-impl<C: SessionContext> EvbMultiOverviewTask<C> {
+impl<C: SessionContext> EbvMultiOverviewTask<C> {
     fn update_pct(task_ctx: Arc<C::TaskContext>, pct: f64, status: NetCdfCfOverviewResponse) {
         crate::util::spawn(async move {
             task_ctx.set_completion(pct, status.boxed()).await;
@@ -230,7 +230,7 @@ impl<C: SessionContext> EvbMultiOverviewTask<C> {
 }
 
 #[async_trait::async_trait]
-impl<C: SessionContext> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> {
     async fn run(
         &self,
         task_ctx: C::TaskContext,
@@ -257,7 +257,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
         };
 
         for (i, file) in files.into_iter().enumerate() {
-            let subtask: Box<dyn Task<C::TaskContext>> = EvbOverviewTask::<C> {
+            let subtask: Box<dyn Task<C::TaskContext>> = EbvOverviewTask::<C> {
                 ctx: self.ctx.clone(),
                 file: file.clone(),
                 params: CreateOverviewParams { resampling_method },
@@ -331,6 +331,28 @@ impl<C: SessionContext> Task<C::TaskContext> for EvbMultiOverviewTask<C> {
         EBV_MULTI_OVERVIEW_TASK_TYPE
     }
 
+    fn task_description(&self) -> String {
+        let files = tokio::runtime::Handle::current().block_on(async {
+            with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
+                provider.list_files().map_err(|_| {
+                    NetCdfCf4DProviderError::CdfCfProviderCannotListFiles {
+                        id: NETCDF_CF_PROVIDER_ID,
+                    }
+                })
+            })
+            .await
+        });
+        let files = match files {
+            Ok(x) => x,
+            Err(_) => return "Failed retrieve file list".to_string(),
+        };
+        files
+            .iter()
+            .map(|path| path.to_string_lossy().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     async fn subtasks(&self) -> Vec<TaskId> {
         self.current_subtask_id
             .lock()
@@ -378,7 +400,7 @@ async fn create_overview<C: ApplicationContext>(
 ) -> Result<impl Responder> {
     let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
-    let task = EvbOverviewTask::<C::SessionContext> {
+    let task = EbvOverviewTask::<C::SessionContext> {
         ctx: ctx.clone(),
         file: path.into_inner(),
         params: params.map(web::Json::into_inner).unwrap_or_default(),
@@ -390,14 +412,14 @@ async fn create_overview<C: ApplicationContext>(
     Ok(web::Json(TaskResponse::new(task_id)))
 }
 
-struct EvbOverviewTask<C: SessionContext> {
+struct EbvOverviewTask<C: SessionContext> {
     ctx: Arc<C>,
     file: PathBuf,
     params: CreateOverviewParams,
 }
 
 #[async_trait::async_trait]
-impl<C: SessionContext> Task<C::TaskContext> for EvbOverviewTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewTask<C> {
     async fn run(
         &self,
         ctx: C::TaskContext,
@@ -455,6 +477,10 @@ impl<C: SessionContext> Task<C::TaskContext> for EvbOverviewTask<C> {
     fn task_unique_id(&self) -> Option<String> {
         Some(self.file.to_string_lossy().to_string())
     }
+
+    fn task_description(&self) -> String {
+        self.file.to_string_lossy().to_string()
+    }
 }
 
 impl TaskStatusInfo for NetCdfCfOverviewResponse {}
@@ -498,7 +524,7 @@ async fn remove_overview<C: ApplicationContext>(
 ) -> Result<impl Responder> {
     let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
-    let task = EvbRemoveOverviewTask::<C::SessionContext> {
+    let task = EbvRemoveOverviewTask::<C::SessionContext> {
         ctx: ctx.clone(),
         file: path.into_inner(),
         params: params.into_inner(),
@@ -510,14 +536,14 @@ async fn remove_overview<C: ApplicationContext>(
     Ok(web::Json(TaskResponse::new(task_id)))
 }
 
-struct EvbRemoveOverviewTask<C: SessionContext> {
+struct EbvRemoveOverviewTask<C: SessionContext> {
     ctx: Arc<C>,
     file: PathBuf,
     params: RemoveOverviewParams,
 }
 
 #[async_trait::async_trait]
-impl<C: SessionContext> Task<C::TaskContext> for EvbRemoveOverviewTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for EbvRemoveOverviewTask<C> {
     async fn run(
         &self,
         _ctx: C::TaskContext,
@@ -547,6 +573,10 @@ impl<C: SessionContext> Task<C::TaskContext> for EvbRemoveOverviewTask<C> {
 
     fn task_unique_id(&self) -> Option<String> {
         Some(self.file.to_string_lossy().to_string())
+    }
+
+    fn task_description(&self) -> String {
+        self.file.to_string_lossy().to_string()
     }
 }
 

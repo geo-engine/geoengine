@@ -237,6 +237,10 @@ mod tests {
         fn task_unique_id(&self) -> Option<String> {
             self.unique_id.clone()
         }
+
+        fn task_description(&self) -> String {
+            "No operation".to_string()
+        }
     }
 
     struct TaskTree<T: TaskManager<C>, C: TaskContext + 'static> {
@@ -296,6 +300,15 @@ mod tests {
             None
         }
 
+        fn task_description(&self) -> String {
+            tokio::runtime::Handle::current()
+                .block_on(async { self.subtasks.lock().await })
+                .iter()
+                .map(|subtask| subtask.task_description())
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+
         async fn subtasks(&self) -> Vec<TaskId> {
             self.subtask_ids.lock().await.clone()
         }
@@ -330,6 +343,10 @@ mod tests {
 
         fn task_unique_id(&self) -> Option<String> {
             None
+        }
+
+        fn task_description(&self) -> String {
+            "Failing task with failing cleanup".to_string()
         }
     }
 
