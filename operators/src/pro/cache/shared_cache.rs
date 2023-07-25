@@ -692,17 +692,19 @@ impl TestDefault for SharedCache {
 
 /// Holds all the cached results for an operator graph (workflow)
 #[derive(Debug, Default)]
-pub struct OperatorCacheEntry<C, L> {
+pub struct OperatorCacheEntry<CacheEntriesContainer, LandingZoneEntriesContainer> {
     // for a given operator and query we need to look through all entries to find one that matches
     // TODO: use a multi-dimensional index to speed up the lookup
-    entries: HashMap<CacheEntryId, C>,
+    entries: HashMap<CacheEntryId, CacheEntriesContainer>,
 
     // running queries insert their tiles as they are produced. The entry will be created once the query is done.
     // The query is identified by a Uuid instead of the query rectangle to avoid confusions with other queries
-    landing_zone: HashMap<QueryId, L>,
+    landing_zone: HashMap<QueryId, LandingZoneEntriesContainer>,
 }
 
-impl<C, L> OperatorCacheEntry<C, L> {
+impl<CacheEntriesContainer, LandingZoneEntriesContainer>
+    OperatorCacheEntry<CacheEntriesContainer, LandingZoneEntriesContainer>
+{
     pub fn new() -> Self {
         Self {
             entries: Default::default(),
@@ -713,7 +715,7 @@ impl<C, L> OperatorCacheEntry<C, L> {
     fn insert_landing_zone_entry(
         &mut self,
         query_id: QueryId,
-        landing_zone_entry: L,
+        landing_zone_entry: LandingZoneEntriesContainer,
     ) -> Result<(), CacheError> {
         let old_entry = self.landing_zone.insert(query_id, landing_zone_entry);
 
@@ -724,18 +726,24 @@ impl<C, L> OperatorCacheEntry<C, L> {
         }
     }
 
-    fn remove_landing_zone_entry(&mut self, query_id: &QueryId) -> Option<L> {
+    fn remove_landing_zone_entry(
+        &mut self,
+        query_id: &QueryId,
+    ) -> Option<LandingZoneEntriesContainer> {
         self.landing_zone.remove(query_id)
     }
 
-    fn landing_zone_entry_mut(&mut self, query_id: &QueryId) -> Option<&mut L> {
+    fn landing_zone_entry_mut(
+        &mut self,
+        query_id: &QueryId,
+    ) -> Option<&mut LandingZoneEntriesContainer> {
         self.landing_zone.get_mut(query_id)
     }
 
     fn insert_cache_entry(
         &mut self,
         cache_entry_id: CacheEntryId,
-        cache_entry: C,
+        cache_entry: CacheEntriesContainer,
     ) -> Result<(), CacheError> {
         let old_entry = self.entries.insert(cache_entry_id, cache_entry);
 
@@ -746,7 +754,10 @@ impl<C, L> OperatorCacheEntry<C, L> {
         }
     }
 
-    fn remove_cache_entry(&mut self, cache_entry_id: &CacheEntryId) -> Option<C> {
+    fn remove_cache_entry(
+        &mut self,
+        cache_entry_id: &CacheEntryId,
+    ) -> Option<CacheEntriesContainer> {
         self.entries.remove(cache_entry_id)
     }
 
@@ -754,7 +765,7 @@ impl<C, L> OperatorCacheEntry<C, L> {
         self.entries.is_empty() && self.landing_zone.is_empty()
     }
 
-    fn iter(&self) -> impl Iterator<Item = (&CacheEntryId, &C)> {
+    fn iter(&self) -> impl Iterator<Item = (&CacheEntryId, &CacheEntriesContainer)> {
         self.entries.iter()
     }
 }
