@@ -291,6 +291,22 @@ impl UserDb for ProInMemoryDb {
         Ok(())
     }
 
+    async fn bulk_increment_quota_used<I: IntoIterator<Item = (UserId, u64)> + Send>(
+        &self,
+        quota_used_updates: I,
+    ) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let mut user_db = self.backend.user_db.write().await;
+
+        for (user, quota) in quota_used_updates {
+            *user_db.quota_used.entry(user).or_default() += quota;
+            *user_db.quota_available.entry(user).or_default() -= quota as i64;
+        }
+
+        Ok(())
+    }
+
     async fn quota_used(&self) -> Result<u64> {
         Ok(self
             .backend
