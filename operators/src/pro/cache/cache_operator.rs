@@ -1,21 +1,23 @@
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
-
+use super::shared_cache::{CacheElement, CacheElementSubType};
+use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
-    CanonicOperatorName, InitializedRasterOperator, InitializedVectorOperator, QueryContext,
-    QueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+    CanonicOperatorName, ChunkByteSize, InitializedRasterOperator, InitializedVectorOperator,
+    QueryContext, QueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
 };
 use crate::pro::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
+use futures::stream::{BoxStream, FusedStream};
 use futures::{ready, Stream};
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle};
+use geoengine_datatypes::collections::FeatureCollection;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, Geometry, QueryRectangle};
+use geoengine_datatypes::raster::RasterTile2D;
+use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::{pin_project, pinned_drop};
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
-
-use super::shared_cache::{CacheElement, CacheElementSubType};
 
 /// A cache operator that caches the results of its source operator
 pub struct InitializedCacheOperator<S> {
@@ -159,6 +161,7 @@ impl<P, S, E, Q> QueryProcessor for CacheQueryProcessor<P, E, Q>
 where
     P: QueryProcessor<Output = E, SpatialBounds = Q> + Sized,
     E: CacheElement<CacheElementSubType = S, Query = QueryRectangle<Q>>
+        + ResultStreamWrapper
         + Send
         + Sync
         + Clone
@@ -187,7 +190,9 @@ where
             // cache hit
             log::debug!("cache hit for operator {}", self.cache_key);
 
-            return Ok(Box::pin(cache_result));
+            let wrapped_result_steam = E::wrap_result_stream(cache_result, ctx.chunk_byte_size());
+
+            return Ok(wrapped_result_steam);
         }
 
         // cache miss
@@ -342,6 +347,45 @@ where
                 log::debug!("could not send abort to cache: {}", e.to_string());
             }
         }
+    }
+}
+
+trait ResultStreamWrapper: CacheElement {
+    fn wrap_result_stream<'a>(
+        stream: Self::ResultStream,
+        chunk_byte_size: ChunkByteSize,
+    ) -> BoxStream<'a, Result<Self>>;
+}
+
+impl<G> ResultStreamWrapper for FeatureCollection<G>
+where
+    G: Geometry + ArrowTyped + Send + Sync + 'static,
+    FeatureCollection<G>: CacheElement,
+    <FeatureCollection<G> as CacheElement>::ResultStream: FusedStream + Send,
+    <FeatureCollection<G> as CacheElement>::ResultStream: Stream<Item = Result<Self>>,
+{
+    fn wrap_result_stream<'a>(
+        stream: Self::ResultStream,
+        chunk_byte_size: ChunkByteSize,
+    ) -> BoxStream<'a, Result<Self>> {
+        Box::pin(FeatureCollectionChunkMerger::new(
+            stream,
+            chunk_byte_size.into(),
+        ))
+    }
+}
+
+impl<P> ResultStreamWrapper for RasterTile2D<P>
+where
+    P: 'static,
+    RasterTile2D<P>: CacheElement,
+    <RasterTile2D<P> as CacheElement>::ResultStream: Stream<Item = Result<Self>> + Send,
+{
+    fn wrap_result_stream<'a>(
+        stream: Self::ResultStream,
+        _chunk_byte_size: ChunkByteSize,
+    ) -> BoxStream<'a, Result<Self>> {
+        Box::pin(stream)
     }
 }
 
