@@ -207,7 +207,7 @@ where
     }
 
     /// This method removes a list of queries from the cache and the LRU.
-    fn discard_querys_from_cache_and_lru(&mut self, cache_entry_ids: &[CacheEntryId]) {
+    fn discard_queries_from_cache_and_lru(&mut self, cache_entry_ids: &[CacheEntryId]) {
         for cache_entry_id in cache_entry_ids {
             let old_entry = self.remove_query_from_cache_and_lru(cache_entry_id);
             debug_assert!(
@@ -434,7 +434,7 @@ where
         };
 
         // discard expired cache entries
-        cache.discard_querys_from_cache_and_lru(&expired_cache_entry_ids);
+        cache.discard_queries_from_cache_and_lru(&expired_cache_entry_ids);
 
         Ok(res.flatten())
     }
@@ -498,7 +498,7 @@ where
         cache_entry_ids: &[CacheEntryId],
     ) {
         if let Some(mut cache) = self.operator_cache_view_mut(key) {
-            cache.discard_querys_from_cache_and_lru(cache_entry_ids);
+            cache.discard_queries_from_cache_and_lru(cache_entry_ids);
             if cache.is_empty() {
                 self.remove_operator_cache(key);
             }
