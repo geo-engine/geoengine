@@ -767,7 +767,7 @@ identifier!(CacheEntryId);
 
 impl ByteSize for CacheEntryId {}
 
-/// Holds all the tiles for a given query and is able to answer queries that are fully contained
+/// Holds all the elements for a given query and is able to answer queries that are fully contained
 #[derive(Debug, Hash)]
 pub struct CacheQueryEntry<Query, Elements> {
     query: Query,
