@@ -4,6 +4,7 @@ use super::shared_cache::{
     CacheElement, CacheElementsContainer, CacheElementsContainerInfos, LandingZoneElementsContainer,
 };
 use crate::util::Result;
+use futures::stream::FusedStream;
 use futures::Stream;
 use geoengine_datatypes::{
     collections::{
@@ -201,7 +202,7 @@ where
     }
 }
 
-macro_rules! impl_cache_element_subtype_magic {
+macro_rules! impl_cache_element_subtype {
     ($g:ty, $variant:ident) => {
         impl CacheElementSubType for $g {
             type CacheElementType = FeatureCollection<$g>;
@@ -238,10 +239,10 @@ macro_rules! impl_cache_element_subtype_magic {
         }
     };
 }
-impl_cache_element_subtype_magic!(NoGeometry, NoGeometry);
-impl_cache_element_subtype_magic!(MultiPoint, MultiPoint);
-impl_cache_element_subtype_magic!(MultiLineString, MultiLineString);
-impl_cache_element_subtype_magic!(MultiPolygon, MultiPolygon);
+impl_cache_element_subtype!(NoGeometry, NoGeometry);
+impl_cache_element_subtype!(MultiPoint, MultiPoint);
+impl_cache_element_subtype!(MultiLineString, MultiLineString);
+impl_cache_element_subtype!(MultiPolygon, MultiPolygon);
 
 /// Our own tile stream that "owns" the data (more precisely a reference to the data)
 #[pin_project(project = CacheChunkStreamProjection)]
@@ -306,6 +307,16 @@ where
         }
 
         std::task::Poll::Ready(None)
+    }
+}
+
+impl<G> FusedStream for CacheChunkStream<G>
+where
+    G: Geometry + ArrowTyped,
+    FeatureCollection<G>: CacheElementHitCheck,
+{
+    fn is_terminated(&self) -> bool {
+        self.idx >= self.data.len()
     }
 }
 
