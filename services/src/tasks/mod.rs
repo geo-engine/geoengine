@@ -97,6 +97,7 @@ pub enum TaskStatus {
     Running(Arc<RunningTaskStatusInfo>),
     #[serde(rename_all = "camelCase")]
     Completed {
+        task_type: &'static str,
         description: Option<String>,
         info: Arc<dyn TaskStatusInfo>,
         time_total: String,
@@ -208,6 +209,7 @@ impl TaskStatus {
     #[must_use]
     pub fn completed(&self, info: Arc<dyn TaskStatusInfo>) -> Self {
         Self::Completed {
+            task_type: self.task_type(),
             description: self.description(),
             info,
             time_total: self.time_total(),
@@ -276,6 +278,14 @@ impl TaskStatus {
         }
     }
 
+    fn task_type(&self) -> &'static str {
+        match self {
+            TaskStatus::Completed { task_type, .. } => task_type,
+            TaskStatus::Running(info) => info.task_type,
+            _ => "",
+        }
+    }
+
     fn description(&self) -> Option<String> {
         match self {
             TaskStatus::Completed { description, .. } => description.clone(),
@@ -288,6 +298,7 @@ impl TaskStatus {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunningTaskStatusInfo {
+    task_type: &'static str,
     description: Option<String>,
     #[serde(serialize_with = "serialize_as_pct")]
     pct_complete: f64,
@@ -298,12 +309,14 @@ pub struct RunningTaskStatusInfo {
 
 impl RunningTaskStatusInfo {
     pub fn new(
+        task_type: &'static str,
         description: Option<String>,
         pct_complete: f64,
         info: Box<dyn TaskStatusInfo>,
     ) -> Arc<Self> {
         let time_estimate = TimeEstimation::new();
         Arc::new(RunningTaskStatusInfo {
+            task_type,
             description,
             pct_complete: pct_complete.clamp(0., 1.),
             time_started: time_estimate.time_started(),
@@ -319,6 +332,7 @@ impl RunningTaskStatusInfo {
         time_estimate.update_now(pct_complete);
 
         Arc::new(RunningTaskStatusInfo {
+            task_type: self.task_type,
             description: self.description.clone(),
             pct_complete,
             time_started: self.time_started,

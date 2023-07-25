@@ -342,10 +342,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> {
             })
             .await
         });
-        let files = match files {
-            Ok(x) => x,
-            Err(_) => return "Failed retrieve file list".to_string(),
-        };
+        let Ok(files) = files else { return "Failed retrieve file list".to_string() };
         files
             .iter()
             .map(|path| path.to_string_lossy().to_string())
