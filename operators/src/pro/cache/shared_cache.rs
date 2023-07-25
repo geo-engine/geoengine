@@ -250,7 +250,7 @@ where
         // new entries might update the query bounds stored for this entry
         landing_zone_element.update_stored_query(&mut landing_zone_entry.query)?;
 
-        // acctually insert the element into the landing zone
+        // actually insert the element into the landing zone
         landing_zone_entry.insert_element(landing_zone_element)?;
 
         // we add the bytes size of the element to the landing zone size after we have inserted it.
