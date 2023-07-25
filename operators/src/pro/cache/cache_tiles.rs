@@ -226,7 +226,7 @@ where
     }
 }
 
-macro_rules! impl_cache_element_subtype_magic {
+macro_rules! impl_cache_element_subtype {
     ($t:ty, $variant:ident) => {
         impl CacheElementSubType for $t {
             type CacheElementType = RasterTile2D<$t>;
@@ -263,16 +263,16 @@ macro_rules! impl_cache_element_subtype_magic {
         }
     };
 }
-impl_cache_element_subtype_magic!(i8, I8);
-impl_cache_element_subtype_magic!(u8, U8);
-impl_cache_element_subtype_magic!(i16, I16);
-impl_cache_element_subtype_magic!(u16, U16);
-impl_cache_element_subtype_magic!(i32, I32);
-impl_cache_element_subtype_magic!(u32, U32);
-impl_cache_element_subtype_magic!(i64, I64);
-impl_cache_element_subtype_magic!(u64, U64);
-impl_cache_element_subtype_magic!(f32, F32);
-impl_cache_element_subtype_magic!(f64, F64);
+impl_cache_element_subtype!(i8, I8);
+impl_cache_element_subtype!(u8, U8);
+impl_cache_element_subtype!(i16, I16);
+impl_cache_element_subtype!(u16, U16);
+impl_cache_element_subtype!(i32, I32);
+impl_cache_element_subtype!(u32, U32);
+impl_cache_element_subtype!(i64, I64);
+impl_cache_element_subtype!(u64, U64);
+impl_cache_element_subtype!(f32, F32);
+impl_cache_element_subtype!(f64, F64);
 
 /// Our own tile stream that "owns" the data (more precisely a reference to the data)
 #[pin_project(project = CacheTileStreamProjection)]
