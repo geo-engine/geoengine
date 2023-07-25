@@ -450,7 +450,7 @@ where
     ) -> Result<QueryId, CacheError> {
         self.create_operator_cache_if_needed(key.clone());
         self.operator_cache_view_mut(key)
-            .expect("OperatorCache was Just created ")
+            .expect("This method must not fail since the OperatorCache was created one line above.")
             .insert_query_into_landing_zone(query)
     }
 
