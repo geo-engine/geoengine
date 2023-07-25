@@ -3570,12 +3570,12 @@ let ctx = app_ctx.session_context(session);
                 .unwrap();
 
             // single item in bulk
-            db.bulk_increment_quota_used(&[(user1, 1)]).await.unwrap();
+            db.bulk_increment_quota_used([(user1, 1)]).await.unwrap();
 
             assert_eq!(db.quota_used_by_user(&user1).await.unwrap(), 1);
 
             // multiple items in bulk
-            db.bulk_increment_quota_used(&[(user1, 1), (user2, 3)])
+            db.bulk_increment_quota_used([(user1, 1), (user2, 3)])
                 .await
                 .unwrap();
 

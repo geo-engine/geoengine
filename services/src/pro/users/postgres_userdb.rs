@@ -509,18 +509,19 @@ where
         Ok(())
     }
 
-    async fn bulk_increment_quota_used(&self, quota_used: &[(UserId, u64)]) -> Result<()> {
+    async fn bulk_increment_quota_used<I: IntoIterator<Item = (UserId, u64)> + Send>(
+        &self,
+        quota_used_updates: I,
+    ) -> Result<()> {
         ensure!(self.session.is_admin(), error::PermissionDenied);
 
         let conn = self.conn_pool.get().await?;
 
         // collect the user ids and quotas into separate vectors to pass them as parameters to the query
-        let mut users: Vec<UserId> = vec![];
-        let mut quotas: Vec<i64> = vec![];
-        for (user, quota) in quota_used {
-            users.push(*user);
-            quotas.push(*quota as i64);
-        }
+        let (users, quotas): (Vec<UserId>, Vec<i64>) = quota_used_updates
+            .into_iter()
+            .map(|(user, quota)| (user, quota as i64))
+            .unzip();
 
         let query = "
             UPDATE users
