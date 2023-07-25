@@ -128,13 +128,15 @@ impl<U: UserDb + 'static> QuotaManager<U> {
 
                 if flush_buffer {
                     // TODO: what to do if this fails (quota can't be recorded)? Try again later?
-                    for (user, quota_used) in self.increment_quota_buffer.drain() {
-                        let r = self.user_db.increment_quota_used(&user, quota_used).await;
 
-                        if r.is_err() {
-                            log::error!("Could not increment quota for user {}", user);
-                        }
+                    if let Err(error) = self
+                        .user_db
+                        .bulk_increment_quota_used(self.increment_quota_buffer.drain())
+                        .await
+                    {
+                        log::error!("Could not increment quota for users {error:?}");
                     }
+
                     self.increment_quota_buffer_used = 0;
                 }
             }
