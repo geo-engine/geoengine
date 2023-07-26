@@ -17,6 +17,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 
 mod in_memory;
+mod postgres;
 mod session;
 mod simple_context;
 
@@ -35,6 +36,7 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 pub use in_memory::{InMemoryContext, InMemoryDb, InMemorySessionContext};
+pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
 pub use simple_context::SimpleApplicationContext;
 
@@ -457,7 +459,8 @@ mod tests {
 
         let ctx = InMemoryContext::test_default()
             .default_session_context()
-            .await;
+            .await
+            .unwrap();
 
         let exe_ctx = ctx.execution_context().unwrap();
 
@@ -492,7 +495,8 @@ mod tests {
         set_config("machinelearning.model_defs_path", temp_ml_path).unwrap();
         let ctx = InMemoryContext::test_default()
             .default_session_context()
-            .await;
+            .await
+            .unwrap();
         let mut exe_ctx = ctx.execution_context().unwrap();
 
         let model_path = PathBuf::from("xgboost/model.json");

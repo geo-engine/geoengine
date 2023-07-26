@@ -19,11 +19,12 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::string_token;
-#[cfg(feature = "postgres")]
+
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
 identifier!(ProjectId);
@@ -32,7 +33,7 @@ identifier!(ProjectId);
 #[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: ProjectId,
-    pub version: ProjectVersion,
+    pub version: ProjectVersion, // TODO: remove, this exists only for pro
     pub name: String,
     pub description: String,
     pub layers: Vec<ProjectLayer>,
@@ -123,8 +124,7 @@ impl Project {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
 #[allow(clippy::upper_case_acronyms)]
 #[serde(rename_all = "camelCase")]
 // TODO: add example, once utoipas schema macro can co-exist with postgres OR: split type into API and database model
@@ -239,8 +239,7 @@ impl ProjectLayer {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 pub enum LayerType {
     Raster,
@@ -364,8 +363,7 @@ pub struct DerivedColor {
     pub colorizer: Colorizer,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema, ToSql, FromSql)]
 pub struct LayerVisibility {
     pub data: bool,
     pub legend: bool,
@@ -605,6 +603,20 @@ impl ProjectVersion {
             id: ProjectVersionId::new(),
             changed: DateTime::now(),
         }
+    }
+}
+
+#[derive(PartialEq)]
+pub enum LoadVersion {
+    Version(ProjectVersionId),
+    Latest,
+}
+
+impl From<Option<Uuid>> for LoadVersion {
+    fn from(id: Option<Uuid>) -> Self {
+        id.map_or(LoadVersion::Latest, |id| {
+            LoadVersion::Version(ProjectVersionId(id))
+        })
     }
 }
 

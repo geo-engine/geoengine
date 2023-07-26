@@ -5,22 +5,23 @@ use crate::{
     util::Result,
 };
 use gdal::spatial_ref::SpatialRef;
-#[cfg(feature = "postgres")]
+
 use postgres_types::private::BytesMut;
-#[cfg(feature = "postgres")]
+
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use proj::Proj;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-#[cfg(feature = "postgres")]
+
 use snafu::Error;
 use snafu::ResultExt;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt::Formatter};
 
 /// A spatial reference authority that is part of a spatial reference definition
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[derive(
+    Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, ToSql, FromSql,
+)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum SpatialReferenceAuthority {
     Epsg,
@@ -45,8 +46,7 @@ impl std::fmt::Display for SpatialReferenceAuthority {
 }
 
 /// A spatial reference consists of an authority and a code
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ToSql, FromSql)]
 pub struct SpatialReference {
     authority: SpatialReferenceAuthority,
     code: u32,
@@ -264,7 +264,6 @@ impl SpatialReferenceOption {
     }
 }
 
-#[cfg(feature = "postgres")]
 impl ToSql for SpatialReferenceOption {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
     where
@@ -295,7 +294,6 @@ impl ToSql for SpatialReferenceOption {
     }
 }
 
-#[cfg(feature = "postgres")]
 impl<'a> FromSql<'a> for SpatialReferenceOption {
     fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         Ok(SpatialReferenceOption::SpatialReference(

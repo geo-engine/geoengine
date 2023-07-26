@@ -431,8 +431,8 @@ async fn wfs_feature_handler<C: ApplicationContext>(
     let endpoint = endpoint.into_inner();
     let request = request.into_inner();
 
-    let type_names = match request.typeNames.namespace.as_deref() {
-        None => WorkflowId::from_str(&request.typeNames.feature_type)?,
+    let type_names = match request.type_names.namespace.as_deref() {
+        None => WorkflowId::from_str(&request.type_names.feature_type)?,
         Some(_) => {
             return Err(error::Error::InvalidNamespace);
         }
@@ -448,7 +448,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
 
     // TODO: validate request further
 
-    if request.typeNames.feature_type == "93d6785e-5eea-4e0e-8074-e7f78733d988" {
+    if request.type_names.feature_type == "93d6785e-5eea-4e0e-8074-e7f78733d988" {
         return get_feature_mock(&request);
     }
 
@@ -481,7 +481,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
 
     // TODO: use a default spatial reference if it is not set?
     let request_spatial_ref: SpatialReference = request
-        .srsName
+        .srs_name
         .ok_or(error::Error::InvalidSpatialReference)?;
 
     // perform reprojection if necessary
@@ -524,7 +524,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
         time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
         // TODO: find reasonable default
         spatial_resolution: request
-            .queryResolution
+            .query_resolution
             .map_or_else(SpatialResolution::zero_point_one, |r| r.0),
     };
     let query_ctx = ctx.query_context()?;
@@ -731,7 +731,7 @@ mod tests {
     async fn mock_test() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let req = test::TestRequest::get()
@@ -837,8 +837,7 @@ x;y
 
         let app_ctx = InMemoryContext::test_default();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -855,7 +854,9 @@ x;y
         };
 
         let workflow_id = app_ctx
-            .session_context(session)
+            .default_session_context()
+            .await
+            .unwrap()
             .db()
             .register_workflow(workflow)
             .await
@@ -905,9 +906,8 @@ x;y
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = app_ctx.default_session_id().await;
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -989,7 +989,7 @@ x;y
     async fn get_feature_registry_missing_fields() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let req = test::TestRequest::get().uri(
@@ -1022,8 +1022,7 @@ x;y
 
         let app_ctx = InMemoryContext::test_default();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -1040,7 +1039,9 @@ x;y
         };
 
         let workflow_id = app_ctx
-            .session_context(session)
+            .default_session_context()
+            .await
+            .unwrap()
             .db()
             .register_workflow(workflow)
             .await
@@ -1124,7 +1125,7 @@ x;y
     async fn get_feature_json_missing_fields() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let params = &[
@@ -1159,7 +1160,7 @@ x;y
         let data = data.replace("test_data/", test_data!("./").to_str().unwrap());
         let def: DatasetDefinition = serde_json::from_str(&data).unwrap();
 
-        let db = app_ctx.default_session_context().await.db();
+        let db = app_ctx.default_session_context().await.unwrap().db();
 
         db.add_dataset(def.properties, Box::new(def.meta_data))
             .await
@@ -1180,8 +1181,7 @@ x;y
             TestDefault::test_default(),
         );
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let _ndvi_id: DataId =
             add_dataset_definition_to_datasets(&app_ctx, test_data!("dataset_defs/ndvi.json"))
@@ -1228,7 +1228,9 @@ x;y
         let workflow = serde_json::from_str(&json).unwrap();
 
         let workflow_id = app_ctx
-            .session_context(session)
+            .default_session_context()
+            .await
+            .unwrap()
             .db()
             .register_workflow(workflow)
             .await

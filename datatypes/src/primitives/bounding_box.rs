@@ -4,13 +4,12 @@ use super::{AxisAlignedRectangle, Coordinate2D, SpatialBounded};
 use crate::error;
 use crate::util::Result;
 use float_cmp::ApproxEq;
-#[cfg(feature = "postgres")]
+
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, ToSql, FromSql)]
 #[repr(C)]
 #[serde(rename_all = "camelCase")]
 /// A bounding box that includes all border points.
@@ -956,6 +955,15 @@ mod tests {
         assert!(!box_down_right.overlaps_bbox(&box_down_right));
 
         assert!(!box_down_left.overlaps_bbox(&box_up_right));
+    }
+
+    #[test]
+    fn bounding_box_contains_self() {
+        let ll = Coordinate2D::new(1.0, 1.0);
+        let ur = Coordinate2D::new(4.0, 4.0);
+        let bbox = BoundingBox2D::new(ll, ur).unwrap();
+
+        assert!(bbox.contains_bbox(&bbox));
     }
 
     #[test]

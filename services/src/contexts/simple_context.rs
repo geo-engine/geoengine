@@ -1,17 +1,19 @@
-use super::{ApplicationContext, Db, SimpleSession};
+use crate::error::Result;
+use crate::projects::{ProjectId, STRectangle};
+
+use super::{ApplicationContext, SessionId, SimpleSession};
 
 use async_trait::async_trait;
-use tokio::sync::{RwLockReadGuard, RwLockWriteGuard};
 
 /// A simple application context that provides a default session and session context.
 #[async_trait]
 pub trait SimpleApplicationContext: ApplicationContext<Session = SimpleSession> {
-    fn default_session(&self) -> Db<SimpleSession>;
-    async fn default_session_ref(&self) -> RwLockReadGuard<SimpleSession>;
-    async fn default_session_ref_mut(&self) -> RwLockWriteGuard<SimpleSession>;
+    async fn default_session_id(&self) -> SessionId;
+    async fn default_session(&self) -> Result<SimpleSession>;
+
+    async fn update_default_session_project(&self, project: ProjectId) -> Result<()>;
+    async fn update_default_session_view(&self, view: STRectangle) -> Result<()>;
 
     /// Get a session context for the default session.
-    async fn default_session_context(&self) -> Self::SessionContext {
-        self.session_context(self.default_session_ref().await.clone())
-    }
+    async fn default_session_context(&self) -> Result<Self::SessionContext>;
 }

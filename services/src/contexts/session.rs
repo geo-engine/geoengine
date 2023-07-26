@@ -12,9 +12,10 @@ use futures_util::FutureExt;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::util::Identifier;
 use serde::{Deserialize, Serialize};
+use tokio_postgres::NoTls;
 use utoipa::ToSchema;
 
-use super::ApplicationContext;
+use super::{ApplicationContext, PostgresContext};
 
 identifier!(SessionId);
 
@@ -35,6 +36,12 @@ pub struct SimpleSession {
     id: SessionId,
     pub project: Option<ProjectId>,
     pub view: Option<STRectangle>,
+}
+
+impl SimpleSession {
+    pub fn new(id: SessionId, project: Option<ProjectId>, view: Option<STRectangle>) -> Self {
+        Self { id, project, view }
+    }
 }
 
 impl Default for SimpleSession {
@@ -89,12 +96,19 @@ impl FromRequest for SimpleSession {
             Ok(token) => token,
             Err(error) => return Box::pin(err(error)),
         };
-        let ctx = req
+
+        {
+            if let Some(pg_ctx) = req.app_data::<web::Data<PostgresContext<NoTls>>>() {
+                let pg_ctx = pg_ctx.get_ref().clone();
+                return async move { pg_ctx.session_by_id(token).await.map_err(Into::into) }
+                    .boxed_local();
+            }
+        }
+        let mem_ctx = req
             .app_data::<web::Data<InMemoryContext>>()
-            .expect("InMemoryContext must be available")
-            .get_ref()
-            .clone();
-        async move { ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
+            .expect("InMemoryContext will be registered because Postgres was not activated");
+        let mem_ctx = mem_ctx.get_ref().clone();
+        async move { mem_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
     }
 }
 

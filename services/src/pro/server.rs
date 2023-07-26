@@ -3,9 +3,9 @@ use crate::error::{Error, Result};
 use crate::handlers;
 use crate::pro;
 use crate::pro::apidoc::ApiDoc;
-#[cfg(feature = "postgres")]
-use crate::pro::contexts::PostgresContext;
 use crate::pro::contexts::ProInMemoryContext;
+
+use crate::pro::contexts::ProPostgresContext;
 use crate::util::config::{self, get_config_element, Backend};
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
@@ -13,7 +13,7 @@ use crate::util::server::{
 };
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, FromRequest, HttpServer};
-#[cfg(feature = "postgres")]
+
 use bb8_postgres::tokio_postgres::NoTls;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::ChunkByteSize;
@@ -50,7 +50,7 @@ where
             .configure(handlers::layers::init_layer_routes::<C>)
             .configure(pro::handlers::permissions::init_permissions_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
-            .configure(pro::handlers::projects::init_project_routes::<C>)
+            .configure(handlers::projects::init_project_routes::<C>)
             .configure(pro::handlers::users::init_user_routes::<C>)
             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
             .configure(handlers::upload::init_upload_routes::<C>)
@@ -150,6 +150,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let web_config: crate::util::config::Web = get_config_element()?;
     let open_telemetry: crate::pro::util::config::OpenTelemetry = get_config_element()?;
     let cache_config: crate::pro::util::config::Cache = get_config_element()?;
+    let quota_config: crate::pro::util::config::Quota = get_config_element()?;
 
     if user_config.user_registration {
         info!("User Registration: enabled");
@@ -178,10 +179,12 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     }
 
     if cache_config.enabled {
-        info!("Cache: enabled");
+        info!("Cache: enabled ({} MB)", cache_config.cache_size_in_mb);
     } else {
         info!("Cache: disabled");
     }
+
+    info!("QuotaTracking: {:?}", quota_config.mode);
 
     let data_path_config: config::DataProvider = get_config_element()?;
 
@@ -203,6 +206,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                 static_files_dir,
                 web_config,
                 cache_config,
+                quota_config,
             )
             .await
         }
@@ -215,12 +219,14 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
                 static_files_dir,
                 web_config,
                 cache_config,
+                quota_config,
             )
             .await
         }
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn start_in_memory(
     data_path_config: config::DataProvider,
     tiling_spec: TilingSpecification,
@@ -229,6 +235,7 @@ async fn start_in_memory(
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
     cache_config: crate::pro::util::config::Cache,
+    quota_config: crate::pro::util::config::Quota,
 ) -> Result<()> {
     info!("Using in memory backend");
     let ctx = ProInMemoryContext::new_with_data(
@@ -240,6 +247,7 @@ async fn start_in_memory(
         chunk_byte_size,
         oidc_config,
         cache_config,
+        quota_config,
     )
     .await;
 
@@ -253,6 +261,7 @@ async fn start_in_memory(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn start_postgres(
     data_path_config: config::DataProvider,
     tiling_spec: TilingSpecification,
@@ -261,8 +270,8 @@ async fn start_postgres(
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
     cache_config: crate::pro::util::config::Cache,
+    quota_config: crate::pro::util::config::Quota,
 ) -> Result<()> {
-    #[cfg(feature = "postgres")]
     {
         info!("Using Postgres backend");
 
@@ -276,7 +285,7 @@ async fn start_postgres(
             // fix schema by providing `search_path` option
             .options(&format!("-c search_path={}", db_config.schema));
 
-        let ctx = PostgresContext::new_with_data(
+        let ctx = ProPostgresContext::new_with_data(
             pg_config,
             NoTls,
             data_path_config.dataset_defs_path,
@@ -287,6 +296,7 @@ async fn start_postgres(
             chunk_byte_size,
             oidc_config,
             cache_config,
+            quota_config,
         )
         .await?;
 
@@ -299,6 +309,4 @@ async fn start_postgres(
         )
         .await
     }
-    #[cfg(not(feature = "postgres"))]
-            panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
 }

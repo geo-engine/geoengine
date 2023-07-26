@@ -168,7 +168,7 @@ mod tests {
 
     use crate::util::tests::read_body_json;
     use crate::{
-        contexts::{InMemoryContext, Session, SimpleApplicationContext},
+        contexts::{InMemoryContext, SimpleApplicationContext},
         tasks::{
             util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
         },
@@ -354,9 +354,8 @@ mod tests {
     async fn test_get_status() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = app_ctx.default_session_id().await;
 
         let (task, complete_tx) = NopTask::new_with_sender();
 
@@ -419,9 +418,8 @@ mod tests {
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = app_ctx.default_session_id().await;
 
         let (task, _complete_tx) = NopTask::new_with_sender();
         let task_id = ctx.tasks().schedule_task(task.boxed(), None).await.unwrap();
@@ -450,9 +448,8 @@ mod tests {
     async fn test_get_list() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = app_ctx.default_session_id().await;
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -486,9 +483,8 @@ mod tests {
     async fn test_abort_task() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = app_ctx.default_session_id().await;
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -543,9 +539,8 @@ mod tests {
     async fn test_force_abort_task() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = app_ctx.default_session_id().await;
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -597,9 +592,8 @@ mod tests {
     async fn test_abort_after_abort() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = app_ctx.default_session_id().await;
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -682,7 +676,7 @@ mod tests {
         let unique_id = "highlander".to_string();
         let app_ctx = InMemoryContext::test_default();
 
-        let session = app_ctx.default_session_ref().await.clone();
+        let session = app_ctx.default_session().await.unwrap();
 
         let tasks = app_ctx.session_context(session).tasks();
 
@@ -700,7 +694,7 @@ mod tests {
         let unique_id = "highlander".to_string();
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -727,7 +721,7 @@ mod tests {
     async fn test_notify() {
         let app_ctx = InMemoryContext::test_default();
 
-        let session = app_ctx.default_session_ref().await.clone();
+        let session = app_ctx.default_session().await.unwrap();
 
         let tasks = app_ctx.session_context(session).tasks();
 
@@ -756,7 +750,7 @@ mod tests {
     async fn abort_subtasks() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -848,7 +842,7 @@ mod tests {
     async fn test_failing_task_with_failing_cleanup() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let tasks = Arc::new(ctx.tasks());
 

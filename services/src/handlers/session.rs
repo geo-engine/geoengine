@@ -46,7 +46,7 @@ async fn anonymous_handler<C: SimpleApplicationContext>(
         });
     }
 
-    let session = app_ctx.default_session_ref().await.clone();
+    let session = app_ctx.default_session().await?;
     Ok(web::Json(session))
 }
 
@@ -92,10 +92,12 @@ async fn session_project_handler<C: SimpleApplicationContext>(
     project: web::Path<ProjectId>,
     _session: C::Session,
     app_ctx: web::Data<C>,
-) -> impl Responder {
-    app_ctx.default_session_ref_mut().await.project = Some(project.into_inner());
+) -> Result<impl Responder> {
+    app_ctx
+        .update_default_session_project(project.into_inner())
+        .await?;
 
-    HttpResponse::Ok()
+    Ok(HttpResponse::Ok())
 }
 
 /// Sets the active view of the session.
@@ -115,10 +117,12 @@ async fn session_view_handler<C: SimpleApplicationContext>(
     _session: C::Session,
     app_ctx: web::Data<C>,
     view: web::Json<STRectangle>,
-) -> impl Responder {
-    app_ctx.default_session_ref_mut().await.view = Some(view.into_inner());
+) -> Result<impl Responder> {
+    app_ctx
+        .update_default_session_view(view.into_inner())
+        .await?;
 
-    HttpResponse::Ok()
+    Ok(HttpResponse::Ok())
 }
 
 #[cfg(test)]
@@ -142,7 +146,7 @@ mod tests {
     async fn session() {
         let app_ctx = InMemoryContext::test_default();
 
-        let session = app_ctx.default_session_ref().await.clone();
+        let session = app_ctx.default_session().await.unwrap();
 
         let req = test::TestRequest::get()
             .uri("/session")
@@ -157,7 +161,7 @@ mod tests {
     async fn session_view_project() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session = ctx.session().clone();
         let project = create_project_helper(&app_ctx).await;
@@ -169,7 +173,10 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert_eq!(app_ctx.default_session_ref().await.project(), Some(project));
+        assert_eq!(
+            app_ctx.default_session().await.unwrap().project(),
+            Some(project)
+        );
 
         let rect =
             STRectangle::new_unchecked(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1);
@@ -183,7 +190,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            app_ctx.default_session_ref().await.view(),
+            app_ctx.default_session().await.unwrap().view(),
             Some(rect).as_ref()
         );
     }

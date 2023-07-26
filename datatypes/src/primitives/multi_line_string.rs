@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use arrow::array::{ArrayBuilder, BooleanArray};
+use arrow::array::BooleanArray;
 use arrow::error::ArrowError;
 use float_cmp::{ApproxEq, F64Margin};
 use geo::algorithm::intersects::Intersects;
@@ -14,7 +14,7 @@ use crate::primitives::{
     error, BoundingBox2D, GeometryRef, MultiPoint, PrimitivesError, TypedGeometry,
 };
 use crate::primitives::{Coordinate2D, Geometry};
-use crate::util::arrow::{downcast_array, ArrowTyped};
+use crate::util::arrow::{downcast_array, padded_buffer_size, ArrowTyped};
 use crate::util::Result;
 
 /// A trait that allows a common access to lines of `MultiLineString`s and its references
@@ -143,18 +143,24 @@ impl ArrowTyped for MultiLineString {
         MultiPoint::arrow_list_data_type()
     }
 
-    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
-        let multi_line_indices_size = builder.len() * std::mem::size_of::<i32>();
+    fn estimate_array_memory_size(builder: &mut Self::ArrowBuilder) -> usize {
+        let static_size = std::mem::size_of::<Self::ArrowArray>()
+            + std::mem::size_of::<<MultiPoint as ArrowTyped>::ArrowArray>();
+
+        let feature_offset_bytes_size = std::mem::size_of_val(builder.offsets_slice());
 
         let line_builder = builder.values();
-        let line_indices_size = line_builder.len() * std::mem::size_of::<i32>();
 
-        let point_builder = line_builder.values();
-        let point_indices_size = point_builder.len() * std::mem::size_of::<i32>();
+        let line_offset_bytes_size = std::mem::size_of_val(line_builder.offsets_slice());
 
-        let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
+        let coordinates_builder = line_builder.values();
 
-        multi_line_indices_size + line_indices_size + point_indices_size + coordinates_size
+        let coords_size = Coordinate2D::estimate_array_memory_size(coordinates_builder);
+
+        static_size
+            + coords_size
+            + padded_buffer_size(line_offset_bytes_size, 64)
+            + padded_buffer_size(feature_offset_bytes_size, 64)
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
@@ -198,7 +204,7 @@ impl ArrowTyped for MultiLineString {
             }
         }
 
-        Ok(multi_line_builder.finish())
+        Ok(multi_line_builder.finish_cloned())
     }
 
     fn filter(
@@ -240,7 +246,7 @@ impl ArrowTyped for MultiLineString {
             multi_line_builder.append(true);
         }
 
-        Ok(multi_line_builder.finish())
+        Ok(multi_line_builder.finish_cloned())
     }
 
     fn from_vec(multi_line_strings: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
@@ -267,7 +273,7 @@ impl ArrowTyped for MultiLineString {
             builder.append(true);
         }
 
-        Ok(builder.finish())
+        Ok(builder.finish_cloned())
     }
 }
 
@@ -387,9 +393,9 @@ impl<'g> From<&MultiLineStringRef<'g>> for geo::MultiLineString<f64> {
 
 #[cfg(test)]
 mod tests {
-    use float_cmp::approx_eq;
-
     use super::*;
+    use arrow::array::{Array, ArrayBuilder};
+    use float_cmp::approx_eq;
 
     #[test]
     fn access() {
@@ -509,5 +515,87 @@ mod tests {
         let line_string_back = MultiLineString::from(geo_line_string);
 
         assert_eq!(line_string, line_string_back);
+    }
+
+    #[test]
+    fn arrow_builder_size() {
+        fn push_geometry(
+            geometries_builder: &mut <MultiLineString as ArrowTyped>::ArrowBuilder,
+            geometry: &MultiLineString,
+        ) {
+            let line_builder = geometries_builder.values();
+
+            for line in geometry.lines() {
+                let coordinate_builder = line_builder.values();
+
+                for coordinate in line {
+                    coordinate_builder
+                        .values()
+                        .append_slice(coordinate.as_ref());
+
+                    coordinate_builder.append(true);
+                }
+
+                line_builder.append(true);
+            }
+
+            geometries_builder.append(true);
+        }
+
+        for num_multi_lines in 0..64 {
+            for capacity in [0, num_multi_lines] {
+                let mut builder = MultiLineString::arrow_builder(capacity);
+
+                for i in 0..num_multi_lines {
+                    match i % 3 {
+                        0 => {
+                            push_geometry(
+                                &mut builder,
+                                &MultiLineString::new(vec![
+                                    vec![(0.1, 0.1).into(), (0.5, 0.5).into()],
+                                    vec![(0.5, 0.5).into(), (0.6, 0.6).into()],
+                                    vec![(0.6, 0.6).into(), (0.9, 0.9).into()],
+                                ])
+                                .unwrap(),
+                            );
+                        }
+                        1 => {
+                            push_geometry(
+                                &mut builder,
+                                &MultiLineString::new(vec![
+                                    vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                                    vec![(3.0, 3.1).into(), (4.0, 4.1).into()],
+                                ])
+                                .unwrap(),
+                            );
+                        }
+                        2 => {
+                            push_geometry(
+                                &mut builder,
+                                &MultiLineString::new(vec![
+                                    vec![(0.1, 0.1).into(), (0.5, 0.5).into()],
+                                    vec![(0.5, 0.5).into(), (0.6, 0.6).into(), (0.7, 0.7).into()],
+                                    vec![(0.7, 0.7).into(), (0.9, 0.9).into()],
+                                ])
+                                .unwrap(),
+                            );
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+
+                assert_eq!(builder.len(), num_multi_lines);
+
+                let builder_byte_size = MultiLineString::estimate_array_memory_size(&mut builder);
+
+                let array = builder.finish_cloned();
+
+                assert_eq!(
+                    builder_byte_size,
+                    array.get_array_memory_size(),
+                    "{num_multi_lines}"
+                );
+            }
+        }
     }
 }

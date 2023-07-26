@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::DatasetName;
-use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId};
+use crate::contexts::{ApplicationContext, PostgresContext, QueryContextImpl, SessionId};
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::datasets::upload::{Volume, Volumes};
@@ -14,7 +14,7 @@ use crate::pro::permissions::Role;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::{OidcRequestDb, UserAuth, UserSession};
-use crate::pro::util::config::{Cache, Oidc};
+use crate::pro::util::config::{Cache, Oidc, Quota};
 
 use crate::tasks::SimpleTaskManagerContext;
 use crate::util::config::get_config_element;
@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
     bb8::PooledConnection,
-    tokio_postgres::{error::SqlState, tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
+    tokio_postgres::{tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
 use geoengine_datatypes::raster::TilingSpecification;
@@ -33,7 +33,6 @@ use geoengine_operators::pro::cache::tile_cache::TileCache;
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, info};
-use postgres_protocol::escape::escape_literal;
 use pwhash::bcrypt;
 use rayon::ThreadPool;
 use snafu::{ensure, ResultExt};
@@ -46,7 +45,7 @@ use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCh
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
-pub struct PostgresContext<Tls>
+pub struct ProPostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -64,7 +63,7 @@ where
     tile_cache: Arc<TileCache>,
 }
 
-impl<Tls> PostgresContext<Tls>
+impl<Tls> ProPostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -76,16 +75,26 @@ where
         tls: Tls,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
+        quota_config: Quota,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
-        Self::update_schema(pool.get().await?).await?;
 
-        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
-        let quota = initialize_quota_tracking(db);
+        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
+        if created_schema {
+            Self::create_pro_schema(pool.get().await?).await?;
+        }
 
-        Ok(PostgresContext {
+        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
+        );
+
+        Ok(ProPostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -111,18 +120,26 @@ where
         query_ctx_chunk_size: ChunkByteSize,
         oidc_config: Oidc,
         cache_config: Cache,
+        quota_config: Quota,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
-        let conn = pool.get().await?;
-        let uninitialized = Self::schema_version(&conn).await? == 0;
-        Self::update_schema(conn).await?;
 
-        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
-        let quota = initialize_quota_tracking(db);
+        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
+        if created_schema {
+            Self::create_pro_schema(pool.get().await?).await?;
+        }
 
-        let app_ctx = PostgresContext {
+        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
+        );
+
+        let app_ctx = ProPostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -140,7 +157,7 @@ where
             ),
         };
 
-        if uninitialized {
+        if created_schema {
             info!("Populating database with initial data...");
 
             let mut db = app_ctx.session_context(UserSession::admin_session()).db();
@@ -161,429 +178,116 @@ where
         Ok(app_ctx)
     }
 
-    async fn schema_version(
-        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<i32> {
-        let stmt = match conn.prepare("SELECT version from version").await {
-            Ok(stmt) => stmt,
-            Err(e) => {
-                if let Some(code) = e.code() {
-                    if *code == SqlState::UNDEFINED_TABLE {
-                        info!("Version table not found. Initializing schema.");
-                        return Ok(0);
-                    }
-                }
-                return Err(error::Error::TokioPostgres { source: e });
-            }
-        };
-
-        let row = conn.query_one(&stmt, &[]).await?;
-
-        Ok(row.get(0))
-    }
-
     #[allow(clippy::too_many_lines)]
-    /// Updates the schema, returns the new schema version
-    async fn update_schema(
-        conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<i32> {
-        let mut version = Self::schema_version(&conn).await?;
+    /// Creates the database schema. Returns true if the schema was created, false if it already existed.
+    pub(crate) async fn create_pro_schema(
+        mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<()> {
+        let user_config = get_config_element::<crate::pro::util::config::User>()?;
 
-        loop {
-            match version {
-                0 => {
-                    let user_config = get_config_element::<crate::pro::util::config::User>()?;
+        let tx = conn.build_transaction().start().await?;
 
-                    conn.batch_execute(
-                        &format!(r#"
-                        CREATE TABLE version (
-                            version INT
-                        );
-                        INSERT INTO version VALUES (1);
+        tx.batch_execute(include_str!("schema.sql")).await?;
 
-                        -- TODO: distinguish between roles that are (correspond to) users and roles that are not
-                        -- TODO: integrity constraint for roles that correspond to users + DELETE CASCADE
-                        CREATE TABLE roles (
-                            id UUID PRIMARY KEY,
-                            name text UNIQUE NOT NULL
-                        );
+        let stmt = tx
+            .prepare(
+                r#"
+            INSERT INTO roles (id, name) VALUES
+                ($1, 'admin'),
+                ($2, 'user'),
+                ($3, 'anonymous');"#,
+            )
+            .await?;
 
-                        INSERT INTO roles (id, name) VALUES
-                            ({admin_role_id}, 'admin'),
-                            ({user_role_id}, 'user'),
-                            ({anonymous_role_id}, 'anonymous');
+        tx.execute(
+            &stmt,
+            &[
+                &Role::admin_role_id(),
+                &Role::registered_user_role_id(),
+                &Role::anonymous_role_id(),
+            ],
+        )
+        .await?;
 
-                        CREATE TABLE users (
-                            id UUID PRIMARY KEY REFERENCES roles(id),
-                            email character varying (256) UNIQUE,
-                            password_hash character varying (256),
-                            real_name character varying (256),
-                            active boolean NOT NULL,
-                            quota_available bigint NOT NULL DEFAULT 0,
-                            quota_used bigint NOT NULL DEFAULT 0, -- TODO: rename to total_quota_used?
-                            CONSTRAINT users_anonymous_ck CHECK (
-                               (email IS NULL AND password_hash IS NULL AND real_name IS NULL) OR 
-                               (email IS NOT NULL AND password_hash IS NOT NULL AND 
-                                real_name IS NOT NULL) 
-                            ),
-                            CONSTRAINT users_quota_used_ck CHECK (quota_used >= 0)
-                        );
+        let stmt = tx
+            .prepare(
+                r#"
+            INSERT INTO users (
+                id, 
+                email,
+                password_hash,
+                real_name,
+                active)
+            VALUES (
+                $1, 
+                $2,
+                $3,
+                'admin',
+                true
+            );"#,
+            )
+            .await?;
 
-                        INSERT INTO users (
-                            id, 
-                            email,
-                            password_hash,
-                            real_name,
-                            active)
-                        VALUES (
-                            {admin_role_id}, 
-                            {admin_email},
-                            {admin_password},
-                            'admin',
-                            true
-                        );
+        tx.execute(
+            &stmt,
+            &[
+                &Role::admin_role_id(),
+                &user_config.admin_email,
+                &bcrypt::hash(user_config.admin_password)
+                    .expect("Admin password hash should be valid"),
+            ],
+        )
+        .await?;
 
-                        -- relation between users and roles
-                        -- all users have a default role where role_id = user_id
-                        CREATE TABLE user_roles (
-                            user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-                            role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
-                            PRIMARY KEY (user_id, role_id)
-                        );
+        let stmt = tx
+            .prepare(
+                r#"
+            INSERT INTO user_roles 
+                (user_id, role_id)
+            VALUES 
+                ($1, $1);"#,
+            )
+            .await?;
 
-                        -- admin user role
-                        INSERT INTO user_roles 
-                            (user_id, role_id)
-                        VALUES 
-                            ({admin_role_id}, 
-                            {admin_role_id});
+        tx.execute(&stmt, &[&Role::admin_role_id()]).await?;
 
-                        CREATE TYPE "SpatialReferenceAuthority" AS ENUM (
-                            'Epsg', 'SrOrg', 'Iau2000', 'Esri'
-                        );
+        let stmt = tx
+            .prepare(
+                r#"
+            INSERT INTO permissions
+             (role_id, layer_collection_id, permission)  
+            VALUES 
+                ($1, $4, 'Owner'),
+                ($2, $4, 'Read'),
+                ($3, $4, 'Read'),
+                ($1, $5, 'Owner'),
+                ($2, $5, 'Read'),
+                ($3, $5, 'Read');"#,
+            )
+            .await?;
 
-                        CREATE TYPE "SpatialReference" AS (
-                            authority "SpatialReferenceAuthority", 
-                            code OID
-                        );
+        tx.execute(
+            &stmt,
+            &[
+                &Role::admin_role_id(),
+                &Role::registered_user_role_id(),
+                &Role::anonymous_role_id(),
+                &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+                &UNSORTED_COLLECTION_ID,
+            ],
+        )
+        .await?;
 
-                        CREATE TYPE "Coordinate2D" AS (
-                            x double precision, 
-                            y double precision
-                        );
+        tx.commit().await?;
 
-                        CREATE TYPE "BoundingBox2D" AS (
-                            lower_left_coordinate "Coordinate2D", 
-                            upper_right_coordinate "Coordinate2D"
-                        );
+        debug!("Created pro database schema");
 
-                        CREATE TYPE "TimeInterval" AS (                                                      
-                            start timestamp with time zone,
-                            "end" timestamp with time zone
-                        );
-
-                        CREATE TYPE "STRectangle" AS (
-                            spatial_reference "SpatialReference",
-                            bounding_box "BoundingBox2D",
-                            time_interval "TimeInterval"
-                        );
-                        
-                        CREATE TYPE "TimeGranularity" AS ENUM (
-                            'Millis', 'Seconds', 'Minutes', 'Hours',
-                            'Days',  'Months', 'Years'
-                        );
-                        
-                        CREATE TYPE "TimeStep" AS (
-                            granularity "TimeGranularity",
-                            step OID
-                        );
-
-                        CREATE TABLE projects (
-                            id UUID PRIMARY KEY
-                        );        
-                        
-                        CREATE TABLE sessions (
-                            id UUID PRIMARY KEY,
-                            user_id UUID REFERENCES users(id),
-                            created timestamp with time zone NOT NULL,
-                            valid_until timestamp with time zone NOT NULL,
-                            project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
-                            view "STRectangle"
-                        );                
-
-                        CREATE TABLE project_versions (
-                            id UUID PRIMARY KEY,
-                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
-                            name character varying (256) NOT NULL,
-                            description text NOT NULL,
-                            bounds "STRectangle" NOT NULL,
-                            time_step "TimeStep" NOT NULL,
-                            changed timestamp with time zone,
-                            author_user_id UUID REFERENCES users(id) NOT NULL
-                        );
-
-                        CREATE INDEX project_version_idx
-                        ON project_versions (project_id, changed DESC, author_user_id DESC);
-
-                        CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
-                        
-                        CREATE TYPE "LayerVisibility" AS (
-                            data BOOLEAN,
-                            legend BOOLEAN
-                        );
-
-                        CREATE TABLE project_version_layers (
-                            layer_index integer NOT NULL,
-                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
-                            project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
-                            name character varying (256) NOT NULL,
-                            workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
-                            symbology json,
-                            visibility "LayerVisibility" NOT NULL,
-                            PRIMARY KEY (project_id, project_version_id, layer_index)            
-                        );
-                        
-                        CREATE TABLE project_version_plots (
-                            plot_index integer NOT NULL,
-                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
-                            project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
-                            name character varying (256) NOT NULL,
-                            workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
-                            PRIMARY KEY (project_id, project_version_id, plot_index)            
-                        );
-
-                        CREATE TABLE workflows (
-                            id UUID PRIMARY KEY,
-                            workflow json NOT NULL
-                        );
-
-                        -- TODO: add constraint not null
-                        -- TODO: add length constraints
-                        CREATE TYPE "DatasetName" AS (
-                            namespace text,
-                            name text
-                        );
-
-                        CREATE TABLE datasets (
-                            id UUID PRIMARY KEY,
-                            name "DatasetName" UNIQUE NOT NULL,
-                            display_name text NOT NULL,
-                            description text NOT NULL, 
-                            tags text[], 
-                            source_operator text NOT NULL,
-
-                            result_descriptor json NOT NULL,
-                            meta_data json NOT NULL,
-
-                            symbology json,
-                            provenance json
-                        );
-
-                        -- TODO: add constraint not null
-                        -- TODO: add constaint byte_size >= 0
-                        CREATE TYPE "FileUpload" AS (
-                            id UUID,
-                            name text,
-                            byte_size bigint
-                        );
-
-                        -- TODO: store user
-                        -- TODO: time of creation and last update
-                        -- TODO: upload directory that is not directly derived from id
-                        CREATE TABLE uploads (
-                            id UUID PRIMARY KEY,
-                            user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-                            files "FileUpload"[] NOT NULL
-                        );
-
-                        CREATE TYPE "Permission" AS ENUM (
-                            'Read', 'Owner'
-                        );  
-
-                        CREATE TYPE "PropertyType" AS (
-                            key text,
-                            value text
-                        );
-
-                        CREATE TABLE layer_collections (
-                            id UUID PRIMARY KEY,
-                            name text NOT NULL,
-                            description text NOT NULL,
-                            properties "PropertyType"[] NOT NULL
-                        );
-
-                        -- insert the root layer collection
-                        INSERT INTO layer_collections (
-                            id,
-                            name,
-                            description,
-                            properties
-                        ) VALUES (
-                            {root_layer_collection_id},
-                            'Layers',
-                            'All available Geo Engine layers',
-                            ARRAY[]::"PropertyType"[]
-                        );
-
-                        -- insert the unsorted layer collection
-                        INSERT INTO layer_collections (
-                            id,
-                            name,
-                            description,
-                            properties
-                        ) VALUES (
-                            {unsorted_layer_collection_id},
-                            'Unsorted',
-                            'Unsorted Layers',
-                            ARRAY[]::"PropertyType"[]
-                        );
-    
-
-                        CREATE TABLE layers (
-                            id UUID PRIMARY KEY,
-                            name text NOT NULL,
-                            description text NOT NULL,
-                            workflow json NOT NULL,
-                            symbology json,
-                            properties "PropertyType"[] NOT NULL,
-                            metadata json NOT NULL
-                        );
-
-                        CREATE TABLE collection_layers (
-                            collection UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
-                            layer UUID REFERENCES layers(id) ON DELETE CASCADE NOT NULL,
-                            PRIMARY KEY (collection, layer)
-                        );
-
-                        CREATE TABLE collection_children (
-                            parent UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
-                            child UUID REFERENCES layer_collections(id) ON DELETE CASCADE NOT NULL,
-                            PRIMARY KEY (parent, child)
-                        );
-
-                        -- add unsorted layers to root layer collection
-                        INSERT INTO collection_children (parent, child) VALUES
-                        ({root_layer_collection_id}, {unsorted_layer_collection_id});
-
-                        -- TODO: should name be unique (per user)?
-                        CREATE TABLE layer_providers (
-                            id UUID PRIMARY KEY,
-                            type_name text NOT NULL,
-                            name text NOT NULL,
-
-                            definition json NOT NULL
-                        );
-
-                        -- TODO: uploads, providers permissions
-
-                        -- TODO: relationship between uploads and datasets?
-
-                        CREATE TABLE external_users (
-                            id UUID PRIMARY KEY REFERENCES users(id),
-                            external_id character varying (256) UNIQUE,
-                            email character varying (256),
-                            real_name character varying (256),
-                            active boolean NOT NULL
-                        );
-
-                        CREATE TABLE permissions (
-                            -- resource_type "ResourceType" NOT NULL,
-                            role_id UUID REFERENCES roles(id) ON DELETE CASCADE NOT NULL,
-                            permission "Permission" NOT NULL,
-                            dataset_id UUID REFERENCES datasets(id) ON DELETE CASCADE,
-                            layer_id UUID REFERENCES layers(id) ON DELETE CASCADE,
-                            layer_collection_id UUID REFERENCES layer_collections(id) ON DELETE CASCADE,
-                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-                            check(
-                                (
-                                    (dataset_id is not null)::integer +
-                                    (layer_id is not null)::integer +
-                                    (layer_collection_id is not null)::integer +
-                                    (project_id is not null)::integer 
-                                ) = 1
-                            )
-                        );
-
-                        CREATE UNIQUE INDEX ON permissions (role_id, permission, dataset_id);
-                        CREATE UNIQUE INDEX ON permissions (role_id, permission, layer_id);
-                        CREATE UNIQUE INDEX ON permissions (role_id, permission, layer_collection_id);
-                        CREATE UNIQUE INDEX ON permissions (role_id, permission, project_id);   
-
-                        CREATE VIEW user_permitted_datasets AS
-                            SELECT 
-                                r.user_id,
-                                p.dataset_id,
-                                p.permission
-                            FROM 
-                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND dataset_id IS NOT NULL);
-
-                        CREATE VIEW user_permitted_projects AS
-                            SELECT 
-                                r.user_id,
-                                p.project_id,
-                                p.permission
-                            FROM 
-                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND project_id IS NOT NULL); 
-
-                        CREATE VIEW user_permitted_layer_collections AS
-                            SELECT 
-                                r.user_id,
-                                p.layer_collection_id,
-                                p.permission
-                            FROM 
-                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_collection_id IS NOT NULL); 
-
-                        CREATE VIEW user_permitted_layers AS
-                            SELECT 
-                                r.user_id,
-                                p.layer_id,
-                                p.permission
-                            FROM 
-                                user_roles r JOIN permissions p ON (r.role_id = p.role_id AND layer_id IS NOT NULL); 
-
-                        --- permission for unsorted layers and root layer collection
-                        INSERT INTO permissions
-                            (role_id, layer_collection_id, permission)  
-                        VALUES 
-                            ({admin_role_id}, {root_layer_collection_id}, 'Owner'),
-                            ({user_role_id}, {root_layer_collection_id}, 'Read'),
-                            ({anonymous_role_id}, {root_layer_collection_id}, 'Read'),
-                            ({admin_role_id}, {unsorted_layer_collection_id}, 'Owner'),
-                            ({user_role_id}, {unsorted_layer_collection_id}, 'Read'),
-                            ({anonymous_role_id}, {unsorted_layer_collection_id}, 'Read');
-                        "#
-                    ,
-                    admin_role_id = escape_literal(&Role::admin_role_id().to_string()),
-                    admin_email = escape_literal(&user_config.admin_email),
-                    admin_password = escape_literal(&bcrypt::hash(user_config.admin_password).expect("Admin password hash should be valid")),
-                    user_role_id = escape_literal(&Role::registered_user_role_id().to_string()),
-                    anonymous_role_id = escape_literal(&Role::anonymous_role_id().to_string()),
-                    root_layer_collection_id = escape_literal(&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
-                    unsorted_layer_collection_id = escape_literal(&UNSORTED_COLLECTION_ID.to_string())))
-                    .await?;
-                    debug!("Updated user database to schema version {}", version + 1);
-                }
-                // 1 => {
-                // next version
-                // conn.batch_execute(
-                //     "\
-                //     ALTER TABLE users ...
-                //
-                //     UPDATE version SET version = 2;\
-                //     ",
-                // )
-                // .await?;
-                // eprintln!("Updated user database to schema version {}", version + 1);
-                // }
-                _ => return Ok(version),
-            }
-            version += 1;
-        }
+        Ok(())
     }
 }
 
 #[async_trait]
-impl<Tls> ApplicationContext for PostgresContext<Tls>
+impl<Tls> ApplicationContext for ProPostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -609,7 +313,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> ProApplicationContext for PostgresContext<Tls>
+impl<Tls> ProApplicationContext for ProPostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -630,7 +334,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     session: UserSession,
-    context: PostgresContext<Tls>,
+    context: ProPostgresContext<Tls>,
 }
 
 #[async_trait]
@@ -642,7 +346,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type Session = UserSession;
-    type GeoEngineDB = PostgresDb<Tls>;
+    type GeoEngineDB = ProPostgresDb<Tls>;
 
     type TaskContext = SimpleTaskManagerContext;
     type TaskManager = ProTaskManager; // this does not persist across restarts
@@ -650,7 +354,7 @@ where
     type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
     fn db(&self) -> Self::GeoEngineDB {
-        PostgresDb::new(self.context.pool.clone(), self.session.clone())
+        ProPostgresDb::new(self.context.pool.clone(), self.session.clone())
     }
 
     fn tasks(&self) -> Self::TaskManager {
@@ -677,7 +381,7 @@ where
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<PostgresDb<Tls>>::new(
+        Ok(ExecutionContextImpl::<ProPostgresDb<Tls>>::new(
             self.db(),
             self.context.thread_pool.clone(),
             self.context.exe_ctx_tiling_spec,
@@ -695,7 +399,7 @@ where
     }
 }
 
-pub struct PostgresDb<Tls>
+pub struct ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -706,7 +410,7 @@ where
     pub(crate) session: UserSession,
 }
 
-impl<Tls> PostgresDb<Tls>
+impl<Tls> ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -732,7 +436,7 @@ where
     }
 }
 
-impl<Tls> GeoEngineDb for PostgresDb<Tls>
+impl<Tls> GeoEngineDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -741,7 +445,7 @@ where
 {
 }
 
-impl<Tls> ProGeoEngineDb for PostgresDb<Tls>
+impl<Tls> ProGeoEngineDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -774,15 +478,15 @@ mod tests {
         INTERNAL_PROVIDER_ID,
     };
     use crate::pro::permissions::{Permission, PermissionDb};
-    use crate::pro::projects::{LoadVersion, ProProjectDb};
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
     };
+    use crate::pro::util::config::QuotaTrackingMode;
     use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::projects::{
-        CreateProject, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
-        ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
-        UpdateProject,
+        CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
+        ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
+        STRectangle, UpdateProject,
     };
     use crate::util::config::{get_config_element, Postgres};
     use crate::workflows::registry::WorkflowRegistry;
@@ -861,7 +565,7 @@ mod tests {
 
     async fn with_temp_context<F, Fut>(f: F)
     where
-        F: FnOnce(PostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+        F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
             + std::panic::UnwindSafe
             + Send
             + 'static,
@@ -875,11 +579,12 @@ mod tests {
             std::panic::catch_unwind(move || {
                 tokio::task::block_in_place(move || {
                     Handle::current().block_on(async move {
-                        let ctx = PostgresContext::new_with_context_spec(
+                        let ctx = ProPostgresContext::new_with_context_spec(
                             pg_config.clone(),
                             tokio_postgres::NoTls,
                             TestDefault::test_default(),
                             TestDefault::test_default(),
+                            get_config_element::<Quota>().unwrap(),
                         )
                         .await
                         .unwrap();
@@ -953,7 +658,7 @@ mod tests {
         .await;
     }
 
-    async fn set_session(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+    async fn set_session(app_ctx: &ProPostgresContext<NoTls>, projects: &[ProjectListing]) {
         let credentials = UserCredentials {
             email: "foo@example.com".into(),
             password: "secret123".into(),
@@ -964,7 +669,10 @@ mod tests {
         set_session_in_database(app_ctx, projects, session).await;
     }
 
-    async fn set_session_external(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+    async fn set_session_external(
+        app_ctx: &ProPostgresContext<NoTls>,
+        projects: &[ProjectListing],
+    ) {
         let external_user_claims = ExternalUserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -980,7 +688,7 @@ mod tests {
     }
 
     async fn set_session_in_database(
-        app_ctx: &PostgresContext<NoTls>,
+        app_ctx: &ProPostgresContext<NoTls>,
         projects: &[ProjectListing],
         session: UserSession,
     ) {
@@ -1002,7 +710,7 @@ mod tests {
     }
 
     async fn delete_project(
-        app_ctx: &PostgresContext<NoTls>,
+        app_ctx: &ProPostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -1014,7 +722,7 @@ mod tests {
     }
 
     async fn add_permission(
-        app_ctx: &PostgresContext<NoTls>,
+        app_ctx: &ProPostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -1060,7 +768,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     async fn update_projects(
-        app_ctx: &PostgresContext<NoTls>,
+        app_ctx: &ProPostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -1174,7 +882,7 @@ mod tests {
     }
 
     async fn list_projects(
-        app_ctx: &PostgresContext<NoTls>,
+        app_ctx: &ProPostgresContext<NoTls>,
         session: &UserSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
@@ -1194,7 +902,7 @@ mod tests {
         projects
     }
 
-    async fn create_projects(app_ctx: &PostgresContext<NoTls>, session: &UserSession) {
+    async fn create_projects(app_ctx: &ProPostgresContext<NoTls>, session: &UserSession) {
         let db = app_ctx.session_context(session.clone()).db();
 
         for i in 0..10 {
@@ -1217,7 +925,7 @@ mod tests {
         }
     }
 
-    async fn user_reg_login(app_ctx: &PostgresContext<NoTls>) -> UserId {
+    async fn user_reg_login(app_ctx: &ProPostgresContext<NoTls>) -> UserId {
         let user_registration = UserRegistration {
             email: "foo@example.com".into(),
             password: "secret123".into(),
@@ -1245,7 +953,7 @@ mod tests {
     }
 
     //TODO: No duplicate tests for postgres and hashmap implementation possible?
-    async fn external_user_login_twice(app_ctx: &PostgresContext<NoTls>) -> UserSession {
+    async fn external_user_login_twice(app_ctx: &ProPostgresContext<NoTls>) -> UserSession {
         let external_user_claims = ExternalUserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -1301,7 +1009,7 @@ mod tests {
         result
     }
 
-    async fn anonymous(app_ctx: &PostgresContext<NoTls>) {
+    async fn anonymous(app_ctx: &ProPostgresContext<NoTls>) {
         let now: DateTime = chrono::offset::Utc::now().into();
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let then: DateTime = chrono::offset::Utc::now().into();
@@ -2414,7 +2122,12 @@ let ctx = app_ctx.session_context(session);
 
             let admin_session = admin_login(&app_ctx).await;
 
-            let quota = initialize_quota_tracking(app_ctx.session_context(admin_session).db());
+            let quota = initialize_quota_tracking(
+                QuotaTrackingMode::Check,
+                app_ctx.session_context(admin_session).db(),
+                0,
+                60,
+            );
 
             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
@@ -2469,7 +2182,12 @@ let ctx = app_ctx.session_context(session);
                 .await
                 .unwrap();
 
-            let quota = initialize_quota_tracking(app_ctx.session_context(admin_session).db());
+            let quota = initialize_quota_tracking(
+                QuotaTrackingMode::Check,
+                app_ctx.session_context(admin_session).db(),
+                0,
+                60,
+            );
 
             let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
@@ -2520,14 +2238,14 @@ let ctx = app_ctx.session_context(session);
 
             assert_eq!(
                 db.quota_available().await.unwrap(),
-                crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                     .unwrap()
                     .default_available_quota
             );
 
             assert_eq!(
                 admin_db.quota_available_by_user(&user).await.unwrap(),
-                crate::util::config::get_config_element::<crate::pro::util::config::User>()
+                crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                     .unwrap()
                     .default_available_quota
             );
@@ -3822,6 +3540,47 @@ let ctx = app_ctx.session_context(session);
                 db.resolve_dataset_name_to_id(&dataset_name2).await.unwrap(),
                 dataset_id2
             );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_bulk_updates_quota() {
+        with_temp_context(|app_ctx, _| async move {
+            let admin_session = UserSession::admin_session();
+            let db = app_ctx.session_context(admin_session.clone()).db();
+
+            let user1 = app_ctx
+                .register_user(UserRegistration {
+                    email: "user1@example.com".into(),
+                    password: "12345678".into(),
+                    real_name: "User1".into(),
+                })
+                .await
+                .unwrap();
+
+            let user2 = app_ctx
+                .register_user(UserRegistration {
+                    email: "user2@example.com".into(),
+                    password: "12345678".into(),
+                    real_name: "User2".into(),
+                })
+                .await
+                .unwrap();
+
+            // single item in bulk
+            db.bulk_increment_quota_used([(user1, 1)]).await.unwrap();
+
+            assert_eq!(db.quota_used_by_user(&user1).await.unwrap(), 1);
+
+            // multiple items in bulk
+            db.bulk_increment_quota_used([(user1, 1), (user2, 3)])
+                .await
+                .unwrap();
+
+            assert_eq!(db.quota_used_by_user(&user1).await.unwrap(), 2);
+            assert_eq!(db.quota_used_by_user(&user2).await.unwrap(), 3);
         })
         .await;
     }

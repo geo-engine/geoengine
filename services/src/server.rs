@@ -1,9 +1,9 @@
 use crate::apidoc::ApiDoc;
-use crate::contexts::{InMemoryContext, SimpleApplicationContext};
+use crate::contexts::{InMemoryContext, PostgresContext, SimpleApplicationContext};
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::util::config;
-use crate::util::config::get_config_element;
+use crate::util::config::{get_config_element, Backend};
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
     log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
@@ -34,8 +34,6 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         info!("Fixed Session Token: {session_token}");
     }
 
-    info!("Using in memory backend");
-
     let data_path_config: config::DataProvider = get_config_element()?;
 
     let chunk_byte_size = config::get_config_element::<config::QueryContext>()?
@@ -46,24 +44,64 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     register_gdal_drivers_from_list(config::get_config_element::<config::Gdal>()?.allowed_drivers);
 
-    let ctx = InMemoryContext::new_with_data(
-        data_path_config.dataset_defs_path,
-        data_path_config.provider_defs_path,
-        data_path_config.layer_defs_path,
-        data_path_config.layer_collection_defs_path,
-        tiling_spec,
-        chunk_byte_size,
-    )
-    .await;
+    match web_config.backend {
+        Backend::InMemory => {
+            info!("Using in memory backend");
 
-    start(
-        static_files_dir,
-        web_config.bind_address,
-        web_config.api_prefix,
-        web_config.version_api,
-        ctx,
-    )
-    .await
+            let ctx = InMemoryContext::new_with_data(
+                data_path_config.dataset_defs_path,
+                data_path_config.provider_defs_path,
+                data_path_config.layer_defs_path,
+                data_path_config.layer_collection_defs_path,
+                tiling_spec,
+                chunk_byte_size,
+            )
+            .await;
+
+            start(
+                static_files_dir,
+                web_config.bind_address,
+                web_config.api_prefix,
+                web_config.version_api,
+                ctx,
+            )
+            .await
+        }
+        Backend::Postgres => {
+            info!("Using Postgres backend");
+
+            let db_config = config::get_config_element::<config::Postgres>()?;
+            let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
+            pg_config
+                .user(&db_config.user)
+                .password(&db_config.password)
+                .host(&db_config.host)
+                .dbname(&db_config.database)
+                // fix schema by providing `search_path` option
+                .options(&format!("-c search_path={}", db_config.schema));
+
+            let ctx = PostgresContext::new_with_data(
+                pg_config,
+                tokio_postgres::NoTls,
+                data_path_config.dataset_defs_path,
+                data_path_config.provider_defs_path,
+                data_path_config.layer_defs_path,
+                data_path_config.layer_collection_defs_path,
+                tiling_spec,
+                chunk_byte_size,
+            )
+            .await?;
+
+            start(
+                static_files_dir,
+                web_config.bind_address,
+                web_config.api_prefix,
+                web_config.version_api,
+                ctx,
+            )
+            .await
+        }
+    }
 }
 
 async fn start<C>(

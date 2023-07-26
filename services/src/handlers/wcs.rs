@@ -520,7 +520,7 @@ mod tests {
     async fn get_capabilities() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -605,7 +605,7 @@ mod tests {
     async fn describe_coverage() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -678,7 +678,7 @@ mod tests {
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
         );
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -729,7 +729,7 @@ mod tests {
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
         );
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
