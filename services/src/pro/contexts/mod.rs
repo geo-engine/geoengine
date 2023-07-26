@@ -122,7 +122,19 @@ where
         span: CreateSpan,
         path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedVectorOperator> {
-        Box::new(InitializedOperatorWrapper::new(op, span, path))
+        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span, path))
+            as Box<dyn InitializedVectorOperator>;
+
+        if get_config_element::<Cache>()
+            .expect(
+                "Cache config should be present because it is part of the Settings-default.toml",
+            )
+            .enabled
+        {
+            return Box::new(InitializedCacheOperator::new(wrapped));
+        }
+
+        wrapped
     }
 
     fn wrap_initialized_plot_operator(

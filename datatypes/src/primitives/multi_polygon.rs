@@ -351,7 +351,17 @@ pub struct MultiPolygonRef<'g> {
     polygons: Vec<PolygonRef<'g>>,
 }
 
-impl<'r> GeometryRef for MultiPolygonRef<'r> {}
+impl<'r> GeometryRef for MultiPolygonRef<'r> {
+    type GeometryType = MultiPolygon;
+
+    fn as_geometry(&self) -> Self::GeometryType {
+        MultiPolygon::from(self)
+    }
+
+    fn bbox(&self) -> Option<BoundingBox2D> {
+        self.bbox()
+    }
+}
 
 impl<'g> MultiPolygonRef<'g> {
     pub fn new(polygons: Vec<PolygonRef<'g>>) -> Result<Self> {
@@ -377,6 +387,17 @@ impl<'g> MultiPolygonRef<'g> {
 
     pub(crate) fn new_unchecked(polygons: Vec<PolygonRef<'g>>) -> Self {
         Self { polygons }
+    }
+
+    pub fn bbox(&self) -> Option<BoundingBox2D> {
+        self.polygons().iter().fold(None, |bbox, rings| {
+            let lbox = BoundingBox2D::from_coord_ref_iter(rings[0].iter()); // we only need to look at the outer ring coords
+            match (bbox, lbox) {
+                (None, Some(lbox)) => Some(lbox),
+                (Some(bbox), Some(lbox)) => Some(bbox.union(&lbox)),
+                (bbox, None) => bbox,
+            }
+        })
     }
 }
 

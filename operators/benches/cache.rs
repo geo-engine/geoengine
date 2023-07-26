@@ -12,7 +12,7 @@ use geoengine_operators::{
         QueryContextExtensions, QueryProcessor, RasterOperator, SingleRasterSource,
         WorkflowOperatorPath,
     },
-    pro::cache::{cache_operator::InitializedCacheOperator, tile_cache::TileCache},
+    pro::cache::{cache_operator::InitializedCacheOperator, shared_cache::SharedCache},
     processing::{
         AggregateFunctionParams, NeighborhoodAggregate, NeighborhoodAggregateParams,
         NeighborhoodParams,
@@ -53,7 +53,7 @@ async fn main() {
 
     let processor = cached_op.query_processor().unwrap().get_u8().unwrap();
 
-    let tile_cache = Arc::new(TileCache::test_default());
+    let tile_cache = Arc::new(SharedCache::test_default());
 
     let mut extensions = QueryContextExtensions::default();
 

@@ -5,12 +5,18 @@ use snafu::Snafu;
 #[snafu(context(suffix(false)))]
 pub enum CacheError {
     LandingZoneRatioMustBeLargerThanZero,
-    LandingZoneRatioMustBeSmallerThanOne,
+    LandingZoneRatioMustBeSmallerThenHalfCacheSize,
+    ElementAndQueryDoNotIntersect,
     NotEnoughSpaceInLandingZone,
     NotEnoughSpaceInCache,
     QueryNotFoundInLandingZone,
-    InvalidRasterDataTypeForInsertion,
+    OperatorCacheEntryNotFound,
+    InvalidTypeForInsertion,
+    #[snafu(display("The Element inserted into the cache is already expired"))]
     TileExpiredBeforeInsertion,
     NegativeSizeOfLandingZone,
     NegativeSizeOfCache,
+    QueryIdAlreadyInLandingZone,
+    CacheEntryIdAlreadyInCache,
+    CouldNotFilterResults,
 }
