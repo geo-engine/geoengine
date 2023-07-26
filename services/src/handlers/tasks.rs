@@ -178,7 +178,7 @@ mod tests {
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use futures::{channel::oneshot, lock::Mutex};
+    use futures::{channel::oneshot, future::join_all, lock::Mutex};
     use geoengine_datatypes::{error::ErrorSource, util::test::TestDefault};
     use serde_json::json;
     use std::{pin::Pin, sync::Arc};
@@ -240,7 +240,7 @@ mod tests {
             self.unique_id.clone()
         }
 
-        fn task_description(&self) -> String {
+        async fn task_description(&self) -> String {
             "No operation".to_string()
         }
     }
@@ -302,13 +302,16 @@ mod tests {
             None
         }
 
-        fn task_description(&self) -> String {
-            tokio::runtime::Handle::current()
-                .block_on(async { self.subtasks.lock().await })
-                .iter()
-                .map(|subtask| subtask.task_description())
-                .collect::<Vec<_>>()
-                .join(", ")
+        async fn task_description(&self) -> String {
+            join_all(
+                self.subtasks
+                    .lock()
+                    .await
+                    .iter()
+                    .map(|subtask| subtask.task_description()),
+            )
+            .await
+            .join(", ")
         }
 
         async fn subtasks(&self) -> Vec<TaskId> {
@@ -347,7 +350,7 @@ mod tests {
             None
         }
 
-        fn task_description(&self) -> String {
+        async fn task_description(&self) -> String {
             "Failing task with failing cleanup".to_string()
         }
     }

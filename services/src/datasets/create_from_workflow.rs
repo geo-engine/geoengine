@@ -170,7 +170,7 @@ impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C
         Some(self.upload.to_string())
     }
 
-    fn task_description(&self) -> String {
+    async fn task_description(&self) -> String {
         format!(
             "Creating dataset {} from {}",
             self.info.display_name, self.source_name

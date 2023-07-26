@@ -331,18 +331,16 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> {
         EBV_MULTI_OVERVIEW_TASK_TYPE
     }
 
-    fn task_description(&self) -> String {
-        let files = tokio::runtime::Handle::current().block_on(async {
-            with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
-                provider.list_files().map_err(|_| {
-                    NetCdfCf4DProviderError::CdfCfProviderCannotListFiles {
-                        id: NETCDF_CF_PROVIDER_ID,
-                    }
-                })
+    async fn task_description(&self) -> String {
+        let files = with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
+            provider.list_files().map_err(|_| {
+                NetCdfCf4DProviderError::CdfCfProviderCannotListFiles {
+                    id: NETCDF_CF_PROVIDER_ID,
+                }
             })
-            .await
-        });
-        let Ok(files) = files else { return "Failed retrieve file list".to_string() };
+        })
+        .await;
+        let Ok(files) = files else { return "Failed to retrieve file list".to_string() };
         files
             .iter()
             .map(|path| path.to_string_lossy().to_string())
@@ -479,7 +477,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewTask<C> {
         Some(self.file.to_string_lossy().to_string())
     }
 
-    fn task_description(&self) -> String {
+    async fn task_description(&self) -> String {
         self.file.to_string_lossy().to_string()
     }
 }
@@ -576,7 +574,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvRemoveOverviewTask<C> {
         Some(self.file.to_string_lossy().to_string())
     }
 
-    fn task_description(&self) -> String {
+    async fn task_description(&self) -> String {
         self.file.to_string_lossy().to_string()
     }
 }
