@@ -44,11 +44,12 @@ impl TaskResponse {
         (status = 200, description = "Status of the task (running)", body = TaskStatus,
             example = json!({
                 "status": "running",
-                "description": null,
-                "pctComplete": 0,
+                "taskType": "dummy-task",
+                "description": "Demo",
+                "pctComplete": "0.00%",
                 "timeStarted": "2023-02-16T15:25:45.390Z",
                 "estimatedTimeRemaining": "? (± ?)",
-                "info": (),
+                "info": null,
             })
         )
     ),
@@ -86,8 +87,9 @@ async fn status_handler<C: ApplicationContext>(
                 {
                     "taskId": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
                     "status": "completed",
-                    "description": null,
-                    "info": "completed",
+                    "taskType": "dummy-task",
+                    "description": "Demo",
+                    "info": null,
                     "timeTotal": "00:00:30",
                     "timeStarted": "2023-02-16T15:25:45.390Z"
                 }
