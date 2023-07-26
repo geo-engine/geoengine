@@ -182,7 +182,7 @@ where
         let shared_cache = ctx
             .extensions()
             .get::<Arc<SharedCache>>()
-            .expect("`TileCache` extension should be set during `ProContext` creation");
+            .expect("`SharedCache` extension should be set during `ProContext` creation");
 
         let cache_result = shared_cache.query_cache::<S>(&self.cache_key, &query).await;
 
