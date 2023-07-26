@@ -173,7 +173,7 @@ impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C
     fn task_description(&self) -> String {
         format!(
             "Creating dataset {} from {}",
-            self.info.name, self.source_name
+            self.info.display_name, self.source_name
         )
     }
 }
