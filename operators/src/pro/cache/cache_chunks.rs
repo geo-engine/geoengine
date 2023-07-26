@@ -198,11 +198,11 @@ where
     }
 
     fn update_stored_query(&self, _query: &mut Self::Query) -> Result<(), CacheError> {
-        // In this case the elements of the cache are vector data chunks.
-        // In contrast to raster data chunks there is no guarantied extent (spatial, or temporal) other then the bounds of the query itself.
-        // If a vector element has a larger extent then the query the bbox calculated for the collection is larger then the query bbox.
-        // However, there might be a point that is outside of the query bbox but inside the collection bbox. Since it is not in the query bbox it is returned as result of the query.
-        // The query is therefore not updated.
+        // In this case, the elements of the cache are vector data chunks.
+        // Unlike raster data, chunks have no guaranteed extent (spatial or temporal) other than the limits of the query itself.
+        // If a vector element has a larger extent than the query, then the bbox computed for the collection is larger than the query bbox.
+        // However, there may be a point that is outside the query bbox but inside the collection bbox. As it is not in the query bbox, it must not be returned as the result of the query.
+        // So the query is not updated.
         Ok(())
     }
 }
