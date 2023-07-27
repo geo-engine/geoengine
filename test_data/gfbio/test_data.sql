@@ -124,7 +124,7 @@ INSERT INTO abcd_datasets_translation (name, hash) VALUES (
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
     '/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/'
-    | 'TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonRank',
+    || 'TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonRank',
     'bad2f7cae88e4219f2c3b186628189c5380f3c52'
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
@@ -133,7 +133,7 @@ INSERT INTO abcd_datasets_translation (name, hash) VALUES (
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
     '/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/'
-    | 'Licenses/License/URI',
+    || 'Licenses/License/URI',
     '54a52959a34f3c19fa1b0e22cea2ae5c8ce78602'
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
@@ -142,12 +142,12 @@ INSERT INTO abcd_datasets_translation (name, hash) VALUES (
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
     '/DataSets/DataSet/Units/Unit/Gathering/SiteCoordinateSets/SiteCoordinates/'
-    | 'CoordinatesLatLong/LongitudeDecimal',
+    || 'CoordinatesLatLong/LongitudeDecimal',
     'e9eefbe81d4343c6a114b7d522017bf493b89cef'
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
     '/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/'
-    | 'TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonName',
+    || 'TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonName',
     'd22ecb7dd0e5de6e8b2721977056d30aefda1b75'
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
@@ -156,12 +156,12 @@ INSERT INTO abcd_datasets_translation (name, hash) VALUES (
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
     '/DataSets/DataSet/Units/Unit/Gathering/SiteCoordinateSets/SiteCoordinates/'
-    | 'CoordinatesLatLong/SpatialDatum',
+    || 'CoordinatesLatLong/SpatialDatum',
     'f65b72bbbd0b17e7345821a34c1da49d317ca28b'
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
     '/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/'
-    | 'TaxonIdentified/ScientificName/FullScientificNameString',
+    || 'TaxonIdentified/ScientificName/FullScientificNameString',
     '624516976f697c1eacc7bccfb668d2c25ae7756e'
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
@@ -170,7 +170,7 @@ INSERT INTO abcd_datasets_translation (name, hash) VALUES (
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
     '/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/'
-    | 'Licenses/License/Text',
+    || 'Licenses/License/Text',
     '2598ba17aa170832b45c3c206f8133ddddc52c6e'
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
@@ -183,12 +183,12 @@ INSERT INTO abcd_datasets_translation (name, hash) VALUES (
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
     '/DataSets/DataSet/Units/Unit/Gathering/SiteCoordinateSets/SiteCoordinates/'
-    | 'CoordinatesLatLong/LatitudeDecimal',
+    || 'CoordinatesLatLong/LatitudeDecimal',
     '506e190d0ad979d1c7a816223d1ded3604907d91'
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (
     '/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/'
-    | 'Licenses/License/Details',
+    || 'Licenses/License/Details',
     '46b0ed7a1faa8d25b0c681fbbdc2cca60cecbdf0'
 );
 INSERT INTO abcd_datasets_translation (name, hash) VALUES (

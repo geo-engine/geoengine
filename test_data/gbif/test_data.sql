@@ -8,9 +8,9 @@ CREATE TABLE gbif_datasets (
 INSERT INTO gbif_datasets VALUES (
     '92827b65-9987-4479-b135-7ec1bf9cf3d1',
     'Mederos J, Pollet M, Oosterbroek P, Brosens D (2023). Tipuloidea of '
-    | 'Martinique - 2016-2018. Version 1.10. Research Institute for Nature and '
-    | 'Forest (INBO). Occurrence dataset https://doi.org/10.15468/s8h9pg '
-    | 'accessed via GBIF.org on 2023-01-31.',
+    || 'Martinique - 2016-2018. Version 1.10. Research Institute for Nature '
+    || 'and Forest (INBO). Occurrence dataset https://doi.org/10.15468/s8h9pg '
+    || 'accessed via GBIF.org on 2023-01-31.',
     'http://creativecommons.org/publicdomain/zero/1.0/legalcode',
     'http://www.gbif.org/dataset/92827b65-9987-4479-b135-7ec1bf9cf3d1'
 );
@@ -121,8 +121,7 @@ INSERT INTO occurrences VALUES (
     NULL,
     NULL,
     '0101000020E6100000C685032159884EC02237C30DF88C2D40'
-);
-INSERT INTO occurrences VALUES (
+), (
     4021925302,
     '92827b65-9987-4479-b135-7ec1bf9cf3d1',
     'Mart:tipu:13800',
@@ -174,8 +173,7 @@ INSERT INTO occurrences VALUES (
     NULL,
     NULL,
     '0101000020E6100000C22FF5F3A68E4EC024287E8CB95B2D40'
-);
-INSERT INTO occurrences VALUES (
+), (
     4021925303,
     '92827b65-9987-4479-b135-7ec1bf9cf3d1',
     'Mart:tipu:13803',
@@ -252,8 +250,7 @@ INSERT INTO species VALUES (
     'Limoniidae',
     'Rhipidia',
     'Rhipidia willistoniana'
-);
-INSERT INTO species VALUES (
+), (
     1519912,
     'genus',
     'Animalia',
@@ -263,8 +260,7 @@ INSERT INTO species VALUES (
     'Limoniidae',
     'Rhipidia',
     'Rhipidia'
-);
-INSERT INTO species VALUES (
+), (
     5580,
     'family',
     'Animalia',
