@@ -181,7 +181,7 @@ mod tests {
     use futures::channel::mpsc::UnboundedSender;
     use geoengine_datatypes::{
         primitives::{DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
-        util::{arrow::arrow_ipc_file_to_record_batches},
+        util::arrow::arrow_ipc_file_to_record_batches,
     };
     use tokio_postgres::NoTls;
 

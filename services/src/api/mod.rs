@@ -366,14 +366,14 @@ mod tests {
     use crate::datasets::upload::Volume;
     use crate::util::server::{configure_extractors, render_404, render_405};
     use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
-    
+
     use serde::Deserialize;
-    
+
     use utoipa::openapi::path::{OperationBuilder, ParameterBuilder, PathItemBuilder};
     use utoipa::openapi::request_body::RequestBodyBuilder;
     use utoipa::openapi::{
-        AllOfBuilder, ArrayBuilder, ComponentsBuilder, ContentBuilder, ObjectBuilder,
-        OneOfBuilder, OpenApiBuilder, PathItemType, PathsBuilder, ResponseBuilder,
+        AllOfBuilder, ArrayBuilder, ComponentsBuilder, ContentBuilder, ObjectBuilder, OneOfBuilder,
+        OpenApiBuilder, PathItemType, PathsBuilder, ResponseBuilder,
     };
     use utoipa::ToSchema;
 

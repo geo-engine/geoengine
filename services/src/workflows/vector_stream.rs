@@ -193,17 +193,6 @@ fn send_result(
 
 #[cfg(test)]
 mod tests {
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
 
     // #[tokio::test]
     // async fn test_websocket_stream() {

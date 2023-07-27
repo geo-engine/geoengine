@@ -1532,10 +1532,8 @@ mod tests {
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::layers::storage::LayerProviderDb;
 
-    use crate::{
-        tasks::util::NopTaskContext,
-        util::tests::add_land_cover_to_datasets,
-    };
+    use crate::util::tests::with_temp_context;
+    use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
     use geoengine_datatypes::{
         primitives::{
@@ -1557,7 +1555,6 @@ mod tests {
             GdalLoadingInfoTemporalSlice,
         },
     };
-    use crate::util::tests::with_temp_context;
 
     #[test]
     fn it_parses_netcdf_layer_collection_ids() {
@@ -2231,7 +2228,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_irregular_time_series() {
         with_temp_context(|app_ctx, _| async move {
-            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let land_cover_dataset_id = add_land_cover_to_datasets(&ctx.db()).await;

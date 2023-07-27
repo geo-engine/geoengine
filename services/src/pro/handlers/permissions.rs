@@ -151,7 +151,6 @@ where
 #[cfg(test)]
 mod tests {
 
-    
     use geoengine_operators::{
         engine::{RasterOperator, VectorOperator, WorkflowOperatorPath},
         source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},

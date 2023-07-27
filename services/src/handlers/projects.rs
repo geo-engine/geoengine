@@ -350,16 +350,16 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    
+
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    
+
     use serde_json::json;
-    use tokio_postgres::Socket;
     use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
+    use tokio_postgres::Socket;
 
     // async fn create_test_helper(method: Method) -> ServiceResponse {
     //     with_temp_context(|app_ctx, _| async move {
-            
+
     //     let ctx = app_ctx.default_session_context().await.unwrap();
 
     //     let session_id = ctx.session().id();
@@ -403,26 +403,24 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn create_invalid_body() {
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session_id = ctx.session().id();
+            let session_id = ctx.session().id();
 
-        let req = test::TestRequest::post()
-            .uri("/project")
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_payload("no json");
-        let res = send_test_request(req, app_ctx).await;
+            let req = test::TestRequest::post()
+                .uri("/project")
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+                .set_payload("no json");
+            let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(
-            res,
-            415,
-            "UnsupportedMediaType",
-            "Unsupported content type header.",
-        )
-        .await;
-
+            ErrorResponse::assert(
+                res,
+                415,
+                "UnsupportedMediaType",
+                "Unsupported content type header.",
+            )
+            .await;
         })
         .await;
     }
@@ -430,7 +428,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn create_missing_fields() {
         with_temp_context(|app_ctx, _| async move {
-            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
@@ -461,7 +458,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn create_missing_header() {
         with_temp_context(|app_ctx, _| async move {
-            
         let create = json!({
             "description": "Foo".to_string(),
             "bounds": STRectangle::new(SpatialReference::epsg_4326(), 0., 0., 1., 1., 0, 1).unwrap(),
@@ -484,34 +480,32 @@ mod tests {
 
     async fn list_test_helper(method: Method) -> ServiceResponse {
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = ctx.session();
-        let _ = create_project_helper(&app_ctx).await;
+            let session = ctx.session();
+            let _ = create_project_helper(&app_ctx).await;
 
-        let req = test::TestRequest::default()
-            .method(method)
-            .uri(&format!(
-                "/projects?{}",
-                &serde_urlencoded::to_string([
-                    (
-                        "permissions",
-                        serde_json::json! {["Read", "Write", "Owner"]}
-                            .to_string()
-                            .as_str()
-                    ),
-                    // omitted ("filter", "None"),
-                    ("order", "NameDesc"),
-                    ("offset", "0"),
-                    ("limit", "2"),
-                ])
-                .unwrap()
-            ))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        send_test_request(req, app_ctx).await
-
+            let req = test::TestRequest::default()
+                .method(method)
+                .uri(&format!(
+                    "/projects?{}",
+                    &serde_urlencoded::to_string([
+                        (
+                            "permissions",
+                            serde_json::json! {["Read", "Write", "Owner"]}
+                                .to_string()
+                                .as_str()
+                        ),
+                        // omitted ("filter", "None"),
+                        ("order", "NameDesc"),
+                        ("offset", "0"),
+                        ("limit", "2"),
+                    ])
+                    .unwrap()
+                ))
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+            send_test_request(req, app_ctx).await
         })
         .await
     }
@@ -534,56 +528,52 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn list_missing_header() {
         with_temp_context(|app_ctx, _| async move {
-            
-        create_project_helper(&app_ctx).await;
+            create_project_helper(&app_ctx).await;
 
-        let req = test::TestRequest::get()
-            .uri(&format!(
-                "/projects?{}",
-                &serde_urlencoded::to_string([
-                    (
-                        "permissions",
-                        serde_json::json! {["Read", "Write", "Owner"]}
-                            .to_string()
-                            .as_str()
-                    ),
-                    // omitted ("filter", "None"),
-                    ("order", "NameDesc"),
-                    ("offset", "0"),
-                    ("limit", "2"),
-                ])
-                .unwrap()
-            ))
-            .append_header((header::CONTENT_LENGTH, 0));
-        let res = send_test_request(req, app_ctx).await;
+            let req = test::TestRequest::get()
+                .uri(&format!(
+                    "/projects?{}",
+                    &serde_urlencoded::to_string([
+                        (
+                            "permissions",
+                            serde_json::json! {["Read", "Write", "Owner"]}
+                                .to_string()
+                                .as_str()
+                        ),
+                        // omitted ("filter", "None"),
+                        ("order", "NameDesc"),
+                        ("offset", "0"),
+                        ("limit", "2"),
+                    ])
+                    .unwrap()
+                ))
+                .append_header((header::CONTENT_LENGTH, 0));
+            let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(
-            res,
-            401,
-            "Unauthorized",
-            "Authorization error: Header with authorization token not provided.",
-        )
-        .await;
-
+            ErrorResponse::assert(
+                res,
+                401,
+                "Unauthorized",
+                "Authorization error: Header with authorization token not provided.",
+            )
+            .await;
         })
         .await;
     }
 
     async fn load_test_helper(method: Method) -> ServiceResponse {
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+            let session = ctx.session().clone();
+            let project = create_project_helper(&app_ctx).await;
 
-        let req = test::TestRequest::default()
-            .method(method)
-            .uri(&format!("/project/{project}"))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        send_test_request(req, app_ctx).await
-
+            let req = test::TestRequest::default()
+                .method(method)
+                .uri(&format!("/project/{project}"))
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+            send_test_request(req, app_ctx).await
         })
         .await
     }
@@ -609,22 +599,20 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn load_missing_header() {
         with_temp_context(|app_ctx, _| async move {
-            
-        let project = create_project_helper(&app_ctx).await;
+            let project = create_project_helper(&app_ctx).await;
 
-        let req = test::TestRequest::get()
-            .uri(&format!("/project/{project}"))
-            .append_header((header::CONTENT_LENGTH, 0));
-        let res = send_test_request(req, app_ctx).await;
+            let req = test::TestRequest::get()
+                .uri(&format!("/project/{project}"))
+                .append_header((header::CONTENT_LENGTH, 0));
+            let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(
-            res,
-            401,
-            "Unauthorized",
-            "Authorization error: Header with authorization token not provided.",
-        )
-        .await;
-
+            ErrorResponse::assert(
+                res,
+                401,
+                "Unauthorized",
+                "Authorization error: Header with authorization token not provided.",
+            )
+            .await;
         })
         .await;
     }
@@ -632,19 +620,17 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn load_not_found() {
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session_id = ctx.session().id();
+            let session_id = ctx.session().id();
 
-        let req = test::TestRequest::get()
-            .uri("/project")
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+            let req = test::TestRequest::get()
+                .uri("/project")
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(res, 405, "MethodNotAllowed", "HTTP method not allowed.").await;
-
+            ErrorResponse::assert(res, 405, "MethodNotAllowed", "HTTP method not allowed.").await;
         })
         .await;
     }
@@ -653,7 +639,7 @@ mod tests {
     //     method: Method,
     // ) -> (InMemoryContext, SimpleSession, ProjectId, ServiceResponse) {
     //     with_temp_context(|app_ctx, _| async move {
-            
+
     //     let ctx = app_ctx.default_session_context().await.unwrap();
 
     //     let session = ctx.session().clone();
@@ -694,28 +680,26 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn update_invalid_body() {
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+            let session = ctx.session().clone();
+            let project = create_project_helper(&app_ctx).await;
 
-        let req = test::TestRequest::patch()
-            .uri(&format!("/project/{project}"))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-            .set_payload("no json");
-        let res = send_test_request(req, app_ctx).await;
+            let req = test::TestRequest::patch()
+                .uri(&format!("/project/{project}"))
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
+                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+                .set_payload("no json");
+            let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(
-            res,
-            400,
-            "BodyDeserializeError",
-            "expected ident at line 1 column 2",
-        )
-        .await;
-
+            ErrorResponse::assert(
+                res,
+                400,
+                "BodyDeserializeError",
+                "expected ident at line 1 column 2",
+            )
+            .await;
         })
         .await;
     }
@@ -723,42 +707,40 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn update_missing_fields() {
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+            let session = ctx.session().clone();
+            let project = create_project_helper(&app_ctx).await;
 
-        let update = json!({
-            "name": "TestUpdate",
-            "description": None::<String>,
-            "layers": vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-                workflow: WorkflowId::new(),
-                name: "L1".to_string(),
-                visibility: Default::default(),
-                symbology: Symbology::Raster(RasterSymbology {
-                    opacity: 1.0,
-                    colorizer: Colorizer::Rgba,
-                })
-            })],
-            "bounds": None::<String>,
-            "time_step": None::<String>,
-        });
+            let update = json!({
+                "name": "TestUpdate",
+                "description": None::<String>,
+                "layers": vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
+                    workflow: WorkflowId::new(),
+                    name: "L1".to_string(),
+                    visibility: Default::default(),
+                    symbology: Symbology::Raster(RasterSymbology {
+                        opacity: 1.0,
+                        colorizer: Colorizer::Rgba,
+                    })
+                })],
+                "bounds": None::<String>,
+                "time_step": None::<String>,
+            });
 
-        let req = test::TestRequest::patch()
-            .uri(&format!("/project/{project}"))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-            .set_json(&update);
-        let res = send_test_request(req, app_ctx).await;
+            let req = test::TestRequest::patch()
+                .uri(&format!("/project/{project}"))
+                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+                .set_json(&update);
+            let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(
-            res,
-            400,
-            "BodyDeserializeError",
-            "missing field `id` at line 1 column 260",
-        )
-        .await;
-
+            ErrorResponse::assert(
+                res,
+                400,
+                "BodyDeserializeError",
+                "missing field `id` at line 1 column 260",
+            )
+            .await;
         })
         .await;
     }
@@ -771,11 +753,13 @@ mod tests {
             session: &SimpleSession,
             project_id: ProjectId,
             update: UpdateProject,
-        ) -> Vec<ProjectLayer> where
-        Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-        <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-        <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-        <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,{
+        ) -> Vec<ProjectLayer>
+        where
+            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+            <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+            <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+            <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+        {
             let req = test::TestRequest::patch()
                 .uri(&format!("/project/{project_id}"))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
@@ -795,124 +779,122 @@ mod tests {
         }
 
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+            let session = ctx.session().clone();
+            let project = create_project_helper(&app_ctx).await;
 
-        let layer_1 = ProjectLayer {
-            workflow: WorkflowId::new(),
-            name: "L1".to_string(),
-            visibility: LayerVisibility {
-                data: true,
-                legend: false,
-            },
-            symbology: Symbology::Raster(RasterSymbology {
-                opacity: 1.0,
-                colorizer: Colorizer::Rgba,
-            }),
-        };
+            let layer_1 = ProjectLayer {
+                workflow: WorkflowId::new(),
+                name: "L1".to_string(),
+                visibility: LayerVisibility {
+                    data: true,
+                    legend: false,
+                },
+                symbology: Symbology::Raster(RasterSymbology {
+                    opacity: 1.0,
+                    colorizer: Colorizer::Rgba,
+                }),
+            };
 
-        let layer_2 = ProjectLayer {
-            workflow: WorkflowId::new(),
-            name: "L2".to_string(),
-            visibility: LayerVisibility {
-                data: false,
-                legend: true,
-            },
-            symbology: Symbology::Raster(RasterSymbology {
-                opacity: 1.0,
-                colorizer: Colorizer::Rgba,
-            }),
-        };
+            let layer_2 = ProjectLayer {
+                workflow: WorkflowId::new(),
+                name: "L2".to_string(),
+                visibility: LayerVisibility {
+                    data: false,
+                    legend: true,
+                },
+                symbology: Symbology::Raster(RasterSymbology {
+                    opacity: 1.0,
+                    colorizer: Colorizer::Rgba,
+                }),
+            };
 
-        // add first layer
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: Some(vec![LayerUpdate::UpdateOrInsert(layer_1.clone())]),
-                    plots: None,
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![layer_1.clone()]
-        );
+            // add first layer
+            assert_eq!(
+                update_and_load_latest(
+                    &app_ctx,
+                    &session,
+                    project,
+                    UpdateProject {
+                        id: project,
+                        name: None,
+                        description: None,
+                        layers: Some(vec![LayerUpdate::UpdateOrInsert(layer_1.clone())]),
+                        plots: None,
+                        bounds: None,
+                        time_step: None,
+                    }
+                )
+                .await,
+                vec![layer_1.clone()]
+            );
 
-        // add second layer
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: Some(vec![
-                        LayerUpdate::None(Default::default()),
-                        LayerUpdate::UpdateOrInsert(layer_2.clone())
-                    ]),
-                    plots: None,
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![layer_1.clone(), layer_2.clone()]
-        );
+            // add second layer
+            assert_eq!(
+                update_and_load_latest(
+                    &app_ctx,
+                    &session,
+                    project,
+                    UpdateProject {
+                        id: project,
+                        name: None,
+                        description: None,
+                        layers: Some(vec![
+                            LayerUpdate::None(Default::default()),
+                            LayerUpdate::UpdateOrInsert(layer_2.clone())
+                        ]),
+                        plots: None,
+                        bounds: None,
+                        time_step: None,
+                    }
+                )
+                .await,
+                vec![layer_1.clone(), layer_2.clone()]
+            );
 
-        // remove first layer
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: Some(vec![
-                        LayerUpdate::Delete(Default::default()),
-                        LayerUpdate::None(Default::default()),
-                    ]),
-                    plots: None,
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![layer_2.clone()]
-        );
+            // remove first layer
+            assert_eq!(
+                update_and_load_latest(
+                    &app_ctx,
+                    &session,
+                    project,
+                    UpdateProject {
+                        id: project,
+                        name: None,
+                        description: None,
+                        layers: Some(vec![
+                            LayerUpdate::Delete(Default::default()),
+                            LayerUpdate::None(Default::default()),
+                        ]),
+                        plots: None,
+                        bounds: None,
+                        time_step: None,
+                    }
+                )
+                .await,
+                vec![layer_2.clone()]
+            );
 
-        // clear layers
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: Some(vec![]),
-                    plots: None,
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![]
-        );
-
+            // clear layers
+            assert_eq!(
+                update_and_load_latest(
+                    &app_ctx,
+                    &session,
+                    project,
+                    UpdateProject {
+                        id: project,
+                        name: None,
+                        description: None,
+                        layers: Some(vec![]),
+                        plots: None,
+                        bounds: None,
+                        time_step: None,
+                    }
+                )
+                .await,
+                vec![]
+            );
         })
         .await;
     }
@@ -925,11 +907,13 @@ mod tests {
             session: &SimpleSession,
             project_id: ProjectId,
             update: UpdateProject,
-        ) -> Vec<Plot> where
-        Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-        <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-        <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-        <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,{
+        ) -> Vec<Plot>
+        where
+            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+            <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+            <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+            <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+        {
             let req = test::TestRequest::patch()
                 .uri(&format!("/project/{project_id}"))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
@@ -949,115 +933,113 @@ mod tests {
         }
 
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+            let session = ctx.session().clone();
+            let project = create_project_helper(&app_ctx).await;
 
-        let plot_1 = Plot {
-            workflow: WorkflowId::new(),
-            name: "P1".to_string(),
-        };
+            let plot_1 = Plot {
+                workflow: WorkflowId::new(),
+                name: "P1".to_string(),
+            };
 
-        let plot_2 = Plot {
-            workflow: WorkflowId::new(),
-            name: "P2".to_string(),
-        };
+            let plot_2 = Plot {
+                workflow: WorkflowId::new(),
+                name: "P2".to_string(),
+            };
 
-        // add first plot
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: None,
-                    plots: Some(vec![PlotUpdate::UpdateOrInsert(plot_1.clone())]),
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![plot_1.clone()]
-        );
+            // add first plot
+            assert_eq!(
+                update_and_load_latest(
+                    &app_ctx,
+                    &session,
+                    project,
+                    UpdateProject {
+                        id: project,
+                        name: None,
+                        description: None,
+                        layers: None,
+                        plots: Some(vec![PlotUpdate::UpdateOrInsert(plot_1.clone())]),
+                        bounds: None,
+                        time_step: None,
+                    }
+                )
+                .await,
+                vec![plot_1.clone()]
+            );
 
-        // add second plot
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: None,
-                    plots: Some(vec![
-                        PlotUpdate::None(Default::default()),
-                        PlotUpdate::UpdateOrInsert(plot_2.clone())
-                    ]),
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![plot_1.clone(), plot_2.clone()]
-        );
+            // add second plot
+            assert_eq!(
+                update_and_load_latest(
+                    &app_ctx,
+                    &session,
+                    project,
+                    UpdateProject {
+                        id: project,
+                        name: None,
+                        description: None,
+                        layers: None,
+                        plots: Some(vec![
+                            PlotUpdate::None(Default::default()),
+                            PlotUpdate::UpdateOrInsert(plot_2.clone())
+                        ]),
+                        bounds: None,
+                        time_step: None,
+                    }
+                )
+                .await,
+                vec![plot_1.clone(), plot_2.clone()]
+            );
 
-        // remove first plot
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: None,
-                    plots: Some(vec![
-                        PlotUpdate::Delete(Default::default()),
-                        PlotUpdate::None(Default::default()),
-                    ]),
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![plot_2.clone()]
-        );
+            // remove first plot
+            assert_eq!(
+                update_and_load_latest(
+                    &app_ctx,
+                    &session,
+                    project,
+                    UpdateProject {
+                        id: project,
+                        name: None,
+                        description: None,
+                        layers: None,
+                        plots: Some(vec![
+                            PlotUpdate::Delete(Default::default()),
+                            PlotUpdate::None(Default::default()),
+                        ]),
+                        bounds: None,
+                        time_step: None,
+                    }
+                )
+                .await,
+                vec![plot_2.clone()]
+            );
 
-        // clear plots
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: None,
-                    plots: Some(vec![]),
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![]
-        );
-
+            // clear plots
+            assert_eq!(
+                update_and_load_latest(
+                    &app_ctx,
+                    &session,
+                    project,
+                    UpdateProject {
+                        id: project,
+                        name: None,
+                        description: None,
+                        layers: None,
+                        plots: Some(vec![]),
+                        bounds: None,
+                        time_step: None,
+                    }
+                )
+                .await,
+                vec![]
+            );
         })
         .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn delete() {
-        with_temp_context(|app_ctx, _| async move {            
+        with_temp_context(|app_ctx, _| async move {
             let ctx = app_ctx.default_session_context().await.unwrap();
 
             let session = ctx.session().clone();

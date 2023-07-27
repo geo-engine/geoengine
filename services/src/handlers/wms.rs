@@ -479,9 +479,11 @@ mod tests {
     use super::*;
     use crate::contexts::{Session, SimpleApplicationContext};
     use crate::handlers::ErrorResponse;
+    use crate::util::tests::with_temp_context;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
-        register_ndvi_workflow_helper_with_cache_ttl, send_test_request, with_temp_context_from_spec,
+        register_ndvi_workflow_helper_with_cache_ttl, send_test_request,
+        with_temp_context_from_spec,
     };
     use actix_web::dev::ServiceResponse;
     use actix_web::http::header;
@@ -497,12 +499,10 @@ mod tests {
     use std::convert::TryInto;
     use std::marker::PhantomData;
     use xml::ParserConfig;
-    use crate::util::tests::with_temp_context;
 
     async fn test_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
         let path = path.map(ToString::to_string);
         with_temp_context(|app_ctx, _| async move {
-            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -549,19 +549,17 @@ mod tests {
 
     async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+            let ctx = app_ctx.default_session_context().await.unwrap();
+            let session_id = ctx.session().id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+            let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
-        let req = actix_web::test::TestRequest::with_uri(&format!(
-            "/wms/{id}?request=GetCapabilities&service=WMS"
-        ))
-        .method(method)
-        .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, app_ctx).await
-
+            let req = actix_web::test::TestRequest::with_uri(&format!(
+                "/wms/{id}?request=GetCapabilities&service=WMS"
+            ))
+            .method(method)
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            send_test_request(req, app_ctx).await
         })
         .await
     }
@@ -590,47 +588,45 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn png_from_stream_non_full() {
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let exe_ctx = ctx.execution_context().unwrap();
+            let ctx = app_ctx.default_session_context().await.unwrap();
+            let exe_ctx = ctx.execution_context().unwrap();
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            tiling_specification: exe_ctx.tiling_specification(),
-            meta_data: Box::new(create_ndvi_meta_data()),
-            _phantom_data: PhantomData,
-        };
+            let gdal_source = GdalSourceProcessor::<u8> {
+                tiling_specification: exe_ctx.tiling_specification(),
+                meta_data: Box::new(create_ndvi_meta_data()),
+                _phantom_data: PhantomData,
+            };
 
-        let query_partition =
-            SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+            let query_partition =
+                SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
-        let (image_bytes, _) = raster_stream_to_png_bytes(
-            gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_partition,
-                time_interval: geoengine_datatypes::primitives::TimeInterval::new(
-                    1_388_534_400_000,
-                    1_388_534_400_000 + 1000,
-                )
-                .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
-            },
-            ctx.query_context().unwrap(),
-            360,
-            180,
-            None,
-            None,
-            Box::pin(futures::future::pending()),
-        )
-        .await
-        .unwrap();
+            let (image_bytes, _) = raster_stream_to_png_bytes(
+                gdal_source.boxed(),
+                RasterQueryRectangle {
+                    spatial_bounds: query_partition,
+                    time_interval: geoengine_datatypes::primitives::TimeInterval::new(
+                        1_388_534_400_000,
+                        1_388_534_400_000 + 1000,
+                    )
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
+                },
+                ctx.query_context().unwrap(),
+                360,
+                180,
+                None,
+                None,
+                Box::pin(futures::future::pending()),
+            )
+            .await
+            .unwrap();
 
-        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small.png");
+            // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small.png");
 
-        assert_eq!(
-            include_bytes!("../../../test_data/wms/raster_small.png") as &[u8],
-            image_bytes.as_slice()
-        );
-
+            assert_eq!(
+                include_bytes!("../../../test_data/wms/raster_small.png") as &[u8],
+                image_bytes.as_slice()
+            );
         })
         .await;
     }
@@ -679,7 +675,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_map_ndvi() {
         with_temp_context(|app_ctx, _| async move {
-            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -774,117 +769,117 @@ mod tests {
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
             |app_ctx, _| async move {
+                let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
+                let session_id = ctx.session().id();
 
-        let session_id = ctx.session().id();
+                let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+                let colorizer = Colorizer::linear_gradient(
+                    vec![
+                        (0.0, RgbaColor::white()).try_into().unwrap(),
+                        (1.0, RgbaColor::black()).try_into().unwrap(),
+                    ],
+                    RgbaColor::transparent(),
+                    DefaultColors::OverUnder {
+                        over_color: RgbaColor::white(),
+                        under_color: RgbaColor::black(),
+                    },
+                )
+                .unwrap();
 
-        let colorizer = Colorizer::linear_gradient(
-            vec![
-                (0.0, RgbaColor::white()).try_into().unwrap(),
-                (1.0, RgbaColor::black()).try_into().unwrap(),
-            ],
-            RgbaColor::transparent(),
-            DefaultColors::OverUnder {
-                over_color: RgbaColor::white(),
-                under_color: RgbaColor::black(),
+                let params = &[
+                    ("request", "GetMap"),
+                    ("service", "WMS"),
+                    ("version", "1.3.0"),
+                    ("layers", &id.to_string()),
+                    ("bbox", "20,-10,80,50"),
+                    ("width", "600"),
+                    ("height", "600"),
+                    ("crs", "EPSG:4326"),
+                    (
+                        "styles",
+                        &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+                    ),
+                    ("format", "image/png"),
+                    ("time", "2014-01-01T00:00:00.0Z"),
+                ];
+
+                let req = actix_web::test::TestRequest::get()
+                    .uri(&format!(
+                        "/wms/{}?{}",
+                        id,
+                        serde_urlencoded::to_string(params).unwrap()
+                    ))
+                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+                let res = send_test_request(req, app_ctx).await;
+
+                assert_eq!(res.status(), 200);
+
+                let image_bytes = actix_web::test::read_body(res).await;
+
+                // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_colorizer.png");
+
+                assert_eq!(
+                    include_bytes!("../../../test_data/wms/get_map_colorizer.png") as &[u8],
+                    image_bytes
+                );
             },
         )
-        .unwrap();
-
-        let params = &[
-            ("request", "GetMap"),
-            ("service", "WMS"),
-            ("version", "1.3.0"),
-            ("layers", &id.to_string()),
-            ("bbox", "20,-10,80,50"),
-            ("width", "600"),
-            ("height", "600"),
-            ("crs", "EPSG:4326"),
-            (
-                "styles",
-                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
-            ),
-            ("format", "image/png"),
-            ("time", "2014-01-01T00:00:00.0Z"),
-        ];
-
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!(
-                "/wms/{}?{}",
-                id,
-                serde_urlencoded::to_string(params).unwrap()
-            ))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
-
-        assert_eq!(res.status(), 200);
-
-        let image_bytes = actix_web::test::read_body(res).await;
-
-        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_colorizer.png");
-
-        assert_eq!(
-            include_bytes!("../../../test_data/wms/get_map_colorizer.png") as &[u8],
-            image_bytes
-        );}).await;
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_zoomes_very_far() {
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+            let ctx = app_ctx.default_session_context().await.unwrap();
+            let session_id = ctx.session().id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+            let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
-        let colorizer = Colorizer::linear_gradient(
-            vec![
-                (0.0, RgbaColor::white()).try_into().unwrap(),
-                (255.0, RgbaColor::black()).try_into().unwrap(),
-            ],
-            RgbaColor::transparent(),
-            DefaultColors::OverUnder {
-                over_color: RgbaColor::white(),
-                under_color: RgbaColor::black(),
-            },
-        )
-        .unwrap();
+            let colorizer = Colorizer::linear_gradient(
+                vec![
+                    (0.0, RgbaColor::white()).try_into().unwrap(),
+                    (255.0, RgbaColor::black()).try_into().unwrap(),
+                ],
+                RgbaColor::transparent(),
+                DefaultColors::OverUnder {
+                    over_color: RgbaColor::white(),
+                    under_color: RgbaColor::black(),
+                },
+            )
+            .unwrap();
 
-        let params = &[
-            ("request", "GetMap"),
-            ("service", "WMS"),
-            ("version", "1.3.0"),
-            ("layers", &id.to_string()),
-            (
-                "bbox",
-                "1.95556640625,0.90087890625,1.9775390625,0.9228515625",
-            ),
-            ("width", "256"),
-            ("height", "256"),
-            ("crs", "EPSG:4326"),
-            (
-                "styles",
-                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
-            ),
-            ("format", "image/png"),
-            ("time", "2014-04-01T12:00:00.0Z"),
-        ];
+            let params = &[
+                ("request", "GetMap"),
+                ("service", "WMS"),
+                ("version", "1.3.0"),
+                ("layers", &id.to_string()),
+                (
+                    "bbox",
+                    "1.95556640625,0.90087890625,1.9775390625,0.9228515625",
+                ),
+                ("width", "256"),
+                ("height", "256"),
+                ("crs", "EPSG:4326"),
+                (
+                    "styles",
+                    &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+                ),
+                ("format", "image/png"),
+                ("time", "2014-04-01T12:00:00.0Z"),
+            ];
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!(
-                "/wms/{}?{}",
-                id,
-                serde_urlencoded::to_string(params).unwrap()
-            ))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+            let req = actix_web::test::TestRequest::get()
+                .uri(&format!(
+                    "/wms/{}?{}",
+                    id,
+                    serde_urlencoded::to_string(params).unwrap()
+                ))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let res = send_test_request(req, app_ctx).await;
 
-        assert_eq!(res.status(), 200);
-
+            assert_eq!(res.status(), 200);
         })
         .await;
     }
@@ -892,7 +887,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn default_error() {
         with_temp_context(|app_ctx, _| async move {
-            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -961,7 +955,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn json_error() {
         with_temp_context(|app_ctx, _| async move {
-            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -1019,7 +1012,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_sets_cache_control_header_no_cache() {
         with_temp_context(|app_ctx, _| async move {
-            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -1047,7 +1039,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_sets_cache_control_header_with_cache() {
         with_temp_context(|app_ctx, _| async move {
-            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 

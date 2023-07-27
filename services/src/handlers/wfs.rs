@@ -706,11 +706,13 @@ mod tests {
     use super::*;
 
     use crate::api::model::datatypes::{DataId, DatasetId};
-    use crate::contexts::{Session, SimpleApplicationContext, PostgresContext};
+    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
     use crate::datasets::storage::{DatasetDefinition, DatasetStore};
     use crate::handlers::ErrorResponse;
+    use crate::util::tests::with_temp_context;
+    use crate::util::tests::with_temp_context_from_spec;
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
-    use crate::{workflows::workflow::Workflow};
+    use crate::workflows::workflow::Workflow;
     use actix_web::dev::ServiceResponse;
     use actix_web::http::header;
     use actix_web::{http::Method, test};
@@ -722,19 +724,16 @@ mod tests {
     use geoengine_operators::source::CsvSourceParameters;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
-    use tokio_postgres::Socket;
-    use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
     use std::fs;
     use std::io::{Seek, SeekFrom, Write};
     use std::path::Path;
+    use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
+    use tokio_postgres::Socket;
     use xml::ParserConfig;
-    use crate::util::tests::with_temp_context;
-    use crate::util::tests::with_temp_context_from_spec;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn mock_test() {
         with_temp_context(|app_ctx, _| async move {
-            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -843,39 +842,37 @@ x;y
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
         with_temp_context(|app_ctx, _| async move {
-            
-        let session_id = app_ctx.default_session_id().await;
+            let session_id = app_ctx.default_session_id().await;
 
-        let workflow = Workflow {
-            operator: TypedOperator::Vector(Box::new(CsvSource {
-                params: CsvSourceParameters {
-                    file_path: temp_file.path().into(),
-                    field_separator: ';',
-                    geometry: CsvGeometrySpecification::XY {
-                        x: "x".into(),
-                        y: "y".into(),
+            let workflow = Workflow {
+                operator: TypedOperator::Vector(Box::new(CsvSource {
+                    params: CsvSourceParameters {
+                        file_path: temp_file.path().into(),
+                        field_separator: ';',
+                        geometry: CsvGeometrySpecification::XY {
+                            x: "x".into(),
+                            y: "y".into(),
+                        },
+                        time: CsvTimeSpecification::None,
                     },
-                    time: CsvTimeSpecification::None,
-                },
-            })),
-        };
+                })),
+            };
 
-        let workflow_id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
-            .db()
-            .register_workflow(workflow)
-            .await
-            .unwrap();
+            let workflow_id = app_ctx
+                .default_session_context()
+                .await
+                .unwrap()
+                .db()
+                .register_workflow(workflow)
+                .await
+                .unwrap();
 
-        let req = test::TestRequest::with_uri(&format!(
-            "/wfs/{workflow_id}?request=GetCapabilities&service=WFS"
-        ))
-        .method(method)
-        .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, app_ctx).await
-
+            let req = test::TestRequest::with_uri(&format!(
+                "/wfs/{workflow_id}?request=GetCapabilities&service=WFS"
+            ))
+            .method(method)
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            send_test_request(req, app_ctx).await
         })
         .await
     }
@@ -915,7 +912,6 @@ x;y
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
         with_temp_context(|app_ctx, _| async move {
-            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -1001,7 +997,6 @@ x;y
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_feature_registry_missing_fields() {
         with_temp_context(|app_ctx, _| async move {
-            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -1037,49 +1032,47 @@ x;y
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
         with_temp_context(|app_ctx, _| async move {
-            
-        let session_id = app_ctx.default_session_id().await;
+            let session_id = app_ctx.default_session_id().await;
 
-        let workflow = Workflow {
-            operator: TypedOperator::Vector(Box::new(CsvSource {
-                params: CsvSourceParameters {
-                    file_path: temp_file.path().into(),
-                    field_separator: ';',
-                    geometry: CsvGeometrySpecification::XY {
-                        x: "x".into(),
-                        y: "y".into(),
+            let workflow = Workflow {
+                operator: TypedOperator::Vector(Box::new(CsvSource {
+                    params: CsvSourceParameters {
+                        file_path: temp_file.path().into(),
+                        field_separator: ';',
+                        geometry: CsvGeometrySpecification::XY {
+                            x: "x".into(),
+                            y: "y".into(),
+                        },
+                        time: CsvTimeSpecification::None,
                     },
-                    time: CsvTimeSpecification::None,
-                },
-            })),
-        };
+                })),
+            };
 
-        let workflow_id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
-            .db()
-            .register_workflow(workflow)
-            .await
-            .unwrap();
+            let workflow_id = app_ctx
+                .default_session_context()
+                .await
+                .unwrap()
+                .db()
+                .register_workflow(workflow)
+                .await
+                .unwrap();
 
-        let params = &[
-            ("request", "GetFeature"),
-            ("service", "WFS"),
-            ("version", "2.0.0"),
-            ("typeNames", &workflow_id.to_string()),
-            ("bbox", "-90,-180,90,180"),
-            ("srsName", "EPSG:4326"),
-        ];
-        let req = test::TestRequest::with_uri(&format!(
-            "/wfs/{}?{}",
-            workflow_id,
-            &serde_urlencoded::to_string(params).unwrap()
-        ))
-        .method(method)
-        .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, app_ctx).await
-
+            let params = &[
+                ("request", "GetFeature"),
+                ("service", "WFS"),
+                ("version", "2.0.0"),
+                ("typeNames", &workflow_id.to_string()),
+                ("bbox", "-90,-180,90,180"),
+                ("srsName", "EPSG:4326"),
+            ];
+            let req = test::TestRequest::with_uri(&format!(
+                "/wfs/{}?{}",
+                workflow_id,
+                &serde_urlencoded::to_string(params).unwrap()
+            ))
+            .method(method)
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            send_test_request(req, app_ctx).await
         })
         .await
     }
@@ -1143,33 +1136,31 @@ x;y
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_feature_json_missing_fields() {
         with_temp_context(|app_ctx, _| async move {
-            
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+            let ctx = app_ctx.default_session_context().await.unwrap();
+            let session_id = ctx.session().id();
 
-        let params = &[
-            ("request", "GetFeature"),
-            ("service", "WFS"),
-            ("version", "2.0.0"),
-            ("bbox", "-90,-180,90,180"),
-            ("crs", "EPSG:4326"),
-        ];
-        let req = test::TestRequest::get()
-            .uri(&format!(
-                "/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?{}",
-                &serde_urlencoded::to_string(params).unwrap()
-            ))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+            let params = &[
+                ("request", "GetFeature"),
+                ("service", "WFS"),
+                ("version", "2.0.0"),
+                ("bbox", "-90,-180,90,180"),
+                ("crs", "EPSG:4326"),
+            ];
+            let req = test::TestRequest::get()
+                .uri(&format!(
+                    "/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?{}",
+                    &serde_urlencoded::to_string(params).unwrap()
+                ))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(
-            res,
-            400,
-            "UnableToParseQueryString",
-            "Unable to parse query string: missing field `typeNames`",
-        )
-        .await;
-
+            ErrorResponse::assert(
+                res,
+                400,
+                "UnableToParseQueryString",
+                "Unable to parse query string: missing field `typeNames`",
+            )
+            .await;
         })
         .await;
     }
@@ -1177,12 +1168,13 @@ x;y
     async fn add_dataset_definition_to_datasets<Tls>(
         app_ctx: &PostgresContext<Tls>,
         dataset_definition_path: &Path,
-    ) -> DatasetId 
+    ) -> DatasetId
     where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,{
+        Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+        <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+        <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+        <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+    {
         let data = fs::read_to_string(dataset_definition_path).unwrap();
         let data = data.replace("test_data/", test_data!("./").to_str().unwrap());
         let def: DatasetDefinition = serde_json::from_str(&data).unwrap();
@@ -1207,103 +1199,107 @@ x;y
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
             |app_ctx, _| async move {
+                let session_id = app_ctx.default_session_id().await;
 
-        let session_id = app_ctx.default_session_id().await;
-
-        let _ndvi_id: DataId =
-            add_dataset_definition_to_datasets(&app_ctx, test_data!("dataset_defs/ndvi.json"))
+                let _ndvi_id: DataId = add_dataset_definition_to_datasets(
+                    &app_ctx,
+                    test_data!("dataset_defs/ndvi.json"),
+                )
                 .await
                 .into();
-        let _points_with_time_id: DataId = add_dataset_definition_to_datasets(
-            &app_ctx,
-            test_data!("dataset_defs/points_with_time.json"),
-        )
-        .await
-        .into();
+                let _points_with_time_id: DataId = add_dataset_definition_to_datasets(
+                    &app_ctx,
+                    test_data!("dataset_defs/points_with_time.json"),
+                )
+                .await
+                .into();
 
-        let workflow = serde_json::json!({
-            "type": "Vector",
-            "operator": {
-                "type": "RasterVectorJoin",
-                "params": {
-                    "names": [
-                        "NDVI"
-                    ],
-                    "featureAggregation": "first",
-                    "temporalAggregation": "first"
-                },
-                "sources": {
-                    "vector": {
-                        "type": "OgrSource",
+                let workflow = serde_json::json!({
+                    "type": "Vector",
+                    "operator": {
+                        "type": "RasterVectorJoin",
                         "params": {
-                            "data": "points_with_time",
-                            "attributeProjection": null
+                            "names": [
+                                "NDVI"
+                            ],
+                            "featureAggregation": "first",
+                            "temporalAggregation": "first"
+                        },
+                        "sources": {
+                            "vector": {
+                                "type": "OgrSource",
+                                "params": {
+                                    "data": "points_with_time",
+                                    "attributeProjection": null
+                                }
+                            },
+                            "rasters": [{
+                                "type": "GdalSource",
+                                "params": {
+                                    "data": "ndvi",
+                                }
+                            }],
                         }
-                    },
-                    "rasters": [{
-                        "type": "GdalSource",
-                        "params": {
-                            "data": "ndvi",
-                        }
-                    }],
-                }
-            }
-        });
-
-        let json = serde_json::to_string(&workflow).unwrap();
-
-        let workflow = serde_json::from_str(&json).unwrap();
-
-        let workflow_id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
-            .db()
-            .register_workflow(workflow)
-            .await
-            .unwrap();
-
-        let params = &[
-            ("request", "GetFeature"),
-            ("service", "WFS"),
-            ("version", "2.0.0"),
-            ("typeNames", &workflow_id.to_string()),
-            ("bbox", "-90,-180,90,180"),
-            ("srsName", "EPSG:4326"),
-            ("time", "2014-04-01T12:00:00.000Z/2014-04-01T12:00:00.000Z"),
-        ];
-        let req = test::TestRequest::get()
-            .uri(&format!(
-                "/wfs/{}?{}",
-                workflow_id,
-                &serde_urlencoded::to_string(params).unwrap()
-            ))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
-
-        let body: serde_json::Value = test::read_body_json(res).await;
-
-        assert_eq!(
-            body,
-            serde_json::json!({
-                "type": "FeatureCollection",
-                "features": [{
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [12.843_159, 47.825_724]
-                    },
-                    "properties": {
-                        "NDVI": 228
-                    },
-                    "when": {
-                        "start": "2014-04-01T00:00:00+00:00",
-                        "end": "2014-07-01T00:00:00+00:00",
-                        "type": "Interval"
                     }
-                }]
-            })
-        );}).await;
+                });
+
+                let json = serde_json::to_string(&workflow).unwrap();
+
+                let workflow = serde_json::from_str(&json).unwrap();
+
+                let workflow_id = app_ctx
+                    .default_session_context()
+                    .await
+                    .unwrap()
+                    .db()
+                    .register_workflow(workflow)
+                    .await
+                    .unwrap();
+
+                let params = &[
+                    ("request", "GetFeature"),
+                    ("service", "WFS"),
+                    ("version", "2.0.0"),
+                    ("typeNames", &workflow_id.to_string()),
+                    ("bbox", "-90,-180,90,180"),
+                    ("srsName", "EPSG:4326"),
+                    ("time", "2014-04-01T12:00:00.000Z/2014-04-01T12:00:00.000Z"),
+                ];
+                let req = test::TestRequest::get()
+                    .uri(&format!(
+                        "/wfs/{}?{}",
+                        workflow_id,
+                        &serde_urlencoded::to_string(params).unwrap()
+                    ))
+                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+                let res = send_test_request(req, app_ctx).await;
+
+                let body: serde_json::Value = test::read_body_json(res).await;
+
+                assert_eq!(
+                    body,
+                    serde_json::json!({
+                        "type": "FeatureCollection",
+                        "features": [{
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [12.843_159, 47.825_724]
+                            },
+                            "properties": {
+                                "NDVI": 228
+                            },
+                            "when": {
+                                "start": "2014-04-01T00:00:00+00:00",
+                                "end": "2014-07-01T00:00:00+00:00",
+                                "type": "Interval"
+                            }
+                        }]
+                    })
+                );
+            },
+        )
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]

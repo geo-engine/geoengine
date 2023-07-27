@@ -153,12 +153,11 @@ impl TaskManager<SimpleTaskManagerContext> for ProTaskManager {
 
 #[cfg(test)]
 mod tests {
-    
 
     use crate::pro::util::tests::with_pro_temp_context;
     use crate::{
         contexts::{ApplicationContext, SessionContext},
-        pro::{users::UserAuth},
+        pro::users::UserAuth,
         tasks::{TaskListOptions, TaskManager},
     };
 

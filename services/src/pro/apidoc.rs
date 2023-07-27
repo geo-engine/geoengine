@@ -408,10 +408,6 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
-    
-    
 
     #[test]
     fn can_resolve_api() {

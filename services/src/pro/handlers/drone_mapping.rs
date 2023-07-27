@@ -361,7 +361,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::RasterTile2D;
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
-    
+
     use geoengine_operators::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
         GdalLoadingInfoTemporalSlice, GdalSource, GdalSourceParameters,
@@ -380,9 +380,7 @@ mod tests {
     use crate::test_data;
     use crate::util::tests::TestDataUploads;
     use crate::{
-        pro::{
-            util::tests::{create_session_helper, send_pro_test_request},
-        },
+        pro::util::tests::{create_session_helper, send_pro_test_request},
         util::config,
     };
     use actix_web::{http::header, test};
