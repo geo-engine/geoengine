@@ -14,7 +14,7 @@ pro = ["geoengine-datatypes/pro"]
 xgboost = ["dep:xgboost-rs", "pro"]
 
 [dependencies]
-arrow = { version = "43.0", features = ["simd"] }
+arrow = { version = "43.0" } # TODO: activate SIMD when stable
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
