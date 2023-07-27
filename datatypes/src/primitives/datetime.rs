@@ -570,7 +570,6 @@ impl Sub<Duration> for DateTime {
     }
 }
 
-#[cfg(feature = "postgres")]
 mod sql {
     use super::*;
     use postgres_types::{

@@ -107,11 +107,13 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::suggest_meta_data_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::plots::get_plot_handler,
-        handlers::projects::create_project_handler,
         handlers::projects::list_projects_handler,
-        handlers::projects::load_project_handler,
+        handlers::projects::project_versions_handler,
+        handlers::projects::load_project_latest_handler,
+        handlers::projects::create_project_handler,
         handlers::projects::update_project_handler,
         handlers::projects::delete_project_handler,
+        handlers::projects::load_project_version_handler,
         handlers::upload::list_upload_files_handler,
         handlers::upload::list_upload_file_layers_handler,
         handlers::upload::upload_handler
@@ -376,7 +378,7 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
+    use crate::contexts::{InMemoryContext, SimpleApplicationContext};
     use crate::util::tests::send_test_request;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -391,7 +393,7 @@ mod tests {
             ApiDoc::openapi(),
             move || async move {
                 let ctx = InMemoryContext::test_default();
-                let session_id = ctx.default_session_ref().await.id();
+                let session_id = ctx.default_session_id().await;
                 (ctx, session_id)
             },
             send_test_request,

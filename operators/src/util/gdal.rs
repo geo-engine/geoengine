@@ -191,14 +191,11 @@ pub fn create_ports_meta_data(
     }
 }
 
-pub fn add_ports_dataset(ctx: &mut MockExecutionContext) -> DataId {
+pub fn add_ports_dataset(ctx: &mut MockExecutionContext) -> NamedData {
     let id: DataId = DatasetId::new().into();
-    ctx.add_meta_data(
-        id.clone(),
-        NamedData::with_system_name("ne_10m_ports"),
-        Box::new(create_ports_meta_data()),
-    );
-    id
+    let name = NamedData::with_system_name("ne_10m_ports");
+    ctx.add_meta_data(id, name.clone(), Box::new(create_ports_meta_data()));
+    name
 }
 
 /// Opens a Gdal Dataset with the given `path`.
@@ -230,6 +227,29 @@ pub fn raster_descriptor_from_dataset(
 
     let spatial_ref: SpatialReference =
         dataset.spatial_ref()?.try_into().context(error::DataType)?;
+
+    let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
+        .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
+
+    let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+
+    Ok(RasterResultDescriptor {
+        data_type,
+        spatial_reference: spatial_ref.into(),
+        measurement: measurement_from_rasterband(dataset, band)?,
+        time: None,
+        bbox: None,
+        resolution: Some(geo_transfrom.spatial_resolution()),
+    })
+}
+
+// a version of `raster_descriptor_from_dataset` that does not read the sref from the dataset but takes it as an argument
+pub fn raster_descriptor_from_dataset_and_sref(
+    dataset: &Dataset,
+    band: isize,
+    spatial_ref: SpatialReference,
+) -> Result<RasterResultDescriptor> {
+    let rasterband = &dataset.rasterband(band)?;
 
     let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;

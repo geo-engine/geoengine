@@ -1,16 +1,16 @@
 use crate::error::{self, Result};
 
-use crate::pro::contexts::PostgresDb;
+use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::PermissionDb;
 use crate::pro::users::UserId;
 
-use crate::projects::Plot;
 use crate::projects::ProjectLayer;
 use crate::projects::{
     CreateProject, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject,
 };
+use crate::projects::{LoadVersion, Plot};
 
 use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
@@ -24,9 +24,6 @@ use snafu::ResultExt;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Transaction;
 use snafu::ensure;
-
-use super::LoadVersion;
-use super::ProProjectDb;
 
 async fn list_plots<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
@@ -128,7 +125,7 @@ async fn update_plots(
 }
 
 #[async_trait]
-impl<Tls> ProjectDb for PostgresDb<Tls>
+impl<Tls> ProjectDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -220,25 +217,38 @@ where
                     description,
                     bounds,
                     time_step,
-                    author_user_id,
                     changed)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP);",
+                    VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);",
             )
             .await?;
+
+        let version_id = ProjectVersionId::new();
 
         trans
             .execute(
                 &stmt,
                 &[
-                    &ProjectVersionId::new(),
+                    &version_id,
                     &project.id,
                     &project.name,
                     &project.description,
                     &project.bounds,
                     &project.time_step,
-                    &self.session.user.id,
                 ],
             )
+            .await?;
+
+        let stmt = trans
+            .prepare(
+                "INSERT INTO 
+                    project_version_authors (project_version_id, user_id) 
+                VALUES 
+                    ($1, $2);",
+            )
+            .await?;
+
+        trans
+            .execute(&stmt, &[&version_id, &self.session.user.id])
             .await?;
 
         let stmt = trans
@@ -291,9 +301,8 @@ where
                     description,
                     bounds,
                     time_step,
-                    author_user_id,
                     changed)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP);",
+                VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);",
             )
             .await?;
 
@@ -307,9 +316,21 @@ where
                     &project.description,
                     &project.bounds,
                     &project.time_step,
-                    &self.session.user.id,
                 ],
             )
+            .await?;
+
+        let stmt = trans
+            .prepare(
+                "INSERT INTO 
+                    project_version_authors (project_version_id, user_id) 
+                VALUES 
+                    ($1, $2);",
+            )
+            .await?;
+
+        trans
+            .execute(&stmt, &[&project.version.id, &self.session.user.id])
             .await?;
 
         for (idx, layer) in project.layers.iter().enumerate() {
@@ -367,16 +388,7 @@ where
 
         Ok(())
     }
-}
 
-#[async_trait]
-impl<Tls> ProProjectDb for PostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
     #[allow(clippy::too_many_lines)]
     async fn load_project_version(
         &self,
@@ -402,9 +414,10 @@ where
                 p.bounds,
                 p.time_step,
                 p.changed,
-                p.author_user_id
-            FROM project_versions p
-            WHERE p.project_id = $1 AND p.project_version = $2",
+                a.user_id
+            FROM 
+                project_versions p JOIN project_version_authors a ON (p.id = a.project_version_id)
+            WHERE p.project_id = $1 AND p.id = $2",
                 )
                 .await?;
 
@@ -421,8 +434,9 @@ where
                 p.bounds,
                 p.time_step,
                 p.changed,
-                p.author_user_id
-            FROM project_versions p
+                a.user_id
+            FROM 
+                project_versions p JOIN project_version_authors a ON (p.id = a.project_version_id)
             WHERE project_id = $1 AND p.changed >= ALL(
                 SELECT changed FROM project_versions WHERE project_id = $1
             )",
@@ -490,9 +504,14 @@ where
         let stmt = conn
             .prepare(
                 "
-                SELECT id, changed, author_user_id
-                FROM project_versions WHERE project_id = $1 
-                ORDER BY changed DESC, author_user_id DESC",
+                SELECT 
+                    p.id, p.changed, a.user_id
+                FROM 
+                    project_versions p JOIN project_version_authors a ON (p.id = a.project_version_id)
+                WHERE 
+                    project_id = $1 
+                ORDER BY 
+                    p.changed DESC, a.user_id DESC",
             )
             .await?;
 

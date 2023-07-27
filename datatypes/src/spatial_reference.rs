@@ -5,22 +5,23 @@ use crate::{
     util::Result,
 };
 use gdal::spatial_ref::SpatialRef;
-#[cfg(feature = "postgres")]
+
 use postgres_types::private::BytesMut;
-#[cfg(feature = "postgres")]
+
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use proj::Proj;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-#[cfg(feature = "postgres")]
+
 use snafu::Error;
 use snafu::ResultExt;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt::Formatter};
 
 /// A spatial reference authority that is part of a spatial reference definition
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[derive(
+    Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, ToSql, FromSql,
+)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum SpatialReferenceAuthority {
     Epsg,
@@ -45,8 +46,7 @@ impl std::fmt::Display for SpatialReferenceAuthority {
 }
 
 /// A spatial reference consists of an authority and a code
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ToSql, FromSql)]
 pub struct SpatialReference {
     authority: SpatialReferenceAuthority,
     code: u32,
@@ -72,12 +72,12 @@ impl SpatialReference {
 
     pub fn proj_string(self) -> Result<String> {
         match self.authority {
-            SpatialReferenceAuthority::Epsg | SpatialReferenceAuthority::Iau2000 => {
+            SpatialReferenceAuthority::Epsg | SpatialReferenceAuthority::Iau2000 | SpatialReferenceAuthority::Esri => {
                 Ok(format!("{}:{}", self.authority, self.code))
             }
             // poor-mans integration of Meteosat Second Generation 
             SpatialReferenceAuthority::SrOrg if self.code == 81 => Ok("+proj=geos +lon_0=0 +h=35785831 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs +type=crs".to_owned()),
-            SpatialReferenceAuthority::SrOrg | SpatialReferenceAuthority::Esri => {
+            SpatialReferenceAuthority::SrOrg => {
                 Err(error::Error::ProjStringUnresolvable { spatial_ref: self })
                 //TODO: we might need to look them up somehow! Best solution would be a registry where we can store user definexd srs strings.
             }
@@ -264,7 +264,6 @@ impl SpatialReferenceOption {
     }
 }
 
-#[cfg(feature = "postgres")]
 impl ToSql for SpatialReferenceOption {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
     where
@@ -295,7 +294,6 @@ impl ToSql for SpatialReferenceOption {
     }
 }
 
-#[cfg(feature = "postgres")]
 impl<'a> FromSql<'a> for SpatialReferenceOption {
     fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         Ok(SpatialReferenceOption::SpatialReference(
@@ -560,9 +558,12 @@ mod tests {
                 .unwrap(),
             "IAU2000:4711"
         );
-        assert!(SpatialReference::new(SpatialReferenceAuthority::Esri, 42)
-            .proj_string()
-            .is_err());
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Esri, 42)
+                .proj_string()
+                .unwrap(),
+            "ESRI:42"
+        );
         assert!(SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1)
             .proj_string()
             .is_err());

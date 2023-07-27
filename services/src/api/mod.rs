@@ -388,7 +388,7 @@ pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
+    use crate::contexts::{InMemoryContext, SimpleApplicationContext};
     use crate::datasets::upload::Volume;
     use crate::util::server::{configure_extractors, render_404, render_405};
     use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
@@ -716,7 +716,7 @@ mod tests {
                 .into(),
             move || async move {
                 let ctx = InMemoryContext::test_default();
-                let session_id = ctx.default_session_ref().await.id();
+                let session_id = ctx.default_session_id().await;
                 (ctx, session_id)
             },
             dummy_send_test_request,

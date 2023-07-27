@@ -282,7 +282,7 @@ mod tests {
     async fn get_spatial_reference() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let req = actix_web::test::TestRequest::get()

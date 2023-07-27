@@ -1,6 +1,6 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
-use crate::pro::contexts::PostgresDb;
+use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::{Role, RoleId};
 use crate::pro::users::oidc::ExternalUserClaims;
 use crate::pro::users::{
@@ -8,7 +8,7 @@ use crate::pro::users::{
 };
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::Identifier;
-use crate::{error, pro::contexts::PostgresContext};
+use crate::{error, pro::contexts::ProPostgresContext};
 use async_trait::async_trait;
 
 use bb8_postgres::{
@@ -22,7 +22,7 @@ use uuid::Uuid;
 use super::userdb::{RoleDb, UserAuth};
 
 #[async_trait]
-impl<Tls> UserAuth for PostgresContext<Tls>
+impl<Tls> UserAuth for ProPostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -50,7 +50,7 @@ where
             .await?;
 
         let quota_available =
-            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
                 .default_available_quota;
 
         tx.execute(
@@ -96,7 +96,7 @@ where
             .await?;
 
         let quota_available =
-            crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
                 .default_available_quota;
 
         let stmt = tx
@@ -120,9 +120,22 @@ where
         let stmt = tx
             .prepare(
                 "
-                INSERT INTO sessions (id, user_id, created, valid_until)
-                VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3)) 
-                RETURNING created, valid_until;",
+                INSERT INTO sessions (id)
+                VALUES ($1);",
+            )
+            .await?;
+
+        tx.execute(&stmt, &[&session_id]).await?;
+
+        let stmt = tx
+            .prepare(
+                "
+            INSERT INTO 
+                user_sessions (user_id, session_id, created, valid_until) 
+            VALUES 
+                ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3))
+            RETURNING 
+                created, valid_until;",
             )
             .await?;
 
@@ -132,8 +145,8 @@ where
             .query_one(
                 &stmt,
                 &[
-                    &session_id,
                     &user_id,
+                    &session_id,
                     &(session_duration.num_seconds() as f64),
                 ],
             )
@@ -157,12 +170,15 @@ where
     }
 
     async fn login(&self, user_credentials: UserCredentials) -> Result<UserSession> {
-        let conn = self.pool.get().await?;
-        let stmt = conn
+        let mut conn = self.pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
             .prepare("SELECT id, password_hash, email, real_name FROM users WHERE email = $1;")
             .await?;
 
-        let row = conn
+        let row = tx
             .query_one(&stmt, &[&user_credentials.email])
             .await
             .map_err(|_error| error::Error::LoginFailed)?;
@@ -174,36 +190,50 @@ where
 
         if bcrypt::verify(user_credentials.password, password_hash) {
             let session_id = SessionId::new();
-            let stmt = conn
+            let stmt = tx
                 .prepare(
                     "
-                INSERT INTO sessions (id, user_id, created, valid_until)
-                VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3)) 
-                RETURNING created, valid_until;",
+                INSERT INTO sessions (id)
+                VALUES ($1);",
                 )
                 .await?;
 
+            tx.execute(&stmt, &[&session_id]).await?;
+
             // TODO: load from config
             let session_duration = chrono::Duration::days(30);
-            let row = conn
+            let stmt = tx
+                .prepare(
+                    "
+                INSERT INTO 
+                    user_sessions (user_id, session_id, created, valid_until) 
+                VALUES 
+                    ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3))
+                RETURNING 
+                    created, valid_until;",
+                )
+                .await?;
+            let row = tx
                 .query_one(
                     &stmt,
                     &[
-                        &session_id,
                         &user_id,
+                        &session_id,
                         &(session_duration.num_seconds() as f64),
                     ],
                 )
                 .await?;
 
-            let stmt = conn
+            let stmt = tx
                 .prepare("SELECT role_id FROM user_roles WHERE user_id = $1;")
                 .await?;
 
-            let rows = conn
+            let rows = tx
                 .query(&stmt, &[&user_id])
                 .await
                 .map_err(|_error| error::Error::LoginFailed)?;
+
+            tx.commit().await?;
 
             let roles = rows.into_iter().map(|row| row.get(0)).collect();
 
@@ -225,17 +255,20 @@ where
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn login_external(
         &self,
         user: ExternalUserClaims,
         duration: Duration,
     ) -> Result<UserSession> {
         let mut conn = self.pool.get().await?;
-        let stmt = conn
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
             .prepare("SELECT id, external_id, email, real_name FROM external_users WHERE external_id = $1;")
             .await?;
 
-        let row = conn
+        let row = tx
             .query_opt(&stmt, &[&user.external_id.to_string()])
             .await
             .map_err(|_error| error::Error::LoginFailed)?;
@@ -243,8 +276,6 @@ where
         let user_id = match row {
             Some(row) => UserId(row.get(0)),
             None => {
-                let tx = conn.build_transaction().start().await?;
-
                 let user_id = UserId::new();
 
                 let stmt = tx
@@ -253,7 +284,7 @@ where
                 tx.execute(&stmt, &[&user_id, &user.email]).await?;
 
                 let quota_available =
-                    crate::util::config::get_config_element::<crate::pro::util::config::User>()?
+                    crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
                         .default_available_quota;
 
                 //TODO: Inconsistent to hashmap implementation, where an external user is not part of the user database.
@@ -294,39 +325,51 @@ where
                 tx.execute(&stmt, &[&user_id, &Role::registered_user_role_id()])
                     .await?;
 
-                tx.commit().await?;
-
                 user_id
             }
         };
 
         let session_id = SessionId::new();
-        let stmt = conn
+        let stmt = tx
             .prepare(
                 "
-            INSERT INTO sessions (id, user_id, created, valid_until)
-            VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3))
-            RETURNING created, valid_until;",
+            INSERT INTO sessions (id)
+            VALUES ($1);",
             )
             .await?; //TODO: Check documentation if inconsistent to hashmap implementation - would happen if CURRENT_TIMESTAMP is called twice in postgres for a single query. Worked in tests.
 
-        let row = conn
+        tx.execute(&stmt, &[&session_id]).await?;
+
+        let stmt = tx
+            .prepare(
+                "
+            INSERT INTO 
+                user_sessions (user_id, session_id, created, valid_until) 
+            VALUES 
+                ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3))
+            RETURNING 
+                created, valid_until;",
+            )
+            .await?;
+        let row = tx
             .query_one(
                 &stmt,
-                &[&session_id, &user_id, &(duration.num_seconds() as f64)],
+                &[&user_id, &session_id, &(duration.num_seconds() as f64)],
             )
             .await?;
 
-        let stmt = conn
+        let stmt = tx
             .prepare("SELECT role_id FROM user_roles WHERE user_id = $1;")
             .await?;
 
-        let rows = conn
+        let rows = tx
             .query(&stmt, &[&user_id])
             .await
             .map_err(|_error| error::Error::LoginFailed)?;
 
         let roles = rows.into_iter().map(|row| row.get(0)).collect();
+
+        tx.commit().await?;
 
         Ok(UserSession {
             id: session_id,
@@ -355,12 +398,14 @@ where
                 u.id,   
                 u.email,
                 u.real_name,             
-                s.created, 
-                s.valid_until, 
+                us.created, 
+                us.valid_until, 
                 s.project_id,
                 s.view
-            FROM sessions s JOIN users u ON (s.user_id = u.id)
-            WHERE s.id = $1 AND CURRENT_TIMESTAMP < s.valid_until;",
+            FROM 
+                sessions s JOIN user_sessions us ON (s.id = us.session_id) 
+                    JOIN users u ON (us.user_id = u.id)
+            WHERE s.id = $1 AND CURRENT_TIMESTAMP < us.valid_until;",
             )
             .await?;
 
@@ -400,7 +445,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> UserDb for PostgresDb<Tls>
+impl<Tls> UserDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -460,6 +505,34 @@ where
             .await?;
 
         conn.execute(&stmt, &[&(quota_used as i64), &user]).await?;
+
+        Ok(())
+    }
+
+    async fn bulk_increment_quota_used<I: IntoIterator<Item = (UserId, u64)> + Send>(
+        &self,
+        quota_used_updates: I,
+    ) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        // collect the user ids and quotas into separate vectors to pass them as parameters to the query
+        let (users, quotas): (Vec<UserId>, Vec<i64>) = quota_used_updates
+            .into_iter()
+            .map(|(user, quota)| (user, quota as i64))
+            .unzip();
+
+        let query = "
+            UPDATE users
+            SET quota_available = quota_available - quota_changes.quota, 
+                quota_used = quota_used + quota_changes.quota
+            FROM 
+                (SELECT * FROM UNNEST($1::uuid[], $2::bigint[]) AS t(id, quota)) AS quota_changes
+            WHERE users.id = quota_changes.id;
+        ";
+
+        conn.execute(query, &[&users, &quotas]).await?;
 
         Ok(())
     }
@@ -555,7 +628,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> RoleDb for PostgresDb<Tls>
+impl<Tls> RoleDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

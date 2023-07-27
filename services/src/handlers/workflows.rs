@@ -707,7 +707,7 @@ mod tests {
     async fn register_test_helper(method: Method) -> ServiceResponse {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -779,7 +779,7 @@ mod tests {
     async fn register_invalid_body() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -805,7 +805,7 @@ mod tests {
     async fn register_missing_fields() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -831,7 +831,7 @@ mod tests {
     async fn load_test_helper(method: Method) -> (Workflow, ServiceResponse) {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -884,7 +884,7 @@ mod tests {
     async fn load_not_exist() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
 
@@ -899,10 +899,9 @@ mod tests {
     async fn vector_metadata_test_helper(method: Method) -> ServiceResponse {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -971,10 +970,9 @@ mod tests {
     async fn raster_metadata() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let workflow = Workflow {
             operator: MockRasterSource::<u8> {
@@ -1035,7 +1033,7 @@ mod tests {
     async fn metadata_missing_header() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -1075,10 +1073,9 @@ mod tests {
     async fn plot_metadata() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let workflow = Workflow {
             operator: Statistics {
@@ -1119,10 +1116,9 @@ mod tests {
     async fn provenance() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
         let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
@@ -1171,7 +1167,7 @@ mod tests {
     async fn it_does_not_register_invalid_workflow() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let workflow = json!({
@@ -1229,8 +1225,7 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
 
@@ -1246,7 +1241,9 @@ mod tests {
         };
 
         let workflow_id = app_ctx
-            .session_context(session)
+            .default_session_context()
+            .await
+            .unwrap()
             .db()
             .register_workflow(workflow)
             .await
@@ -1343,10 +1340,9 @@ mod tests {
             TestDefault::test_default(),
         );
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let session = app_ctx.default_session_ref().await.clone();
-        let session_id = session.id();
+        let session_id = app_ctx.default_session_id().await;
 
         let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
@@ -1370,7 +1366,7 @@ mod tests {
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(
                 r#"{
-                "name": "foo",
+                "displayName": "foo",
                 "description": null,
                 "query": {
                     "spatialBounds": {

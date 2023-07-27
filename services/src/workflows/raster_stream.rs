@@ -201,7 +201,7 @@ mod tests {
 
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let (workflow, _workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 

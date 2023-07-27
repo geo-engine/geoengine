@@ -9,15 +9,33 @@ use crate::util::parsing::deserialize_base_url;
 #[derive(Debug, Deserialize)]
 pub struct User {
     pub user_registration: bool,
-    pub quota_check: bool,
-    #[serde(default)]
-    pub default_available_quota: i64,
     pub admin_email: String,
     pub admin_password: String,
 }
 
 impl ConfigElement for User {
     const KEY: &'static str = "user";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Quota {
+    pub mode: QuotaTrackingMode,
+    #[serde(default)]
+    pub default_available_quota: i64,
+    pub increment_quota_buffer_size: usize,
+    pub increment_quota_buffer_timeout_seconds: u64,
+}
+
+impl ConfigElement for Quota {
+    const KEY: &'static str = "quota";
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum QuotaTrackingMode {
+    Track,
+    Check,
+    Disabled,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,8 +83,8 @@ impl TestDefault for Cache {
     fn test_default() -> Self {
         Self {
             enabled: false,
-            cache_size_in_mb: usize::MAX,
-            landing_zone_ratio: 0.5,
+            cache_size_in_mb: 1_000, // 1 GB
+            landing_zone_ratio: 0.1, // 10% of cache size
         }
     }
 }
