@@ -480,7 +480,7 @@ impl LayerCollectionProvider for HashMapLayerDb {
                     },
                     name: collection.name.clone(),
                     description: collection.description.clone(),
-                    properties: Default::default(),
+                    properties: collection.properties.clone(),
                 })
             });
 
@@ -530,7 +530,7 @@ impl LayerCollectionProvider for HashMapLayerDb {
             description: collection.description.clone(),
             items,
             entry_label: None,
-            properties: vec![],
+            properties: collection.properties.clone(),
         })
     }
 
