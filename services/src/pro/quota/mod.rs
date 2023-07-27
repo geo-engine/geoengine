@@ -183,7 +183,6 @@ mod tests {
     use crate::{
         contexts::{ApplicationContext, SessionContext},
         pro::{
-            contexts::ProPostgresContext,
             users::{UserAuth, UserCredentials, UserRegistration},
             util::tests::admin_login,
         },

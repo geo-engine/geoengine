@@ -269,7 +269,7 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, Session};
+    use crate::contexts::{Session};
     use crate::contexts::{SessionContext, SimpleApplicationContext};
     use crate::util::tests::send_test_request;
     use crate::util::tests::with_temp_context;
@@ -279,7 +279,7 @@ mod tests {
     use float_cmp::approx_eq;
     use geoengine_datatypes::primitives::BoundingBox2D;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
-    use geoengine_datatypes::util::test::TestDefault;
+    
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_spatial_reference() {

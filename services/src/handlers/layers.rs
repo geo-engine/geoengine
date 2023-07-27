@@ -892,13 +892,13 @@ mod tests {
     use super::*;
     use crate::contexts::{SessionId, SimpleApplicationContext, SimpleSession};
     use crate::datasets::RasterDatasetFromWorkflowResult;
-    use crate::handlers::ErrorResponse;
+    
     use crate::layers::layer::Layer;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
     use crate::util::tests::with_temp_context;
-    use crate::util::tests::{read_body_string, TestDataUploads};
+    use crate::util::tests::{read_body_string};
     use crate::{
         contexts::{PostgresContext, Session},
         util::tests::send_test_request,
@@ -922,7 +922,7 @@ mod tests {
     };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::processing::{TimeShift, TimeShiftParams};
-    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
+    
     use geoengine_operators::util::raster_stream_to_geotiff::{
         raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
     };

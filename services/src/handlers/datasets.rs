@@ -1077,7 +1077,7 @@ mod tests {
     use crate::api::model::datatypes::{DatasetName, NamedData};
     use crate::api::model::responses::datasets::{DatasetIdAndName, DatasetNameResponse};
     use crate::api::model::services::DatasetDefinition;
-    use crate::contexts::{PostgresContext, Session, SessionId, SimpleApplicationContext};
+    use crate::contexts::{Session, SessionId, SimpleApplicationContext};
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
     use crate::error::Result;

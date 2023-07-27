@@ -151,7 +151,7 @@ where
 #[cfg(test)]
 mod tests {
 
-    use geoengine_datatypes::util::test::TestDefault;
+    
     use geoengine_operators::{
         engine::{RasterOperator, VectorOperator, WorkflowOperatorPath},
         source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
@@ -159,7 +159,6 @@ mod tests {
 
     use crate::pro::util::tests::with_pro_temp_context;
     use crate::pro::{
-        contexts::ProPostgresContext,
         users::{UserAuth, UserCredentials, UserRegistration},
         util::tests::{add_ndvi_to_datasets, add_ports_to_datasets, admin_login},
     };

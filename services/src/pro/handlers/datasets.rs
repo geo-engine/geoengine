@@ -141,7 +141,6 @@ mod tests {
             upload::{UploadId, UploadRootPath, VolumeName},
         },
         pro::{
-            contexts::ProPostgresContext,
             users::UserAuth,
             util::{
                 config::Quota,

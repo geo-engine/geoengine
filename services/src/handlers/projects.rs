@@ -350,9 +350,9 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
+    
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::util::test::TestDefault;
+    
     use serde_json::json;
     use tokio_postgres::Socket;
     use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};

@@ -508,7 +508,7 @@ fn default_time_from_config() -> TimeInterval {
 
 #[cfg(test)]
 mod tests {
-    use crate::contexts::{PostgresContext, Session, SessionContext, SimpleApplicationContext};
+    use crate::contexts::{Session, SessionContext, SimpleApplicationContext};
     use crate::util::tests::{read_body_string, register_ndvi_workflow_helper, send_test_request};
     use actix_web::http::header;
     use actix_web::test;

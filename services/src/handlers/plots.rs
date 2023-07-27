@@ -209,7 +209,7 @@ pub struct WrappedPlotOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, SimpleApplicationContext};
+    use crate::contexts::{SimpleApplicationContext};
     use crate::util::tests::with_temp_context_from_spec;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_json, read_body_string, send_test_request,

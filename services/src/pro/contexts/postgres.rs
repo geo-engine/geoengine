@@ -532,12 +532,12 @@ mod tests {
         ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
         STRectangle, UpdateProject,
     };
-    use crate::util::config::{get_config_element, Postgres};
+    
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
-    use bb8_postgres::bb8::ManageConnection;
-    use bb8_postgres::tokio_postgres::{self, NoTls};
-    use futures::{join, Future};
+    
+    use bb8_postgres::tokio_postgres::{NoTls};
+    use futures::{join};
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{

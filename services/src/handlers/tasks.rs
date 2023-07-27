@@ -166,7 +166,7 @@ mod tests {
 
     use crate::util::tests::read_body_json;
     use crate::{
-        contexts::{PostgresContext, SimpleApplicationContext},
+        contexts::{SimpleApplicationContext},
         tasks::{
             util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
         },
@@ -175,7 +175,7 @@ mod tests {
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::{channel::oneshot, lock::Mutex};
-    use geoengine_datatypes::{error::ErrorSource, util::test::TestDefault};
+    use geoengine_datatypes::{error::ErrorSource};
     use serde_json::json;
     use std::{pin::Pin, sync::Arc};
     use crate::util::tests::with_temp_context;

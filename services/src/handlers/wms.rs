@@ -477,7 +477,7 @@ fn default_time_from_config() -> TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
+    use crate::contexts::{Session, SimpleApplicationContext};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,

@@ -13,7 +13,7 @@ use crate::{
         contexts::{ProApplicationContext, ProGeoEngineDb, ProPostgresContext},
         permissions::{Permission, PermissionDb, Role},
         users::{
-            OidcRequestDb, UserAuth, UserCredentials, UserId, UserInfo, UserRegistration,
+            UserAuth, UserCredentials, UserId, UserInfo, UserRegistration,
             UserSession,
         },
     },
@@ -47,7 +47,7 @@ use rand::RngCore;
 use tokio::runtime::Handle;
 use tokio_postgres::NoTls;
 
-use super::config::{Cache, Oidc, Quota};
+use super::config::{Quota};
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: UserAuth>(app_ctx: &C) -> UserSession {

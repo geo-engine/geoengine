@@ -380,9 +380,9 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, SimpleApplicationContext};
-    use crate::util::tests::send_test_request;
-    use geoengine_datatypes::util::test::TestDefault;
+    
+    
+    
 
     #[test]
     fn can_resolve_api() {

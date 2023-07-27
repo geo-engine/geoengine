@@ -1533,7 +1533,7 @@ mod tests {
     use crate::layers::storage::LayerProviderDb;
 
     use crate::{
-        contexts::PostgresContext, tasks::util::NopTaskContext,
+        tasks::util::NopTaskContext,
         util::tests::add_land_cover_to_datasets,
     };
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};

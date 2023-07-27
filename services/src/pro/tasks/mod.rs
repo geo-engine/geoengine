@@ -153,12 +153,12 @@ impl TaskManager<SimpleTaskManagerContext> for ProTaskManager {
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::util::test::TestDefault;
+    
 
     use crate::pro::util::tests::with_pro_temp_context;
     use crate::{
         contexts::{ApplicationContext, SessionContext},
-        pro::{contexts::ProPostgresContext, users::UserAuth},
+        pro::{users::UserAuth},
         tasks::{TaskListOptions, TaskManager},
     };
 

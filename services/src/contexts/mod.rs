@@ -432,16 +432,13 @@ where
 #[cfg(test)]
 
 mod tests {
-    use super::*;
-    use std::path::PathBuf;
+    
+    
 
-    use geoengine_datatypes::{test_data, util::test::TestDefault};
-    use serial_test::serial;
+    
+    
 
-    use crate::{
-        contexts::{PostgresContext, SessionContext},
-        util::config::set_config,
-    };
+    
 
     // #[tokio::test]
     // #[serial]

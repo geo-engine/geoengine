@@ -560,7 +560,7 @@ mod tests {
     use super::*;
 
     use crate::{
-        contexts::{PostgresContext, SimpleApplicationContext},
+        contexts::{SimpleApplicationContext},
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
         tasks::util::test::wait_for_task_to_finish,
         util::server::{configure_extractors, render_404, render_405},
@@ -568,7 +568,7 @@ mod tests {
     };
     use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::{test_data, util::test::TestDefault};
+    use geoengine_datatypes::{test_data};
     use serde_json::json;
     use std::path::Path;
     use crate::util::tests::with_temp_context;

@@ -133,14 +133,14 @@ mod tests {
     use crate::handlers::ErrorResponse;
     use crate::util::tests::with_temp_context;
     use crate::{
-        contexts::{PostgresContext, SimpleSession},
+        contexts::{SimpleSession},
         util::tests::{check_allowed_http_methods, create_project_helper, send_test_request},
     };
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-    use geoengine_datatypes::util::test::TestDefault;
+    
     use serial_test::serial;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]

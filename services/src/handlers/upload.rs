@@ -201,12 +201,12 @@ async fn list_upload_file_layers_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
+    use crate::contexts::{Session, SimpleApplicationContext};
     use crate::util::tests::with_temp_context;
     use crate::util::tests::{send_test_request, SetMultipartBody, TestDataUploads};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::util::test::TestDefault;
+    
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn upload() {

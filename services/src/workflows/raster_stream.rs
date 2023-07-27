@@ -172,7 +172,7 @@ fn send_result(
 mod tests {
     use super::*;
     use crate::{
-        contexts::{PostgresContext, PostgresSessionContext, SimpleApplicationContext},
+        contexts::{PostgresSessionContext, SimpleApplicationContext},
         util::tests::{register_ndvi_workflow_helper, with_temp_context},
     };
     use actix_http::error::PayloadError;
@@ -181,7 +181,7 @@ mod tests {
     use futures::channel::mpsc::UnboundedSender;
     use geoengine_datatypes::{
         primitives::{DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
-        util::{arrow::arrow_ipc_file_to_record_batches, test::TestDefault},
+        util::{arrow::arrow_ipc_file_to_record_batches},
     };
     use tokio_postgres::NoTls;
 

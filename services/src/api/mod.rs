@@ -366,13 +366,13 @@ mod tests {
     use crate::datasets::upload::Volume;
     use crate::util::server::{configure_extractors, render_404, render_405};
     use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
-    use geoengine_datatypes::util::test::TestDefault;
+    
     use serde::Deserialize;
-    use serde_json::json;
+    
     use utoipa::openapi::path::{OperationBuilder, ParameterBuilder, PathItemBuilder};
     use utoipa::openapi::request_body::RequestBodyBuilder;
     use utoipa::openapi::{
-        AllOfBuilder, ArrayBuilder, ComponentsBuilder, ContentBuilder, Object, ObjectBuilder,
+        AllOfBuilder, ArrayBuilder, ComponentsBuilder, ContentBuilder, ObjectBuilder,
         OneOfBuilder, OpenApiBuilder, PathItemType, PathsBuilder, ResponseBuilder,
     };
     use utoipa::ToSchema;
@@ -637,7 +637,7 @@ mod tests {
             .map_into_boxed_body()
     }
 
-    async fn run_dummy_example(example: serde_json::Value) {
+    async fn run_dummy_example(_example: serde_json::Value) {
         // can_run_examples(
         //     OpenApiBuilder::new()
         //         .paths(

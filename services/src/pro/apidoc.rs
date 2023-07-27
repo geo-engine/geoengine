@@ -408,10 +408,10 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::Session;
-    use crate::pro::users::UserAuth;
-    use crate::pro::util::tests::send_pro_test_request;
-    use geoengine_datatypes::util::test::TestDefault;
+    
+    
+    
+    
 
     #[test]
     fn can_resolve_api() {

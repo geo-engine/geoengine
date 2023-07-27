@@ -668,17 +668,17 @@ mod tests {
     use crate::contexts::{Session, SessionContext};
     use crate::handlers::ErrorResponse;
     use crate::pro::util::tests::mock_oidc::{
-        mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
+        mock_jwks, mock_provider_metadata,
     };
     use crate::pro::util::tests::{
         admin_login, create_project_helper, create_session_helper, register_ndvi_workflow_helper,
         send_pro_test_request,
     };
     use crate::pro::{contexts::ProPostgresContext, users::UserId};
-    use crate::util::config::get_config_element;
+    
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
 
-    use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb, UserAuth};
+    use crate::pro::users::{OidcRequestDb, UserAuth};
     use crate::pro::util::config::Oidc;
     use crate::pro::util::tests::with_pro_temp_context;
     use actix_http::header::CONTENT_TYPE;
@@ -687,7 +687,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-    use geoengine_datatypes::util::test::TestDefault;
+    
     use httptest::matchers::request;
     use httptest::responders::status_code;
     use httptest::{Expectation, Server};

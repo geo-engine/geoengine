@@ -5,7 +5,6 @@ use actix_web_httpauth::headers::authorization::Bearer;
 use geoengine_datatypes::{
     operations::image::{Colorizer, DefaultColors, RgbaColor},
     primitives::{TimeGranularity, TimeStep},
-    util::test::TestDefault,
 };
 use geoengine_operators::{
     engine::{RasterOperator, SingleRasterSource, TypedOperator},
