@@ -15,7 +15,7 @@ use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{
     tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
 
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Transaction;
@@ -327,7 +327,9 @@ where
 
         let stmt = conn.prepare("DELETE FROM projects WHERE id = $1;").await?;
 
-        conn.execute(&stmt, &[&project]).await?;
+        let rows_affected = conn.execute(&stmt, &[&project]).await?;
+
+        ensure!(rows_affected == 1, error::ProjectDeleteFailed);
 
         Ok(())
     }

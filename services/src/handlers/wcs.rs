@@ -508,18 +508,20 @@ fn default_time_from_config() -> TimeInterval {
 
 #[cfg(test)]
 mod tests {
-    use crate::contexts::{InMemoryContext, Session, SessionContext, SimpleApplicationContext};
+    use crate::contexts::{PostgresContext, Session, SessionContext, SimpleApplicationContext};
     use crate::util::tests::{read_body_string, register_ndvi_workflow_helper, send_test_request};
     use actix_web::http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::util::test::TestDefault;
+    use crate::util::tests::with_temp_context;
+    use crate::util::tests::with_temp_context_from_spec;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_capabilities() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -599,12 +601,15 @@ mod tests {
             ),
             body
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn describe_coverage() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -662,11 +667,14 @@ mod tests {
             ),
             body
         );
+
+        })
+        .await;
     }
 
     // TODO: add get_coverage with masked band
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_coverage_with_nodatavalue() {
         let exe_ctx_tiling_spec = TilingSpecification {
             origin_coordinate: (0., 0.).into(),
@@ -674,10 +682,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let app_ctx = InMemoryContext::new_with_context_spec(
+        with_temp_context_from_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
-        );
+            |app_ctx, _| async move {
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -714,10 +722,10 @@ mod tests {
             include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
             test::read_body(res).await.as_ref()
-        );
+        );}).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_sets_cache_control_header() {
         let exe_ctx_tiling_spec = TilingSpecification {
             origin_coordinate: (0., 0.).into(),
@@ -725,10 +733,12 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let app_ctx = InMemoryContext::new_with_context_spec(
+        with_temp_context_from_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
-        );
+            |app_ctx, _| async move {
+
+
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -765,5 +775,6 @@ mod tests {
             res.headers().get(header::CACHE_CONTROL).unwrap(),
             "no-cache"
         );
+    }).await;
     }
 }

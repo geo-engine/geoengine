@@ -166,7 +166,7 @@ mod tests {
 
     use crate::util::tests::read_body_json;
     use crate::{
-        contexts::{InMemoryContext, SimpleApplicationContext},
+        contexts::{PostgresContext, SimpleApplicationContext},
         tasks::{
             util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
         },
@@ -178,6 +178,7 @@ mod tests {
     use geoengine_datatypes::{error::ErrorSource, util::test::TestDefault};
     use serde_json::json;
     use std::{pin::Pin, sync::Arc};
+    use crate::util::tests::with_temp_context;
 
     struct NopTask {
         complete_rx: Arc<Mutex<oneshot::Receiver<()>>>,
@@ -331,10 +332,10 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_status() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -387,9 +388,12 @@ mod tests {
         assert_eq!(res_body["info"], json!("completed"));
         assert_eq!(res_body["timeTotal"], json!("00:00:00"));
         assert!(res_body["timeStarted"].is_string());
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_status_with_admin_session() {
         crate::util::config::set_config(
             "session.admin_session_token",
@@ -397,8 +401,8 @@ mod tests {
         )
         .unwrap();
 
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -423,12 +427,15 @@ mod tests {
         assert!(res_body["info"].is_null());
         assert_eq!(res_body["estimatedTimeRemaining"], json!("? (± ?)"));
         assert!(res_body["timeStarted"].is_string());
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_list() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -458,12 +465,15 @@ mod tests {
         assert_eq!(res_body["info"], json!("completed"));
         assert_eq!(res_body["timeTotal"], json!("00:00:00"));
         assert!(res_body["timeStarted"].is_string());
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_abort_task() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -514,12 +524,15 @@ mod tests {
                 },
             })
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_force_abort_task() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -567,12 +580,15 @@ mod tests {
                 },
             })
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_abort_after_abort() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -650,13 +666,16 @@ mod tests {
                 },
             })
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_duplicate() {
         let unique_id = "highlander".to_string();
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let session = app_ctx.default_session().await.unwrap();
 
         let tasks = app_ctx.session_context(session).tasks();
@@ -668,13 +687,16 @@ mod tests {
         assert!(tasks.schedule_task(task.boxed(), None).await.is_err());
 
         complete_tx.send(()).unwrap();
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_duplicate_after_finish() {
         let unique_id = "highlander".to_string();
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let tasks = Arc::new(ctx.tasks());
@@ -696,12 +718,15 @@ mod tests {
         assert!(tasks.schedule_task(task.boxed(), None).await.is_ok());
 
         complete_tx.send(()).unwrap();
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_notify() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let session = app_ctx.default_session().await.unwrap();
 
         let tasks = app_ctx.session_context(session).tasks();
@@ -725,12 +750,15 @@ mod tests {
             schedule_complete_rx.await.unwrap(),
             TaskStatus::Completed { .. }
         ));
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn abort_subtasks() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let tasks = Arc::new(ctx.tasks());
@@ -817,12 +845,15 @@ mod tests {
                 "cleanUp": {"status": "completed", "info": null}
             })
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_failing_task_with_failing_cleanup() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let tasks = Arc::new(ctx.tasks());
@@ -848,5 +879,8 @@ mod tests {
                 "cleanUp": {"status": "failed", "error": "FailingTaskWithFailingCleanupError"}
             })
         );
+
+        })
+        .await;
     }
 }

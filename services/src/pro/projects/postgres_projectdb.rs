@@ -384,7 +384,9 @@ where
 
         let stmt = conn.prepare("DELETE FROM projects WHERE id = $1;").await?;
 
-        conn.execute(&stmt, &[&project]).await?;
+        let rows_affected = conn.execute(&stmt, &[&project]).await?;
+
+        ensure!(rows_affected == 1, error::ProjectDeleteFailed);
 
         Ok(())
     }

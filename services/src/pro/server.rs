@@ -3,10 +3,9 @@ use crate::error::{Error, Result};
 use crate::handlers;
 use crate::pro;
 use crate::pro::apidoc::ApiDoc;
-use crate::pro::contexts::ProInMemoryContext;
 
 use crate::pro::contexts::ProPostgresContext;
-use crate::util::config::{self, get_config_element, Backend};
+use crate::util::config::{self, get_config_element};
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
     log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
@@ -196,67 +195,15 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     register_gdal_drivers_from_list(config::get_config_element::<config::Gdal>()?.allowed_drivers);
 
-    match web_config.backend {
-        Backend::InMemory => {
-            start_in_memory(
-                data_path_config,
-                tiling_spec,
-                oidc_config,
-                chunk_byte_size,
-                static_files_dir,
-                web_config,
-                cache_config,
-                quota_config,
-            )
-            .await
-        }
-        Backend::Postgres => {
-            start_postgres(
-                data_path_config,
-                tiling_spec,
-                oidc_config,
-                chunk_byte_size,
-                static_files_dir,
-                web_config,
-                cache_config,
-                quota_config,
-            )
-            .await
-        }
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn start_in_memory(
-    data_path_config: config::DataProvider,
-    tiling_spec: TilingSpecification,
-    oidc_config: crate::pro::util::config::Oidc,
-    chunk_byte_size: ChunkByteSize,
-    static_files_dir: Option<PathBuf>,
-    web_config: config::Web,
-    cache_config: crate::pro::util::config::Cache,
-    quota_config: crate::pro::util::config::Quota,
-) -> Result<()> {
-    info!("Using in memory backend");
-    let ctx = ProInMemoryContext::new_with_data(
-        data_path_config.dataset_defs_path,
-        data_path_config.provider_defs_path,
-        data_path_config.layer_defs_path,
-        data_path_config.layer_collection_defs_path,
+    start_postgres(
+        data_path_config,
         tiling_spec,
-        chunk_byte_size,
         oidc_config,
+        chunk_byte_size,
+        static_files_dir,
+        web_config,
         cache_config,
         quota_config,
-    )
-    .await;
-
-    start(
-        static_files_dir,
-        web_config.bind_address,
-        web_config.api_prefix,
-        web_config.version_api,
-        ctx,
     )
     .await
 }
@@ -273,8 +220,6 @@ async fn start_postgres(
     quota_config: crate::pro::util::config::Quota,
 ) -> Result<()> {
     {
-        info!("Using Postgres backend");
-
         let db_config = config::get_config_element::<config::Postgres>()?;
         let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
         pg_config

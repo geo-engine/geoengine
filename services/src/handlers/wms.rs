@@ -477,11 +477,11 @@ fn default_time_from_config() -> TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
+    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
-        register_ndvi_workflow_helper_with_cache_ttl, send_test_request,
+        register_ndvi_workflow_helper_with_cache_ttl, send_test_request, with_temp_context_from_spec,
     };
     use actix_web::dev::ServiceResponse;
     use actix_web::http::header;
@@ -497,26 +497,31 @@ mod tests {
     use std::convert::TryInto;
     use std::marker::PhantomData;
     use xml::ParserConfig;
+    use crate::util::tests::with_temp_context;
 
     async fn test_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
-        let app_ctx = InMemoryContext::test_default();
-
+        let path = path.map(ToString::to_string);
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
         let req = actix_web::test::TestRequest::default()
             .method(method)
-            .uri(path.unwrap_or("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
+            .uri(&path.unwrap_or("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png".to_string()))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, app_ctx).await
+
+        })
+        .await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_invalid_method() {
         check_allowed_http_methods(|method| test_test_helper(method, None), &[Method::GET]).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_missing_fields() {
         let res = test_test_helper(Method::GET, Some("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?service=WMS&request=GetMap&version=1.3.0&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png")).await;
 
@@ -529,7 +534,7 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_invalid_fields() {
         let res = test_test_helper(Method::GET, Some("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=XYZ&height=100&crs=EPSG:4326&styles=ssss&format=image/png")).await;
 
@@ -543,8 +548,8 @@ mod tests {
     }
 
     async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -556,9 +561,12 @@ mod tests {
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, app_ctx).await
+
+        })
+        .await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_capabilities() {
         let res = get_capabilities_test_helper(Method::GET).await;
 
@@ -573,16 +581,16 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_capabilities_invalid_method() {
         check_allowed_http_methods(get_capabilities_test_helper, &[Method::GET]).await;
     }
 
     // The result should be similar to the GDAL output of this command: gdalwarp -tr 1 1 -r near -srcnodata 0 -dstnodata 0  MOD13A2_M_NDVI_2014-01-01.TIFF MOD13A2_M_NDVI_2014-01-01_360_180_near_0.TIFF
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn png_from_stream_non_full() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let exe_ctx = ctx.execution_context().unwrap();
 
@@ -622,33 +630,37 @@ mod tests {
             include_bytes!("../../../test_data/wms/raster_small.png") as &[u8],
             image_bytes.as_slice()
         );
+
+        })
+        .await;
     }
 
     async fn get_map_test_helper(method: Method, path: Option<&str>) -> ServiceResponse {
+        // override the pixel size since this test was designed for 600 x 600 pixel tiles
         let exe_ctx_tiling_spec = TilingSpecification {
             origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
         };
 
-        // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let app_ctx = InMemoryContext::new_with_context_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-        );
+        let path = path.map(ToString::to_string);
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        with_temp_context_from_spec( exe_ctx_tiling_spec,
+            TestDefault::test_default(), |app_ctx, _| async move {
 
-        let session_id = ctx.session().id();
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+            let session_id = ctx.session().id();
 
-        let req = actix_web::test::TestRequest::with_uri(path.unwrap_or(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())))
-            .method(method)
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, app_ctx).await
+            let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+
+            let req = actix_web::test::TestRequest::with_uri(&path.unwrap_or(format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())))
+                .method(method)
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            send_test_request(req, app_ctx).await
+        }).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_map() {
         let res = get_map_test_helper(Method::GET, None).await;
 
@@ -664,10 +676,10 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_map_ndvi() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -691,10 +703,13 @@ mod tests {
             include_bytes!("../../../test_data/wms/get_map_ndvi.png") as &[u8],
             image_bytes
         );
+
+        })
+        .await;
     }
 
     ///Actix uses serde_urlencoded inside web::Query which does not support this
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_map_uppercase() {
         let exe_ctx_tiling_spec = TilingSpecification {
             origin_coordinate: (0., 0.).into(),
@@ -702,10 +717,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let app_ctx = InMemoryContext::new_with_context_spec(
+        with_temp_context_from_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
-        );
+            |app_ctx, _| async move {
 
         let ctx = app_ctx.default_session_context().await.unwrap();
 
@@ -725,16 +740,16 @@ mod tests {
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
             image_bytes
-        );
+        );}).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_map_invalid_method() {
         check_allowed_http_methods(|method| get_map_test_helper(method, None), &[Method::GET])
             .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_map_missing_fields() {
         let res = get_map_test_helper(Method::GET, Some("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z")).await;
 
@@ -747,7 +762,7 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_map_colorizer() {
         let exe_ctx_tiling_spec = TilingSpecification {
             origin_coordinate: (0., 0.).into(),
@@ -755,10 +770,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let app_ctx = InMemoryContext::new_with_context_spec(
+        with_temp_context_from_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
-        );
+            |app_ctx, _| async move {
 
         let ctx = app_ctx.default_session_context().await.unwrap();
 
@@ -814,13 +829,13 @@ mod tests {
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map_colorizer.png") as &[u8],
             image_bytes
-        );
+        );}).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_zoomes_very_far() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -869,12 +884,15 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn default_error() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -935,12 +953,15 @@ mod tests {
     </ServiceException>
 </ServiceExceptionReport>"#
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn json_error() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -990,12 +1011,15 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 200, "Operator", "Operator: DataTypeError: No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_sets_cache_control_header_no_cache() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -1015,12 +1039,15 @@ mod tests {
             response.headers().get(header::CACHE_CONTROL).unwrap(),
             "no-cache"
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_sets_cache_control_header_with_cache() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -1045,5 +1072,8 @@ mod tests {
                 || cache_header == "private, max-age=59"
                 || cache_header == "private, max-age=58"
         );
+
+        })
+        .await;
     }
 }

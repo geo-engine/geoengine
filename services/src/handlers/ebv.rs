@@ -560,7 +560,7 @@ mod tests {
     use super::*;
 
     use crate::{
-        contexts::{InMemoryContext, SimpleApplicationContext},
+        contexts::{PostgresContext, SimpleApplicationContext},
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
         tasks::util::test::wait_for_task_to_finish,
         util::server::{configure_extractors, render_404, render_405},
@@ -571,6 +571,7 @@ mod tests {
     use geoengine_datatypes::{test_data, util::test::TestDefault};
     use serde_json::json;
     use std::path::Path;
+    use crate::util::tests::with_temp_context;
 
     async fn send_test_request<C: SimpleApplicationContext>(
         req: test::TestRequest,
@@ -596,7 +597,7 @@ mod tests {
             .map_into_boxed_body()
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_remove_overviews() {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
@@ -608,8 +609,8 @@ mod tests {
         )
         .unwrap();
 
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = app_ctx.default_session_id().await;
@@ -687,9 +688,12 @@ mod tests {
         assert!(status["timeStarted"].is_string());
 
         assert!(is_empty(overview_folder.path()));
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_remove_overviews_non_existing() {
         // setup
 
@@ -699,8 +703,8 @@ mod tests {
         )
         .unwrap();
 
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -740,9 +744,12 @@ mod tests {
         assert_eq!(status["info"], json!(null));
         assert_eq!(status["timeTotal"], json!("00:00:00"));
         assert!(status["timeStarted"].is_string());
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_create_non_existing_overview() {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
@@ -754,8 +761,8 @@ mod tests {
         )
         .unwrap();
 
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -807,5 +814,8 @@ mod tests {
         assert_eq!(clean_up, r#"{"status":"completed","info":null}"#);
 
         assert!(is_empty(overview_folder.path()));
+
+        })
+        .await;
     }
 }

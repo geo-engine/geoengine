@@ -376,11 +376,12 @@ mod tests {
     use crate::contexts::{Session, SessionContext};
     use crate::datasets::listing::DatasetProvider;
     use crate::error::Result;
+    use crate::pro::util::tests::with_pro_temp_context;
     use crate::test_data;
     use crate::util::tests::TestDataUploads;
     use crate::{
         pro::{
-            contexts::ProInMemoryContext,
+            contexts::ProPostgresContext,
             util::tests::{create_session_helper, send_pro_test_request},
         },
         util::config,
@@ -396,219 +397,226 @@ mod tests {
     use std::path::PathBuf;
 
     #[allow(clippy::too_many_lines)]
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[serial]
     async fn it_works() -> Result<()> {
-        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+        with_pro_temp_context(|app_ctx, _| async move {
+            let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let mock_nodeodm = Server::run();
-        mock_nodeodm.expect(
-            Expectation::matching(request::method_path("POST", "/task/new/init")).respond_with(
-                json_encoded(json!({
-                    "uuid": "9c64ff33-b6d7-4ff9-b63c-aaba37dfb4b7"
-                })),
-            ),
-        );
+            let mock_nodeodm = Server::run();
+            mock_nodeodm.expect(
+                Expectation::matching(request::method_path("POST", "/task/new/init")).respond_with(
+                    json_encoded(json!({
+                        "uuid": "9c64ff33-b6d7-4ff9-b63c-aaba37dfb4b7"
+                    })),
+                ),
+            );
 
-        mock_nodeodm.expect(
-            Expectation::matching(request::method_path(
-                "POST",
-                "/task/new/upload/9c64ff33-b6d7-4ff9-b63c-aaba37dfb4b7",
-            ))
-            .times(2)
-            .respond_with(json_encoded(json!({}))),
-        );
+            mock_nodeodm.expect(
+                Expectation::matching(request::method_path(
+                    "POST",
+                    "/task/new/upload/9c64ff33-b6d7-4ff9-b63c-aaba37dfb4b7",
+                ))
+                .times(2)
+                .respond_with(json_encoded(json!({}))),
+            );
 
-        mock_nodeodm.expect(
-            Expectation::matching(request::method_path(
-                "POST",
-                "/task/new/commit/9c64ff33-b6d7-4ff9-b63c-aaba37dfb4b7",
-            ))
-            .respond_with(json_encoded(json!({}))),
-        );
+            mock_nodeodm.expect(
+                Expectation::matching(request::method_path(
+                    "POST",
+                    "/task/new/commit/9c64ff33-b6d7-4ff9-b63c-aaba37dfb4b7",
+                ))
+                .respond_with(json_encoded(json!({}))),
+            );
 
-        // manipulate config to use the mock nodeodm server
-        config::set_config("odm.endpoint", mock_nodeodm.url_str("/")).unwrap();
+            // manipulate config to use the mock nodeodm server
+            config::set_config("odm.endpoint", mock_nodeodm.url_str("/")).unwrap();
 
-        let app_ctx = ProInMemoryContext::test_default();
-        let session = create_session_helper(&app_ctx).await;
-        let ctx = app_ctx.session_context(session.clone());
+            let session = create_session_helper(&app_ctx).await;
+            let ctx = app_ctx.session_context(session.clone());
 
-        // file upload into geo engine
-        // TODO: properly upload the data using the handler once this is possible in a test (after migration to actix)
-        let upload_id = UploadId::new();
-        let upload_dir = upload_id.root_path()?;
-        fs::create_dir_all(&upload_dir).await.context(error::Io)?;
+            // file upload into geo engine
+            // TODO: properly upload the data using the handler once this is possible in a test (after migration to actix)
+            let upload_id = UploadId::new();
+            let upload_dir = upload_id.root_path()?;
+            fs::create_dir_all(&upload_dir).await.context(error::Io)?;
 
-        test_data.uploads.push(upload_id);
+            test_data.uploads.push(upload_id);
 
-        // copy the test data into upload directory
-        let mut drone_images_dir = fs::read_dir(test_data!("pro/drone_mapping/drone_images"))
-            .await
-            .context(error::Io)?;
+            // copy the test data into upload directory
+            let mut drone_images_dir = fs::read_dir(test_data!("pro/drone_mapping/drone_images"))
+                .await
+                .context(error::Io)?;
 
-        while let Some(entry) = drone_images_dir.next_entry().await.context(error::Io)? {
-            if entry.path().is_dir() {
-                continue;
+            while let Some(entry) = drone_images_dir.next_entry().await.context(error::Io)? {
+                if entry.path().is_dir() {
+                    continue;
+                }
+                fs::copy(entry.path(), upload_dir.join(entry.file_name())).await?;
             }
-            fs::copy(entry.path(), upload_dir.join(entry.file_name())).await?;
-        }
 
-        // submit the task via geo engine
-        let task = TaskStart { upload: upload_id };
+            // submit the task via geo engine
+            let task = TaskStart { upload: upload_id };
 
-        let req = test::TestRequest::post()
-            .uri("/droneMapping/task")
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-            .set_json(&task);
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+            let req = test::TestRequest::post()
+                .uri("/droneMapping/task")
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+                .set_json(&task);
+            let res = send_pro_test_request(req, app_ctx.clone()).await;
 
-        assert_eq!(res.status(), 200);
+            assert_eq!(res.status(), 200);
 
-        let task: IdResponse<Uuid> = test::read_body_json(res).await;
+            let task: IdResponse<Uuid> = test::read_body_json(res).await;
 
-        let task_uuid = task.id;
+            let task_uuid = task.id;
 
-        // create a dataset from the nodeodm result
+            // create a dataset from the nodeodm result
 
-        // create zip archive from test data
-        let odm_test_data_dir = test_data!("pro/drone_mapping/odm_result").into();
-        let odm_all_zip_bytes = zip_dir(odm_test_data_dir).await.unwrap();
+            // create zip archive from test data
+            let odm_test_data_dir = test_data!("pro/drone_mapping/odm_result").into();
+            let odm_all_zip_bytes = zip_dir(odm_test_data_dir).await.unwrap();
 
-        mock_nodeodm.expect(
-            Expectation::matching(request::method_path(
-                "GET",
-                format!("/task/{task_uuid}/download/all.zip"),
-            ))
-            .respond_with(
-                status_code(200)
-                    .append_header(CONTENT_TYPE, "application/zip")
-                    .body(odm_all_zip_bytes),
-            ),
-        );
+            mock_nodeodm.expect(
+                Expectation::matching(request::method_path(
+                    "GET",
+                    format!("/task/{task_uuid}/download/all.zip"),
+                ))
+                .respond_with(
+                    status_code(200)
+                        .append_header(CONTENT_TYPE, "application/zip")
+                        .body(odm_all_zip_bytes),
+                ),
+            );
 
-        // download odm result through geo engine and create dataset
-        let req = test::TestRequest::post()
-            .uri(&format!("/droneMapping/dataset/{task_uuid}"))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-            .set_json(task);
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+            // download odm result through geo engine and create dataset
+            let req = test::TestRequest::post()
+                .uri(&format!("/droneMapping/dataset/{task_uuid}"))
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+                .set_json(task);
+            let res = send_pro_test_request(req, app_ctx.clone()).await;
 
-        let dataset_response: CreateDatasetResponse = test::read_body_json(res).await;
-        test_data.uploads.push(dataset_response.upload);
+            let dataset_response: CreateDatasetResponse = test::read_body_json(res).await;
+            test_data.uploads.push(dataset_response.upload);
 
-        // test if the meta data is correct
-        let dataset_name = dataset_response.dataset;
-        let dataset_id = ctx
-            .db()
-            .resolve_dataset_name_to_id(&dataset_name)
-            .await
-            .unwrap();
-        let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
-            ctx.execution_context()
+            // test if the meta data is correct
+            let dataset_name = dataset_response.dataset;
+            let dataset_id = ctx
+                .db()
+                .resolve_dataset_name_to_id(&dataset_name)
+                .await
+                .unwrap();
+            let meta: Box<
+                dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
+            > = ctx
+                .execution_context()
                 .unwrap()
                 .meta_data(&dataset_id.into())
                 .await
                 .unwrap();
 
-        let result_descriptor = meta.result_descriptor().await.unwrap();
-        assert_eq!(
-            result_descriptor,
-            RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32630)
+            let result_descriptor = meta.result_descriptor().await.unwrap();
+            assert_eq!(
+                result_descriptor,
+                RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::new(
+                        SpatialReferenceAuthority::Epsg,
+                        32630
+                    )
                     .into(),
-                measurement: Measurement::Unitless,
-                time: None,
-                bbox: None,
-                resolution: None,
-            }
-        );
+                    measurement: Measurement::Unitless,
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                }
+            );
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (0.0, 0.0).into(),
-                (200.0, -200.0).into(),
-            ),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::new_unchecked(1., 1.),
-        };
-
-        let mut loading_info = meta.loading_info(query).await.unwrap();
-
-        let part = loading_info.info.next().unwrap().unwrap();
-        assert!(loading_info.info.next().is_none());
-
-        let file_path = &part.params.as_ref().unwrap().file_path;
-
-        assert_eq!(
-            file_path,
-            &dataset_response
-                .upload
-                .root_path()
-                .unwrap()
-                .join("odm_orthophoto")
-                .join("odm_orthophoto.tif")
-        );
-
-        assert_eq!(
-            part,
-            GdalLoadingInfoTemporalSlice {
-                time: TimeInterval::default(),
-                params: Some(GdalDatasetParameters {
-                    file_path: file_path.clone(),
-                    rasterband_channel: 1,
-                    geo_transform: GdalDatasetGeoTransform {
-                        origin_coordinate: (0.0, 0.0).into(),
-                        x_pixel_size: 1.0,
-                        y_pixel_size: -1.0,
-                    },
-                    width: 200,
-                    height: 200,
-                    file_not_found_handling: FileNotFoundHandling::Error,
-                    no_data_value: None,
-                    properties_mapping: None,
-                    gdal_open_options: None,
-                    gdal_config_options: None,
-                    allow_alphaband_as_mask: true,
-                    retry: None,
-                }),
-                cache_ttl: CacheTtlSeconds::default(),
-            }
-        );
-
-        // test if the data can be loaded
-        let op = GdalSource {
-            params: GdalSourceParameters {
-                data: geoengine_datatypes::dataset::NamedData::with_namespaced_name(
-                    session.user.id.to_string(),
-                    dataset_id.to_string(),
+            let query = RasterQueryRectangle {
+                spatial_bounds: SpatialPartition2D::new_unchecked(
+                    (0.0, 0.0).into(),
+                    (200.0, -200.0).into(),
                 ),
-            },
-        }
-        .boxed();
+                time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::new_unchecked(1., 1.),
+            };
 
-        let exe_ctx = ctx.execution_context().unwrap();
-        let initialized = op
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .unwrap();
+            let mut loading_info = meta.loading_info(query).await.unwrap();
 
-        let processor = initialized.query_processor().unwrap().get_u8().unwrap();
+            let part = loading_info.info.next().unwrap().unwrap();
+            assert!(loading_info.info.next().is_none());
 
-        let query_ctx = ctx.query_context().unwrap();
-        let result = processor.raster_query(query, &query_ctx).await.unwrap();
+            let file_path = &part.params.as_ref().unwrap().file_path;
 
-        let result = result
-            .map(Result::unwrap)
-            .collect::<Vec<RasterTile2D<u8>>>()
-            .await;
+            assert_eq!(
+                file_path,
+                &dataset_response
+                    .upload
+                    .root_path()
+                    .unwrap()
+                    .join("odm_orthophoto")
+                    .join("odm_orthophoto.tif")
+            );
 
-        assert_eq!(result.len(), 1);
+            assert_eq!(
+                part,
+                GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::default(),
+                    params: Some(GdalDatasetParameters {
+                        file_path: file_path.clone(),
+                        rasterband_channel: 1,
+                        geo_transform: GdalDatasetGeoTransform {
+                            origin_coordinate: (0.0, 0.0).into(),
+                            x_pixel_size: 1.0,
+                            y_pixel_size: -1.0,
+                        },
+                        width: 200,
+                        height: 200,
+                        file_not_found_handling: FileNotFoundHandling::Error,
+                        no_data_value: None,
+                        properties_mapping: None,
+                        gdal_open_options: None,
+                        gdal_config_options: None,
+                        allow_alphaband_as_mask: true,
+                        retry: None,
+                    }),
+                    cache_ttl: CacheTtlSeconds::default(),
+                }
+            );
 
-        Ok(())
+            // test if the data can be loaded
+            let op = GdalSource {
+                params: GdalSourceParameters {
+                    data: geoengine_datatypes::dataset::NamedData::with_namespaced_name(
+                        session.user.id.to_string(),
+                        dataset_id.to_string(),
+                    ),
+                },
+            }
+            .boxed();
+
+            let exe_ctx = ctx.execution_context().unwrap();
+            let initialized = op
+                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .unwrap();
+
+            let processor = initialized.query_processor().unwrap().get_u8().unwrap();
+
+            let query_ctx = ctx.query_context().unwrap();
+            let result = processor.raster_query(query, &query_ctx).await.unwrap();
+
+            let result = result
+                .map(Result::unwrap)
+                .collect::<Vec<RasterTile2D<u8>>>()
+                .await;
+
+            assert_eq!(result.len(), 1);
+
+            Ok(())
+        })
+        .await
     }
 
     /// create a zip file from the content of `source_dir` and its subfolders and output it as a byte vector

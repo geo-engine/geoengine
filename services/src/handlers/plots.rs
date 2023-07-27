@@ -209,9 +209,11 @@ pub struct WrappedPlotOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, SimpleApplicationContext};
+    use crate::contexts::{PostgresContext, SimpleApplicationContext};
+    use crate::util::tests::with_temp_context_from_spec;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_json, read_body_string, send_test_request,
+        with_temp_context,
     };
     use crate::workflows::workflow::Workflow;
     use actix_web;
@@ -262,177 +264,184 @@ mod tests {
         .boxed()
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn json() {
         let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
-        let app_ctx = InMemoryContext::new_with_context_spec(
+
+        with_temp_context_from_spec(
             tiling_specification,
             ChunkByteSize::test_default(),
-        );
-        let session_id = app_ctx.default_session_id().await;
+            |app_ctx, _| async move {
+                let session_id = app_ctx.default_session_id().await;
 
-        let workflow = Workflow {
-            operator: Statistics {
-                params: StatisticsParams {
-                    column_names: vec![],
-                },
-                sources: vec![example_raster_source()].into(),
-            }
-            .boxed()
-            .into(),
-        };
-
-        let id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
-            .db()
-            .register_workflow(workflow)
-            .await
-            .unwrap();
-
-        let params = &[
-            ("bbox", "0,-0.3,0.2,0"),
-            ("crs", "EPSG:4326"),
-            ("time", "2020-01-01T00:00:00.0Z"),
-            ("spatialResolution", "0.1,0.1"),
-        ];
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!(
-                "/plot/{}?{}",
-                id,
-                &serde_urlencoded::to_string(params).unwrap()
-            ))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
-
-        assert_eq!(res.status(), 200);
-
-        assert_eq!(
-            read_body_json(res).await,
-            json!({
-                "outputFormat": "JsonPlain",
-                "plotType": "Statistics",
-                "data": {
-                    "Raster-1": {
-                        "valueCount": 24, // Note: this is caused by the query being a BoundingBox where the right and lower bounds are inclusive. This requires that the tiles that inculde the right and lower bounds are also produced.
-                        "validCount": 6,
-                        "min": 1.0,
-                        "max": 6.0,
-                        "mean": 3.5,
-                        "stddev": 1.707_825_127_659_933
+                let workflow = Workflow {
+                    operator: Statistics {
+                        params: StatisticsParams {
+                            column_names: vec![],
+                        },
+                        sources: vec![example_raster_source()].into(),
                     }
-                }
-            })
-        );
+                    .boxed()
+                    .into(),
+                };
+
+                let id = app_ctx
+                    .default_session_context()
+                    .await
+                    .unwrap()
+                    .db()
+                    .register_workflow(workflow)
+                    .await
+                    .unwrap();
+
+                let params = &[
+                    ("bbox", "0,-0.3,0.2,0"),
+                    ("crs", "EPSG:4326"),
+                    ("time", "2020-01-01T00:00:00.0Z"),
+                    ("spatialResolution", "0.1,0.1"),
+                ];
+                let req = actix_web::test::TestRequest::get()
+                    .uri(&format!(
+                        "/plot/{}?{}",
+                        id,
+                        &serde_urlencoded::to_string(params).unwrap()
+                    ))
+                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+                let res = send_test_request(req, app_ctx).await;
+
+                assert_eq!(res.status(), 200);
+
+                assert_eq!(
+                    read_body_json(res).await,
+                    json!({
+                        "outputFormat": "JsonPlain",
+                        "plotType": "Statistics",
+                        "data": {
+                            "Raster-1": {
+                                "valueCount": 24, // Note: this is caused by the query being a BoundingBox where the right and lower bounds are inclusive. This requires that the tiles that inculde the right and lower bounds are also produced.
+                                "validCount": 6,
+                                "min": 1.0,
+                                "max": 6.0,
+                                "mean": 3.5,
+                                "stddev": 1.707_825_127_659_933
+                            }
+                        }
+                    })
+                );
+            },
+        )
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn json_vega() {
         let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
-        let app_ctx = InMemoryContext::new_with_context_spec(
+        with_temp_context_from_spec(
             tiling_specification,
-            ChunkByteSize::test_default(),
-        );
-        let session_id = app_ctx.default_session_id().await;
+            TestDefault::test_default(),
+            |app_ctx, _| async move {
+                let session_id = app_ctx.default_session_id().await;
 
-        let workflow = Workflow {
-            operator: Histogram {
-                params: HistogramParams {
-                    column_name: None,
-                    bounds: HistogramBounds::Values {
-                        min: 0.0,
-                        max: 10.0,
-                    },
-                    buckets: HistogramBuckets::Number { value: 4 },
-                    interactive: false,
-                },
-                sources: example_raster_source().into(),
-            }
-            .boxed()
-            .into(),
-        };
-
-        let id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
-            .db()
-            .register_workflow(workflow)
-            .await
-            .unwrap();
-
-        let params = &[
-            ("bbox", "0,-0.3,0.2,0"),
-            ("crs", "EPSG:4326"),
-            ("time", "2020-01-01T00:00:00.0Z"),
-            ("spatialResolution", "0.1,0.1"),
-        ];
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!(
-                "/plot/{}?{}",
-                id,
-                &serde_urlencoded::to_string(params).unwrap()
-            ))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
-
-        assert_eq!(res.status(), 200);
-
-        let response = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
-
-        assert_eq!(response["outputFormat"], "JsonVega");
-        assert_eq!(response["plotType"], "Histogram");
-        assert!(response["plotType"]["metadata"].is_null());
-
-        let vega_json: Value =
-            serde_json::from_str(response["data"]["vegaString"].as_str().unwrap()).unwrap();
-
-        assert_eq!(
-            vega_json,
-            json!({
-                "$schema": "https://vega.github.io/schema/vega-lite/v4.json",
-                "data": {
-                    "values": [{
-                        "binStart": 0.0,
-                        "binEnd": 2.5,
-                        "Frequency": 2
-                    }, {
-                        "binStart": 2.5,
-                        "binEnd": 5.0,
-                        "Frequency": 2
-                    }, {
-                        "binStart": 5.0,
-                        "binEnd": 7.5,
-                        "Frequency": 2
-                    }, {
-                        "binStart": 7.5,
-                        "binEnd": 10.0,
-                        "Frequency": 0
-                    }]
-                },
-                "mark": "bar",
-                "encoding": {
-                    "x": {
-                        "field": "binStart",
-                        "bin": {
-                            "binned": true,
-                            "step": 2.5
+                let workflow = Workflow {
+                    operator: Histogram {
+                        params: HistogramParams {
+                            column_name: None,
+                            bounds: HistogramBounds::Values {
+                                min: 0.0,
+                                max: 10.0,
+                            },
+                            buckets: HistogramBuckets::Number { value: 4 },
+                            interactive: false,
                         },
-                        "axis": {
-                            "title": ""
-                        }
-                    },
-                    "x2": {
-                        "field": "binEnd"
-                    },
-                    "y": {
-                        "field": "Frequency",
-                        "type": "quantitative"
+                        sources: example_raster_source().into(),
                     }
-                }
-            })
-        );
+                    .boxed()
+                    .into(),
+                };
+
+                let id = app_ctx
+                    .default_session_context()
+                    .await
+                    .unwrap()
+                    .db()
+                    .register_workflow(workflow)
+                    .await
+                    .unwrap();
+
+                let params = &[
+                    ("bbox", "0,-0.3,0.2,0"),
+                    ("crs", "EPSG:4326"),
+                    ("time", "2020-01-01T00:00:00.0Z"),
+                    ("spatialResolution", "0.1,0.1"),
+                ];
+                let req = actix_web::test::TestRequest::get()
+                    .uri(&format!(
+                        "/plot/{}?{}",
+                        id,
+                        &serde_urlencoded::to_string(params).unwrap()
+                    ))
+                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+                let res = send_test_request(req, app_ctx).await;
+
+                assert_eq!(res.status(), 200);
+
+                let response = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
+
+                assert_eq!(response["outputFormat"], "JsonVega");
+                assert_eq!(response["plotType"], "Histogram");
+                assert!(response["plotType"]["metadata"].is_null());
+
+                let vega_json: Value =
+                    serde_json::from_str(response["data"]["vegaString"].as_str().unwrap()).unwrap();
+
+                assert_eq!(
+                    vega_json,
+                    json!({
+                        "$schema": "https://vega.github.io/schema/vega-lite/v4.json",
+                        "data": {
+                            "values": [{
+                                "binStart": 0.0,
+                                "binEnd": 2.5,
+                                "Frequency": 2
+                            }, {
+                                "binStart": 2.5,
+                                "binEnd": 5.0,
+                                "Frequency": 2
+                            }, {
+                                "binStart": 5.0,
+                                "binEnd": 7.5,
+                                "Frequency": 2
+                            }, {
+                                "binStart": 7.5,
+                                "binEnd": 10.0,
+                                "Frequency": 0
+                            }]
+                        },
+                        "mark": "bar",
+                        "encoding": {
+                            "x": {
+                                "field": "binStart",
+                                "bin": {
+                                    "binned": true,
+                                    "step": 2.5
+                                },
+                                "axis": {
+                                    "title": ""
+                                }
+                            },
+                            "x2": {
+                                "field": "binEnd"
+                            },
+                            "y": {
+                                "field": "Frequency",
+                                "type": "quantitative"
+                            }
+                        }
+                    })
+                );
+            },
+        )
+        .await
     }
 
     #[test]
@@ -461,41 +470,42 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn check_request_types() {
         async fn get_workflow_json(method: Method) -> ServiceResponse {
-            let app_ctx = InMemoryContext::test_default();
+            with_temp_context(|app_ctx, _| async move {
+                let ctx = app_ctx.default_session_context().await.unwrap();
+                let session_id = app_ctx.default_session_id().await;
 
-            let ctx = app_ctx.default_session_context().await.unwrap();
-            let session_id = app_ctx.default_session_id().await;
+                let workflow = Workflow {
+                    operator: Statistics {
+                        params: StatisticsParams {
+                            column_names: vec![],
+                        },
+                        sources: vec![example_raster_source()].into(),
+                    }
+                    .boxed()
+                    .into(),
+                };
 
-            let workflow = Workflow {
-                operator: Statistics {
-                    params: StatisticsParams {
-                        column_names: vec![],
-                    },
-                    sources: vec![example_raster_source()].into(),
-                }
-                .boxed()
-                .into(),
-            };
+                let id = ctx.db().register_workflow(workflow).await.unwrap();
 
-            let id = ctx.db().register_workflow(workflow).await.unwrap();
-
-            let params = &[
-                ("bbox", "-180,-90,180,90"),
-                ("time", "2020-01-01T00:00:00.0Z"),
-                ("spatial_resolution", "0.1,0.1"),
-            ];
-            let req = actix_web::test::TestRequest::default()
-                .method(method)
-                .uri(&format!(
-                    "/plot/{}?{}",
-                    id,
-                    &serde_urlencoded::to_string(params).unwrap()
-                ))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            send_test_request(req, app_ctx).await
+                let params = &[
+                    ("bbox", "-180,-90,180,90"),
+                    ("time", "2020-01-01T00:00:00.0Z"),
+                    ("spatial_resolution", "0.1,0.1"),
+                ];
+                let req = actix_web::test::TestRequest::default()
+                    .method(method)
+                    .uri(&format!(
+                        "/plot/{}?{}",
+                        id,
+                        &serde_urlencoded::to_string(params).unwrap()
+                    ))
+                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+                send_test_request(req, app_ctx).await
+            })
+            .await
         }
 
         check_allowed_http_methods(get_workflow_json, &[Method::GET]).await;

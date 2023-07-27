@@ -126,7 +126,6 @@ pub struct Web {
     /// During parsing it is ensured that a slash is at the start and no slash is at the end.
     #[serde(deserialize_with = "deserialize_api_prefix")]
     pub api_prefix: String,
-    pub backend: Backend,
     pub version_api: bool,
 }
 
@@ -143,17 +142,6 @@ impl Web {
 
 impl ConfigElement for Web {
     const KEY: &'static str = "web";
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Backend {
-    InMemory,
-    Postgres,
-}
-
-impl ConfigElement for Backend {
-    const KEY: &'static str = "backend";
 }
 
 #[derive(Debug, Deserialize)]

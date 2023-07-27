@@ -659,7 +659,7 @@ pub enum WorkflowApiError {
 mod tests {
 
     use super::*;
-    use crate::contexts::{InMemoryContext, Session, SimpleApplicationContext};
+    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::handlers::ErrorResponse;
     use crate::tasks::util::test::wait_for_task_to_finish;
@@ -703,10 +703,12 @@ mod tests {
     use std::sync::Arc;
     use zip::read::ZipFile;
     use zip::ZipArchive;
+    use crate::util::tests::with_temp_context;
+    use crate::util::tests::with_temp_context_from_spec;
 
     async fn register_test_helper(method: Method) -> ServiceResponse {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
@@ -729,9 +731,12 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&workflow);
         send_test_request(req, app_ctx).await
+
+        })
+        .await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn register() {
         let res = register_test_helper(Method::POST).await;
 
@@ -740,15 +745,15 @@ mod tests {
         let _id: IdResponse<WorkflowId> = test::read_body_json(res).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn register_invalid_method() {
         check_allowed_http_methods(register_test_helper, &[Method::POST]).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn register_missing_header() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let workflow = Workflow {
             operator: MockPointSource {
                 params: MockPointSourceParams {
@@ -773,12 +778,15 @@ mod tests {
             "Authorization error: Header with authorization token not provided.",
         )
         .await;
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn register_invalid_body() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
@@ -799,12 +807,15 @@ mod tests {
             "expected ident at line 1 column 2",
         )
         .await;
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn register_missing_fields() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
@@ -826,11 +837,14 @@ mod tests {
             "missing field `type` at line 1 column 2",
         )
         .await;
+
+        })
+        .await;
     }
 
     async fn load_test_helper(method: Method) -> (Workflow, ServiceResponse) {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
@@ -844,9 +858,12 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
 
         (workflow, res)
+
+        })
+        .await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn load() {
         let (workflow, res) = load_test_helper(Method::GET).await;
 
@@ -857,15 +874,15 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn load_invalid_method() {
         check_allowed_http_methods2(load_test_helper, &[Method::GET], |(_, res)| res).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn load_missing_header() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = test::TestRequest::get().uri(&format!("/workflow/{id}"));
@@ -878,12 +895,15 @@ mod tests {
             "Authorization error: Header with authorization token not provided.",
         )
         .await;
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn load_not_exist() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = ctx.session().id();
@@ -894,11 +914,14 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 404, "NotFound", "Not Found").await;
+
+        })
+        .await;
     }
 
     async fn vector_metadata_test_helper(method: Method) -> ServiceResponse {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = app_ctx.default_session_id().await;
@@ -930,9 +953,12 @@ mod tests {
             .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, app_ctx).await
+
+        })
+        .await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn vector_metadata() {
         let res = vector_metadata_test_helper(Method::GET).await;
 
@@ -966,10 +992,10 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn raster_metadata() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = app_ctx.default_session_id().await;
@@ -1022,17 +1048,20 @@ mod tests {
                 "resolution": null
             })
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn metadata_invalid_method() {
         check_allowed_http_methods(vector_metadata_test_helper, &[Method::GET]).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn metadata_missing_header() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let workflow = Workflow {
@@ -1067,12 +1096,15 @@ mod tests {
             "Authorization error: Header with authorization token not provided.",
         )
         .await;
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn plot_metadata() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = app_ctx.default_session_id().await;
@@ -1110,12 +1142,15 @@ mod tests {
                 "bbox": null
             })
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn provenance() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let session_id = app_ctx.default_session_id().await;
@@ -1161,12 +1196,15 @@ mod tests {
                 }
             ])
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_does_not_register_invalid_workflow() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -1202,9 +1240,12 @@ mod tests {
             res_body,
             json!({"error": "Operator", "message": "Operator: Invalid operator type: expected Vector found Raster"}).to_string()
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn test_download_all_metadata_zip() {
         fn zip_file_to_json(mut zip_file: ZipFile) -> serde_json::Value {
@@ -1220,10 +1261,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let app_ctx = InMemoryContext::new_with_context_spec(
+        with_temp_context_from_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
-        );
+            |app_ctx, _| async move {
 
         let session_id = app_ctx.default_session_id().await;
 
@@ -1324,9 +1365,10 @@ mod tests {
                 }
             ])
         );
+    }).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn dataset_from_workflow_task_success() {
         let exe_ctx_tiling_spec = TilingSpecification {
@@ -1335,10 +1377,10 @@ mod tests {
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let app_ctx = InMemoryContext::new_with_context_spec(
+        with_temp_context_from_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
-        );
+            |app_ctx, _| async move {
 
         let ctx = app_ctx.default_session_context().await.unwrap();
 
@@ -1469,5 +1511,6 @@ mod tests {
                 as &[u8],
             result.as_slice()
         );
+    }).await;
     }
 }

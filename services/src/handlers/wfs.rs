@@ -706,11 +706,11 @@ mod tests {
     use super::*;
 
     use crate::api::model::datatypes::{DataId, DatasetId};
-    use crate::contexts::{Session, SimpleApplicationContext};
+    use crate::contexts::{Session, SimpleApplicationContext, PostgresContext};
     use crate::datasets::storage::{DatasetDefinition, DatasetStore};
     use crate::handlers::ErrorResponse;
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
-    use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
+    use crate::{workflows::workflow::Workflow};
     use actix_web::dev::ServiceResponse;
     use actix_web::http::header;
     use actix_web::{http::Method, test};
@@ -722,15 +722,19 @@ mod tests {
     use geoengine_operators::source::CsvSourceParameters;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
+    use tokio_postgres::Socket;
+    use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
     use std::fs;
     use std::io::{Seek, SeekFrom, Write};
     use std::path::Path;
     use xml::ParserConfig;
+    use crate::util::tests::with_temp_context;
+    use crate::util::tests::with_temp_context_from_spec;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn mock_test() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -819,6 +823,9 @@ mod tests {
             })
             .to_string()
         );
+
+        })
+        .await;
     }
 
     async fn get_capabilities_test_helper(method: Method) -> ServiceResponse {
@@ -835,8 +842,8 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let session_id = app_ctx.default_session_id().await;
 
         let workflow = Workflow {
@@ -868,9 +875,12 @@ x;y
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, app_ctx).await
+
+        })
+        .await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_capabilities() {
         let res = get_capabilities_test_helper(Method::GET).await;
 
@@ -885,7 +895,7 @@ x;y
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_capabilities_invalid_method() {
         check_allowed_http_methods(get_capabilities_test_helper, &[Method::GET]).await;
     }
@@ -904,8 +914,8 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -927,9 +937,12 @@ x;y
 
         let req = test::TestRequest::with_uri(&format!("/wfs/{id}?request=GetFeature&service=WFS&version=2.0.0&typeNames={id}&bbox=-90,-180,90,180&srsName=EPSG:4326", id = id.to_string())).method(method).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, app_ctx).await
+
+        })
+        .await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_feature_registry() {
         let res = get_feature_registry_test_helper(Method::GET).await;
 
@@ -980,15 +993,15 @@ x;y
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_feature_registry_invalid_method() {
         check_allowed_http_methods(get_feature_registry_test_helper, &[Method::GET]).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_feature_registry_missing_fields() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -1003,6 +1016,9 @@ x;y
             "UnableToParseQueryString",
             "Unable to parse query string: missing field `typeNames`",
         )
+        .await;
+
+        })
         .await;
     }
 
@@ -1020,8 +1036,8 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let session_id = app_ctx.default_session_id().await;
 
         let workflow = Workflow {
@@ -1063,9 +1079,12 @@ x;y
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, app_ctx).await
+
+        })
+        .await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_feature_json() {
         let res = get_feature_json_test_helper(Method::GET).await;
 
@@ -1116,15 +1135,15 @@ x;y
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_feature_json_invalid_method() {
         check_allowed_http_methods(get_feature_json_test_helper, &[Method::GET]).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_feature_json_missing_fields() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -1150,12 +1169,20 @@ x;y
             "Unable to parse query string: missing field `typeNames`",
         )
         .await;
+
+        })
+        .await;
     }
 
-    async fn add_dataset_definition_to_datasets(
-        app_ctx: &InMemoryContext,
+    async fn add_dataset_definition_to_datasets<Tls>(
+        app_ctx: &PostgresContext<Tls>,
         dataset_definition_path: &Path,
-    ) -> DatasetId {
+    ) -> DatasetId 
+    where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,{
         let data = fs::read_to_string(dataset_definition_path).unwrap();
         let data = data.replace("test_data/", test_data!("./").to_str().unwrap());
         let def: DatasetDefinition = serde_json::from_str(&data).unwrap();
@@ -1168,7 +1195,7 @@ x;y
             .id
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn raster_vector_join() {
         let exe_ctx_tiling_spec = TilingSpecification {
             origin_coordinate: (0., 0.).into(),
@@ -1176,10 +1203,10 @@ x;y
         };
 
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        let app_ctx = InMemoryContext::new_with_context_spec(
+        with_temp_context_from_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
-        );
+            |app_ctx, _| async move {
 
         let session_id = app_ctx.default_session_id().await;
 
@@ -1276,10 +1303,10 @@ x;y
                     }
                 }]
             })
-        );
+        );}).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_sets_cache_control_header() {
         let res = get_feature_json_test_helper(Method::GET).await;
 

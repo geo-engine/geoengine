@@ -1533,7 +1533,7 @@ mod tests {
     use crate::layers::storage::LayerProviderDb;
 
     use crate::{
-        contexts::InMemoryContext, tasks::util::NopTaskContext,
+        contexts::PostgresContext, tasks::util::NopTaskContext,
         util::tests::add_land_cover_to_datasets,
     };
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
@@ -1557,6 +1557,7 @@ mod tests {
             GdalLoadingInfoTemporalSlice,
         },
     };
+    use crate::util::tests::with_temp_context;
 
     #[test]
     fn it_parses_netcdf_layer_collection_ids() {
@@ -2229,11 +2230,11 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_irregular_time_series() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
+            
         let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let land_cover_dataset_id = add_land_cover_to_datasets(&ctx).await;
+        let land_cover_dataset_id = add_land_cover_to_datasets(&ctx.db()).await;
 
         let provider_definition: Box<dyn DataProviderDefinition> =
             Box::new(EbvPortalDataProviderDefinition {
@@ -2329,5 +2330,8 @@ mod tests {
             vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.34280000000002},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
             metadata: PlotMetaData::None,
         });
+
+        })
+        .await;
     }
 }

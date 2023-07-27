@@ -179,10 +179,11 @@ pub fn initialize_quota_tracking<U: UserDb + 'static>(
 mod tests {
     use geoengine_datatypes::util::Identifier;
 
+    use crate::pro::util::tests::with_pro_temp_context;
     use crate::{
         contexts::{ApplicationContext, SessionContext},
         pro::{
-            contexts::ProInMemoryContext,
+            contexts::ProPostgresContext,
             users::{UserAuth, UserCredentials, UserRegistration},
             util::tests::admin_login,
         },
@@ -190,160 +191,163 @@ mod tests {
 
     use super::*;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_tracks_quota() {
-        let app_ctx = ProInMemoryContext::test_default();
+        with_pro_temp_context(|app_ctx, _| async move {
+            let _user = app_ctx
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
+                .await
+                .unwrap();
 
-        let _user = app_ctx
-            .register_user(UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret1234".to_string(),
-                real_name: "Foo Bar".to_string(),
-            })
-            .await
-            .unwrap();
+            let session = app_ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
 
-        let session = app_ctx
-            .login(UserCredentials {
-                email: "foo@example.com".to_string(),
-                password: "secret1234".to_string(),
-            })
-            .await
-            .unwrap();
+            let admin_session = admin_login(&app_ctx).await;
 
-        let admin_session = admin_login(&app_ctx).await;
+            let quota = initialize_quota_tracking(
+                QuotaTrackingMode::Check,
+                app_ctx.session_context(admin_session.clone()).db(),
+                0,
+                60,
+            );
 
-        let quota = initialize_quota_tracking(
-            QuotaTrackingMode::Check,
-            app_ctx.session_context(admin_session.clone()).db(),
-            0,
-            60,
-        );
+            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+            tracking.work_unit_done();
+            tracking.work_unit_done();
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+            let db = app_ctx.session_context(session).db();
 
-        let db = app_ctx.session_context(session).db();
+            // wait for quota to be recorded
+            let mut success = false;
+            for _ in 0..10 {
+                let used = db.quota_used().await.unwrap();
+                let available = db.quota_available().await.unwrap();
 
-        // wait for quota to be recorded
-        let mut success = false;
-        for _ in 0..10 {
-            let used = db.quota_used().await.unwrap();
-            let available = db.quota_available().await.unwrap();
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-            if used == 2 && available == 9997 {
-                success = true;
-                break;
+                if used == 2 && available == 9997 {
+                    success = true;
+                    break;
+                }
             }
-        }
 
-        assert!(success);
+            assert!(success);
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_tracks_quota_buffered() {
-        let app_ctx = ProInMemoryContext::test_default();
+        with_pro_temp_context(|app_ctx, _| async move {
+            let _user = app_ctx
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
+                .await
+                .unwrap();
 
-        let _user = app_ctx
-            .register_user(UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret1234".to_string(),
-                real_name: "Foo Bar".to_string(),
-            })
-            .await
-            .unwrap();
+            let session = app_ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
 
-        let session = app_ctx
-            .login(UserCredentials {
-                email: "foo@example.com".to_string(),
-                password: "secret1234".to_string(),
-            })
-            .await
-            .unwrap();
+            let admin_session = admin_login(&app_ctx).await;
 
-        let admin_session = admin_login(&app_ctx).await;
+            let quota = initialize_quota_tracking(
+                QuotaTrackingMode::Check,
+                app_ctx.session_context(admin_session.clone()).db(),
+                5,
+                60,
+            );
 
-        let quota = initialize_quota_tracking(
-            QuotaTrackingMode::Check,
-            app_ctx.session_context(admin_session.clone()).db(),
-            5,
-            60,
-        );
+            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+            tracking.work_unit_done();
+            tracking.work_unit_done();
+            tracking.work_unit_done();
+            tracking.work_unit_done();
+            tracking.work_unit_done();
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
-        tracking.work_unit_done();
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+            let db = app_ctx.session_context(session).db();
 
-        let db = app_ctx.session_context(session).db();
+            // wait for quota to be recorded
+            let mut success = false;
+            for _ in 0..10 {
+                let used = db.quota_used().await.unwrap();
+                let available = db.quota_available().await.unwrap();
 
-        // wait for quota to be recorded
-        let mut success = false;
-        for _ in 0..10 {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+                if used == 5 && available == 9994 {
+                    success = true;
+                    break;
+                }
+            }
+
+            assert!(success);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_tracks_quota_buffered_timeout() {
+        with_pro_temp_context(|app_ctx, _| async move {
+            let _user = app_ctx
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
+                .await
+                .unwrap();
+
+            let session = app_ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret1234".to_string(),
+                })
+                .await
+                .unwrap();
+
+            let admin_session = admin_login(&app_ctx).await;
+
+            let quota = initialize_quota_tracking(
+                QuotaTrackingMode::Check,
+                app_ctx.session_context(admin_session.clone()).db(),
+                5,
+                2,
+            );
+
+            let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+
+            tracking.work_unit_done();
+            tracking.work_unit_done();
+
+            let db = app_ctx.session_context(session).db();
+
+            tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+
             let used = db.quota_used().await.unwrap();
             let available = db.quota_available().await.unwrap();
 
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-            if used == 5 && available == 9994 {
-                success = true;
-                break;
-            }
-        }
-
-        assert!(success);
-    }
-
-    #[tokio::test]
-    async fn it_tracks_quota_buffered_timeout() {
-        let app_ctx = ProInMemoryContext::test_default();
-
-        let _user = app_ctx
-            .register_user(UserRegistration {
-                email: "foo@example.com".to_string(),
-                password: "secret1234".to_string(),
-                real_name: "Foo Bar".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let session = app_ctx
-            .login(UserCredentials {
-                email: "foo@example.com".to_string(),
-                password: "secret1234".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let admin_session = admin_login(&app_ctx).await;
-
-        let quota = initialize_quota_tracking(
-            QuotaTrackingMode::Check,
-            app_ctx.session_context(admin_session.clone()).db(),
-            5,
-            2,
-        );
-
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
-
-        tracking.work_unit_done();
-        tracking.work_unit_done();
-
-        let db = app_ctx.session_context(session).db();
-
-        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
-
-        let used = db.quota_used().await.unwrap();
-        let available = db.quota_available().await.unwrap();
-
-        assert_eq!(used, 2);
-        assert_eq!(available, 9997);
+            assert_eq!(used, 2);
+            assert_eq!(available, 9997);
+        })
+        .await;
     }
 }
