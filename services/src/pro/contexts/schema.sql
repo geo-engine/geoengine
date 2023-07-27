@@ -127,7 +127,7 @@ SELECT
 FROM user_roles AS r
 INNER JOIN permissions AS p ON (
     r.role_id = p.role_id AND p.dataset_id IS NOT NULL
-);;
+);
 
 CREATE VIEW user_permitted_projects
 AS
@@ -138,7 +138,7 @@ SELECT
 FROM user_roles AS r
 INNER JOIN permissions AS p ON (
     r.role_id = p.role_id AND p.project_id IS NOT NULL
-);;
+);
 
 CREATE VIEW user_permitted_layer_collections
 AS
@@ -149,7 +149,7 @@ SELECT
 FROM user_roles AS r
 INNER JOIN permissions AS p ON (
     r.role_id = p.role_id AND p.layer_collection_id IS NOT NULL
-);;
+);
 
 CREATE VIEW user_permitted_layers
 AS
@@ -160,4 +160,4 @@ SELECT
 FROM user_roles AS r
 INNER JOIN permissions AS p ON (
     r.role_id = p.role_id AND p.layer_id IS NOT NULL
-);;
+);

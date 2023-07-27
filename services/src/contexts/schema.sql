@@ -124,6 +124,12 @@ CREATE TABLE workflows (
 
 CREATE TYPE "DatasetName" AS (namespace text, name text);
 
+CREATE TYPE "Provenance" AS (
+    citation text,
+    license text,
+    uri text
+);
+
 CREATE TABLE datasets (
     id uuid PRIMARY KEY,
     name "DatasetName" UNIQUE NOT NULL,
@@ -134,7 +140,7 @@ CREATE TABLE datasets (
     result_descriptor json NOT NULL,
     meta_data json NOT NULL,
     symbology json,
-    provenance json
+    provenance "Provenance" []
 );
 
 -- TODO: add constraint not null
