@@ -414,17 +414,18 @@ mod tests {
         crate::api::can_resolve_api(ApiDoc::openapi());
     }
 
-    // #[tokio::test]
-    // async fn can_run_examples() {
-    //     crate::api::can_run_examples(
-    //         ApiDoc::openapi(),
-    //         move || async move {
-    //             let ctx = ProInMemoryContext::test_default();
-    //             let session_id = ctx.create_anonymous_session().await.unwrap().id();
-    //             (ctx, session_id)
-    //         },
-    //         send_pro_test_request,
-    //     )
-    //     .await;
-    // }
+    #[tokio::test]
+    async fn can_run_examples() {
+        //     crate::api::can_run_examples(
+        //         ApiDoc::openapi(),
+        //         move || async move {
+        //             let ctx = ProInMemoryContext::test_default();
+        //             let session_id = ctx.create_anonymous_session().await.unwrap().id();
+        //             (ctx, session_id)
+        //         },
+        //         send_pro_test_request,
+        //     )
+        //     .await;
+        todo!()
+    }
 }

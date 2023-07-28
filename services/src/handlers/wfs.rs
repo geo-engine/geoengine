@@ -1188,6 +1188,7 @@ x;y
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
     async fn raster_vector_join() {
         let exe_ctx_tiling_spec = TilingSpecification {
             origin_coordinate: (0., 0.).into(),

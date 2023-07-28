@@ -101,39 +101,3 @@ async fn it_starts_postgres_backend_with_no_warnings() {
 
     assert!(result.is_ok());
 }
-
-#[serial]
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn it_starts_in_memory_backend_with_no_warnings() {
-    // change cwd s.t. the config file can be found
-    std::env::set_current_dir(test_data!("..")).expect("failed to set current directory");
-
-    let mut server = Command::cargo_bin("main")
-        .unwrap()
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-
-    let stderr = server.stderr.take().expect("failed to read stderr");
-
-    let mut reader = std::io::BufReader::new(stderr);
-
-    let mut startup_succesful = false;
-    for _ in 0..99 {
-        let mut buf = String::new();
-        reader.read_line(&mut buf).unwrap();
-
-        // println!("{buf}");
-
-        assert!(!buf.contains("WARN"));
-
-        if buf.contains("Tokio runtime found") {
-            startup_succesful = true;
-            break;
-        }
-    }
-
-    server.kill().unwrap();
-
-    assert!(startup_succesful);
-}

@@ -386,17 +386,18 @@ mod tests {
         crate::api::can_resolve_api(ApiDoc::openapi());
     }
 
-    // #[tokio::test]
-    // async fn can_run_examples() {
-    //     crate::api::can_run_examples(
-    //         ApiDoc::openapi(),
-    //         move || async move {
-    //             let ctx = InMemoryContext::test_default();
-    //             let session_id = ctx.default_session_id().await;
-    //             (ctx, session_id)
-    //         },
-    //         send_test_request,
-    //     )
-    //     .await;
-    // }
+    #[tokio::test]
+    async fn can_run_examples() {
+        //     crate::api::can_run_examples(
+        //         ApiDoc::openapi(),
+        //         move || async move {
+        //             let ctx = InMemoryContext::test_default();
+        //             let session_id = ctx.default_session_id().await;
+        //             (ctx, session_id)
+        //         },
+        //         send_test_request,
+        //     )
+        //     .await;
+        todo!()
+    }
 }

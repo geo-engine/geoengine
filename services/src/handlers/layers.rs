@@ -892,13 +892,12 @@ mod tests {
     use super::*;
     use crate::contexts::{SessionId, SimpleApplicationContext, SimpleSession};
     use crate::datasets::RasterDatasetFromWorkflowResult;
-
+    use crate::handlers::ErrorResponse;
     use crate::layers::layer::Layer;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
-    use crate::util::tests::read_body_string;
-    use crate::util::tests::with_temp_context;
+    use crate::util::tests::{read_body_string, with_temp_context_from_spec, TestDataUploads};
     use crate::{
         contexts::{PostgresContext, Session},
         util::tests::send_test_request,
@@ -922,7 +921,9 @@ mod tests {
     };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::processing::{TimeShift, TimeShiftParams};
+    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 
+    use crate::util::tests::with_temp_context;
     use geoengine_operators::util::raster_stream_to_geotiff::{
         raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
     };
@@ -931,8 +932,7 @@ mod tests {
         mock::{MockPointSource, MockPointSourceParams},
     };
     use std::sync::Arc;
-    use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
-    use tokio_postgres::Socket;
+    use tokio_postgres::NoTls;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_add_layer_to_collection() {
@@ -1407,13 +1407,7 @@ mod tests {
             }
         }
 
-        async fn create_layer_in_context<Tls>(&self, app_ctx: &PostgresContext<Tls>) -> Layer
-        where
-            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-            <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-            <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-            <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-        {
+        async fn create_layer_in_context(&self, app_ctx: &PostgresContext<NoTls>) -> Layer {
             let ctx = app_ctx.default_session_context().await.unwrap();
 
             let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
@@ -1539,123 +1533,150 @@ mod tests {
         .await
     }
 
-    // // async fn raster_layer_to_dataset_success(mock_source: MockRasterWorkflowLayerDescription) {
-    // //     let app_ctx = InMemoryContext::new_with_context_spec(
-    // //         mock_source.tiling_specification,
-    // //         TestDefault::test_default(),
-    // //     );
-    // //     let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn raster_layer_to_dataset_success(
+        app_ctx: PostgresContext<NoTls>,
+        mock_source: MockRasterWorkflowLayerDescription,
+    ) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-    // //     let layer = mock_source.create_layer_in_context(&app_ctx).await;
-    // //     let response =
-    // //         create_dataset_request_with_result_success(&app_ctx, layer, ctx.session().clone())
-    // //             .await;
+        let layer = mock_source.create_layer_in_context(&app_ctx).await;
+        let response =
+            create_dataset_request_with_result_success(&app_ctx, layer, ctx.session().clone())
+                .await;
 
-    // //     // automatically deletes uploads on drop
-    // //     let _test_uploads = TestDataUploads {
-    // //         uploads: vec![response.upload],
-    // //     };
+        // automatically deletes uploads on drop
+        let _test_uploads = TestDataUploads {
+            uploads: vec![response.upload],
+        };
 
-    // //     // query the layer
-    // //     let workflow_operator = mock_source.workflow.operator.get_raster().unwrap();
-    // //     let workflow_result =
-    // //         raster_operator_to_geotiff_bytes(&ctx, workflow_operator, mock_source.query_rectangle)
-    // //             .await
-    // //             .unwrap();
+        // query the layer
+        let workflow_operator = mock_source.workflow.operator.get_raster().unwrap();
+        let workflow_result =
+            raster_operator_to_geotiff_bytes(&ctx, workflow_operator, mock_source.query_rectangle)
+                .await
+                .unwrap();
 
-    // //     // query the newly created dataset
-    // //     let dataset_operator = GdalSource {
-    // //         params: GdalSourceParameters {
-    // //             data: response.dataset.into(),
-    // //         },
-    // //     }
-    // //     .boxed();
-    // //     let dataset_result =
-    // //         raster_operator_to_geotiff_bytes(&ctx, dataset_operator, mock_source.query_rectangle)
-    // //             .await
-    // //             .unwrap();
+        // query the newly created dataset
+        let dataset_operator = GdalSource {
+            params: GdalSourceParameters {
+                data: response.dataset.into(),
+            },
+        }
+        .boxed();
+        let dataset_result =
+            raster_operator_to_geotiff_bytes(&ctx, dataset_operator, mock_source.query_rectangle)
+                .await
+                .unwrap();
 
-    // //     assert_eq!(workflow_result.as_slice(), dataset_result.as_slice());
-    // // }
+        assert_eq!(workflow_result.as_slice(), dataset_result.as_slice());
+    }
 
-    // #[tokio::test]
-    // async fn test_raster_layer_to_dataset_success() {
-    //     let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 0);
-    //     raster_layer_to_dataset_success(mock_source).await;
-    // }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_raster_layer_to_dataset_success() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 0);
+        with_temp_context_from_spec(
+            mock_source.tiling_specification,
+            TestDefault::test_default(),
+            |app_ctx, _| async move {
+                let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 0);
+                raster_layer_to_dataset_success(app_ctx, mock_source).await;
+            },
+        )
+        .await;
+    }
 
-    // #[tokio::test]
-    // async fn test_raster_layer_with_timeshift_to_dataset_success() {
-    //     let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 1_000);
-    //     raster_layer_to_dataset_success(mock_source).await;
-    // }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_raster_layer_with_timeshift_to_dataset_success() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 1_000);
+        with_temp_context_from_spec(
+            mock_source.tiling_specification,
+            TestDefault::test_default(),
+            |app_ctx, _| async move {
+                let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 1_000);
+                raster_layer_to_dataset_success(app_ctx, mock_source).await;
+            },
+        )
+        .await;
+    }
 
-    // #[tokio::test]
-    // async fn test_raster_layer_to_dataset_no_time_interval() {
-    //     let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
-    //     let app_ctx = InMemoryContext::new_with_context_spec(
-    //         mock_source.tiling_specification,
-    //         TestDefault::test_default(),
-    //     );
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_raster_layer_to_dataset_no_time_interval() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
+        with_temp_context_from_spec(
+            mock_source.tiling_specification,
+            TestDefault::test_default(),
+            |app_ctx, _| async move {
+                let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
 
-    //     let session_id = app_ctx.default_session_id().await;
+                let session_id = app_ctx.default_session_id().await;
 
-    //     let layer = mock_source.create_layer_in_context(&app_ctx).await;
+                let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-    //     let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+                let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
 
-    //     ErrorResponse::assert(
-    //         res,
-    //         400,
-    //         "LayerResultDescriptorMissingFields",
-    //         "Result Descriptor field 'time' is None",
-    //     )
-    //     .await;
-    // }
+                ErrorResponse::assert(
+                    res,
+                    400,
+                    "LayerResultDescriptorMissingFields",
+                    "Result Descriptor field 'time' is None",
+                )
+                .await;
+            },
+        )
+        .await;
+    }
 
-    // #[tokio::test]
-    // async fn test_raster_layer_to_dataset_no_bounding_box() {
-    //     let mock_source = MockRasterWorkflowLayerDescription::new(true, false, true, 0);
-    //     let app_ctx = InMemoryContext::new_with_context_spec(
-    //         mock_source.tiling_specification,
-    //         TestDefault::test_default(),
-    //     );
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_raster_layer_to_dataset_no_bounding_box() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, false, true, 0);
+        with_temp_context_from_spec(
+            mock_source.tiling_specification,
+            TestDefault::test_default(),
+            |app_ctx, _| async move {
+                let mock_source = MockRasterWorkflowLayerDescription::new(true, false, true, 0);
 
-    //     let session_id = app_ctx.default_session_id().await;
+                let session_id = app_ctx.default_session_id().await;
 
-    //     let layer = mock_source.create_layer_in_context(&app_ctx).await;
+                let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-    //     let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+                let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
 
-    //     ErrorResponse::assert(
-    //         res,
-    //         400,
-    //         "LayerResultDescriptorMissingFields",
-    //         "Result Descriptor field 'bbox' is None",
-    //     )
-    //     .await;
-    // }
+                ErrorResponse::assert(
+                    res,
+                    400,
+                    "LayerResultDescriptorMissingFields",
+                    "Result Descriptor field 'bbox' is None",
+                )
+                .await;
+            },
+        )
+        .await;
+    }
 
-    // #[tokio::test]
-    // async fn test_raster_layer_to_dataset_no_spatial_resolution() {
-    //     let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
-    //     let app_ctx = InMemoryContext::new_with_context_spec(
-    //         mock_source.tiling_specification,
-    //         TestDefault::test_default(),
-    //     );
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_raster_layer_to_dataset_no_spatial_resolution() {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
+        with_temp_context_from_spec(
+            mock_source.tiling_specification,
+            TestDefault::test_default(),
+            |app_ctx, _| async move {
+                let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
 
-    //     let session_id = app_ctx.default_session_id().await;
+                let session_id = app_ctx.default_session_id().await;
 
-    //     let layer = mock_source.create_layer_in_context(&app_ctx).await;
+                let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-    //     let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+                let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
 
-    //     ErrorResponse::assert(
-    //         res,
-    //         400,
-    //         "LayerResultDescriptorMissingFields",
-    //         "Result Descriptor field 'spatial_resolution' is None",
-    //     )
-    //     .await;
-    // }
+                ErrorResponse::assert(
+                    res,
+                    400,
+                    "LayerResultDescriptorMissingFields",
+                    "Result Descriptor field 'spatial_resolution' is None",
+                )
+                .await;
+            },
+        )
+        .await;
+    }
 }

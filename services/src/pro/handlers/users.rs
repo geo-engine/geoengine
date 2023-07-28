@@ -667,18 +667,22 @@ mod tests {
 
     use crate::contexts::{Session, SessionContext};
     use crate::handlers::ErrorResponse;
-    use crate::pro::util::tests::mock_oidc::{mock_jwks, mock_provider_metadata};
+    use crate::pro::util::tests::mock_oidc::{
+        mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
+    };
     use crate::pro::util::tests::{
         admin_login, create_project_helper, create_session_helper, register_ndvi_workflow_helper,
         send_pro_test_request,
     };
     use crate::pro::{contexts::ProPostgresContext, users::UserId};
 
+    use crate::util::config::get_config_element;
     use crate::util::tests::{check_allowed_http_methods, read_body_string};
 
-    use crate::pro::users::{OidcRequestDb, UserAuth};
+    use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb, UserAuth};
     use crate::pro::util::config::Oidc;
     use crate::pro::util::tests::with_pro_temp_context;
+    use crate::pro::util::tests::with_pro_temp_context_and_oidc;
     use actix_http::header::CONTENT_TYPE;
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
@@ -686,13 +690,14 @@ mod tests {
     use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 
+    use geoengine_datatypes::util::test::TestDefault;
     use httptest::matchers::request;
     use httptest::responders::status_code;
     use httptest::{Expectation, Server};
     use serde_json::json;
     use serial_test::serial;
     use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
-    use tokio_postgres::Socket;
+    use tokio_postgres::{NoTls, Socket};
 
     async fn register_test_helper<C: ProApplicationContext>(
         app_ctx: C,
@@ -1266,16 +1271,10 @@ mod tests {
         server
     }
 
-    async fn oidc_init_test_helper<Tls>(
+    async fn oidc_init_test_helper(
         method: Method,
-        ctx: ProPostgresContext<Tls>,
-    ) -> ServiceResponse
-    where
-        Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-        <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-        <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-        <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-    {
+        ctx: ProPostgresContext<NoTls>,
+    ) -> ServiceResponse {
         let req = test::TestRequest::default()
             .method(method)
             .uri("/oidcInit")
@@ -1302,61 +1301,64 @@ mod tests {
         send_pro_test_request(req, ctx).await
     }
 
-    // #[tokio::test]
-    // async fn oidc_init() {
-    //     let server = mock_valid_provider_discovery(1);
-    //     let server_url = format!("http://{}", server.addr());
-    //     let request_db = single_state_nonce_request_db(server_url);
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn oidc_init() {
+        let server = mock_valid_provider_discovery(1);
+        let server_url = format!("http://{}", server.addr());
 
-    //     let ctx = ProInMemoryContext::new_with_oidc(
-    //         request_db,
-    //         TestDefault::test_default(),
-    //         get_config_element::<crate::pro::util::config::Quota>().unwrap(),
-    //     );
-    //     let res = oidc_init_test_helper(Method::POST, ctx).await;
+        with_pro_temp_context_and_oidc(
+            || single_state_nonce_request_db(server_url),
+            TestDefault::test_default(),
+            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
+            |app_ctx, _| async move {
+                let res = oidc_init_test_helper(Method::POST, app_ctx).await;
 
-    //     assert_eq!(res.status(), 200);
-    //     let _auth_code_url: AuthCodeRequestURL = test::read_body_json(res).await;
-    // }
+                assert_eq!(res.status(), 200);
+                let _auth_code_url: AuthCodeRequestURL = test::read_body_json(res).await;
+            },
+        )
+        .await;
+    }
 
-    // #[tokio::test]
-    // async fn oidc_illegal_provider() {
-    //     let server = Server::run();
-    //     let server_url = format!("http://{}", server.addr());
-    //     let request_db = single_state_nonce_request_db(server_url);
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn oidc_illegal_provider() {
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
 
-    //     let error_message = serde_json::to_string(&json!({
-    //         "error_description": "Dummy bad request",
-    //         "error": "catch_all_error"
-    //     }))
-    //     .expect("Serde Json unsuccessful");
+        let error_message = serde_json::to_string(&json!({
+            "error_description": "Dummy bad request",
+            "error": "catch_all_error"
+        }))
+        .expect("Serde Json unsuccessful");
 
-    //     server.expect(
-    //         Expectation::matching(request::method_path(
-    //             "GET",
-    //             "/.well-known/openid-configuration",
-    //         ))
-    //         .respond_with(
-    //             status_code(404)
-    //                 .insert_header("content-type", "application/json")
-    //                 .body(error_message),
-    //         ),
-    //     );
+        server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/.well-known/openid-configuration",
+            ))
+            .respond_with(
+                status_code(404)
+                    .insert_header("content-type", "application/json")
+                    .body(error_message),
+            ),
+        );
 
-    //     let ctx = ProInMemoryContext::new_with_oidc(
-    //         request_db,
-    //         TestDefault::test_default(),
-    //         get_config_element::<crate::pro::util::config::Quota>().unwrap(),
-    //     );
-    //     let res = oidc_init_test_helper(Method::POST, ctx).await;
+        with_pro_temp_context_and_oidc(
+            || single_state_nonce_request_db(server_url),
+            TestDefault::test_default(),
+            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
+            |app_ctx, _| async move {
 
-    //     ErrorResponse::assert(
-    //         res,
-    //         400,
-    //         "OidcError",
-    //         "OidcError: ProviderDiscoveryError: Server returned invalid response: HTTP status code 404 Not Found",
-    //     ).await;
-    // }
+            let res = oidc_init_test_helper(Method::POST, app_ctx).await;
+
+            ErrorResponse::assert(
+                res,
+                400,
+                "OidcError",
+                "OidcError: ProviderDiscoveryError: Server returned invalid response: HTTP status code 404 Not Found",
+            ).await;
+        }).await;
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn oidc_init_invalid_method() {
@@ -1370,207 +1372,220 @@ mod tests {
         .await;
     }
 
-    // #[tokio::test]
-    // async fn oidc_login() {
-    //     let server = mock_valid_provider_discovery(2);
-    //     let server_url = format!("http://{}", server.addr());
-    //     let request_db = single_state_nonce_request_db(server_url.clone());
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn oidc_login() {
+        let server = mock_valid_provider_discovery(2);
+        let server_url = format!("http://{}", server.addr());
 
-    //     let client = request_db.get_client().await.unwrap();
-    //     let request = request_db.generate_request(client).await;
+        let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+            server_url.clone(),
+            MOCK_CLIENT_ID.to_string(),
+        );
+        let token_response = mock_token_response(mock_token_config);
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token")).respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(serde_json::to_string(&token_response).unwrap()),
+            ),
+        );
 
-    //     assert!(request.is_ok());
+        let auth_code_response = AuthCodeResponse {
+            session_state: String::new(),
+            code: String::new(),
+            state: SINGLE_STATE.to_string(),
+        };
 
-    //     let mock_token_config =
-    //         MockTokenConfig::create_from_issuer_and_client(server_url, MOCK_CLIENT_ID.to_string());
-    //     let token_response = mock_token_response(mock_token_config);
-    //     server.expect(
-    //         Expectation::matching(request::method_path("POST", "/token")).respond_with(
-    //             status_code(200)
-    //                 .insert_header("content-type", "application/json")
-    //                 .body(serde_json::to_string(&token_response).unwrap()),
-    //         ),
-    //     );
+        with_pro_temp_context_and_oidc(
+            || single_state_nonce_request_db(server_url),
+            TestDefault::test_default(),
+            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
+            |app_ctx, _| async move {
+                let oidc_request_db = app_ctx.oidc_request_db();
+                let request_db = oidc_request_db.as_ref().as_ref().unwrap();
 
-    //     let auth_code_response = AuthCodeResponse {
-    //         session_state: String::new(),
-    //         code: String::new(),
-    //         state: SINGLE_STATE.to_string(),
-    //     };
+                let client = request_db.get_client().await.unwrap();
+                let request = request_db.generate_request(client).await;
 
-    //     let ctx = ProInMemoryContext::new_with_oidc(
-    //         request_db,
-    //         TestDefault::test_default(),
-    //         get_config_element::<crate::pro::util::config::Quota>().unwrap(),
-    //     );
-    //     let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+                assert!(request.is_ok());
 
-    //     assert_eq!(res.status(), 200);
+                let res = oidc_login_test_helper(Method::POST, app_ctx, auth_code_response).await;
 
-    //     let _id: UserSession = test::read_body_json(res).await;
-    // }
+                assert_eq!(res.status(), 200);
 
-    // #[tokio::test]
-    // async fn oidc_login_illegal_request() {
-    //     let server = mock_valid_provider_discovery(1);
-    //     let server_url = format!("http://{}", server.addr());
-    //     let request_db = single_state_nonce_request_db(server_url.clone());
+                let _id: UserSession = test::read_body_json(res).await;
+            },
+        )
+        .await;
+    }
 
-    //     let auth_code_response = AuthCodeResponse {
-    //         session_state: String::new(),
-    //         code: String::new(),
-    //         state: SINGLE_STATE.to_string(),
-    //     };
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn oidc_login_illegal_request() {
+        let server = mock_valid_provider_discovery(1);
+        let server_url = format!("http://{}", server.addr());
 
-    //     let ctx = ProInMemoryContext::new_with_oidc(
-    //         request_db,
-    //         TestDefault::test_default(),
-    //         get_config_element::<crate::pro::util::config::Quota>().unwrap(),
-    //     );
-    //     let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+        let auth_code_response = AuthCodeResponse {
+            session_state: String::new(),
+            code: String::new(),
+            state: SINGLE_STATE.to_string(),
+        };
 
-    //     ErrorResponse::assert(
-    //         res,
-    //         400,
-    //         "OidcError",
-    //         "OidcError: Login failed: Request unknown",
-    //     )
-    //     .await;
-    // }
+        with_pro_temp_context_and_oidc(
+            || single_state_nonce_request_db(server_url),
+            TestDefault::test_default(),
+            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
+            |app_ctx, _| async move {
+                let res = oidc_login_test_helper(Method::POST, app_ctx, auth_code_response).await;
 
-    // #[tokio::test]
-    // async fn oidc_login_fail() {
-    //     let server = mock_valid_provider_discovery(2);
-    //     let server_url = format!("http://{}", server.addr());
-    //     let request_db = single_state_nonce_request_db(server_url);
+                ErrorResponse::assert(
+                    res,
+                    400,
+                    "OidcError",
+                    "OidcError: Login failed: Request unknown",
+                )
+                .await;
+            },
+        )
+        .await;
+    }
 
-    //     let client = request_db.get_client().await.unwrap();
-    //     let request = request_db.generate_request(client).await;
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn oidc_login_fail() {
+        let server = mock_valid_provider_discovery(2);
+        let server_url = format!("http://{}", server.addr());
 
-    //     assert!(request.is_ok());
+        let error_message = serde_json::to_string(&json!({
+            "error_description": "Dummy bad request",
+            "error": "catch_all_error"
+        }))
+        .expect("Serde Json unsuccessful");
 
-    //     let error_message = serde_json::to_string(&json!({
-    //         "error_description": "Dummy bad request",
-    //         "error": "catch_all_error"
-    //     }))
-    //     .expect("Serde Json unsuccessful");
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token")).respond_with(
+                status_code(404)
+                    .insert_header("content-type", "application/json")
+                    .body(error_message),
+            ),
+        );
 
-    //     server.expect(
-    //         Expectation::matching(request::method_path("POST", "/token")).respond_with(
-    //             status_code(404)
-    //                 .insert_header("content-type", "application/json")
-    //                 .body(error_message),
-    //         ),
-    //     );
+        let auth_code_response = AuthCodeResponse {
+            session_state: String::new(),
+            code: String::new(),
+            state: SINGLE_STATE.to_string(),
+        };
 
-    //     let auth_code_response = AuthCodeResponse {
-    //         session_state: String::new(),
-    //         code: String::new(),
-    //         state: SINGLE_STATE.to_string(),
-    //     };
+        with_pro_temp_context_and_oidc(
+            || single_state_nonce_request_db(server_url),
+            TestDefault::test_default(),
+            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
+            |app_ctx, _| async move {
+                let oidc_request_db = app_ctx.oidc_request_db();
+                let request_db = oidc_request_db.as_ref().as_ref().unwrap();
+                let client = request_db.get_client().await.unwrap();
+                let request = request_db.generate_request(client).await;
 
-    //     let ctx = ProInMemoryContext::new_with_oidc(
-    //         request_db,
-    //         TestDefault::test_default(),
-    //         get_config_element::<crate::pro::util::config::Quota>().unwrap(),
-    //     );
-    //     let res = oidc_login_test_helper(Method::POST, ctx, auth_code_response).await;
+                assert!(request.is_ok());
 
-    //     ErrorResponse::assert(
-    //         res,
-    //         400,
-    //         "OidcError",
-    //         "OidcError: Verification failed: Request for code to token exchange failed",
-    //     )
-    //     .await;
-    // }
+                let res = oidc_login_test_helper(Method::POST, app_ctx, auth_code_response).await;
 
-    // #[tokio::test]
-    // async fn oidc_login_invalid_method() {
-    //     with_pro_temp_context(|app_ctx, _| async move {
-    //         let auth_code_response = AuthCodeResponse {
-    //             session_state: String::new(),
-    //             code: String::new(),
-    //             state: String::new(),
-    //         };
+                ErrorResponse::assert(
+                    res,
+                    400,
+                    "OidcError",
+                    "OidcError: Verification failed: Request for code to token exchange failed",
+                )
+                .await;
+            },
+        )
+        .await;
+    }
 
-    //         check_allowed_http_methods(
-    //             |method| {
-    //                 oidc_login_test_helper(method, app_ctx.clone(), auth_code_response.clone())
-    //             },
-    //             &[Method::POST],
-    //         )
-    //         .await;
-    //     })
-    //     .await;
-    // }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn oidc_login_invalid_method() {
+        with_pro_temp_context(|app_ctx, _| async move {
+            let auth_code_response = AuthCodeResponse {
+                session_state: String::new(),
+                code: String::new(),
+                state: String::new(),
+            };
 
-    // #[tokio::test]
-    // async fn oidc_login_invalid_body() {
-    //     with_pro_temp_context(|app_ctx, _| async move {
-    //         let req = test::TestRequest::post()
-    //             .uri("/oidcLogin")
-    //             .append_header((header::CONTENT_LENGTH, 0))
-    //             .set_payload("no json");
-    //         let res = send_pro_test_request(req, app_ctx).await;
+            check_allowed_http_methods(
+                |method| {
+                    oidc_login_test_helper(method, app_ctx.clone(), auth_code_response.clone())
+                },
+                &[Method::POST],
+            )
+            .await;
+        })
+        .await;
+    }
 
-    //         ErrorResponse::assert(
-    //             res,
-    //             415,
-    //             "UnsupportedMediaType",
-    //             "Unsupported content type header.",
-    //         )
-    //         .await;
-    //     })
-    //     .await;
-    // }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn oidc_login_invalid_body() {
+        with_pro_temp_context(|app_ctx, _| async move {
+            let req = test::TestRequest::post()
+                .uri("/oidcLogin")
+                .append_header((header::CONTENT_LENGTH, 0))
+                .set_payload("no json");
+            let res = send_pro_test_request(req, app_ctx).await;
 
-    // #[tokio::test]
-    // async fn oidc_login_missing_fields() {
-    //     with_pro_temp_context(|app_ctx, _| async move {
-    //         let auth_code_response = json!({
-    //             "sessionState": "",
-    //             "code": "",
-    //         });
+            ErrorResponse::assert(
+                res,
+                415,
+                "UnsupportedMediaType",
+                "Unsupported content type header.",
+            )
+            .await;
+        })
+        .await;
+    }
 
-    //         // register user
-    //         let req = test::TestRequest::post()
-    //             .uri("/oidcLogin")
-    //             .append_header((header::CONTENT_LENGTH, 0))
-    //             .set_json(&auth_code_response);
-    //         let res = send_pro_test_request(req, app_ctx).await;
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn oidc_login_missing_fields() {
+        with_pro_temp_context(|app_ctx, _| async move {
+            let auth_code_response = json!({
+                "sessionState": "",
+                "code": "",
+            });
 
-    //         ErrorResponse::assert(
-    //             res,
-    //             400,
-    //             "BodyDeserializeError",
-    //             "missing field `state` at line 1 column 29",
-    //         )
-    //         .await;
-    //     })
-    //     .await;
-    // }
+            // register user
+            let req = test::TestRequest::post()
+                .uri("/oidcLogin")
+                .append_header((header::CONTENT_LENGTH, 0))
+                .set_json(&auth_code_response);
+            let res = send_pro_test_request(req, app_ctx).await;
 
-    // #[tokio::test]
-    // async fn oidc_login_invalid_type() {
-    //     with_pro_temp_context(|app_ctx, _| async move {
-    //         // register user
-    //         let req = test::TestRequest::post()
-    //             .uri("/oidcLogin")
-    //             .append_header((header::CONTENT_LENGTH, 0))
-    //             .append_header((header::CONTENT_TYPE, "text/html"));
-    //         let res = send_pro_test_request(req, app_ctx).await;
+            ErrorResponse::assert(
+                res,
+                400,
+                "BodyDeserializeError",
+                "missing field `state` at line 1 column 29",
+            )
+            .await;
+        })
+        .await;
+    }
 
-    //         ErrorResponse::assert(
-    //             res,
-    //             415,
-    //             "UnsupportedMediaType",
-    //             "Unsupported content type header.",
-    //         )
-    //         .await;
-    //     })
-    //     .await;
-    // }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn oidc_login_invalid_type() {
+        with_pro_temp_context(|app_ctx, _| async move {
+            // register user
+            let req = test::TestRequest::post()
+                .uri("/oidcLogin")
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::CONTENT_TYPE, "text/html"));
+            let res = send_pro_test_request(req, app_ctx).await;
+
+            ErrorResponse::assert(
+                res,
+                415,
+                "UnsupportedMediaType",
+                "Unsupported content type header.",
+            )
+            .await;
+        })
+        .await;
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_gets_quota() {

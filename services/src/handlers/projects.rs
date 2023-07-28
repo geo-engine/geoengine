@@ -351,54 +351,63 @@ mod tests {
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
 
+    use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
     use serde_json::json;
     use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
-    use tokio_postgres::Socket;
+    use tokio_postgres::{NoTls, Socket};
 
-    // async fn create_test_helper(method: Method) -> ServiceResponse {
-    //     with_temp_context(|app_ctx, _| async move {
+    async fn create_test_helper(
+        app_ctx: PostgresContext<NoTls>,
+        method: Method,
+    ) -> ServiceResponse {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-    //     let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = ctx.session().id();
 
-    //     let session_id = ctx.session().id();
+        let create = CreateProject {
+            name: "Test".to_string(),
+            description: "Foo".to_string(),
+            bounds: STRectangle::new(SpatialReference::epsg_4326(), 0., 0., 1., 1., 0, 1).unwrap(),
+            time_step: Some(TimeStep {
+                step: 1,
+                granularity: TimeGranularity::Months,
+            }),
+        };
 
-    //     let create = CreateProject {
-    //         name: "Test".to_string(),
-    //         description: "Foo".to_string(),
-    //         bounds: STRectangle::new(SpatialReference::epsg_4326(), 0., 0., 1., 1., 0, 1).unwrap(),
-    //         time_step: Some(TimeStep {
-    //             step: 1,
-    //             granularity: TimeGranularity::Months,
-    //         }),
-    //     };
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/project")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(&create);
+        send_test_request(req, app_ctx).await
+    }
 
-    //     let req = test::TestRequest::default()
-    //         .method(method)
-    //         .uri("/project")
-    //         .append_header((header::CONTENT_LENGTH, 0))
-    //         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-    //         .set_json(&create);
-    //     send_test_request(req, app_ctx).await
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn create() {
+        with_temp_context(move |app_ctx, _| async move {
+            let res = create_test_helper(app_ctx, Method::POST).await;
 
-    //     })
-    //     .await;
-    // }
+            assert_eq!(res.status(), 200);
 
-    // #[tokio::test]
-    // async fn create() {
-    //     let res = create_test_helper(Method::POST).await;
+            let _project: IdResponse<ProjectId> = test::read_body_json(res).await;
+        })
+        .await;
+    }
 
-    //     assert_eq!(res.status(), 200);
-
-    //     let _project: IdResponse<ProjectId> = test::read_body_json(res).await;
-    // }
-
-    // #[tokio::test]
-    // async fn create_invalid_method() {
-    //     check_allowed_http_methods(create_test_helper, &[Method::POST]).await;
-    // }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn create_invalid_method() {
+        with_temp_context(|app_ctx, _| async move {
+            check_allowed_http_methods(
+                |method| create_test_helper(app_ctx.clone(), method),
+                &[Method::POST],
+            )
+            .await;
+        })
+        .await;
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn create_invalid_body() {

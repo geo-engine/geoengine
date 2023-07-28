@@ -176,15 +176,15 @@ mod tests {
 
     /// Test the webserver startup to ensure that `tokio` and `actix` are working properly
     // TODO: create temp schema first and clean up afterwards...
-    // #[actix_rt::test]
-    // async fn webserver_start() {
-    //     tokio::select! {
-    //         server = start_server(None) => {
-    //             server.expect("server run");
-    //         }
-    //         _ = queries() => {}
-    //     }
-    // }
+    #[actix_rt::test]
+    async fn webserver_start() {
+        tokio::select! {
+            server = start_server(None) => {
+                server.expect("server run");
+            }
+            _ = queries() => {}
+        }
+    }
 
     async fn queries() {
         let web_config: config::Web = get_config_element().unwrap();

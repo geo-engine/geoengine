@@ -12,7 +12,10 @@ use crate::{
     pro::{
         contexts::{ProApplicationContext, ProGeoEngineDb, ProPostgresContext},
         permissions::{Permission, PermissionDb, Role},
-        users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
+        users::{
+            OidcRequestDb, UserAuth, UserCredentials, UserId, UserInfo, UserRegistration,
+            UserSession,
+        },
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
     util::config::get_config_element,
@@ -44,7 +47,7 @@ use rand::RngCore;
 use tokio::runtime::Handle;
 use tokio_postgres::NoTls;
 
-use super::config::Quota;
+use super::config::{Cache, Quota};
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: UserAuth>(app_ctx: &C) -> UserSession {
@@ -597,52 +600,53 @@ where
     }
 }
 
-// /// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
-// ///
-// /// # Panics
-// ///
-// /// Panics if the `PostgresContext` could not be created.
-// ///
-// pub async fn with_pro_temp_context_and_oidc<F, Fut, R>(
-//     oidc_db: OidcRequestDb,
-//     cache_config: Cache,
-//     quota_config: Quota,
-//     f: F,
-// ) -> R
-// where
-//     F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
-//         + std::panic::UnwindSafe
-//         + Send
-//         + 'static,
-//     Fut: Future<Output = R> + Send,
-// {
-//     let (pg_config, schema) = setup_db().await;
+/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
+///
+/// # Panics
+///
+/// Panics if the `PostgresContext` could not be created.
+///
+pub async fn with_pro_temp_context_and_oidc<O, F, Fut, R>(
+    oidc_db: O,
+    cache_config: Cache,
+    quota_config: Quota,
+    f: F,
+) -> R
+where
+    O: FnOnce() -> OidcRequestDb + std::panic::UnwindSafe + Send + 'static,
+    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+        + std::panic::UnwindSafe
+        + Send
+        + 'static,
+    Fut: Future<Output = R>,
+{
+    let (pg_config, schema) = setup_db().await;
 
-//     // catch all panics and clean up first…
-//     let executed_fn = {
-//         let pg_config = pg_config.clone();
-//         std::panic::catch_unwind(move || {
-//             tokio::task::block_in_place(move || {
-//                 Handle::current().block_on(async move {
-//                     let ctx = ProPostgresContext::new_with_oidc(
-//                         pg_config.clone(),
-//                         tokio_postgres::NoTls,
-//                         oidc_db,
-//                         cache_config,
-//                         quota_config,
-//                     )
-//                     .await
-//                     .unwrap();
-//                     f(ctx, pg_config.clone()).await
-//                 })
-//             })
-//         })
-//     };
+    // catch all panics and clean up first…
+    let executed_fn = {
+        let pg_config = pg_config.clone();
+        std::panic::catch_unwind(move || {
+            tokio::task::block_in_place(move || {
+                Handle::current().block_on(async move {
+                    let ctx = ProPostgresContext::new_with_oidc(
+                        pg_config.clone(),
+                        tokio_postgres::NoTls,
+                        oidc_db(),
+                        cache_config,
+                        quota_config,
+                    )
+                    .await
+                    .unwrap();
+                    f(ctx, pg_config.clone()).await
+                })
+            })
+        })
+    };
 
-//     tear_down_db(pg_config, &schema).await;
+    tear_down_db(pg_config, &schema).await;
 
-//     match executed_fn {
-//         Ok(res) => res,
-//         Err(err) => std::panic::resume_unwind(err),
-//     }
-// }
+    match executed_fn {
+        Ok(res) => res,
+        Err(err) => std::panic::resume_unwind(err),
+    }
+}

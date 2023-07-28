@@ -1,11 +1,13 @@
-use crate::contexts::SessionId;
+use crate::contexts::{PostgresContext, SessionId, SimpleApplicationContext};
 use crate::handlers::ErrorResponse;
+use crate::util::tests::with_temp_context;
 use actix_web::dev::ServiceResponse;
 use actix_web::http::{header, Method};
 use actix_web::test::TestRequest;
 use actix_web_httpauth::headers::authorization::Bearer;
 use std::collections::HashMap;
 use std::future::Future;
+use tokio_postgres::NoTls;
 use utoipa::openapi::path::{Parameter, ParameterIn};
 use utoipa::openapi::schema::AdditionalProperties;
 use utoipa::openapi::{
@@ -289,15 +291,14 @@ where
 /// and now. It can also detect if the query parameters are not documented correctly or the
 /// request path changed.
 #[allow(clippy::unimplemented)]
-pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
-    api: OpenApi,
-    ctx_creator: F1,
-    send_test_request: F2,
-) where
-    F1: Fn() -> Fut1,
-    Fut1: Future<Output = (C, SessionId)>,
-    F2: Fn(TestRequest, C) -> Fut2,
-    Fut2: Future<Output = ServiceResponse>,
+pub async fn can_run_examples<F, Fut>(api: OpenApi, send_test_request: F)
+where
+    F: Fn(TestRequest, PostgresContext<NoTls>) -> Fut
+        + Send
+        + std::panic::UnwindSafe
+        + 'static
+        + Clone,
+    Fut: Future<Output = ServiceResponse>,
 {
     let components = api.components.expect("api has at least one component");
 
@@ -308,19 +309,27 @@ pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
 
                 for content in request_body.content.into_values() {
                     if let Some(example) = content.example {
-                        let (ctx, session_id) = ctx_creator().await;
-                        RunnableExample {
-                            components: &components,
-                            http_method: &http_method,
-                            uri: uri.as_str(),
-                            parameters: &operation.parameters,
-                            body: example,
-                            with_auth,
-                            ctx,
-                            session_id,
-                            send_test_request: &send_test_request,
-                        }
-                        .check_for_bad_documentation()
+                        let components = components.clone();
+                        let http_method = http_method.clone();
+                        let uri = uri.clone();
+                        let parameters = operation.parameters.clone();
+                        let send_test_request = send_test_request.clone();
+                        let with_auth = with_auth;
+                        with_temp_context(move |app_ctx, _| async move {
+                            RunnableExample {
+                                components: &components,
+                                http_method: &http_method,
+                                uri: uri.as_str(),
+                                parameters: &parameters,
+                                body: example,
+                                with_auth,
+                                session_id: app_ctx.default_session_id().await,
+                                ctx: app_ctx,
+                                send_test_request: &send_test_request,
+                            }
+                            .check_for_bad_documentation()
+                            .await;
+                        })
                         .await;
                     } else {
                         for example in content.examples.into_values() {
@@ -332,19 +341,27 @@ pub async fn can_run_examples<F1, Fut1, F2, Fut2, C>(
                                 }
                                 RefOr::T(concrete) => {
                                     if let Some(body) = concrete.value {
-                                        let (ctx, session_id) = ctx_creator().await;
-                                        RunnableExample {
-                                            components: &components,
-                                            http_method: &http_method,
-                                            uri: uri.as_str(),
-                                            parameters: &operation.parameters,
-                                            body,
-                                            with_auth,
-                                            ctx,
-                                            session_id,
-                                            send_test_request: &send_test_request,
-                                        }
-                                        .check_for_bad_documentation()
+                                        let components = components.clone();
+                                        let http_method = http_method.clone();
+                                        let uri = uri.clone();
+                                        let parameters = operation.parameters.clone();
+                                        let send_test_request = send_test_request.clone();
+                                        let with_auth = with_auth;
+                                        with_temp_context(move |app_ctx, _| async move {
+                                            RunnableExample {
+                                                components: &components,
+                                                http_method: &http_method,
+                                                uri: uri.as_str(),
+                                                parameters: &parameters,
+                                                body,
+                                                with_auth,
+                                                session_id: app_ctx.default_session_id().await,
+                                                ctx: app_ctx,
+                                                send_test_request: &send_test_request,
+                                            }
+                                            .check_for_bad_documentation()
+                                            .await;
+                                        })
                                         .await;
                                     } else {
                                         //skip external examples
@@ -369,11 +386,12 @@ mod tests {
 
     use serde::Deserialize;
 
+    use serde_json::json;
     use utoipa::openapi::path::{OperationBuilder, ParameterBuilder, PathItemBuilder};
     use utoipa::openapi::request_body::RequestBodyBuilder;
     use utoipa::openapi::{
-        AllOfBuilder, ArrayBuilder, ComponentsBuilder, ContentBuilder, ObjectBuilder, OneOfBuilder,
-        OpenApiBuilder, PathItemType, PathsBuilder, ResponseBuilder,
+        AllOfBuilder, ArrayBuilder, ComponentsBuilder, ContentBuilder, Object, ObjectBuilder,
+        OneOfBuilder, OpenApiBuilder, PathItemType, PathsBuilder, ResponseBuilder,
     };
     use utoipa::ToSchema;
 
@@ -637,81 +655,75 @@ mod tests {
             .map_into_boxed_body()
     }
 
-    async fn run_dummy_example(_example: serde_json::Value) {
-        // can_run_examples(
-        //     OpenApiBuilder::new()
-        //         .paths(
-        //             PathsBuilder::new().path(
-        //                 "/test/{id}",
-        //                 PathItemBuilder::new()
-        //                     .operation(
-        //                         PathItemType::Post,
-        //                         OperationBuilder::new()
-        //                             .parameter(
-        //                                 ParameterBuilder::new()
-        //                                     .name("id")
-        //                                     .parameter_in(ParameterIn::Path)
-        //                                     .schema(Some(RefOr::T(
-        //                                         ObjectBuilder::new()
-        //                                             .schema_type(SchemaType::Integer)
-        //                                             .format(Some(SchemaFormat::KnownFormat(
-        //                                                 KnownFormat::Int32,
-        //                                             )))
-        //                                             .into(),
-        //                                     ))),
-        //                             )
-        //                             .parameter(
-        //                                 ParameterBuilder::new()
-        //                                     .name("x")
-        //                                     .parameter_in(ParameterIn::Query)
-        //                                     .schema(Some(RefOr::T(
-        //                                         Object::with_type(SchemaType::String).into(),
-        //                                     ))),
-        //                             )
-        //                             .request_body(Some(
-        //                                 RequestBodyBuilder::new()
-        //                                     .content(
-        //                                         "application/json",
-        //                                         ContentBuilder::new()
-        //                                             .schema(Volume::schema().1)
-        //                                             .example(Some(example))
-        //                                             .into(),
-        //                                     )
-        //                                     .into(),
-        //                             )),
-        //                     )
-        //                     .into(),
-        //             ),
-        //         )
-        //         .components(Some(
-        //             ComponentsBuilder::new()
-        //                 .schemas_from_iter([
-        //                     ("Schema1", Schema::default()),
-        //                     ("Schema2", Schema::default()),
-        //                     ("Schema3", Schema::default()),
-        //                 ])
-        //                 .into(),
-        //         ))
-        //         .into(),
-        //     move || async move {
-        //         let ctx = InMemoryContext::test_default();
-        //         let session_id = ctx.default_session_id().await;
-        //         (ctx, session_id)
-        //     },
-        //     dummy_send_test_request,
-        // )
-        // .await;
-        todo!()
+    async fn run_dummy_example(example: serde_json::Value) {
+        can_run_examples(
+            OpenApiBuilder::new()
+                .paths(
+                    PathsBuilder::new().path(
+                        "/test/{id}",
+                        PathItemBuilder::new()
+                            .operation(
+                                PathItemType::Post,
+                                OperationBuilder::new()
+                                    .parameter(
+                                        ParameterBuilder::new()
+                                            .name("id")
+                                            .parameter_in(ParameterIn::Path)
+                                            .schema(Some(RefOr::T(
+                                                ObjectBuilder::new()
+                                                    .schema_type(SchemaType::Integer)
+                                                    .format(Some(SchemaFormat::KnownFormat(
+                                                        KnownFormat::Int32,
+                                                    )))
+                                                    .into(),
+                                            ))),
+                                    )
+                                    .parameter(
+                                        ParameterBuilder::new()
+                                            .name("x")
+                                            .parameter_in(ParameterIn::Query)
+                                            .schema(Some(RefOr::T(
+                                                Object::with_type(SchemaType::String).into(),
+                                            ))),
+                                    )
+                                    .request_body(Some(
+                                        RequestBodyBuilder::new()
+                                            .content(
+                                                "application/json",
+                                                ContentBuilder::new()
+                                                    .schema(Volume::schema().1)
+                                                    .example(Some(example))
+                                                    .into(),
+                                            )
+                                            .into(),
+                                    )),
+                            )
+                            .into(),
+                    ),
+                )
+                .components(Some(
+                    ComponentsBuilder::new()
+                        .schemas_from_iter([
+                            ("Schema1", Schema::default()),
+                            ("Schema2", Schema::default()),
+                            ("Schema3", Schema::default()),
+                        ])
+                        .into(),
+                ))
+                .into(),
+            dummy_send_test_request,
+        )
+        .await;
     }
 
-    // #[tokio::test]
-    // #[should_panic(expected = "BodyDeserializeError")]
-    // async fn detects_bodydeserializeerror() {
-    //     run_dummy_example(json!({"name": "note-path_field_missing"})).await;
-    // }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[should_panic(expected = "BodyDeserializeError")]
+    async fn detects_bodydeserializeerror() {
+        run_dummy_example(json!({"name": "note-path_field_missing"})).await;
+    }
 
-    // #[tokio::test]
-    // async fn successfull_example_run() {
-    //     run_dummy_example(json!({"name": "Files", "path": "/path/to/files"})).await;
-    // }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn successfull_example_run() {
+        run_dummy_example(json!({"name": "Files", "path": "/path/to/files"})).await;
+    }
 }

@@ -441,7 +441,7 @@ mod tests {
                 );
             },
         )
-        .await
+        .await;
     }
 
     #[test]

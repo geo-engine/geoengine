@@ -327,6 +327,10 @@ where
 
         Ok(())
     }
+
+    pub fn oidc_request_db(&self) -> Arc<Option<OidcRequestDb>> {
+        self.oidc_request_db.clone()
+    }
 }
 
 #[async_trait]
