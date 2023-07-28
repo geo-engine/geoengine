@@ -129,6 +129,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::pro::contexts::ProPostgresContext;
     use crate::pro::util::tests::{with_pro_temp_context, with_pro_temp_context_from_spec};
     use crate::{
         api::model::{
@@ -171,16 +172,14 @@ mod tests {
         util::gdal::create_ndvi_meta_data,
     };
     use serde_json::json;
+    use tokio_postgres::NoTls;
 
     use super::*;
 
-    pub async fn upload_ne_10m_ports_files<C: ProApplicationContext>(
-        app_ctx: C,
+    pub async fn upload_ne_10m_ports_files(
+        app_ctx: ProPostgresContext<NoTls>,
         session_id: SessionId,
-    ) -> Result<UploadId>
-    where
-        <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-    {
+    ) -> Result<UploadId> {
         let files = vec![
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").to_path_buf(),
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shx").to_path_buf(),
@@ -207,14 +206,11 @@ mod tests {
         Ok(upload.id)
     }
 
-    pub async fn construct_dataset_from_upload<C: ProApplicationContext>(
-        app_ctx: C,
+    pub async fn construct_dataset_from_upload(
+        app_ctx: ProPostgresContext<NoTls>,
         upload_id: UploadId,
         session_id: SessionId,
-    ) -> DatasetName
-    where
-        <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-    {
+    ) -> DatasetName {
         let s = json!({
             "dataPath": {
                 "upload": upload_id

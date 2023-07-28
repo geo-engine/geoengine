@@ -28,7 +28,7 @@ use crate::{
         workflow::{Workflow, WorkflowId},
     },
 };
-use actix_web::{dev::ServiceResponse, FromRequest};
+use actix_web::dev::ServiceResponse;
 use actix_web::{http, middleware, test, web, App};
 use bb8_postgres::{bb8::ManageConnection, PostgresConnectionManager};
 use futures_util::Future;
@@ -112,37 +112,44 @@ where
     (session, project)
 }
 
-pub async fn send_pro_test_request<C>(req: test::TestRequest, app_ctx: C) -> ServiceResponse
-where
-    C: ProApplicationContext,
-    C::Session: FromRequest,
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-{
+pub async fn send_pro_test_request(
+    req: test::TestRequest,
+    app_ctx: ProPostgresContext<NoTls>,
+) -> ServiceResponse {
     #[allow(unused_mut)]
-    let mut app = App::new()
-        .app_data(web::Data::new(app_ctx))
-        .wrap(
-            middleware::ErrorHandlers::default()
-                .handler(http::StatusCode::NOT_FOUND, render_404)
-                .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
-        )
-        .wrap(middleware::NormalizePath::trim())
-        .configure(configure_extractors)
-        .configure(pro::handlers::datasets::init_dataset_routes::<C>)
-        .configure(handlers::layers::init_layer_routes::<C>)
-        .configure(pro::handlers::permissions::init_permissions_routes::<C>)
-        .configure(handlers::plots::init_plot_routes::<C>)
-        .configure(handlers::projects::init_project_routes::<C>)
-        .configure(pro::handlers::users::init_user_routes::<C>)
-        .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
-        .configure(handlers::upload::init_upload_routes::<C>)
-        .configure(handlers::wcs::init_wcs_routes::<C>)
-        .configure(handlers::wfs::init_wfs_routes::<C>)
-        .configure(handlers::wms::init_wms_routes::<C>)
-        .configure(handlers::workflows::init_workflow_routes::<C>);
+    let mut app =
+        App::new()
+            .app_data(web::Data::new(app_ctx))
+            .wrap(
+                middleware::ErrorHandlers::default()
+                    .handler(http::StatusCode::NOT_FOUND, render_404)
+                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+            )
+            .wrap(middleware::NormalizePath::trim())
+            .configure(configure_extractors)
+            .configure(pro::handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::layers::init_layer_routes::<ProPostgresContext<NoTls>>)
+            .configure(
+                pro::handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>,
+            )
+            .configure(handlers::plots::init_plot_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::projects::init_project_routes::<ProPostgresContext<NoTls>>)
+            .configure(pro::handlers::users::init_user_routes::<ProPostgresContext<NoTls>>)
+            .configure(
+                handlers::spatial_references::init_spatial_reference_routes::<
+                    ProPostgresContext<NoTls>,
+                >,
+            )
+            .configure(handlers::upload::init_upload_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::wcs::init_wcs_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::wfs::init_wfs_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::wms::init_wms_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::workflows::init_workflow_routes::<ProPostgresContext<NoTls>>);
     #[cfg(feature = "odm")]
     {
-        app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
+        app = app.configure(
+            pro::handlers::drone_mapping::init_drone_mapping_routes::<ProPostgresContext<NoTls>>,
+        );
     }
     let app = test::init_service(app).await;
     test::call_service(&app, req.to_request())

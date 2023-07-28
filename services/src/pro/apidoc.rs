@@ -408,24 +408,24 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pro::util::tests::send_pro_test_request;
+    use crate::pro::util::tests::with_pro_temp_context;
 
     #[test]
     fn can_resolve_api() {
-        crate::api::can_resolve_api(ApiDoc::openapi());
+        crate::util::openapi_examples::can_resolve_api(ApiDoc::openapi());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn can_run_examples() {
-        //     crate::api::can_run_examples(
-        //         ApiDoc::openapi(),
-        //         move || async move {
-        //             let ctx = ProInMemoryContext::test_default();
-        //             let session_id = ctx.create_anonymous_session().await.unwrap().id();
-        //             (ctx, session_id)
-        //         },
-        //         send_pro_test_request,
-        //     )
-        //     .await;
-        todo!()
+        with_pro_temp_context(|app_ctx, _| async move {
+            crate::pro::util::openapi_examples::can_run_pro_examples(
+                app_ctx,
+                ApiDoc::openapi(),
+                send_pro_test_request,
+            )
+            .await;
+        })
+        .await;
     }
 }

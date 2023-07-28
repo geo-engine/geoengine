@@ -696,17 +696,13 @@ mod tests {
     use httptest::{Expectation, Server};
     use serde_json::json;
     use serial_test::serial;
-    use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
-    use tokio_postgres::{NoTls, Socket};
+    use tokio_postgres::NoTls;
 
-    async fn register_test_helper<C: ProApplicationContext>(
-        app_ctx: C,
+    async fn register_test_helper(
+        app_ctx: ProPostgresContext<NoTls>,
         method: Method,
         email: &str,
-    ) -> ServiceResponse
-    where
-        <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-    {
+    ) -> ServiceResponse {
         let user = UserRegistration {
             email: email.to_string(),
             password: "secret123".to_string(),
@@ -1282,17 +1278,11 @@ mod tests {
         send_pro_test_request(req, ctx).await
     }
 
-    async fn oidc_login_test_helper<Tls>(
+    async fn oidc_login_test_helper(
         method: Method,
-        ctx: ProPostgresContext<Tls>,
+        ctx: ProPostgresContext<NoTls>,
         auth_code_response: AuthCodeResponse,
-    ) -> ServiceResponse
-    where
-        Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-        <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-        <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-        <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-    {
+    ) -> ServiceResponse {
         let req = test::TestRequest::default()
             .method(method)
             .uri("/oidcLogin")
