@@ -728,6 +728,9 @@ fn generate_loading_info(
     )
     .boxed_context(error::CannotGenerateLoadingInfo)?;
 
+    // we change the cache ttl when returning the overview metadata in the provider
+    let cache_ttl = CacheTtlSeconds::default();
+
     Ok(match *time_coverage {
         TimeCoverage::Regular { start, end, step } => {
             let time_interval =
@@ -752,7 +755,8 @@ fn generate_loading_info(
                 .into_iter()
                 .collect(),
                 data_time: time_interval,
-                cache_ttl: CacheTtlSeconds::default(),
+
+                cache_ttl,
             })
         }
         TimeCoverage::List { ref time_stamps } => {
@@ -770,7 +774,7 @@ fn generate_loading_info(
                 params_list.push(GdalLoadingInfoTemporalSlice {
                     time: time_interval,
                     params: Some(params),
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl,
                 });
             }
 
