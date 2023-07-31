@@ -30,9 +30,23 @@ apt install cmake sqlite3
 
 ### Lints
 
+### Rust Code
+
 Please run Clippy with
 `cargo clippy --all-targets --all-features`
 before creating a pull request.
+
+#### SQL Files
+
+We use [SQLFluff](https://sqlfluff.com/) to lint our SQL files.
+
+You can install it with `pip install sqlfluff`.
+
+To lint all SQL files, run `sqlfluff lint`.
+This will also be checked in our CI.
+
+There is a VSCode extension available [here](https://marketplace.visualstudio.com/items?itemName=dorzey.vscode-sqlfluff).
+This helps to format the files.
 
 ### Testing
 

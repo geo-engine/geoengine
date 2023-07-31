@@ -48,7 +48,7 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 use postgres_types::{FromSql, ToSql};
-use snafu::{ensure, ResultExt};
+use snafu::ensure;
 use uuid::Uuid;
 
 impl<Tls> DatasetDb for ProPostgresDb<Tls>
@@ -149,7 +149,7 @@ where
             result_descriptor: serde_json::from_value(row.get(4))?,
             source_operator: row.get(5),
             symbology: serde_json::from_value(row.get(6))?,
-            provenance: serde_json::from_value(row.get(7))?,
+            provenance: row.get(7),
         })
     }
 
@@ -175,7 +175,7 @@ where
 
         Ok(ProvenanceOutput {
             data: (*dataset).into(),
-            provenance: serde_json::from_value(row.get(0)).context(error::SerdeJson)?,
+            provenance: row.get(0),
         })
     }
 
@@ -476,7 +476,7 @@ where
                     symbology,
                     provenance
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::\"Provenance\"[])",
             )
             .await?;
 
@@ -491,7 +491,7 @@ where
                 &meta_data_json.result_descriptor,
                 &meta_data_json.meta_data,
                 &serde_json::to_value(&dataset.symbology)?,
-                &serde_json::to_value(&dataset.provenance)?,
+                &dataset.provenance,
             ],
         )
         .await?;
