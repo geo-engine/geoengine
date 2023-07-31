@@ -52,7 +52,12 @@ use geoengine_operators::util::gdal::create_ndvi_meta_data_with_cache_ttl;
 use rand::RngCore;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::runtime::Handle;
+use tokio::sync::OwnedSemaphorePermit;
+use tokio::sync::RwLock;
+use tokio::sync::Semaphore;
 use tokio_postgres::NoTls;
 
 use super::config::get_config_element;
@@ -450,8 +455,22 @@ impl SetMultipartBody for test::TestRequest {
     }
 }
 
+/// configure the number of concurrently running tests that use the database
+const CONCURRENT_DB_TESTS: usize = 10;
+static DB: OnceLock<RwLock<Arc<Semaphore>>> = OnceLock::new();
+
 /// Setup database schema and return its name.
-async fn setup_db() -> (tokio_postgres::Config, String) {
+pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, tokio_postgres::Config, String) {
+    // acquire a permit from the semaphore that limits the number of concurrently running tests that use the database
+    let permit = DB
+        .get_or_init(|| RwLock::new(Arc::new(Semaphore::new(CONCURRENT_DB_TESTS))))
+        .read()
+        .await
+        .clone()
+        .acquire_owned()
+        .await
+        .unwrap();
+
     let mut db_config = get_config_element::<Postgres>().unwrap();
     db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
 
@@ -474,12 +493,13 @@ async fn setup_db() -> (tokio_postgres::Config, String) {
     // fix schema by providing `search_path` option
     pg_config.options(&format!("-c search_path={}", db_config.schema));
 
-    (pg_config, db_config.schema)
+    (permit, pg_config, db_config.schema)
 }
 
 /// Tear down database schema.
-async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
+pub(crate) async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
     // generate schema with prior connection
+    // TODO: backoff and retry if no connections slot are available
     PostgresConnectionManager::new(pg_config, NoTls)
         .connect()
         .await
@@ -524,7 +544,7 @@ where
         + 'static,
     Fut: Future<Output = R>,
 {
-    let (pg_config, schema) = setup_db().await;
+    let (_permit, pg_config, schema) = setup_db().await;
 
     // catch all panics and clean up first…
     let executed_fn = {

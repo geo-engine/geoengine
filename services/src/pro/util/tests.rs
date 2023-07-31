@@ -20,8 +20,8 @@ use crate::{
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
     util::config::get_config_element,
     util::{
-        config::Postgres,
         server::{configure_extractors, render_404, render_405},
+        tests::{setup_db, tear_down_db},
     },
     workflows::{
         registry::WorkflowRegistry,
@@ -30,7 +30,6 @@ use crate::{
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{http, middleware, test, web, App};
-use bb8_postgres::{bb8::ManageConnection, PostgresConnectionManager};
 use futures_util::Future;
 use geoengine_datatypes::{
     primitives::DateTime,
@@ -43,7 +42,6 @@ use geoengine_operators::{
     source::{GdalSource, GdalSourceParameters},
     util::gdal::{create_ndvi_meta_data, create_ports_meta_data},
 };
-use rand::RngCore;
 use tokio::runtime::Handle;
 use tokio_postgres::NoTls;
 
@@ -495,45 +493,6 @@ where
     .unwrap()
 }
 
-/// Setup database schema and return its name.
-async fn setup_db() -> (tokio_postgres::Config, String) {
-    let mut db_config = get_config_element::<Postgres>().unwrap();
-    db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
-
-    let mut pg_config = tokio_postgres::Config::new();
-    pg_config
-        .user(&db_config.user)
-        .password(&db_config.password)
-        .host(&db_config.host)
-        .dbname(&db_config.database);
-
-    // generate schema with prior connection
-    PostgresConnectionManager::new(pg_config.clone(), NoTls)
-        .connect()
-        .await
-        .unwrap()
-        .batch_execute(&format!("CREATE SCHEMA {};", &db_config.schema))
-        .await
-        .unwrap();
-
-    // fix schema by providing `search_path` option
-    pg_config.options(&format!("-c search_path={}", db_config.schema));
-
-    (pg_config, db_config.schema)
-}
-
-/// Tear down database schema.
-async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
-    // generate schema with prior connection
-    PostgresConnectionManager::new(pg_config, NoTls)
-        .connect()
-        .await
-        .unwrap()
-        .batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
-        .await
-        .unwrap();
-}
-
 /// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
 ///
 /// # Panics
@@ -576,7 +535,7 @@ where
         + 'static,
     Fut: Future<Output = R>,
 {
-    let (pg_config, schema) = setup_db().await;
+    let (_permit, pg_config, schema) = setup_db().await;
 
     // catch all panics and clean up first…
     let executed_fn = {
@@ -627,7 +586,7 @@ where
         + 'static,
     Fut: Future<Output = R>,
 {
-    let (pg_config, schema) = setup_db().await;
+    let (_permit, pg_config, schema) = setup_db().await;
 
     // catch all panics and clean up first…
     let executed_fn = {

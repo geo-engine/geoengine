@@ -447,7 +447,7 @@ mod tests {
         with_temp_context(|app_ctx, _| async move {
             let cfg = get_config_element::<crate::util::config::MachineLearning>().unwrap();
             let cfg_backup = &cfg.model_defs_path;
-    
+
             set_config(
                 "machinelearning.model_defs_path",
                 test_data!("pro/ml").to_str().unwrap(),
@@ -483,13 +483,13 @@ mod tests {
         with_temp_context(|app_ctx, _| async move {
             let cfg = get_config_element::<crate::util::config::MachineLearning>().unwrap();
             let cfg_backup = cfg.model_defs_path;
-    
+
             let tmp_dir = tempfile::tempdir().unwrap();
             let tmp_path = tmp_dir.path();
             std::fs::create_dir_all(tmp_path.join("pro/ml/xgboost")).unwrap();
-    
+
             let temp_ml_path = tmp_path.join("pro/ml").to_str().unwrap().to_string();
-    
+
             set_config("machinelearning.model_defs_path", temp_ml_path).unwrap();
 
             let ctx = app_ctx.default_session_context().await.unwrap();
