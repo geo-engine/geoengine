@@ -50,78 +50,6 @@ CREATE TYPE "TimeStep" AS (
     step OID
 );
 
--- seperate table for projects used in foreign key constraints
-
-CREATE TABLE projects (id uuid PRIMARY KEY);
-
-CREATE TABLE sessions (
-    id uuid PRIMARY KEY,
-    project_id uuid REFERENCES projects (id) ON DELETE
-    SET
-    NULL,
-    view "STRectangle"
-);
-
-CREATE TABLE project_versions (
-    id uuid PRIMARY KEY,
-    project_id uuid REFERENCES projects (id) ON DELETE CASCADE NOT NULL,
-    name character varying(256) NOT NULL,
-    description text NOT NULL,
-    bounds "STRectangle" NOT NULL,
-    time_step "TimeStep" NOT NULL,
-    changed timestamp
-    with time zone NOT NULL
-);
-
-CREATE INDEX project_version_idx ON project_versions (project_id, changed DESC);
-
-CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
-
-CREATE TYPE "LayerVisibility" AS (data BOOLEAN, legend BOOLEAN);
-
-CREATE TABLE project_version_layers (
-    layer_index integer NOT NULL,
-    project_id uuid REFERENCES projects (id) ON DELETE CASCADE NOT NULL,
-    project_version_id uuid REFERENCES project_versions (
-        id
-    ) ON DELETE CASCADE NOT NULL,
-    name character varying(256) NOT NULL,
-    workflow_id uuid NOT NULL,
-    -- TODO: REFERENCES workflows(id)
-    symbology json,
-    visibility "LayerVisibility" NOT NULL,
-    PRIMARY KEY (
-        project_id,
-        project_version_id,
-        layer_index
-    )
-);
-
-CREATE TABLE project_version_plots (
-    plot_index integer NOT NULL,
-    project_id uuid REFERENCES projects (id) ON DELETE CASCADE NOT NULL,
-    project_version_id uuid REFERENCES project_versions (
-        id
-    ) ON DELETE CASCADE NOT NULL,
-    name character varying(256) NOT NULL,
-    workflow_id uuid NOT NULL,
-    -- TODO: REFERENCES workflows(id)
-    PRIMARY KEY (
-        project_id,
-        project_version_id,
-        plot_index
-    )
-);
-
-CREATE TABLE workflows (
-    id uuid PRIMARY KEY,
-    workflow json NOT NULL
-);
-
--- TODO: add constraint not null
-
--- TODO: add length constraints
-
 CREATE TYPE "DatasetName" AS (namespace text, name text);
 
 CREATE TYPE "Provenance" AS (
@@ -225,6 +153,78 @@ CREATE TYPE "Symbology" AS (
     "polygon" "PolygonSymbology"
 );
 
+-- seperate table for projects used in foreign key constraints
+
+CREATE TABLE projects (id uuid PRIMARY KEY);
+
+CREATE TABLE sessions (
+    id uuid PRIMARY KEY,
+    project_id uuid REFERENCES projects (id) ON DELETE
+    SET
+    NULL,
+    view "STRectangle"
+);
+
+CREATE TABLE project_versions (
+    id uuid PRIMARY KEY,
+    project_id uuid REFERENCES projects (id) ON DELETE CASCADE NOT NULL,
+    name character varying(256) NOT NULL,
+    description text NOT NULL,
+    bounds "STRectangle" NOT NULL,
+    time_step "TimeStep" NOT NULL,
+    changed timestamp
+    with time zone NOT NULL
+);
+
+CREATE INDEX project_version_idx ON project_versions (project_id, changed DESC);
+
+CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
+
+CREATE TYPE "LayerVisibility" AS (data BOOLEAN, legend BOOLEAN);
+
+CREATE TABLE project_version_layers (
+    layer_index integer NOT NULL,
+    project_id uuid REFERENCES projects (id) ON DELETE CASCADE NOT NULL,
+    project_version_id uuid REFERENCES project_versions (
+        id
+    ) ON DELETE CASCADE NOT NULL,
+    name character varying(256) NOT NULL,
+    workflow_id uuid NOT NULL,
+    -- TODO: REFERENCES workflows(id)
+    symbology "Symbology",
+    visibility "LayerVisibility" NOT NULL,
+    PRIMARY KEY (
+        project_id,
+        project_version_id,
+        layer_index
+    )
+);
+
+CREATE TABLE project_version_plots (
+    plot_index integer NOT NULL,
+    project_id uuid REFERENCES projects (id) ON DELETE CASCADE NOT NULL,
+    project_version_id uuid REFERENCES project_versions (
+        id
+    ) ON DELETE CASCADE NOT NULL,
+    name character varying(256) NOT NULL,
+    workflow_id uuid NOT NULL,
+    -- TODO: REFERENCES workflows(id)
+    PRIMARY KEY (
+        project_id,
+        project_version_id,
+        plot_index
+    )
+);
+
+CREATE TABLE workflows (
+    id uuid PRIMARY KEY,
+    workflow json NOT NULL
+);
+
+-- TODO: add constraint not null
+
+-- TODO: add length constraints
+
 CREATE TABLE datasets (
     id uuid PRIMARY KEY,
     name "DatasetName" UNIQUE NOT NULL,
@@ -272,7 +272,7 @@ CREATE TABLE layers (
     name text NOT NULL,
     description text NOT NULL,
     workflow json NOT NULL,
-    symbology json,
+    symbology "Symbology",
     properties "PropertyType" [] NOT NULL,
     metadata json NOT NULL
 );
