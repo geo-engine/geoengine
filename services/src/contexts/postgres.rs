@@ -480,10 +480,10 @@ mod tests {
         INTERNAL_PROVIDER_ID,
     };
     use crate::projects::{
-        ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LoadVersion,
-        NumberParam, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb, ProjectFilter,
-        ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle, StrokeParam,
-        UpdateProject,
+        ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LineSymbology,
+        LoadVersion, NumberParam, OrderBy, Plot, PlotUpdate, PointSymbology, PolygonSymbology,
+        ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
+        RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
     };
     use crate::util::tests::register_ndvi_workflow_helper;
     use crate::util::tests::with_temp_context;
@@ -519,11 +519,6 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test() {
-        // flexi_logger::Logger::try_with_str("tokio_postgres = trace")
-        //     .unwrap()
-        //     .start()
-        //     .unwrap();
-
         with_temp_context(|app_ctx, _| async move {
             let session = app_ctx.default_session().await.unwrap();
 
@@ -2623,7 +2618,120 @@ mod tests {
             )
             .await;
 
-            // TODO: next is "TextSymbology"
+            test_type(
+                &pool,
+                "TextSymbology",
+                [TextSymbology {
+                    attribute: "attribute".to_string(),
+                    fill_color: ColorParam::Static {
+                        color: RgbaColor([0, 10, 20, 30]).into(),
+                    },
+                    stroke: StrokeParam {
+                        width: NumberParam::Static { value: 42 },
+                        color: ColorParam::Static {
+                            color: RgbaColor([0, 10, 20, 30]).into(),
+                        },
+                    },
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Symbology",
+                [
+                    Symbology::Point(PointSymbology {
+                        fill_color: ColorParam::Static {
+                            color: RgbaColor([0, 10, 20, 30]).into(),
+                        },
+                        stroke: StrokeParam {
+                            width: NumberParam::Static { value: 42 },
+                            color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                        },
+                        radius: NumberParam::Static { value: 42 },
+                        text: Some(TextSymbology {
+                            attribute: "attribute".to_string(),
+                            fill_color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                            stroke: StrokeParam {
+                                width: NumberParam::Static { value: 42 },
+                                color: ColorParam::Static {
+                                    color: RgbaColor([0, 10, 20, 30]).into(),
+                                },
+                            },
+                        }),
+                    }),
+                    Symbology::Line(LineSymbology {
+                        stroke: StrokeParam {
+                            width: NumberParam::Static { value: 42 },
+                            color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                        },
+                        text: Some(TextSymbology {
+                            attribute: "attribute".to_string(),
+                            fill_color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                            stroke: StrokeParam {
+                                width: NumberParam::Static { value: 42 },
+                                color: ColorParam::Static {
+                                    color: RgbaColor([0, 10, 20, 30]).into(),
+                                },
+                            },
+                        }),
+                        auto_simplified: true,
+                    }),
+                    Symbology::Polygon(PolygonSymbology {
+                        fill_color: ColorParam::Static {
+                            color: RgbaColor([0, 10, 20, 30]).into(),
+                        },
+                        stroke: StrokeParam {
+                            width: NumberParam::Static { value: 42 },
+                            color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                        },
+                        text: Some(TextSymbology {
+                            attribute: "attribute".to_string(),
+                            fill_color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                            stroke: StrokeParam {
+                                width: NumberParam::Static { value: 42 },
+                                color: ColorParam::Static {
+                                    color: RgbaColor([0, 10, 20, 30]).into(),
+                                },
+                            },
+                        }),
+                        auto_simplified: true,
+                    }),
+                    Symbology::Raster(RasterSymbology {
+                        opacity: 1.0,
+                        colorizer: Colorizer::LinearGradient(LinearGradient {
+                            breakpoints: vec![
+                                Breakpoint {
+                                    value: NotNan::<f64>::new(-10.0).unwrap().into(),
+                                    color: RgbaColor([0, 0, 0, 0]),
+                                },
+                                Breakpoint {
+                                    value: NotNan::<f64>::new(2.0).unwrap().into(),
+                                    color: RgbaColor([255, 0, 0, 255]),
+                                },
+                            ],
+                            no_data_color: RgbaColor([0, 10, 20, 30]),
+                            color_fields: DefaultColors::OverUnder(OverUnderColors {
+                                over_color: RgbaColor([1, 2, 3, 4]),
+                                under_color: RgbaColor([5, 6, 7, 8]),
+                            }),
+                        }),
+                    }),
+                ],
+            )
+            .await;
         })
         .await;
     }
