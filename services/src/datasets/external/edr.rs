@@ -444,28 +444,31 @@ impl EdrCollectionMetaData {
                 source: Box::new(EdrProviderError::MissingTemporalExtent),
             }
         })?;
+        let z = if self.extent.has_discrete_vertical_axis() {
+            height.to_string()
+        } else {
+            format!("{}%2F{}", height, height)
+        };
         let download_url = format!(
-            "/vsicurl_streaming/{}collections/{}/cube?bbox={},{},{},{}&z={}%2F{}&datetime={}%2F{}&f={}",
+            "/vsicurl_streaming/{}collections/{}/cube?bbox={},{},{},{}&z={}&datetime={}%2F{}&f={}",
             base_url,
             self.id,
             spatial_extent.bbox[0][0],
             spatial_extent.bbox[0][1],
             spatial_extent.bbox[0][2],
             spatial_extent.bbox[0][3],
-            height,
-            height,
+            z,
             temporal_extent.interval[0][0],
             temporal_extent.interval[0][1],
             self.select_output_format()?
         );
         let mut layer_name = format!(
-            "cube?bbox={},{},{},{}&z={}%2F{}&datetime={}%2F{}",
+            "cube?bbox={},{},{},{}&z={}&datetime={}%2F{}",
             spatial_extent.bbox[0][0],
             spatial_extent.bbox[0][1],
             spatial_extent.bbox[0][2],
             spatial_extent.bbox[0][3],
-            height,
-            height,
+            z,
             temporal_extent.interval[0][0],
             temporal_extent.interval[0][1]
         );
@@ -487,16 +490,20 @@ impl EdrCollectionMetaData {
                 source: Box::new(EdrProviderError::MissingSpatialExtent),
             }
         })?;
+        let z = if self.extent.has_discrete_vertical_axis() {
+            height.to_string()
+        } else {
+            format!("{}%2F{}", height, height)
+        };
         Ok(format!(
-            "/vsicurl_streaming/{}collections/{}/cube?bbox={},{},{},{}&z={}%2F{}&datetime={}%2F{}&f={}&parameter-name={}",
+            "/vsicurl_streaming/{}collections/{}/cube?bbox={},{},{},{}&z={}&datetime={}%2F{}&f={}&parameter-name={}",
             base_url,
             self.id,
             spatial_extent.bbox[0][0],
             spatial_extent.bbox[0][1],
             spatial_extent.bbox[0][2],
             spatial_extent.bbox[0][3],
-            height,
-            height,
+            z,
             time,
             time,
             self.select_output_format()?,
@@ -708,6 +715,12 @@ struct EdrExtents {
     temporal: Option<EdrTemporalExtent>,
 }
 
+impl EdrExtents {
+    fn has_discrete_vertical_axis(&self) -> bool {
+        self.vertical.as_ref().map_or(false, |val| DISCRETE_VRS.contains(&val.vrs.as_str()))
+    }
+}
+
 #[derive(Deserialize)]
 struct EdrSpatialExtent {
     bbox: Vec<Vec<f64>>,
@@ -717,12 +730,6 @@ struct EdrSpatialExtent {
 struct EdrVerticalExtent {
     values: Vec<String>,
     vrs: String,
-}
-
-impl EdrVerticalExtent {
-    fn is_axis_discrete(&self) -> bool {
-        DISCRETE_VRS.contains(&self.vrs.as_str())
-    }
 }
 
 #[derive(Deserialize, Clone)]
@@ -1104,17 +1111,12 @@ mod tests {
 
     use futures_util::StreamExt;
     use geoengine_datatypes::{
-        operations::image::Colorizer,
-        primitives::{DateTime, SpatialResolution},
+        primitives::SpatialResolution,
         test_data,
-        util::test::TestDefault,
+        util::test::TestDefault
     };
-    use geoengine_operators::{
-        call_on_typed_operator,
-        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, WorkflowOperatorPath},
-        util::raster_stream_to_png::raster_stream_to_png_bytes,
-    };
-    use tracing_subscriber::layer;
+    use geoengine_operators::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, WorkflowOperatorPath, QueryProcessor};
+    use crate::api::model::datatypes::ExternalDataId;
 
     use super::*;
 
@@ -1134,31 +1136,34 @@ mod tests {
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
                 .meta_data(
-                    &ExternalDataId {
+                    &DataId::External(ExternalDataId {
                         provider_id: DataProviderId::from_str(provider_id)?,
                         layer_id: LayerId(layer_id.to_owned()),
-                    }
+                    })
                     .into(),
                 )
                 .await?;
 
         exe.add_meta_data(
-            ExternalDataId {
+            DataId::External(ExternalDataId {
                 provider_id: DataProviderId::from_str(provider_id)?,
                 layer_id: LayerId(layer_id.to_owned()),
-            }
+            })
             .into(),
+            geoengine_datatypes::dataset::NamedData::with_system_provider(
+                provider_id.to_string(),
+                layer_id.to_string(),
+            ),
             meta,
         );
 
         let op = GdalSource {
             params: GdalSourceParameters {
-                data: ExternalDataId {
-                    provider_id: DataProviderId::from_str(provider_id)?,
-                    layer_id: LayerId(layer_id.to_owned()),
-                }
-                .into(),
-            },
+                data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                    provider_id.to_string(),
+                    layer_id.to_owned(),
+                )
+            }
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe)
@@ -1180,25 +1185,8 @@ mod tests {
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
-        // TODO: check actual data
-        //assert_eq!(result.len(), 4);
-
-        let out_file_name = format!("{}_2.png", query.time_interval.start().as_datetime_string());
-
-        let image_bytes = raster_stream_to_png_bytes(
-            processor,
-            query,
-            ctx,
-            180,
-            90,
-            None,
-            None,
-            Box::pin(futures::future::pending()),
-        )
-        .await
-        .unwrap();
-
-        geoengine_datatypes::util::test::save_test_bytes(&image_bytes, &out_file_name);
+        let tile_stream = processor.query(query, &ctx).await?;
+        assert_eq!(tile_stream.count().await, 4);
 
         Ok(())
     }

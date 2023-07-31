@@ -137,7 +137,6 @@ impl<'a> ToSchema<'a> for Property {
     }
 }
 
-#[cfg(feature = "postgres")]
 mod psql {
     use super::*;
     use postgres_types::{FromSql, ToSql};

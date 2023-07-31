@@ -167,7 +167,9 @@ impl SpatialPartition2D {
         }
     }
 
-    /// Return true if the partition contains the `other`
+    /// Return true if the partition contains the `other`.
+    /// A partition contains another partition if it contains all of its points
+    /// OR the other partition is equal to it.
     pub fn contains(&self, other: &Self) -> bool {
         self.contains_x(other) && self.contains_y(other)
     }
@@ -177,7 +179,7 @@ impl SpatialPartition2D {
             other.upper_left_coordinate.x,
             self.upper_left_coordinate.x,
             self.lower_right_coordinate.x,
-        ) && crate::util::ranges::value_in_range(
+        ) && crate::util::ranges::value_in_range_inv(
             other.lower_right_coordinate.x,
             self.upper_left_coordinate.x,
             self.lower_right_coordinate.x,
@@ -185,7 +187,7 @@ impl SpatialPartition2D {
     }
 
     fn contains_y(&self, other: &Self) -> bool {
-        crate::util::ranges::value_in_range_inv(
+        crate::util::ranges::value_in_range(
             other.lower_right_coordinate.y,
             self.lower_right_coordinate.y,
             self.upper_left_coordinate.y,
@@ -226,17 +228,17 @@ impl SpatialPartition2D {
     }
 
     #[must_use]
-    pub fn extend(&mut self, other: &Self) -> Self {
-        Self {
-            upper_left_coordinate: Coordinate2D::new(
-                self.upper_left().x.min(other.upper_left().x),
-                self.upper_left().y.max(other.upper_left().y),
-            ),
-            lower_right_coordinate: Coordinate2D::new(
-                self.lower_right().x.max(other.lower_right().x),
-                self.lower_right().y.min(other.lower_right().y),
-            ),
-        }
+    pub fn extended(self, other: &Self) -> Self {
+        let mut extended = self;
+        extended.extend(other);
+        extended
+    }
+
+    pub fn extend(&mut self, other: &Self) {
+        self.upper_left_coordinate.x = self.upper_left().x.min(other.upper_left().x);
+        self.upper_left_coordinate.y = self.upper_left().y.max(other.upper_left().y);
+        self.lower_right_coordinate.x = self.lower_right().x.max(other.lower_right().x);
+        self.lower_right_coordinate.y = self.lower_right().y.min(other.lower_right().y);
     }
 }
 
@@ -311,7 +313,7 @@ pub fn partitions_extent<I: Iterator<Item = Option<SpatialPartition2D>>>(
 
     for bbox in bboxes {
         if let Some(bbox) = bbox {
-            extent = extent.extend(&bbox);
+            extent.extend(&bbox);
         } else {
             return None;
         }
@@ -371,6 +373,12 @@ mod tests {
 
         assert!(p1.contains_coordinate(&c1));
         assert!(!p1.contains_coordinate(&c2));
+    }
+
+    #[test]
+    fn it_contains_self() {
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        assert!(p1.contains(&p1));
     }
 
     #[test]
@@ -515,6 +523,27 @@ mod tests {
                 .into_iter()
             ),
             None
+        );
+    }
+
+    #[test]
+    fn extend() {
+        let mut p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let p2 = SpatialPartition2D::new_unchecked((1., 2.).into(), (2., 0.).into());
+        p1.extend(&p2);
+        assert_eq!(
+            p1,
+            SpatialPartition2D::new_unchecked((0., 2.).into(), (2., 0.).into())
+        );
+    }
+
+    #[test]
+    fn extended() {
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let p2 = SpatialPartition2D::new_unchecked((1., 2.).into(), (2., 0.).into());
+        assert_eq!(
+            p1.extended(&p2),
+            SpatialPartition2D::new_unchecked((0., 2.).into(), (2., 0.).into())
         );
     }
 }

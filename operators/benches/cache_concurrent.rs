@@ -11,7 +11,10 @@ use geoengine_datatypes::{
     raster::{Grid, RasterTile2D},
     util::test::TestDefault,
 };
-use geoengine_operators::{engine::CanonicOperatorName, pro::cache::tile_cache::TileCache};
+use geoengine_operators::{
+    engine::CanonicOperatorName,
+    pro::cache::shared_cache::{AsyncCache, SharedCache},
+};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde_json::json;
@@ -33,7 +36,7 @@ struct WriteMeasurement {
     finish_query_ms: u128,
 }
 
-async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> WriteMeasurement {
+async fn write_cache(tile_cache: &SharedCache, op_name: CanonicOperatorName) -> WriteMeasurement {
     let tile = RasterTile2D::<u8> {
         time: TimeInterval::new_unchecked(1, 1),
         tile_position: [-1, 0].into(),
@@ -48,7 +51,7 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
     let start = std::time::Instant::now();
 
     let query_id = tile_cache
-        .insert_query::<u8>(op_name.clone(), &query_rect())
+        .insert_query::<u8>(&op_name, &query_rect())
         .await
         .unwrap();
 
@@ -57,7 +60,7 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
     let start = std::time::Instant::now();
 
     tile_cache
-        .insert_tile(op_name.clone(), query_id, tile)
+        .insert_query_element::<u8>(&op_name, &query_id, tile)
         .await
         .unwrap();
 
@@ -68,7 +71,7 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
     #[allow(clippy::unit_arg)]
     black_box(
         tile_cache
-            .finish_query(op_name.clone(), query_id)
+            .finish_query::<u8>(&op_name, &query_id)
             .await
             .unwrap(),
     );
@@ -84,7 +87,7 @@ async fn write_cache(tile_cache: &TileCache, op_name: CanonicOperatorName) -> Wr
     }
 }
 
-async fn read_cache(tile_cache: &TileCache, op_no: usize) -> ReadMeasurement {
+async fn read_cache(tile_cache: &SharedCache, op_no: usize) -> ReadMeasurement {
     // read from one of the previously written queries at random.
     // as it is not predictable which queries are already written, this means the benchmark may run differently each times
     let mut rng: SmallRng = SeedableRng::seed_from_u64(op_no as u64);
@@ -95,7 +98,8 @@ async fn read_cache(tile_cache: &TileCache, op_no: usize) -> ReadMeasurement {
 
     let start = std::time::Instant::now();
 
-    black_box(tile_cache.query_cache::<u8>(op, &query).await);
+    let res = black_box(tile_cache.query_cache::<u8>(&op, &query).await);
+    res.unwrap();
 
     let read_query_s = start.elapsed().as_millis();
 
@@ -128,7 +132,7 @@ enum Operation {
 }
 
 async fn cache_access(
-    tile_cache: Arc<TileCache>,
+    tile_cache: Arc<SharedCache>,
     op_no: usize,
     operation: Operation,
 ) -> Measurement {
@@ -169,7 +173,7 @@ fn generate_operations(simultaneous_queries: usize, writes_per_read: f64) -> Vec
 
 async fn run_bench(simultaneous_queries: usize, writes_per_read: f64) {
     // cache without limits, because we do not care about eviction here
-    let tile_cache = Arc::new(TileCache::test_default());
+    let tile_cache = Arc::new(SharedCache::test_default());
 
     // pre-fill the query cache
     write_cache(&tile_cache, op(0)).await;

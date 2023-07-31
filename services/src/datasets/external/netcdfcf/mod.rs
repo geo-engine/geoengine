@@ -396,11 +396,20 @@ impl NetCdfCfDataProvider {
         // try to load from overviews
         if let Some(loading_info) = Self::meta_data_from_overviews(overviews, &dataset_id) {
             return match loading_info {
-                MetaDataDefinition::GdalMetadataNetCdfCf(loading_info) => {
+                MetaDataDefinition::GdalMetadataNetCdfCf(mut loading_info) => {
+                    loading_info.cache_ttl = cache_ttl;
                     Ok(Box::new(loading_info))
                 }
-                MetaDataDefinition::GdalMetaDataList(loading_info) => Ok(Box::new(loading_info)),
-                MetaDataDefinition::GdalMetaDataRegular(loading_info) => Ok(Box::new(loading_info)),
+                MetaDataDefinition::GdalMetaDataList(mut loading_info) => {
+                    for params in &mut loading_info.params {
+                        params.cache_ttl = cache_ttl;
+                    }
+                    Ok(Box::new(loading_info))
+                }
+                MetaDataDefinition::GdalMetaDataRegular(mut loading_info) => {
+                    loading_info.cache_ttl = cache_ttl;
+                    Ok(Box::new(loading_info))
+                }
                 _ => Err(NetCdfCf4DProviderError::UnsupportedMetaDataDefinition),
             };
         }
@@ -534,7 +543,7 @@ impl NetCdfCfDataProvider {
                         time: TimeInterval::new_instant(*time_instance)
                             .context(error::InvalidTimeCoverageInterval)?,
                         params: Some(params),
-                        cache_ttl: CacheTtlSeconds::default(),
+                        cache_ttl,
                     });
                 }
 
@@ -2231,7 +2240,7 @@ mod tests {
     async fn test_irregular_time_series() {
         let app_ctx = InMemoryContext::test_default();
 
-        let ctx = app_ctx.default_session_context().await;
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
         let land_cover_dataset_id = add_land_cover_to_datasets(&ctx).await;
 

@@ -1,6 +1,5 @@
 mod in_memory;
 
-#[cfg(feature = "postgres")]
 mod postgres;
 
 use std::str::FromStr;
@@ -20,8 +19,8 @@ use geoengine_operators::pro::meta::quota::QuotaCheck;
 use geoengine_operators::pro::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 pub use in_memory::ProInMemoryContext;
-#[cfg(feature = "postgres")]
-pub use postgres::PostgresContext;
+
+pub use postgres::ProPostgresContext;
 use rayon::ThreadPool;
 use tokio::io::AsyncWriteExt;
 
@@ -37,19 +36,18 @@ use crate::util::path_with_base_path;
 use async_trait::async_trait;
 
 use super::permissions::PermissionDb;
-use super::projects::ProProjectDb;
 use super::users::{RoleDb, UserAuth, UserSession};
-use super::util::config::Cache;
+use super::util::config::{Cache, QuotaTrackingMode};
 
 pub use in_memory::ProInMemoryDb;
-pub use postgres::PostgresDb;
+pub use postgres::ProPostgresDb;
 
 /// A pro application contexts that extends the default context.
 pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + UserAuth {
     fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
 }
 
-pub trait ProGeoEngineDb: GeoEngineDb + ProProjectDb + UserDb + PermissionDb + RoleDb {}
+pub trait ProGeoEngineDb: GeoEngineDb + UserDb + PermissionDb + RoleDb {}
 
 pub struct ExecutionContextImpl<D>
 where
@@ -124,7 +122,19 @@ where
         span: CreateSpan,
         path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedVectorOperator> {
-        Box::new(InitializedOperatorWrapper::new(op, span, path))
+        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span, path))
+            as Box<dyn InitializedVectorOperator>;
+
+        if get_config_element::<Cache>()
+            .expect(
+                "Cache config should be present because it is part of the Settings-default.toml",
+            )
+            .enabled
+        {
+            return Box::new(InitializedCacheOperator::new(wrapped));
+        }
+
+        wrapped
     }
 
     fn wrap_initialized_plot_operator(
@@ -347,13 +357,14 @@ impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
     async fn ensure_quota_available(&self) -> geoengine_operators::util::Result<()> {
         // TODO: cache the result, s.th. other operators in the same workflow can re-use it
         let quota_check_enabled =
-            crate::util::config::get_config_element::<crate::pro::util::config::User>()
+            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .map_err(
                     |e| geoengine_operators::error::Error::CreatingProcessorFailed {
                         source: Box::new(e),
                     },
                 )?
-                .quota_check;
+                .mode
+                == QuotaTrackingMode::Check;
 
         if !quota_check_enabled {
             return Ok(());

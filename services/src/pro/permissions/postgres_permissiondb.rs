@@ -7,7 +7,7 @@ use tokio_postgres::{
 use uuid::Uuid;
 
 use crate::error::{self, Error, Result};
-use crate::pro::contexts::PostgresDb;
+use crate::pro::contexts::ProPostgresDb;
 
 use super::{Permission, PermissionDb, ResourceId, RoleId};
 
@@ -42,7 +42,7 @@ impl ResourceTypeName for ResourceId {
 }
 
 #[async_trait]
-impl<Tls> PermissionDb for PostgresDb<Tls>
+impl<Tls> PermissionDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

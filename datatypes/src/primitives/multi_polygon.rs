@@ -1,20 +1,20 @@
-use std::convert::TryFrom;
-
-use arrow::array::{ArrayBuilder, BooleanArray};
+use arrow::array::BooleanArray;
 use arrow::error::ArrowError;
 use float_cmp::{ApproxEq, F64Margin};
 use geo::intersects::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use std::convert::TryFrom;
 use wkt::{ToWkt, Wkt};
 
+use super::MultiPoint;
 use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{
     error, BoundingBox2D, GeometryRef, MultiLineString, PrimitivesError, TypedGeometry,
 };
 use crate::primitives::{Coordinate2D, Geometry};
-use crate::util::arrow::{downcast_array, ArrowTyped};
+use crate::util::arrow::{downcast_array, padded_buffer_size, ArrowTyped};
 use crate::util::Result;
 use arrow::datatypes::DataType;
 
@@ -179,25 +179,30 @@ impl ArrowTyped for MultiPolygon {
         MultiLineString::arrow_list_data_type()
     }
 
-    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
-        let multi_polygon_indices_size = builder.len() * std::mem::size_of::<i32>();
+    fn estimate_array_memory_size(builder: &mut Self::ArrowBuilder) -> usize {
+        let static_size = std::mem::size_of::<Self::ArrowArray>()
+            + std::mem::size_of::<<MultiLineString as ArrowTyped>::ArrowArray>()
+            + std::mem::size_of::<<MultiPoint as ArrowTyped>::ArrowArray>();
 
-        let ring_builder = builder.values();
-        let ring_indices_size = ring_builder.len() * std::mem::size_of::<i32>();
+        let feature_offset_bytes_size = std::mem::size_of_val(builder.offsets_slice());
 
-        let line_builder = ring_builder.values();
-        let line_indices_size = line_builder.len() * std::mem::size_of::<i32>();
+        let polygon_builder = builder.values();
 
-        let point_builder = line_builder.values();
-        let point_indices_size = point_builder.len() * std::mem::size_of::<i32>();
+        let polygon_offset_bytes_size = std::mem::size_of_val(polygon_builder.offsets_slice());
 
-        let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
+        let ring_builder = polygon_builder.values();
 
-        multi_polygon_indices_size
-            + ring_indices_size
-            + line_indices_size
-            + point_indices_size
-            + coordinates_size
+        let ring_offset_bytes_size = std::mem::size_of_val(ring_builder.offsets_slice());
+
+        let coordinates_builder = ring_builder.values();
+
+        let coords_size = Coordinate2D::estimate_array_memory_size(coordinates_builder);
+
+        static_size
+            + coords_size
+            + padded_buffer_size(ring_offset_bytes_size, 64)
+            + padded_buffer_size(polygon_offset_bytes_size, 64)
+            + padded_buffer_size(feature_offset_bytes_size, 64)
     }
 
     fn arrow_builder(_capacity: usize) -> Self::ArrowBuilder {
@@ -250,7 +255,7 @@ impl ArrowTyped for MultiPolygon {
             }
         }
 
-        Ok(multi_polygon_builder.finish())
+        Ok(multi_polygon_builder.finish_cloned())
     }
 
     fn filter(
@@ -301,7 +306,7 @@ impl ArrowTyped for MultiPolygon {
             multi_polygon_builder.append(true);
         }
 
-        Ok(multi_polygon_builder.finish())
+        Ok(multi_polygon_builder.finish_cloned())
     }
 
     fn from_vec(multi_polygons: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
@@ -334,7 +339,7 @@ impl ArrowTyped for MultiPolygon {
             builder.append(true);
         }
 
-        Ok(builder.finish())
+        Ok(builder.finish_cloned())
     }
 }
 
@@ -346,7 +351,17 @@ pub struct MultiPolygonRef<'g> {
     polygons: Vec<PolygonRef<'g>>,
 }
 
-impl<'r> GeometryRef for MultiPolygonRef<'r> {}
+impl<'r> GeometryRef for MultiPolygonRef<'r> {
+    type GeometryType = MultiPolygon;
+
+    fn as_geometry(&self) -> Self::GeometryType {
+        MultiPolygon::from(self)
+    }
+
+    fn bbox(&self) -> Option<BoundingBox2D> {
+        self.bbox()
+    }
+}
 
 impl<'g> MultiPolygonRef<'g> {
     pub fn new(polygons: Vec<PolygonRef<'g>>) -> Result<Self> {
@@ -372,6 +387,17 @@ impl<'g> MultiPolygonRef<'g> {
 
     pub(crate) fn new_unchecked(polygons: Vec<PolygonRef<'g>>) -> Self {
         Self { polygons }
+    }
+
+    pub fn bbox(&self) -> Option<BoundingBox2D> {
+        self.polygons().iter().fold(None, |bbox, rings| {
+            let lbox = BoundingBox2D::from_coord_ref_iter(rings[0].iter()); // we only need to look at the outer ring coords
+            match (bbox, lbox) {
+                (None, Some(lbox)) => Some(lbox),
+                (Some(bbox), Some(lbox)) => Some(bbox.union(&lbox)),
+                (bbox, None) => bbox,
+            }
+        })
     }
 }
 
@@ -522,9 +548,9 @@ impl ApproxEq for &MultiPolygon {
 
 #[cfg(test)]
 mod tests {
-    use float_cmp::approx_eq;
-
     use super::*;
+    use arrow::array::{Array, ArrayBuilder};
+    use float_cmp::approx_eq;
 
     #[test]
     fn access() {
@@ -856,5 +882,146 @@ mod tests {
         let polygon_back = MultiPolygon::from(geo_polygon);
 
         assert_eq!(polygon, polygon_back);
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn arrow_builder_size() {
+        fn push_geometry(
+            geometries_builder: &mut <MultiPolygon as ArrowTyped>::ArrowBuilder,
+            geometry: &MultiPolygon,
+        ) {
+            let polygon_builder = geometries_builder.values();
+
+            for polygon in geometry.polygons() {
+                let ring_builder = polygon_builder.values();
+
+                for ring in polygon {
+                    let coordinate_builder = ring_builder.values();
+
+                    for coordinate in ring {
+                        coordinate_builder
+                            .values()
+                            .append_slice(coordinate.as_ref());
+
+                        coordinate_builder.append(true);
+                    }
+
+                    ring_builder.append(true);
+                }
+
+                polygon_builder.append(true);
+            }
+
+            geometries_builder.append(true);
+        }
+
+        for num_multi_polygons in 0..64 {
+            for capacity in [0, num_multi_polygons] {
+                let mut builder = MultiPolygon::arrow_builder(capacity);
+
+                for i in 0..num_multi_polygons {
+                    match i % 3 {
+                        0 => {
+                            push_geometry(
+                                &mut builder,
+                                &MultiPolygon::new(vec![
+                                    vec![
+                                        vec![
+                                            (0.1, 0.1).into(),
+                                            (0.8, 0.1).into(),
+                                            (0.8, 0.8).into(),
+                                            (0.1, 0.1).into(),
+                                        ],
+                                        vec![
+                                            (0.2, 0.2).into(),
+                                            (0.9, 0.2).into(),
+                                            (0.9, 0.9).into(),
+                                            (0.2, 0.2).into(),
+                                        ],
+                                    ],
+                                    vec![
+                                        vec![
+                                            (1.1, 1.1).into(),
+                                            (1.8, 1.1).into(),
+                                            (1.8, 1.8).into(),
+                                            (1.1, 1.1).into(),
+                                        ],
+                                        vec![
+                                            (1.2, 1.2).into(),
+                                            (1.9, 1.2).into(),
+                                            (1.9, 1.9).into(),
+                                            (1.2, 1.2).into(),
+                                        ],
+                                    ],
+                                ])
+                                .unwrap(),
+                            );
+                        }
+                        1 => {
+                            push_geometry(
+                                &mut builder,
+                                &MultiPolygon::new(vec![
+                                    vec![
+                                        vec![
+                                            (0.1, 0.1).into(),
+                                            (0.8, 0.1).into(),
+                                            (0.8, 0.8).into(),
+                                            (0.1, 0.1).into(),
+                                        ],
+                                        vec![
+                                            (0.2, 0.2).into(),
+                                            (0.9, 0.2).into(),
+                                            (0.9, 0.9).into(),
+                                            (0.2, 0.2).into(),
+                                        ],
+                                    ],
+                                    vec![vec![
+                                        (1.1, 1.1).into(),
+                                        (1.8, 1.1).into(),
+                                        (1.8, 1.8).into(),
+                                        (1.1, 1.1).into(),
+                                    ]],
+                                ])
+                                .unwrap(),
+                            );
+                        }
+                        2 => {
+                            push_geometry(
+                                &mut builder,
+                                &MultiPolygon::new(vec![vec![
+                                    vec![
+                                        (0.0, 0.1).into(),
+                                        (1.0, 1.1).into(),
+                                        (1.0, 0.1).into(),
+                                        (0.0, 0.1).into(),
+                                    ],
+                                    vec![
+                                        (3.0, 3.1).into(),
+                                        (4.0, 4.1).into(),
+                                        (4.0, 3.1).into(),
+                                        (3.0, 3.1).into(),
+                                    ],
+                                ]])
+                                .unwrap(),
+                            );
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+
+                assert_eq!(builder.len(), num_multi_polygons);
+
+                let builder_byte_size = MultiPolygon::estimate_array_memory_size(&mut builder);
+
+                let array = builder.finish_cloned();
+
+                assert_eq!(
+                    builder_byte_size,
+                    array.get_array_memory_size(),
+                    "{num_multi_polygons}"
+                );
+            }
+        }
     }
 }
