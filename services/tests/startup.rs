@@ -7,13 +7,12 @@ use std::{
     process::{Command, Stdio},
 };
 
-#[cfg(feature = "pro")]
 #[serial]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn it_starts_postgres_backend_with_no_warnings() {
+async fn it_starts_without_warnings_and_accepts_connections() {
     use geoengine_services::util::config::get_config_element;
 
-    const SCHEMA_NAME: &str = "it_starts_postgres_backend_with_no_warnings";
+    const SCHEMA_NAME: &str = "it_starts_without_warnings_and_accepts_connections";
 
     async fn run_server_and_check_warnings() {
         let mut server = Command::cargo_bin("main")
@@ -28,6 +27,7 @@ async fn it_starts_postgres_backend_with_no_warnings() {
 
         let mut reader = std::io::BufReader::new(stderr);
 
+        // read log output and check for warnings
         let mut startup_succesful = false;
         for _ in 0..99 {
             let mut buf = String::new();
@@ -42,6 +42,11 @@ async fn it_starts_postgres_backend_with_no_warnings() {
                 break;
             }
         }
+
+        // once log outputs stop, perform a test request
+        reqwest::get("http://127.0.0.1:3030/info")
+            .await
+            .expect("failed to connect to server");
 
         server.kill().unwrap();
 

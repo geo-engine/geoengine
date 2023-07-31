@@ -193,119 +193,140 @@ fn send_result(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::contexts::PostgresSessionContext;
+    use crate::util::tests::with_temp_context_from_spec;
+    use crate::{contexts::SimpleApplicationContext, workflows::workflow::Workflow};
+    use actix_http::error::PayloadError;
+    use actix_web_actors::ws::WebsocketContext;
+    use bytes::{Bytes, BytesMut};
+    use futures::channel::mpsc::UnboundedSender;
+    use geoengine_datatypes::{
+        collections::MultiPointCollection,
+        primitives::{
+            BoundingBox2D, CacheHint, DateTime, FeatureData, MultiPoint, SpatialResolution,
+            TimeInterval,
+        },
+        util::{arrow::arrow_ipc_file_to_record_batches, test::TestDefault},
+    };
+    use geoengine_operators::{engine::TypedOperator, mock::MockFeatureCollectionSource};
+    use tokio_postgres::NoTls;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_websocket_stream() {
-        //     fn send_next(input_sender: &UnboundedSender<Result<Bytes, PayloadError>>) {
-        //         let mut buf = BytesMut::new();
-        //         actix_http::ws::Parser::write_message(
-        //             &mut buf,
-        //             "NEXT",
-        //             actix_http::ws::OpCode::Text,
-        //             true,
-        //             true,
-        //         );
+        fn send_next(input_sender: &UnboundedSender<Result<Bytes, PayloadError>>) {
+            let mut buf = BytesMut::new();
+            actix_http::ws::Parser::write_message(
+                &mut buf,
+                "NEXT",
+                actix_http::ws::OpCode::Text,
+                true,
+                true,
+            );
 
-        //         input_sender.unbounded_send(Ok(buf.into())).unwrap();
-        //     }
+            input_sender.unbounded_send(Ok(buf.into())).unwrap();
+        }
 
-        //     let collection = MultiPointCollection::from_data(
-        //         MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
-        //         vec![
-        //             TimeInterval::new(
-        //                 DateTime::new_utc(2014, 1, 1, 0, 0, 0),
-        //                 DateTime::new_utc(2015, 1, 1, 0, 0, 0)
-        //             )
-        //             .unwrap();
-        //             3
-        //         ],
-        //         [
-        //             (
-        //                 "foobar".to_string(),
-        //                 FeatureData::NullableInt(vec![Some(0), None, Some(2)]),
-        //             ),
-        //             (
-        //                 "strings".to_string(),
-        //                 FeatureData::Text(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
-        //             ),
-        //         ]
-        //         .iter()
-        //         .cloned()
-        //         .collect(),
-        //         CacheHint::default(),
-        //     )
-        //     .unwrap();
+        with_temp_context_from_spec(
+            TestDefault::test_default(),
+            usize::MAX.into(), // ensure that we get one chunk per input
+            |app_ctx, _| async move {
+                let collection = MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
+                    vec![
+                        TimeInterval::new(
+                            DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                            DateTime::new_utc(2015, 1, 1, 0, 0, 0)
+                        )
+                        .unwrap();
+                        3
+                    ],
+                    [
+                        (
+                            "foobar".to_string(),
+                            FeatureData::NullableInt(vec![Some(0), None, Some(2)]),
+                        ),
+                        (
+                            "strings".to_string(),
+                            FeatureData::Text(vec![
+                                "a".to_string(),
+                                "b".to_string(),
+                                "c".to_string(),
+                            ]),
+                        ),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    CacheHint::default(),
+                )
+                .unwrap();
 
-        //     with_temp_context_from_spec(
-        //         TestDefault::test_default(),
-        //         usize::MAX.into(), // ensure that we get one chunk per input
-        //         |app_ctx, _| async move {
-        //             let ctx = app_ctx.default_session_context().await.unwrap();
+                let ctx = app_ctx.default_session_context().await.unwrap();
 
-        //             let workflow = Workflow {
-        //                 operator: TypedOperator::Vector(
-        //                     MockFeatureCollectionSource::multiple(vec![
-        //                         collection.clone(),
-        //                         collection.clone(),
-        //                         collection.clone(),
-        //                     ])
-        //                     .boxed(),
-        //                 ),
-        //             };
+                let workflow = Workflow {
+                    operator: TypedOperator::Vector(
+                        MockFeatureCollectionSource::multiple(vec![
+                            collection.clone(),
+                            collection.clone(),
+                            collection.clone(),
+                        ])
+                        .boxed(),
+                    ),
+                };
 
-        //             let query_rectangle = VectorQueryRectangle {
-        //                 spatial_bounds: BoundingBox2D::new_upper_left_lower_right(
-        //                     (-180., 90.).into(),
-        //                     (180., -90.).into(),
-        //                 )
-        //                 .unwrap(),
-        //                 time_interval: TimeInterval::new_instant(DateTime::new_utc(
-        //                     2014, 3, 1, 0, 0, 0,
-        //                 ))
-        //                 .unwrap(),
-        //                 spatial_resolution: SpatialResolution::one(),
-        //             };
+                let query_rectangle = VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new_upper_left_lower_right(
+                        (-180., 90.).into(),
+                        (180., -90.).into(),
+                    )
+                    .unwrap(),
+                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
+                        2014, 3, 1, 0, 0, 0,
+                    ))
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::one(),
+                };
 
-        //             let handler = VectorWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(
-        //                 workflow.operator.get_vector().unwrap(),
-        //                 query_rectangle,
-        //                 ctx.execution_context().unwrap(),
-        //                 ctx.query_context().unwrap(),
-        //             )
-        //             .await
-        //             .unwrap();
+                let handler = VectorWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(
+                    workflow.operator.get_vector().unwrap(),
+                    query_rectangle,
+                    ctx.execution_context().unwrap(),
+                    ctx.query_context().unwrap(),
+                )
+                .await
+                .unwrap();
 
-        //             let (input_sender, input_receiver) = futures::channel::mpsc::unbounded();
+                let (input_sender, input_receiver) = futures::channel::mpsc::unbounded();
 
-        //             let mut websocket_context = WebsocketContext::create(handler, input_receiver);
+                let mut websocket_context = WebsocketContext::create(handler, input_receiver);
 
-        //             // 3 batches
-        //             for _ in 0..3 {
-        //                 send_next(&input_sender);
+                // 3 batches
+                for _ in 0..3 {
+                    send_next(&input_sender);
 
-        //                 let bytes = websocket_context.next().await.unwrap().unwrap();
+                    let bytes = websocket_context.next().await.unwrap().unwrap();
 
-        //                 let bytes = &bytes[4..]; // the first four bytes are WS op bytes
+                    let bytes = &bytes[4..]; // the first four bytes are WS op bytes
 
-        //                 let record_batches = arrow_ipc_file_to_record_batches(bytes).unwrap();
-        //                 assert_eq!(record_batches.len(), 1);
-        //                 let record_batch = record_batches.first().unwrap();
-        //                 let schema = record_batch.schema();
+                    let record_batches = arrow_ipc_file_to_record_batches(bytes).unwrap();
+                    assert_eq!(record_batches.len(), 1);
+                    let record_batch = record_batches.first().unwrap();
+                    let schema = record_batch.schema();
 
-        //                 assert_eq!(schema.metadata()["spatialReference"], "EPSG:4326");
+                    assert_eq!(schema.metadata()["spatialReference"], "EPSG:4326");
 
-        //                 assert_eq!(record_batch.column_by_name("foobar").unwrap().len(), 3);
-        //                 assert_eq!(record_batch.column_by_name("strings").unwrap().len(), 3);
-        //             }
+                    assert_eq!(record_batch.column_by_name("foobar").unwrap().len(), 3);
+                    assert_eq!(record_batch.column_by_name("strings").unwrap().len(), 3);
+                }
 
-        //             send_next(&input_sender);
-        //             assert_eq!(websocket_context.next().await.unwrap().unwrap().len(), 4); // close frame
+                send_next(&input_sender);
+                assert_eq!(websocket_context.next().await.unwrap().unwrap().len(), 4); // close frame
 
-        //             send_next(&input_sender);
-        //             assert!(websocket_context.next().await.is_none());
-        //         },
-        //     )
-        //     .await
-        todo!()
+                send_next(&input_sender);
+                assert!(websocket_context.next().await.is_none());
+            },
+        )
+        .await;
     }
 }
