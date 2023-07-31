@@ -457,9 +457,13 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::api::model::datatypes::{DataProviderId, DatasetName, LayerId};
+    use crate::api::model::datatypes::{
+        Breakpoint, Colorizer, DataProviderId, DatasetName, DefaultColors, LayerId, LinearGradient,
+        LogarithmicGradient, NotNanF64, OverUnderColors, Palette, RgbaColor,
+    };
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
+    use crate::api::model::ColorizerTypeDbType;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
@@ -476,9 +480,10 @@ mod tests {
         INTERNAL_PROVIDER_ID,
     };
     use crate::projects::{
-        CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
-        ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
-        STRectangle, UpdateProject,
+        ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LoadVersion,
+        NumberParam, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb, ProjectFilter,
+        ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle, StrokeParam,
+        UpdateProject,
     };
     use crate::util::tests::register_ndvi_workflow_helper;
     use crate::util::tests::with_temp_context;
@@ -509,10 +514,16 @@ mod tests {
         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
     };
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
+    use ordered_float::NotNan;
     use serde_json::json;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test() {
+        // flexi_logger::Logger::try_with_str("tokio_postgres = trace")
+        //     .unwrap()
+        //     .start()
+        //     .unwrap();
+
         with_temp_context(|app_ctx, _| async move {
             let session = app_ctx.default_session().await.unwrap();
 
@@ -2432,6 +2443,187 @@ mod tests {
                 db.resolve_dataset_name_to_id(&dataset_name1).await.unwrap(),
                 dataset_id1
             );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn test_types_individually() {
+        pub async fn test_type<T>(
+            conn: &PooledConnection<'_, PostgresConnectionManager<tokio_postgres::NoTls>>,
+            sql_type: &str,
+            checks: impl IntoIterator<Item = T>,
+        ) where
+            T: PartialEq + postgres_types::FromSqlOwned + postgres_types::ToSql + Sync,
+        {
+            // don't quote built-in types
+            let quote = if sql_type == "double precision" {
+                ""
+            } else {
+                "\""
+            };
+
+            for value in checks {
+                let stmt = conn
+                    .prepare(&format!("SELECT $1::{quote}{sql_type}{quote}"))
+                    .await
+                    .unwrap();
+                let result: T = conn.query_one(&stmt, &[&value]).await.unwrap().get(0);
+
+                assert_eq!(value, result);
+            }
+        }
+
+        with_temp_context(|app_ctx, _| async move {
+            let pool = app_ctx.pool.get().await.unwrap();
+
+            test_type(&pool, "RgbaColor", [RgbaColor([0, 1, 2, 3])]).await;
+
+            test_type(
+                &pool,
+                "double precision",
+                [NotNanF64::from(NotNan::<f64>::new(1.0).unwrap())],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Breakpoint",
+                [Breakpoint {
+                    value: NotNan::<f64>::new(1.0).unwrap().into(),
+                    color: RgbaColor([0, 0, 0, 0]),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "DefaultColors",
+                [
+                    DefaultColors::DefaultColor {
+                        default_color: RgbaColor([0, 10, 20, 30]),
+                    },
+                    DefaultColors::OverUnder(OverUnderColors {
+                        over_color: RgbaColor([1, 2, 3, 4]),
+                        under_color: RgbaColor([5, 6, 7, 8]),
+                    }),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "ColorizerType",
+                [
+                    ColorizerTypeDbType::LinearGradient,
+                    ColorizerTypeDbType::LogarithmicGradient,
+                    ColorizerTypeDbType::Palette,
+                    ColorizerTypeDbType::Rgba,
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Colorizer",
+                [
+                    Colorizer::LinearGradient(LinearGradient {
+                        breakpoints: vec![
+                            Breakpoint {
+                                value: NotNan::<f64>::new(-10.0).unwrap().into(),
+                                color: RgbaColor([0, 0, 0, 0]),
+                            },
+                            Breakpoint {
+                                value: NotNan::<f64>::new(2.0).unwrap().into(),
+                                color: RgbaColor([255, 0, 0, 255]),
+                            },
+                        ],
+                        no_data_color: RgbaColor([0, 10, 20, 30]),
+                        color_fields: DefaultColors::OverUnder(OverUnderColors {
+                            over_color: RgbaColor([1, 2, 3, 4]),
+                            under_color: RgbaColor([5, 6, 7, 8]),
+                        }),
+                    }),
+                    Colorizer::LogarithmicGradient(LogarithmicGradient {
+                        breakpoints: vec![
+                            Breakpoint {
+                                value: NotNan::<f64>::new(1.0).unwrap().into(),
+                                color: RgbaColor([0, 0, 0, 0]),
+                            },
+                            Breakpoint {
+                                value: NotNan::<f64>::new(2.0).unwrap().into(),
+                                color: RgbaColor([255, 0, 0, 255]),
+                            },
+                        ],
+                        no_data_color: RgbaColor([0, 10, 20, 30]),
+                        color_fields: DefaultColors::OverUnder(OverUnderColors {
+                            over_color: RgbaColor([1, 2, 3, 4]),
+                            under_color: RgbaColor([5, 6, 7, 8]),
+                        }),
+                    }),
+                    Colorizer::Palette {
+                        colors: Palette(
+                            [
+                                (NotNan::<f64>::new(1.0).unwrap(), RgbaColor([0, 0, 0, 0])),
+                                (
+                                    NotNan::<f64>::new(2.0).unwrap(),
+                                    RgbaColor([255, 0, 0, 255]),
+                                ),
+                                (NotNan::<f64>::new(3.0).unwrap(), RgbaColor([0, 10, 20, 30])),
+                            ]
+                            .into(),
+                        ),
+                        no_data_color: RgbaColor([1, 2, 3, 4]),
+                        default_color: RgbaColor([5, 6, 7, 8]),
+                    },
+                    Colorizer::Rgba,
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "ColorParam",
+                [
+                    ColorParam::Static {
+                        color: RgbaColor([0, 10, 20, 30]).into(),
+                    },
+                    ColorParam::Derived(DerivedColor {
+                        attribute: "foobar".to_string(),
+                        colorizer: Colorizer::Rgba,
+                    }),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "NumberParam",
+                [
+                    NumberParam::Static { value: 42 },
+                    NumberParam::Derived(DerivedNumber {
+                        attribute: "foobar".to_string(),
+                        factor: 1.0,
+                        default_value: 42.,
+                    }),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "StrokeParam",
+                [StrokeParam {
+                    width: NumberParam::Static { value: 42 },
+                    color: ColorParam::Static {
+                        color: RgbaColor([0, 10, 20, 30]).into(),
+                    },
+                }],
+            )
+            .await;
+
+            // TODO: next is "TextSymbology"
         })
         .await;
     }
