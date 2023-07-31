@@ -13,6 +13,7 @@ use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 
 use crate::projects::{ProjectId, STRectangle};
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
+use crate::util::config::get_config_element;
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -48,6 +49,11 @@ where
     task_manager: Arc<SimpleTaskManagerBackend>,
     pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
+}
+
+enum DatabaseStatus {
+    Unitialized,
+    Initialized { clear_database_on_start: bool },
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -139,25 +145,30 @@ where
         Ok(app_ctx)
     }
 
-    async fn is_schema_initialized(
+    async fn check_schema_status(
         conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<bool> {
-        let stmt = match conn.prepare("SELECT TRUE from geoengine;").await {
+    ) -> Result<DatabaseStatus> {
+        let stmt = match conn
+            .prepare("SELECT clear_database_on_start from geoengine;")
+            .await
+        {
             Ok(stmt) => stmt,
             Err(e) => {
                 if let Some(code) = e.code() {
                     if *code == SqlState::UNDEFINED_TABLE {
                         info!("Initializing schema.");
-                        return Ok(false);
+                        return Ok(DatabaseStatus::Unitialized);
                     }
                 }
                 return Err(error::Error::TokioPostgres { source: e });
             }
         };
 
-        let _row = conn.query(&stmt, &[]).await?;
+        let row = conn.query_one(&stmt, &[]).await?;
 
-        Ok(true)
+        Ok(DatabaseStatus::Initialized {
+            clear_database_on_start: row.get(0),
+        })
     }
 
     #[allow(clippy::too_many_lines)]
@@ -165,13 +176,48 @@ where
     pub(crate) async fn create_schema(
         mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
     ) -> Result<bool> {
-        if Self::is_schema_initialized(&conn).await? {
-            return Ok(false);
-        }
+        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+
+        let database_status = Self::check_schema_status(&conn).await?;
+
+        match database_status {
+            DatabaseStatus::Initialized {
+                clear_database_on_start,
+            } if clear_database_on_start && postgres_config.clear_database_on_start => {
+                let schema_name = postgres_config.schema;
+                info!("Clearing schema {}.", schema_name);
+                conn.batch_execute(&format!(
+                    "DROP SCHEMA {schema_name} CASCADE; CREATE SCHEMA {schema_name};"
+                ))
+                .await?;
+            }
+            DatabaseStatus::Initialized {
+                clear_database_on_start,
+            } if clear_database_on_start => return Ok(false),
+            DatabaseStatus::Initialized {
+                clear_database_on_start,
+            } if !clear_database_on_start && postgres_config.clear_database_on_start => {
+                return Err(Error::ClearDatabaseOnStartupNotAllowed)
+            }
+            DatabaseStatus::Initialized {
+                clear_database_on_start: _,
+            } => return Ok(false),
+            DatabaseStatus::Unitialized => (),
+        };
 
         let tx = conn.build_transaction().start().await?;
 
         tx.batch_execute(include_str!("schema.sql")).await?;
+
+        let stmt = tx
+            .prepare(
+                "
+            INSERT INTO geoengine (clear_database_on_start) VALUES ($1);",
+            )
+            .await?;
+
+        tx.execute(&stmt, &[&postgres_config.clear_database_on_start])
+            .await?;
 
         let stmt = tx
             .prepare(

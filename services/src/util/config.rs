@@ -152,6 +152,7 @@ pub struct Postgres {
     pub schema: String,
     pub user: String,
     pub password: String,
+    pub clear_database_on_start: bool,
 }
 
 impl ConfigElement for Postgres {
