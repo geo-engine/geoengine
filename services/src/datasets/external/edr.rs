@@ -51,6 +51,8 @@ fn init_geo_filetypes() -> HashMap<String, bool> {
     }
 }
 
+const DISCRETE_VRS: [&'static str; 1] = ["ibl#between-depth"];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EdrDataProviderDefinition {
@@ -714,6 +716,13 @@ struct EdrSpatialExtent {
 #[derive(Deserialize)]
 struct EdrVerticalExtent {
     values: Vec<String>,
+    vrs: String,
+}
+
+impl EdrVerticalExtent {
+    fn is_axis_discrete(&self) -> bool {
+        DISCRETE_VRS.contains(&self.vrs.as_str())
+    }
 }
 
 #[derive(Deserialize, Clone)]
