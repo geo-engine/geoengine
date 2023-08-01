@@ -644,47 +644,46 @@ mod tests {
         .await;
     }
 
-    // async fn update_test_helper(
-    //     method: Method,
-    // ) -> (InMemoryContext, SimpleSession, ProjectId, ServiceResponse) {
-    //     with_temp_context(|app_ctx, _| async move {
+    async fn update_test_helper(
+        app_ctx: PostgresContext<NoTls>,
+        method: Method,
+    ) -> (SimpleSession, ProjectId, ServiceResponse) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-    //     let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = ctx.session().clone();
+        let project = create_project_helper(&app_ctx).await;
 
-    //     let session = ctx.session().clone();
-    //     let project = create_project_helper(&app_ctx).await;
+        let update = update_project_helper(project);
 
-    //     let update = update_project_helper(project);
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri(&format!("/project/{project}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_json(&update);
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-    //     let req = test::TestRequest::default()
-    //         .method(method)
-    //         .uri(&format!("/project/{project}"))
-    //         .append_header((header::CONTENT_LENGTH, 0))
-    //         .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-    //         .set_json(&update);
-    //     let res = send_test_request(req, app_ctx.clone()).await;
+        (session, project, res)
+    }
 
-    //     (app_ctx, session, project, res)
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn update() {
+        with_temp_context(|app_ctx, _| async move {
+            let (session, project, res) = update_test_helper(app_ctx.clone(), Method::PATCH).await;
 
-    //     })
-    //     .await;
-    // }
+            assert_eq!(res.status(), 200);
 
-    // #[tokio::test]
-    // async fn update() {
-    //     let (app_ctx, session, project, res) = update_test_helper(Method::PATCH).await;
-
-    //     assert_eq!(res.status(), 200);
-
-    //     let loaded = app_ctx
-    //         .session_context(session)
-    //         .db()
-    //         .load_project(project)
-    //         .await
-    //         .unwrap();
-    //     assert_eq!(loaded.name, "TestUpdate");
-    //     assert_eq!(loaded.layers.len(), 1);
-    // }
+            let loaded = app_ctx
+                .session_context(session)
+                .db()
+                .load_project(project)
+                .await
+                .unwrap();
+            assert_eq!(loaded.name, "TestUpdate");
+            assert_eq!(loaded.layers.len(), 1);
+        })
+        .await;
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn update_invalid_body() {
