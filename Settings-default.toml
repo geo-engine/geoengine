@@ -28,7 +28,9 @@ database = "geoengine"
 schema = "public"
 user = "geoengine"
 password = "geoengine"
-clear_database_on_start = false # set to `true` to start with a fresh database every time. This has to be set at the very first startup with an empty database.
+# Set to `true` to start with a fresh database every time.
+# This is ignored if the engine has ever started with this being `false`.
+clear_database_on_start = false
 
 [raster.tiling_specification]
 origin_coordinate_x = 0.0
