@@ -287,7 +287,10 @@ where
 /// for example due to incompatible schema changes between the time of writing the request body
 /// and now. It can also detect if the query parameters are not documented correctly or the
 /// request path changed.
-#[allow(clippy::unimplemented)]
+///
+/// # Panics
+///
+/// panics if a Ref occurs in an example, as this case is not yet supported.
 pub async fn can_run_examples<F, Fut>(
     app_ctx: PostgresContext<NoTls>,
     api: OpenApi,
@@ -328,7 +331,9 @@ pub async fn can_run_examples<F, Fut>(
                                 RefOr::Ref(_reference) => {
                                     // This never happened during testing.
                                     // It is undocumented how the references would look like.
-                                    unimplemented!()
+                                    panic!(
+                                        "checking examples with references is not yet implemented"
+                                    )
                                 }
                                 RefOr::T(concrete) => {
                                     if let Some(body) = concrete.value {

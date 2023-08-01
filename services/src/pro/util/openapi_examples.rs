@@ -14,8 +14,7 @@ use utoipa::openapi::{OpenApi, RefOr};
 ///
 /// # Panics
 ///
-/// panics if the creation of an anonymous session fails.
-#[allow(clippy::unimplemented)]
+/// panics if the creation of an anonymous session fails or the example contains a Ref which is not yet supported.
 pub async fn can_run_pro_examples<F, Fut>(
     app_ctx: ProPostgresContext<NoTls>,
     api: OpenApi,
@@ -56,7 +55,7 @@ pub async fn can_run_pro_examples<F, Fut>(
                                 RefOr::Ref(_reference) => {
                                     // This never happened during testing.
                                     // It is undocumented how the references would look like.
-                                    unimplemented!()
+                                    panic!("checking pro examples with references is not yet implemented")
                                 }
                                 RefOr::T(concrete) => {
                                     if let Some(body) = concrete.value {
