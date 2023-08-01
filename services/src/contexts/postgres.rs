@@ -53,7 +53,8 @@ where
 
 enum DatabaseStatus {
     Unitialized,
-    Initialized { clear_database_on_start: bool },
+    InitializedClearDatabase,
+    InitializedKeepDatabase,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -166,9 +167,11 @@ where
 
         let row = conn.query_one(&stmt, &[]).await?;
 
-        Ok(DatabaseStatus::Initialized {
-            clear_database_on_start: row.get(0),
-        })
+        if row.get(0) {
+            Ok(DatabaseStatus::InitializedClearDatabase)
+        } else {
+            Ok(DatabaseStatus::InitializedKeepDatabase)
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -181,9 +184,7 @@ where
         let database_status = Self::check_schema_status(&conn).await?;
 
         match database_status {
-            DatabaseStatus::Initialized {
-                clear_database_on_start,
-            } if clear_database_on_start && postgres_config.clear_database_on_start => {
+            DatabaseStatus::InitializedClearDatabase if postgres_config.clear_database_on_start => {
                 let schema_name = postgres_config.schema;
                 info!("Clearing schema {}.", schema_name);
                 conn.batch_execute(&format!(
@@ -191,17 +192,12 @@ where
                 ))
                 .await?;
             }
-            DatabaseStatus::Initialized {
-                clear_database_on_start,
-            } if clear_database_on_start => return Ok(false),
-            DatabaseStatus::Initialized {
-                clear_database_on_start,
-            } if !clear_database_on_start && postgres_config.clear_database_on_start => {
+            DatabaseStatus::InitializedKeepDatabase if postgres_config.clear_database_on_start => {
                 return Err(Error::ClearDatabaseOnStartupNotAllowed)
             }
-            DatabaseStatus::Initialized {
-                clear_database_on_start: _,
-            } => return Ok(false),
+            DatabaseStatus::InitializedClearDatabase | DatabaseStatus::InitializedKeepDatabase => {
+                return Ok(false)
+            }
             DatabaseStatus::Unitialized => (),
         };
 
