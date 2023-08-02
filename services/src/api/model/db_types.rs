@@ -22,11 +22,11 @@ pub struct DefaultColorsDbType {
     pub under_color: Option<RgbaColor>,
 }
 
-impl From<DefaultColors> for DefaultColorsDbType {
-    fn from(value: DefaultColors) -> Self {
+impl From<&DefaultColors> for DefaultColorsDbType {
+    fn from(value: &DefaultColors) -> Self {
         match value {
             DefaultColors::DefaultColor { default_color } => Self {
-                default_color: Some(default_color),
+                default_color: Some(*default_color),
                 over_color: None,
                 under_color: None,
             },
@@ -74,21 +74,21 @@ pub enum ColorizerTypeDbType {
     Rgba,
 }
 
-impl From<Colorizer> for ColorizerDbType {
-    fn from(value: Colorizer) -> Self {
+impl From<&Colorizer> for ColorizerDbType {
+    fn from(value: &Colorizer) -> Self {
         match value {
             Colorizer::LinearGradient(gradient) => ColorizerDbType {
                 r#type: ColorizerTypeDbType::LinearGradient,
-                breakpoints: Some(gradient.breakpoints),
+                breakpoints: Some(gradient.breakpoints.clone()),
                 no_data_color: Some(gradient.no_data_color),
-                color_fields: Some(gradient.color_fields.into()),
+                color_fields: Some((&gradient.color_fields).into()),
                 default_color: None,
             },
             Colorizer::LogarithmicGradient(gradient) => ColorizerDbType {
                 r#type: ColorizerTypeDbType::LogarithmicGradient,
-                breakpoints: Some(gradient.breakpoints),
+                breakpoints: Some(gradient.breakpoints.clone()),
                 no_data_color: Some(gradient.no_data_color),
-                color_fields: Some(gradient.color_fields.into()),
+                color_fields: Some((&gradient.color_fields).into()),
                 default_color: None,
             },
             Colorizer::Palette {
@@ -100,16 +100,16 @@ impl From<Colorizer> for ColorizerDbType {
                 breakpoints: Some(
                     colors
                         .0
-                        .into_iter()
+                        .iter()
                         .map(|(k, v)| Breakpoint {
-                            value: k.into(),
-                            color: v,
+                            value: (*k).into(),
+                            color: *v,
                         })
                         .collect(),
                 ),
-                no_data_color: Some(no_data_color),
+                no_data_color: Some(*no_data_color),
                 color_fields: None,
-                default_color: Some(default_color),
+                default_color: Some(*default_color),
             },
             Colorizer::Rgba => ColorizerDbType {
                 r#type: ColorizerTypeDbType::Rgba,
@@ -185,11 +185,11 @@ pub struct ColorParamDbType {
     colorizer: Option<Colorizer>,
 }
 
-impl From<ColorParam> for ColorParamDbType {
-    fn from(value: ColorParam) -> Self {
+impl From<&ColorParam> for ColorParamDbType {
+    fn from(value: &ColorParam) -> Self {
         match value {
             ColorParam::Static { color } => Self {
-                color: Some(color.into()),
+                color: Some((*color).into()),
                 attribute: None,
                 colorizer: None,
             },
@@ -198,8 +198,8 @@ impl From<ColorParam> for ColorParamDbType {
                 colorizer,
             }) => Self {
                 color: None,
-                attribute: Some(attribute),
-                colorizer: Some(colorizer),
+                attribute: Some(attribute.clone()),
+                colorizer: Some(colorizer.clone()),
             },
         }
     }
@@ -239,11 +239,11 @@ pub struct NumberParamDbType {
     default_value: Option<f64>,
 }
 
-impl From<NumberParam> for NumberParamDbType {
-    fn from(value: NumberParam) -> Self {
+impl From<&NumberParam> for NumberParamDbType {
+    fn from(value: &NumberParam) -> Self {
         match value {
             NumberParam::Static { value } => Self {
-                value: Some(value as i64),
+                value: Some(*value as i64),
                 attribute: None,
                 factor: None,
                 default_value: None,
@@ -254,9 +254,9 @@ impl From<NumberParam> for NumberParamDbType {
                 default_value,
             }) => Self {
                 value: None,
-                attribute: Some(attribute),
-                factor: Some(factor),
-                default_value: Some(default_value),
+                attribute: Some(attribute.clone()),
+                factor: Some(*factor),
+                default_value: Some(*default_value),
             },
         }
     }
@@ -299,32 +299,32 @@ pub struct SymbologyDbType {
     polygon: Option<PolygonSymbology>,
 }
 
-impl From<Symbology> for SymbologyDbType {
-    fn from(symbology: Symbology) -> Self {
+impl From<&Symbology> for SymbologyDbType {
+    fn from(symbology: &Symbology) -> Self {
         match symbology {
             Symbology::Raster(raster) => SymbologyDbType {
-                raster: Some(raster),
+                raster: Some(raster.clone()),
                 point: None,
                 line: None,
                 polygon: None,
             },
             Symbology::Point(point) => SymbologyDbType {
                 raster: None,
-                point: Some(point),
+                point: Some(point.clone()),
                 line: None,
                 polygon: None,
             },
             Symbology::Line(line) => SymbologyDbType {
                 raster: None,
                 point: None,
-                line: Some(line),
+                line: Some(line.clone()),
                 polygon: None,
             },
             Symbology::Polygon(polygon) => SymbologyDbType {
                 raster: None,
                 point: None,
                 line: None,
-                polygon: Some(polygon),
+                polygon: Some(polygon.clone()),
             },
         }
     }
@@ -365,33 +365,33 @@ impl TryFrom<SymbologyDbType> for Symbology {
 }
 
 macro_rules! delegate_from_to_sql {
-    ( $normal:ident, $dbtype:ident ) => {
-        impl ToSql for $normal {
+    ( $RustType:ty, $DbType:ty ) => {
+        impl ToSql for $RustType {
             fn to_sql(
                 &self,
                 ty: &postgres_types::Type,
                 w: &mut bytes::BytesMut,
             ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-                <$dbtype as ToSql>::to_sql(&self.clone().into(), ty, w)
+                <$DbType as ToSql>::to_sql(&self.into(), ty, w)
             }
 
             fn accepts(ty: &postgres_types::Type) -> bool {
-                <$dbtype as FromSql>::accepts(ty)
+                <$DbType as FromSql>::accepts(ty)
             }
 
             postgres_types::to_sql_checked!();
         }
 
-        impl<'a> FromSql<'a> for $normal {
+        impl<'a> FromSql<'a> for $RustType {
             fn from_sql(
                 ty: &postgres_types::Type,
                 raw: &'a [u8],
-            ) -> Result<$normal, Box<dyn std::error::Error + Sync + Send>> {
-                Ok(<$dbtype as FromSql>::from_sql(ty, raw)?.try_into()?)
+            ) -> Result<$RustType, Box<dyn std::error::Error + Sync + Send>> {
+                Ok(<$DbType as FromSql>::from_sql(ty, raw)?.try_into()?)
             }
 
             fn accepts(ty: &postgres_types::Type) -> bool {
-                <$dbtype as FromSql>::accepts(ty)
+                <$DbType as FromSql>::accepts(ty)
             }
         }
     };
