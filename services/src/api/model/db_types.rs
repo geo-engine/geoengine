@@ -393,27 +393,27 @@ pub struct ClassificationMeasurementDbType {
     classes: Vec<SmallintTextKeyValue>,
 }
 
-impl From<Measurement> for MeasurementDbType {
-    fn from(measurement: Measurement) -> Self {
+impl From<&Measurement> for MeasurementDbType {
+    fn from(measurement: &Measurement) -> Self {
         match measurement {
             Measurement::Unitless => Self {
                 continuous: None,
                 classification: None,
             },
             Measurement::Continuous(measurement) => Self {
-                continuous: Some(measurement),
+                continuous: Some(measurement.clone()),
                 classification: None,
             },
             Measurement::Classification(measurement) => Self {
                 continuous: None,
                 classification: Some(ClassificationMeasurementDbType {
-                    measurement: measurement.measurement,
+                    measurement: measurement.measurement.clone(),
                     classes: measurement
                         .classes
-                        .into_iter()
+                        .iter()
                         .map(|(key, value)| SmallintTextKeyValue {
-                            key: i16::from(key),
-                            value,
+                            key: i16::from(*key),
+                            value: value.clone(),
                         })
                         .collect(),
                 }),
@@ -475,18 +475,18 @@ pub struct VectorResultDescriptorDbType {
     pub bbox: Option<BoundingBox2D>,
 }
 
-impl From<VectorResultDescriptor> for VectorResultDescriptorDbType {
-    fn from(result_descriptor: VectorResultDescriptor) -> Self {
+impl From<&VectorResultDescriptor> for VectorResultDescriptorDbType {
+    fn from(result_descriptor: &VectorResultDescriptor) -> Self {
         Self {
             data_type: result_descriptor.data_type,
             spatial_reference: result_descriptor.spatial_reference,
             columns: result_descriptor
                 .columns
-                .into_iter()
+                .iter()
                 .map(|(column, info)| VectorColumnInfoDbType {
-                    column,
+                    column: column.clone(),
                     data_type: info.data_type,
-                    measurement: info.measurement,
+                    measurement: info.measurement.clone(),
                 })
                 .collect(),
             time: result_descriptor.time,
@@ -529,23 +529,23 @@ pub struct TypedResultDescriptorDbType {
     plot: Option<PlotResultDescriptor>,
 }
 
-impl From<TypedResultDescriptor> for TypedResultDescriptorDbType {
-    fn from(result_descriptor: TypedResultDescriptor) -> Self {
+impl From<&TypedResultDescriptor> for TypedResultDescriptorDbType {
+    fn from(result_descriptor: &TypedResultDescriptor) -> Self {
         match result_descriptor {
             TypedResultDescriptor::Raster(raster) => Self {
-                raster: Some(raster),
+                raster: Some(raster.clone()),
                 vector: None,
                 plot: None,
             },
             TypedResultDescriptor::Vector(vector) => Self {
                 raster: None,
-                vector: Some(vector),
+                vector: Some(vector.clone()),
                 plot: None,
             },
             TypedResultDescriptor::Plot(plot) => Self {
                 raster: None,
                 vector: None,
-                plot: Some(plot),
+                plot: Some(*plot),
             },
         }
     }
