@@ -51,7 +51,7 @@ fn init_geo_filetypes() -> HashMap<String, bool> {
     }
 }
 
-const DISCRETE_VRS: [&'static str; 1] = ["ibl#between-depth"];
+const DISCRETE_VRS: [&str; 1] = ["ibl#between-depth"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -274,30 +274,42 @@ impl EdrDataProvider {
         collection_meta: EdrCollectionMetaData,
         options: &LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
-        let items = collection_meta
-            .extent
-            .vertical
-            .expect("checked before")
-            .values
-            .into_iter()
-            .skip(options.offset as usize)
-            .take(options.limit as usize)
-            .map(|height| {
-                Ok(CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: self.id,
-                        layer_id: EdrCollectionId::ParameterOrHeight {
-                            collection: collection_meta.id.clone(),
-                            parameter: height.clone(),
-                        }
-                        .try_into()?,
-                    },
-                    name: height,
-                    description: String::new(),
-                    properties: vec![],
-                }))
-            })
-            .collect::<Result<Vec<CollectionItem>>>()?;
+        let items = match collection_meta.extent.vertical {
+            Some(vertical) => vertical
+                .values
+                .into_iter()
+                .skip(options.offset as usize)
+                .take(options.limit as usize)
+                .map(|height| {
+                    Ok(CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: self.id,
+                            layer_id: EdrCollectionId::ParameterOrHeight {
+                                collection: collection_meta.id.clone(),
+                                parameter: height.clone(),
+                            }
+                            .try_into()?,
+                        },
+                        name: height,
+                        description: String::new(),
+                        properties: vec![],
+                    }))
+                })
+                .collect::<Result<Vec<CollectionItem>>>()?,
+            None => vec![CollectionItem::Layer(LayerListing {
+                id: ProviderLayerId {
+                    provider_id: self.id,
+                    layer_id: EdrCollectionId::ParameterOrHeight {
+                        collection: collection_meta.id.clone(),
+                        parameter: "default".to_string(),
+                    }
+                    .try_into()?,
+                },
+                name: "default height".to_string(),
+                description: String::new(),
+                properties: vec![],
+            })],
+        };
 
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
@@ -319,31 +331,44 @@ impl EdrDataProvider {
         parameter: &str,
         options: &LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
-        let items = collection_meta
-            .extent
-            .vertical
-            .expect("checked before")
-            .values
-            .into_iter()
-            .skip(options.offset as usize)
-            .take(options.limit as usize)
-            .map(|height| {
-                Ok(CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: self.id,
-                        layer_id: EdrCollectionId::ParameterAndHeight {
-                            collection: collection_meta.id.clone(),
-                            parameter: parameter.to_string(),
-                            height: height.clone(),
-                        }
-                        .try_into()?,
-                    },
-                    name: height,
-                    description: String::new(),
-                    properties: vec![],
-                }))
-            })
-            .collect::<Result<Vec<CollectionItem>>>()?;
+        let items = match collection_meta.extent.vertical {
+            Some(vertical) => vertical
+                .values
+                .into_iter()
+                .skip(options.offset as usize)
+                .take(options.limit as usize)
+                .map(|height| {
+                    Ok(CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: self.id,
+                            layer_id: EdrCollectionId::ParameterAndHeight {
+                                collection: collection_meta.id.clone(),
+                                parameter: parameter.to_string(),
+                                height: height.clone(),
+                            }
+                            .try_into()?,
+                        },
+                        name: height,
+                        description: String::new(),
+                        properties: vec![],
+                    }))
+                })
+                .collect::<Result<Vec<CollectionItem>>>()?,
+            None => vec![CollectionItem::Layer(LayerListing {
+                id: ProviderLayerId {
+                    provider_id: self.id,
+                    layer_id: EdrCollectionId::ParameterAndHeight {
+                        collection: collection_meta.id.clone(),
+                        parameter: parameter.to_string(),
+                        height: "default".to_string(),
+                    }
+                    .try_into()?,
+                },
+                name: "default height".to_string(),
+                description: String::new(),
+                properties: vec![],
+            })],
+        };
 
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
@@ -444,13 +469,15 @@ impl EdrCollectionMetaData {
                 source: Box::new(EdrProviderError::MissingTemporalExtent),
             }
         })?;
-        let z = if self.extent.has_discrete_vertical_axis() {
-            height.to_string()
+        let z = if height == "default" {
+            String::new()
+        } else if self.extent.has_discrete_vertical_axis() {
+            format!("&z={height}")
         } else {
-            format!("{}%2F{}", height, height)
+            format!("&z={height}%2F{height}")
         };
         let download_url = format!(
-            "/vsicurl_streaming/{}collections/{}/cube?bbox={},{},{},{}&z={}&datetime={}%2F{}&f={}",
+            "/vsicurl_streaming/{}collections/{}/cube?bbox={},{},{},{}{}&datetime={}%2F{}&f={}",
             base_url,
             self.id,
             spatial_extent.bbox[0][0],
@@ -463,7 +490,7 @@ impl EdrCollectionMetaData {
             self.select_output_format()?
         );
         let mut layer_name = format!(
-            "cube?bbox={},{},{},{}&z={}&datetime={}%2F{}",
+            "cube?bbox={},{},{},{}{}&datetime={}%2F{}",
             spatial_extent.bbox[0][0],
             spatial_extent.bbox[0][1],
             spatial_extent.bbox[0][2],
@@ -490,13 +517,15 @@ impl EdrCollectionMetaData {
                 source: Box::new(EdrProviderError::MissingSpatialExtent),
             }
         })?;
-        let z = if self.extent.has_discrete_vertical_axis() {
-            height.to_string()
+        let z = if height == "default" {
+            String::new()
+        } else if self.extent.has_discrete_vertical_axis() {
+            format!("&z={height}")
         } else {
-            format!("{}%2F{}", height, height)
+            format!("&z={height}%2F{height}")
         };
         Ok(format!(
-            "/vsicurl_streaming/{}collections/{}/cube?bbox={},{},{},{}&z={}&datetime={}%2F{}&f={}&parameter-name={}",
+            "/vsicurl_streaming/{}collections/{}/cube?bbox={},{},{},{}{}&datetime={}%2F{}&f={}&parameter-name={}",
             base_url,
             self.id,
             spatial_extent.bbox[0][0],
@@ -717,7 +746,9 @@ struct EdrExtents {
 
 impl EdrExtents {
     fn has_discrete_vertical_axis(&self) -> bool {
-        self.vertical.as_ref().map_or(false, |val| DISCRETE_VRS.contains(&val.vrs.as_str()))
+        self.vertical
+            .as_ref()
+            .map_or(false, |val| DISCRETE_VRS.contains(&val.vrs.as_str()))
     }
 }
 
@@ -788,7 +819,7 @@ impl FromStr for EdrCollectionId {
     type Err = Error;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let split = s.split('/').collect::<Vec<_>>();
+        let split = s.split('!').collect::<Vec<_>>();
 
         Ok(match *split.as_slice() {
             ["collections"] => EdrCollectionId::Collections,
@@ -815,11 +846,11 @@ impl TryFrom<EdrCollectionId> for LayerCollectionId {
     fn try_from(value: EdrCollectionId) -> std::result::Result<Self, Self::Error> {
         let s = match value {
             EdrCollectionId::Collections => "collections".to_string(),
-            EdrCollectionId::Collection { collection } => format!("collections/{collection}"),
+            EdrCollectionId::Collection { collection } => format!("collections!{collection}"),
             EdrCollectionId::ParameterOrHeight {
                 collection,
                 parameter,
-            } => format!("collections/{collection}/{parameter}"),
+            } => format!("collections!{collection}!{parameter}"),
             EdrCollectionId::ParameterAndHeight { .. } => {
                 return Err(Error::InvalidLayerCollectionId)
             }
@@ -835,16 +866,16 @@ impl TryFrom<EdrCollectionId> for LayerId {
     fn try_from(value: EdrCollectionId) -> std::result::Result<Self, Self::Error> {
         let s = match value {
             EdrCollectionId::Collections => return Err(Error::InvalidLayerId),
-            EdrCollectionId::Collection { collection } => format!("collections/{collection}"),
+            EdrCollectionId::Collection { collection } => format!("collections!{collection}"),
             EdrCollectionId::ParameterOrHeight {
                 collection,
                 parameter,
-            } => format!("collections/{collection}/{parameter}"),
+            } => format!("collections!{collection}!{parameter}"),
             EdrCollectionId::ParameterAndHeight {
                 collection,
                 parameter,
                 height,
-            } => format!("collections/{collection}/{parameter}/{height}"),
+            } => format!("collections!{collection}!{parameter}!{height}"),
         };
 
         Ok(LayerId(s))
@@ -868,10 +899,8 @@ impl LayerCollectionProvider for EdrDataProvider {
 
                 if collection_meta.is_raster_file()? {
                     self.get_raster_parameter_collection(collection_id, collection_meta, &options)
-                } else if collection_meta.extent.vertical.is_some() {
-                    self.get_vector_height_collection(collection_id, collection_meta, &options)
                 } else {
-                    Err(Error::InvalidLayerCollectionId)
+                    self.get_vector_height_collection(collection_id, collection_meta, &options)
                 }
             }
             EdrCollectionId::ParameterOrHeight {
@@ -880,7 +909,7 @@ impl LayerCollectionProvider for EdrDataProvider {
             } => {
                 let collection_meta = self.load_collection_by_name(&collection).await?;
 
-                if !collection_meta.is_raster_file()? || collection_meta.extent.vertical.is_none() {
+                if !collection_meta.is_raster_file()? {
                     return Err(Error::InvalidLayerCollectionId);
                 }
                 self.get_raster_height_collection(
@@ -1109,14 +1138,12 @@ pub enum EdrProviderError {
 mod tests {
     use std::{fs::File, io::BufReader};
 
-    use futures_util::StreamExt;
-    use geoengine_datatypes::{
-        primitives::SpatialResolution,
-        test_data,
-        util::test::TestDefault
-    };
-    use geoengine_operators::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, WorkflowOperatorPath, QueryProcessor};
     use crate::api::model::datatypes::ExternalDataId;
+    use futures_util::StreamExt;
+    use geoengine_datatypes::{primitives::SpatialResolution, test_data, util::test::TestDefault};
+    use geoengine_operators::engine::{
+        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, WorkflowOperatorPath,
+    };
 
     use super::*;
 
@@ -1162,8 +1189,8 @@ mod tests {
                 data: geoengine_datatypes::dataset::NamedData::with_system_provider(
                     provider_id.to_string(),
                     layer_id.to_owned(),
-                )
-            }
+                ),
+            },
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe)
