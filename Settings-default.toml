@@ -154,10 +154,6 @@ mode = "disabled" # "disabled", "track", "check"
 increment_quota_buffer_size = 100           # number of quota updates to buffer before sending them to the database
 increment_quota_buffer_timeout_seconds = 60 # number of seconds after which the quota updates are sent to the database
 
-[odm]
-endpoint = "http://localhost:3000/"
-# TODO: authentication
-
 # Settings for compile-feature `nfdi` only
 [gfbio]
 # This is the basket API endpoint

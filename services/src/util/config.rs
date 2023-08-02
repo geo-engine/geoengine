@@ -339,16 +339,6 @@ impl ConfigElement for Plots {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Odm {
-    #[serde(deserialize_with = "deserialize_base_url")]
-    pub endpoint: url::Url,
-}
-
-impl ConfigElement for Odm {
-    const KEY: &'static str = "odm";
-}
-
-#[derive(Debug, Deserialize)]
 pub struct DataProvider {
     pub dataset_defs_path: PathBuf,
     pub provider_defs_path: PathBuf,

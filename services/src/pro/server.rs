@@ -74,11 +74,6 @@ where
             openapi.clone(),
         );
 
-        #[cfg(feature = "odm")]
-        {
-            api = api.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
-        }
-
         #[cfg(feature = "ebv")]
         {
             api = api.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));

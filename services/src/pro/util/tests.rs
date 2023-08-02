@@ -143,12 +143,7 @@ pub async fn send_pro_test_request(
             .configure(handlers::wfs::init_wfs_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::wms::init_wms_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::workflows::init_workflow_routes::<ProPostgresContext<NoTls>>);
-    #[cfg(feature = "odm")]
-    {
-        app = app.configure(
-            pro::handlers::drone_mapping::init_drone_mapping_routes::<ProPostgresContext<NoTls>>,
-        );
-    }
+
     let app = test::init_service(app).await;
     test::call_service(&app, req.to_request())
         .await
