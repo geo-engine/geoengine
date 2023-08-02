@@ -368,7 +368,8 @@ impl TryFrom<SymbologyDbType> for Symbology {
 /// implementation for another type `$DbType` that already implements it.
 ///
 /// # Usage
-/// ```
+///
+/// ```no_run
 /// delegate_from_to_sql!($RustType, $DbType)
 /// ```
 ///
