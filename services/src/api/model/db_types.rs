@@ -369,7 +369,7 @@ impl TryFrom<SymbologyDbType> for Symbology {
 ///
 /// # Usage
 ///
-/// ```no_run
+/// ```rust,ignore
 /// delegate_from_to_sql!($RustType, $DbType)
 /// ```
 ///
