@@ -9,6 +9,7 @@ use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
 };
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -22,7 +23,7 @@ use super::datatypes::{
 };
 
 /// A `ResultDescriptor` for raster queries
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
@@ -176,7 +177,7 @@ impl From<VectorColumnInfo> for geoengine_operators::engine::VectorColumnInfo {
 }
 
 /// A `ResultDescriptor` for plot queries
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ToSchema, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotResultDescriptor {
     pub spatial_reference: SpatialReferenceOption,
@@ -186,6 +187,16 @@ pub struct PlotResultDescriptor {
 
 impl From<geoengine_operators::engine::PlotResultDescriptor> for PlotResultDescriptor {
     fn from(value: geoengine_operators::engine::PlotResultDescriptor) -> Self {
+        Self {
+            spatial_reference: value.spatial_reference.into(),
+            time: value.time.map(Into::into),
+            bbox: value.bbox.map(Into::into),
+        }
+    }
+}
+
+impl From<PlotResultDescriptor> for geoengine_operators::engine::PlotResultDescriptor {
+    fn from(value: PlotResultDescriptor) -> Self {
         Self {
             spatial_reference: value.spatial_reference.into(),
             time: value.time.map(Into::into),
