@@ -364,6 +364,14 @@ impl TryFrom<SymbologyDbType> for Symbology {
     }
 }
 
+/// A macro for quickly implementing `FromSql` and `ToSql` for `$RustType` if there is a `From` and `Into`
+/// implementation for another type `$DbType` that already implements it.
+///
+/// # Usage
+/// ```
+/// delegate_from_to_sql!($RustType, $DbType)
+/// ```
+///
 macro_rules! delegate_from_to_sql {
     ( $RustType:ty, $DbType:ty ) => {
         impl ToSql for $RustType {
