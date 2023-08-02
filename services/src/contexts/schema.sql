@@ -76,7 +76,7 @@ CREATE TYPE "DefaultColors" AS (
 );
 
 CREATE TYPE "ColorizerType" AS ENUM (
-    'linearGradient', 'logarithmicGradient', 'palette', 'rgba'
+    'LinearGradient', 'LogarithmicGradient', 'Palette', 'Rgba'
 );
 
 CREATE TYPE "Colorizer" AS (

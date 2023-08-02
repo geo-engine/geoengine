@@ -68,13 +68,9 @@ pub struct ColorizerDbType {
 // TODO: use #[postgres(rename_all = "camelCase")]
 #[postgres(name = "ColorizerType")]
 pub enum ColorizerTypeDbType {
-    #[postgres(name = "linearGradient")]
     LinearGradient,
-    #[postgres(name = "logarithmicGradient")]
     LogarithmicGradient,
-    #[postgres(name = "palette")]
     Palette,
-    #[postgres(name = "rgba")]
     Rgba,
 }
 
