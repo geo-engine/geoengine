@@ -1348,7 +1348,69 @@ impl std::fmt::Display for ResamplingMethod {
 
 /// `RgbaColor` defines a 32 bit RGB color with alpha value
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub struct RgbaColor([u8; 4]);
+pub struct RgbaColor(pub [u8; 4]);
+
+impl ToSql for RgbaColor {
+    fn to_sql(
+        &self,
+        ty: &postgres_types::Type,
+        w: &mut bytes::BytesMut,
+    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        let tuple = self.0.map(i16::from);
+
+        let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
+            return Err(Box::new(crate::error::Error::UnexpectedInvalidDbTypeConversion));
+        };
+
+        <[i16; 4] as ToSql>::to_sql(&tuple, inner_type, w)
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        if ty.name() != "RgbaColor" {
+            return false;
+        }
+        let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
+            return false;
+        };
+
+        <[i16; 4] as ToSql>::accepts(inner_type)
+    }
+
+    postgres_types::to_sql_checked!();
+}
+
+impl<'a> FromSql<'a> for RgbaColor {
+    fn from_sql(
+        ty: &postgres_types::Type,
+        raw: &'a [u8],
+    ) -> Result<RgbaColor, Box<dyn std::error::Error + Sync + Send>> {
+        let array_ty = match ty.kind() {
+            postgres_types::Kind::Domain(inner_type) => inner_type,
+            _ => ty,
+        };
+
+        let tuple = <[i16; 4] as FromSql>::from_sql(array_ty, raw)?;
+
+        Ok(RgbaColor(tuple.map(|v| v as u8)))
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        type Target = [i16; 4];
+
+        if <Target as FromSql>::accepts(ty) {
+            return true;
+        }
+
+        if ty.name() != "RgbaColor" {
+            return false;
+        }
+        let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
+            return false;
+        };
+
+        <Target as FromSql>::accepts(inner_type)
+    }
+}
 
 // manual implementation utoipa generates an integer field
 impl<'a> ToSchema<'a> for RgbaColor {
@@ -1378,10 +1440,56 @@ impl From<RgbaColor> for geoengine_datatypes::operations::image::RgbaColor {
 }
 
 /// A container type for breakpoints that specify a value to color mapping
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSql, FromSql)]
 pub struct Breakpoint {
-    pub value: NotNan<f64>,
+    pub value: NotNanF64,
     pub color: RgbaColor,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+pub struct NotNanF64(NotNan<f64>);
+
+impl From<NotNan<f64>> for NotNanF64 {
+    fn from(value: NotNan<f64>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<NotNanF64> for NotNan<f64> {
+    fn from(value: NotNanF64) -> Self {
+        value.0
+    }
+}
+
+impl ToSql for NotNanF64 {
+    fn to_sql(
+        &self,
+        ty: &postgres_types::Type,
+        w: &mut bytes::BytesMut,
+    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        <f64 as ToSql>::to_sql(&self.0.into_inner(), ty, w)
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        <f64 as ToSql>::accepts(ty)
+    }
+
+    postgres_types::to_sql_checked!();
+}
+
+impl<'a> FromSql<'a> for NotNanF64 {
+    fn from_sql(
+        ty: &postgres_types::Type,
+        raw: &'a [u8],
+    ) -> Result<NotNanF64, Box<dyn std::error::Error + Sync + Send>> {
+        let value = <f64 as FromSql>::from_sql(ty, raw)?;
+
+        Ok(NotNanF64(value.try_into()?))
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        <f64 as FromSql>::accepts(ty)
+    }
 }
 
 // manual implementation because of NotNan
@@ -1401,7 +1509,7 @@ impl<'a> ToSchema<'a> for Breakpoint {
 impl From<geoengine_datatypes::operations::image::Breakpoint> for Breakpoint {
     fn from(breakpoint: geoengine_datatypes::operations::image::Breakpoint) -> Self {
         Self {
-            value: breakpoint.value,
+            value: breakpoint.value.into(),
             color: breakpoint.color.into(),
         }
     }
@@ -1419,8 +1527,8 @@ pub enum DefaultColors {
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OverUnderColors {
-    over_color: RgbaColor,
-    under_color: RgbaColor,
+    pub over_color: RgbaColor,
+    pub under_color: RgbaColor,
 }
 
 impl From<DefaultColors> for OverUnderColors {
@@ -1553,7 +1661,7 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
 /// It is assumed that is has at least one and at most 256 entries.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(try_from = "SerializablePalette", into = "SerializablePalette")]
-pub struct Palette(HashMap<NotNan<f64>, RgbaColor>);
+pub struct Palette(pub HashMap<NotNan<f64>, RgbaColor>);
 
 impl From<geoengine_datatypes::operations::image::Palette> for Palette {
     fn from(palette: geoengine_datatypes::operations::image::Palette) -> Self {

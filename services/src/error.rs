@@ -438,6 +438,8 @@ pub enum Error {
     NotImplemented {
         message: String,
     },
+
+    UnexpectedInvalidDbTypeConversion,
 }
 
 impl actix_web::error::ResponseError for Error {

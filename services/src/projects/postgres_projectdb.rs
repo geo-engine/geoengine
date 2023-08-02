@@ -1,6 +1,5 @@
 use crate::contexts::PostgresDb;
-use crate::error::{self, Result};
-
+use crate::error::Result;
 use crate::projects::Plot;
 use crate::projects::ProjectLayer;
 use crate::projects::{
@@ -8,19 +7,16 @@ use crate::projects::{
     ProjectVersion, ProjectVersionId, UpdateProject,
 };
 
+use super::LoadVersion;
 use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
+use bb8_postgres::bb8::PooledConnection;
+use bb8_postgres::tokio_postgres::Transaction;
 use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{
     tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
-use snafu::ResultExt;
-
-use bb8_postgres::bb8::PooledConnection;
-use bb8_postgres::tokio_postgres::Transaction;
-
-use super::LoadVersion;
 
 async fn list_plots<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
@@ -297,8 +293,6 @@ where
                 )
                 .await?;
 
-            let symbology = serde_json::to_value(&layer.symbology).context(error::SerdeJson)?;
-
             trans
                 .execute(
                     &stmt,
@@ -308,7 +302,7 @@ where
                         &(idx as i32),
                         &layer.name,
                         &layer.workflow,
-                        &symbology,
+                        &layer.symbology,
                         &layer.visibility,
                     ],
                 )
@@ -408,7 +402,7 @@ where
             layers.push(ProjectLayer {
                 workflow: WorkflowId(row.get(1)),
                 name: row.get(0),
-                symbology: serde_json::from_value(row.get(2)).context(error::SerdeJson)?,
+                symbology: row.get(2),
                 visibility: row.get(3),
             });
         }

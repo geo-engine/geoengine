@@ -105,7 +105,7 @@ where
                     tags: row.get::<_, Option<_>>(4).unwrap_or_default(),
                     source_operator: row.get(5),
                     result_descriptor: serde_json::from_value(row.get(6))?,
-                    symbology: serde_json::from_value(row.get(7))?,
+                    symbology: row.get(7),
                 })
             })
             .filter_map(Result::ok)
@@ -148,7 +148,7 @@ where
             description: row.get(3),
             result_descriptor: serde_json::from_value(row.get(4))?,
             source_operator: row.get(5),
-            symbology: serde_json::from_value(row.get(6))?,
+            symbology: row.get(6),
             provenance: row.get(7),
         })
     }
@@ -490,7 +490,7 @@ where
                 &dataset.source_operator,
                 &meta_data_json.result_descriptor,
                 &meta_data_json.meta_data,
-                &serde_json::to_value(&dataset.symbology)?,
+                &dataset.symbology,
                 &dataset.provenance,
             ],
         )
@@ -749,7 +749,7 @@ where
         let display_name: String = row.get(1);
         let description: String = row.get(2);
         let source_operator: String = row.get(3);
-        let symbology: Option<Symbology> = serde_json::from_value(row.get(4))?;
+        let symbology: Option<Symbology> = row.get(4);
 
         let operator = source_operator_from_dataset(&source_operator, &name.into())?;
 
