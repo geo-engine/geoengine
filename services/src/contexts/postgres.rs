@@ -2444,7 +2444,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
-    async fn test_types_individually() {
+    async fn test_postgres_type_serialization() {
         pub async fn test_type<T>(
             conn: &PooledConnection<'_, PostgresConnectionManager<tokio_postgres::NoTls>>,
             sql_type: &str,
