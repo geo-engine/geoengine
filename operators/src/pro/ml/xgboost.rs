@@ -1,9 +1,9 @@
 use std::mem;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::StreamExt;
+use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle, SpatialPartition2D,
@@ -13,6 +13,7 @@ use geoengine_datatypes::raster::{
     BaseTile, Grid2D, GridOrEmpty, GridShape, GridShapeAccess, GridSize, RasterDataType,
     RasterTile2D,
 };
+
 use rayon::prelude::ParallelIterator;
 use rayon::slice::ParallelSlice;
 use rayon::ThreadPool;
@@ -25,64 +26,21 @@ use crate::engine::{
     MultipleRasterSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
     RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
+use crate::pro::xg_error::error as XgModuleError;
 use crate::util::stream_zip::StreamVectorZip;
 use crate::util::Result;
 use futures::stream::BoxStream;
 use RasterDataType::F32 as RasterOut;
 
-use snafu::Snafu;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
-pub enum XGBoostModuleError {
-    #[snafu(display("The XGBoost library could not complete the operation successfully.",))]
-    LibraryError { source: XGBError },
-
-    #[snafu(display("Couldn't parse the model file contents.",))]
-    ModelFileParsingError { source: std::io::Error },
-
-    #[snafu(display("Couldn't create a booster instance from the content of the model file.",))]
-    LoadBoosterFromModelError { source: XGBError },
-
-    #[snafu(display("Couldn't generate a xgboost dmatrix from the given data.",))]
-    CreateDMatrixError { source: XGBError },
-
-    #[snafu(display("Couldn't calculate predictions from the given data.",))]
-    PredictionError { source: XGBError },
-
-    #[snafu(display("Couldn't get a base tile.",))]
-    BaseTileError,
-
-    #[snafu(display("No input data error. At least one raster is required.",))]
-    NoInputData,
-
-    #[snafu(display("There was an error with the creation of a new grid.",))]
-    DataTypesError {
-        source: geoengine_datatypes::error::Error,
-    },
-
-    #[snafu(display("There was an error with the joining of tokio tasks.",))]
-    TokioJoinError { source: tokio::task::JoinError },
-}
-
-impl From<std::io::Error> for XGBoostModuleError {
-    fn from(source: std::io::Error) -> Self {
-        Self::ModelFileParsingError { source }
-    }
-}
-
-impl From<XGBError> for XGBoostModuleError {
-    fn from(source: XGBError) -> Self {
-        Self::LibraryError { source }
-    }
-}
+use super::xg_error::XGBoostModuleError;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct XgboostParams {
-    model_sub_path: PathBuf,
-    no_data_value: f32,
+    pub model_id: MlModelId,
+    pub no_data_value: f32,
 }
 
 pub type XgboostOperator = Operator<XgboostParams, MultipleRasterSources>;
@@ -111,13 +69,16 @@ impl RasterOperator for XgboostOperator {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let model = context.read_ml_model(self.params.model_sub_path).await?;
+        // reconstruct model path from the given uuid, then load the actual model
+        let model_path = self.params.model_id;
+
+        let model = context.load_ml_model(model_path).await?;
 
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
 
         let init_rasters = initialized_sources.rasters;
 
-        let input = init_rasters.get(0).context(self::error::NoInputData)?;
+        let input = init_rasters.get(0).context(XgModuleError::NoInputData)?;
 
         let spatial_reference = input.result_descriptor().spatial_reference;
 
@@ -236,7 +197,7 @@ where
         model_content: Arc<String>,
         pool: Arc<ThreadPool>,
     ) -> Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, f32>>, XGBoostModuleError> {
-        let tile = bands_of_tile.get(0).context(self::error::BaseTile)?;
+        let tile = bands_of_tile.get(0).context(XgModuleError::BaseTile)?;
 
         // gather the data
         let grid_shape = tile.grid_shape();
@@ -264,7 +225,7 @@ where
             )
         })
         .await
-        .context(error::TokioJoin)??;
+        .context(XgModuleError::TokioJoin)??;
 
         let rt: BaseTile<GridOrEmpty<GridShape<[usize; 2]>, f32>> =
             RasterTile2D::new_with_properties(
@@ -320,12 +281,12 @@ fn process_tile(
                     -1, // TODO: add this to settings.toml: # of threads for xgboost to use
                     nan_val,
                 )
-                .context(self::error::CreateDMatrix)?;
+                .context(XgModuleError::CreateDMatrix)?;
 
                 let mut out_dim: u64 = 0;
 
                 let bst = Booster::load_buffer(model_file.as_bytes())
-                    .context(self::error::LoadBoosterFromModel)?;
+                    .context(XgModuleError::LoadBoosterFromModel)?;
 
                 // measure time for prediction
                 let predictions: Result<Vec<f32>, XGBError> = bst.predict_from_dmat(
@@ -334,13 +295,18 @@ fn process_tile(
                     &mut out_dim,
                 );
 
+                // TODO:
+                // We now have a sequence of predicted values in numeric form.
+                // If the original data had categorical classes with meaningful names,
+                // we could map these numeric values back to their original names at this point.
+
                 predictions.map_err(|xg_err| XGBoostModuleError::PredictionError { source: xg_err })
             })
             .collect::<Result<Vec<_>, _>>()?;
 
         let predictions_flat: Vec<f32> = res.into_iter().flatten().collect();
 
-        Grid2D::new(grid_shape, predictions_flat).context(self::error::DataTypes)
+        Grid2D::new(grid_shape, predictions_flat).context(XgModuleError::DataTypes)
     })
 }
 
@@ -384,9 +350,10 @@ where
 mod tests {
     use crate::engine::{
         MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
-        RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
+        RasterOperator, RasterResultDescriptor, SourceOperator, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use geoengine_datatypes::ml_model::MlModelId;
 
     use futures::StreamExt;
     use geoengine_datatypes::primitives::CacheHint;
@@ -395,7 +362,8 @@ mod tests {
     };
 
     use geoengine_datatypes::raster::{
-        Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+        Grid2D, GridShape, MaskedGrid2D, RasterDataType, RasterTile2D, TileInformation,
+        TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::test_data;
@@ -406,8 +374,30 @@ mod tests {
     use crate::util::Result;
     use std::collections::HashMap;
     use std::path::PathBuf;
+    use std::str::FromStr;
 
     use super::{XgboostOperator, XgboostParams};
+
+    /// Initializes a machine learning model by reading its contents from a file specified by the given UUID-based `PathBuf`.
+    /// The contents of the model file are expected to be in JSON format.
+    pub fn mock_ml_model_persistance(
+        exe_ctx: &mut MockExecutionContext,
+        model_id: MlModelId,
+    ) -> Result<()> {
+        let model_defs_path = test_data!("pro/ml").to_owned();
+        let model_path_uuid = PathBuf::from(model_id.to_string());
+        let model_path = model_path_uuid.join("mock_model.json");
+
+        let full_model_sub_path = model_defs_path.join(model_path);
+
+        let full_model_path = test_data!(full_model_sub_path).to_owned();
+
+        let model = std::fs::read_to_string(full_model_path)?;
+
+        exe_ctx.ml_models.insert(model_id, model);
+
+        Ok(())
+    }
 
     /// Just a helper method to make the code less cluttery.
     fn zip_bands(b1: &[f32], b2: &[f32], b3: &[f32]) -> Vec<[f32; 3]> {
@@ -418,34 +408,50 @@ mod tests {
             .collect::<Vec<[f32; 3]>>()
     }
 
-    /// Helper method to generate a raster with two tiles.
-    fn make_double_raster(t1: Vec<i32>, t2: Vec<i32>) -> Box<dyn RasterOperator> {
-        let raster_tiles = vec![
-            RasterTile2D::<i32>::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 1),
+    /// Generates test data for a mock raster source.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - A 2D vector of integer data. Contains the data per tile
+    /// * `tile_size_in_pixels` - A `GridShape` struct specifying the size of tiles to create.
+    fn generate_raster_test_data_band_helper(
+        data: Vec<Vec<i32>>,
+        tile_size_in_pixels: GridShape<[usize; 2]>,
+    ) -> SourceOperator<MockRasterSourceParams<i32>> {
+        let n_pixels = data
+            .get(0)
+            .expect("could not access the first data element")
+            .len();
+
+        let n_tiles = data.len();
+
+        let mut tiles = Vec::with_capacity(data.len());
+
+        for (idx, values) in data.into_iter().enumerate() {
+            let grid_data = Grid2D::new(tile_size_in_pixels, values).unwrap();
+            let grid_mask = Grid2D::new(tile_size_in_pixels, vec![true; n_pixels]).unwrap();
+            let masked_grid = MaskedGrid2D::new(grid_data, grid_mask).unwrap().into();
+
+            let global_tile_position = match n_tiles {
+                1 => [-1, 0].into(),
+                _ => [-1, idx as isize].into(),
+            };
+
+            tiles.push(RasterTile2D::new_with_tile_info(
+                TimeInterval::default(),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [5, 5].into(),
                     global_geo_transform: TestDefault::test_default(),
+                    global_tile_position,
+                    tile_size_in_pixels,
                 },
-                GridOrEmpty::from(Grid2D::new([5, 5].into(), t1).unwrap()),
+                masked_grid,
                 CacheHint::default(),
-            ),
-            RasterTile2D::<i32>::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 1),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [5, 5].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                GridOrEmpty::from(Grid2D::new([5, 5].into(), t2).unwrap()),
-                CacheHint::default(),
-            ),
-        ];
+            ));
+        }
 
         MockRasterSource {
             params: MockRasterSourceParams {
-                data: raster_tiles,
+                data: tiles,
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -456,41 +462,6 @@ mod tests {
                 },
             },
         }
-        .boxed()
-    }
-
-    fn make_raster(tile: Vec<i32>) -> Box<dyn RasterOperator> {
-        // green raster:
-        // 255, 255,   0,   0,   0
-        // 255, 255,   0,   0,   0
-        //   0,   0,   0,   0,   0
-        //   0,   0,   0, 255, 255
-        //   0,   0,   0, 255, 255
-        let raster_tiles = vec![RasterTile2D::<i32>::new_with_tile_info(
-            TimeInterval::new_unchecked(0, 1),
-            TileInformation {
-                global_tile_position: [-1, 0].into(),
-                tile_size_in_pixels: [5, 5].into(),
-                global_geo_transform: TestDefault::test_default(),
-            },
-            GridOrEmpty::from(Grid2D::new([5, 5].into(), tile).unwrap()),
-            CacheHint::default(),
-        )];
-
-        MockRasterSource {
-            params: MockRasterSourceParams {
-                data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                },
-            },
-        }
-        .boxed()
     }
 
     // Just a helper method to extract xgboost matrix generation code.
@@ -517,62 +488,100 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn multi_tile_test() {
-        // 255, 255,   0,   0,   0  ||  0,   0,   0, 255, 255
-        // 255, 255,   0,   0,   0  ||  0,   0,   0, 255, 255
-        // 255, 255,   0,   0,   0  ||  0,   0,   0, 255, 255
-        // 255, 255,   0,   0,   0  ||  0,   0,   0, 255, 255
-        // 255, 255,   0,   0,   0  ||  0,   0,   0, 255, 255
-        let green = make_double_raster(
+        let red = generate_raster_test_data_band_helper(
             vec![
-                255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255,
-                255, 0, 0, 0,
+                vec![
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                ],
+                vec![
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                ],
             ],
-            vec![
-                0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0,
-                0, 255, 255,
-            ],
-        );
+            [5, 5].into(),
+        )
+        .boxed();
 
-        //   0,   0,   0, 255, 255  ||  255, 255,   0,   0,   0
-        //   0,   0,   0, 255, 255  ||  255, 255,   0,   0,   0
-        //   0,   0,   0,   0,   0  ||    0,   0,   0,   0,   0
-        //   0,   0,   0, 255, 255  ||  255, 255,   0,   0,   0
-        //   0,   0,   0, 255, 255  ||  255, 255,   0,   0,   0
-        let blue = make_double_raster(
+        let green = generate_raster_test_data_band_helper(
             vec![
-                0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 0, 0, 0,
-                255, 255,
+                vec![
+                    255, 255, 255, 255, 255, //
+                    255, 0, 0, 0, 255, //
+                    255, 0, 0, 0, 255, //
+                    255, 0, 0, 0, 255, //
+                    255, 255, 255, 255, 255, //
+                ],
+                vec![
+                    0, 0, 255, 255, 255, //
+                    0, 0, 255, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 255, 0, 0, //
+                    255, 255, 255, 0, 0, //
+                ],
             ],
-            vec![
-                255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 0, 0, 0, 255, 255,
-                0, 0, 0,
-            ],
-        );
+            [5, 5].into(),
+        )
+        .boxed();
 
-        //   0,   0, 255,   0,   0  ||     0,   0, 255,   0,   0
-        //   0,   0, 255,   0,   0  ||     0,   0, 255,   0,   0
-        //   0,   0, 255, 255, 255  ||   255, 255,   0,   0,   0
-        //   0,   0, 255,   0,   0  ||     0,   0, 255,   0,   0
-        //   0,   0, 255,   0,   0  ||     0,   0, 255,   0,   0
-        let temp = make_double_raster(
+        let blue = generate_raster_test_data_band_helper(
             vec![
-                0, 0, 255, 0, 0, 0, 0, 255, 0, 0, 0, 0, 255, 255, 255, 0, 0, 255, 0, 0, 0, 0, 255,
-                0, 0,
+                vec![
+                    0, 0, 0, 0, 0, //
+                    0, 0, 255, 0, 0, //
+                    0, 255, 255, 255, 0, //
+                    0, 0, 255, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                ],
+                vec![
+                    0, 255, 0, 0, 0, //
+                    255, 0, 0, 255, 255, //
+                    255, 255, 0, 255, 255, //
+                    255, 255, 0, 0, 255, //
+                    0, 0, 0, 255, 0, //
+                ],
             ],
+            [5, 5].into(),
+        )
+        .boxed();
+
+        let temperature = generate_raster_test_data_band_helper(
             vec![
-                0, 0, 255, 0, 0, 0, 0, 255, 0, 0, 255, 255, 255, 0, 0, 0, 0, 255, 0, 0, 0, 0, 255,
-                0, 0,
+                vec![
+                    15, 15, 15, 15, 15, //
+                    15, 30, 5, 30, 15, //
+                    15, 5, 5, 5, 15, //
+                    15, 30, 5, 30, 15, //
+                    15, 15, 15, 15, 15, //
+                ],
+                vec![
+                    30, 5, 15, 15, 15, //
+                    5, 30, 15, 5, 5, //
+                    5, 5, 30, 5, 5, //
+                    5, 5, 15, 30, 5, //
+                    15, 15, 15, 5, 30, //
+                ],
             ],
-        );
+            [5, 5].into(),
+        )
+        .boxed();
 
-        let srcs = vec![green, blue, temp];
+        let srcs = vec![red, green, blue, temperature];
 
-        let model_path = PathBuf::from(test_data!("pro/ml/xgboost/s2_10m_de_marburg/model.json"));
+        let model_uuid_path = MlModelId::from_str("b764bf81-e21d-4eb8-bf01-fac9af13faee")
+            .expect("Should have generated a ModelId from the given uuid string.");
 
         let xg = XgboostOperator {
             params: XgboostParams {
-                model_sub_path: model_path.clone(),
+                model_id: model_uuid_path,
                 no_data_value: f32::NAN,
             },
             sources: MultipleRasterSources { rasters: srcs },
@@ -583,8 +592,7 @@ mod tests {
             [5, 5].into(),
         ));
 
-        exe_ctx
-            .initialize_ml_model(model_path)
+        mock_ml_model_persistance(&mut exe_ctx, model_uuid_path)
             .expect("The model file should be available.");
 
         let op = RasterOperator::boxed(xg)
@@ -596,7 +604,7 @@ mod tests {
 
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(0, 1),
+            time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
         };
 
@@ -618,16 +626,26 @@ mod tests {
 
         // expected result tiles
         //    tile 1      ||      tile 2
-        // 0, 0, 2, 1, 1  ||  1, 1, 2, 0, 0
-        // 0, 0, 2, 1, 1  ||  1, 1, 2, 0, 0
-        // 0, 0, 2, 2, 2  ||  2, 2, 2, 2, 2
-        // 0, 0, 2, 1, 1  ||  1, 1, 2, 0, 0
-        // 0, 0, 2, 1, 1  ||  1, 1, 2, 0, 0
+        // --------------------------------
+        // 1, 1, 1, 1, 1  ||  0, 2, 1, 1, 1
+        // 1, 0, 2, 0, 1  ||  2, 0, 1, 2, 2
+        // 1, 2, 2, 2, 1  ||  2, 2, 0, 2, 2
+        // 1, 0, 2, 0, 1  ||  2, 2, 1, 0, 2
+        // 1, 1, 1, 1, 1  ||  1, 1, 1, 2, 0
 
         let expected = vec![
-            0.0, 0.0, 2.0, 1.0, 1.0, 0.0, 0.0, 2.0, 1.0, 1.0, 0.0, 0.0, 2.0, 2.0, 2.0, 0.0, 0.0,
-            2.0, 1.0, 1.0, 0.0, 0.0, 2.0, 1.0, 1.0, 1.0, 1.0, 2.0, 0.0, 0.0, 1.0, 1.0, 2.0, 0.0,
-            0.0, 2.0, 2.0, 2.0, 0.0, 0.0, 1.0, 1.0, 2.0, 0.0, 0.0, 1.0, 1.0, 2.0, 0.0, 0.0,
+            // tile 1
+            1.0, 1.0, 1.0, 1.0, 1.0, //
+            1.0, 0.0, 2.0, 0.0, 1.0, //
+            1.0, 2.0, 2.0, 2.0, 1.0, //
+            1.0, 0.0, 2.0, 0.0, 1.0, //
+            1.0, 1.0, 1.0, 1.0, 1.0, //
+            // tile 2
+            0.0, 2.0, 1.0, 1.0, 1.0, //
+            2.0, 0.0, 1.0, 2.0, 2.0, //
+            2.0, 2.0, 0.0, 2.0, 2.0, //
+            2.0, 2.0, 1.0, 0.0, 2.0, //
+            1.0, 1.0, 1.0, 2.0, 0.0, //
         ];
 
         assert_eq!(all_pixels, expected);
@@ -846,44 +864,63 @@ mod tests {
     /// This test verifies, that xgboost is creating meaningful result tiles from a learned model.
     #[tokio::test]
     async fn xg_single_tile_test() {
-        // 255, 255,   0,   0,   0
-        // 255, 255,   0,   0,   0
-        //   0,   0,   0,   0,   0
-        //   0,   0,   0, 255, 255
-        //   0,   0,   0, 255, 255
-        let green = make_raster(vec![
-            255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 0, 0, 0, 255,
-            255,
-        ]);
+        let red = generate_raster_test_data_band_helper(
+            vec![vec![
+                0, 0, 0, 0, 0, //
+                0, 0, 0, 0, 0, //
+                0, 0, 0, 0, 0, //
+                0, 0, 0, 0, 0, //
+                0, 0, 0, 0, 0, //
+            ]],
+            [5, 5].into(),
+        )
+        .boxed();
 
-        //   0,   0,   0, 255, 255
-        //   0,   0,   0, 255, 255
-        //   0,   0,   0,   0,   0
-        // 255, 255,   0,   0,   0
-        // 255, 255,   0,   0,   0
-        let blue = make_raster(vec![
-            0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0, 0, 0, 0, 255, 255, 0, 0, 0, 255, 255, 0, 0,
-            0,
-        ]);
+        let green = generate_raster_test_data_band_helper(
+            vec![vec![
+                255, 255, 0, 0, 0, //
+                255, 255, 0, 0, 0, //
+                0, 0, 0, 0, 0, //
+                0, 0, 0, 255, 255, //
+                0, 0, 0, 255, 255, //
+            ]],
+            [5, 5].into(),
+        )
+        .boxed();
 
-        //   15,  15,  60,   5,   5
-        //   15,  15,  60,   5,   5
-        //   60,  60,  60,  60,  60
-        //    5,   5,  60,  15,  15
-        //    5,   5,  60,  15,  15
-        let temp = make_raster(vec![
-            15, 15, 60, 5, 5, 15, 15, 60, 5, 5, 60, 60, 60, 60, 60, 5, 5, 60, 15, 15, 5, 5, 60, 15,
-            15,
-        ]);
+        let blue = generate_raster_test_data_band_helper(
+            vec![vec![
+                0, 0, 0, 255, 255, //
+                0, 0, 0, 255, 255, //
+                0, 0, 0, 0, 0, //
+                255, 255, 0, 0, 0, //
+                255, 255, 0, 0, 0, //
+            ]],
+            [5, 5].into(),
+        )
+        .boxed();
 
-        let srcs = vec![green, blue, temp];
+        let temp = generate_raster_test_data_band_helper(
+            vec![vec![
+                15, 15, 30, 5, 5, //
+                15, 15, 30, 5, 5, //
+                30, 30, 30, 30, 30, //
+                5, 5, 30, 15, 15, //
+                5, 5, 30, 15, 15, //
+            ]],
+            [5, 5].into(),
+        )
+        .boxed();
 
-        let model_path = PathBuf::from(test_data!("pro/ml/xgboost/s2_10m_de_marburg/model.json"));
+        let srcs = vec![red, green, blue, temp];
+
+        let model_uuid_path = MlModelId::from_str("b764bf81-e21d-4eb8-bf01-fac9af13faee")
+            .expect("Should have generated a ModelId from the given uuid string.");
 
         let xg = XgboostOperator {
             params: XgboostParams {
-                model_sub_path: model_path.clone(),
-                no_data_value: -1_000.,
+                model_id: model_uuid_path,
+                no_data_value: f32::NAN,
             },
             sources: MultipleRasterSources { rasters: srcs },
         };
@@ -893,8 +930,7 @@ mod tests {
             [5, 5].into(),
         ));
 
-        exe_ctx
-            .initialize_ml_model(model_path)
+        mock_ml_model_persistance(&mut exe_ctx, model_uuid_path)
             .expect("The model file should be available.");
 
         let op = RasterOperator::boxed(xg)
@@ -906,7 +942,7 @@ mod tests {
 
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (5., 0.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(0, 1),
+            time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
         };
 
@@ -927,8 +963,11 @@ mod tests {
         }
 
         let expected = vec![
-            0., 0., 2., 1., 1., 0., 0., 2., 1., 1., 2., 2., 2., 2., 2., 1., 1., 2., 0., 0., 1., 1.,
-            2., 0., 0.,
+            1., 1., 0., 2., 2., //
+            1., 1., 0., 2., 2., //
+            0., 0., 0., 0., 0., //
+            2., 2., 0., 1., 1., //
+            2., 2., 0., 1., 1., //
         ];
 
         assert_eq!(all_pixels, expected);

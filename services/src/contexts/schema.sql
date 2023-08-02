@@ -165,6 +165,12 @@ CREATE TABLE
         files "FileUpload" [] NOT NULL
     );
 
+CREATE TABLE
+    ml_models (
+        ml_model_id UUID PRIMARY KEY,
+        ml_model_content TEXT NOT NULL
+    );
+
 CREATE TYPE "PropertyType" AS ( key text, value text );
 
 CREATE TABLE

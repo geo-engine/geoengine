@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use async_trait::async_trait;
-
+use geoengine_datatypes::ml_model::MlModelId;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
@@ -83,6 +83,7 @@ pub enum ResourceId {
     LayerCollection(LayerCollectionId), // TODO: UUID?
     Project(ProjectId),
     DatasetId(DatasetId),
+    ModelId(MlModelId),
 }
 
 impl From<LayerId> for ResourceId {

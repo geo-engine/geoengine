@@ -11,10 +11,12 @@ use crate::layers::layer::{
     ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
+use crate::machine_learning::ml_model::{MlModel, MlModelDb};
 use crate::util::operators::source_operator_from_dataset;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
@@ -525,6 +527,45 @@ impl DatasetLayerCollectionProvider for InMemoryDb {
             metadata: HashMap::new(),
         })
     }
+}
+
+// -----------------------------------------------------------------------------------------
+// ML Models
+// -----------------------------------------------------------------------------------------
+
+#[async_trait]
+impl MlModelDb for InMemoryDb {
+    async fn load_ml_model(&self, model_id: MlModelId) -> Result<MlModel> {
+        let m = self
+            .backend
+            .ml_model_db
+            .read()
+            .await
+            .ml_models
+            .get(&model_id)
+            .map(Clone::clone)
+            .ok_or(error::Error::UnknownModelId)?;
+
+        Ok(MlModel {
+            model_id,
+            model_content: m,
+        })
+    }
+
+    async fn store_ml_model(&self, model: MlModel) -> Result<()> {
+        self.backend
+            .ml_model_db
+            .write()
+            .await
+            .ml_models
+            .insert(model.model_id, model.model_content);
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct HashMapMlModelDbBackend {
+    ml_models: HashMap<MlModelId, String>,
 }
 
 #[cfg(test)]

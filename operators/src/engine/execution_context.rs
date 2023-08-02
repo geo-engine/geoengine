@@ -12,6 +12,7 @@ use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
+use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
@@ -21,7 +22,6 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 /// A context that provides certain utility access during operator initialization
@@ -56,9 +56,13 @@ pub trait ExecutionContext: Send
         path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedPlotOperator>;
 
-    async fn read_ml_model(&self, path: PathBuf) -> Result<String>;
+    async fn load_ml_model(&self, model_id: MlModelId) -> Result<String>;
 
-    async fn write_ml_model(&mut self, path: PathBuf, ml_model_str: String) -> Result<()>;
+    async fn store_ml_model_in_db(
+        &mut self,
+        model_id: MlModelId,
+        ml_model_str: String,
+    ) -> Result<()>;
 
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId>;
 }
@@ -96,7 +100,7 @@ pub struct MockExecutionContext {
     pub meta_data: HashMap<DataId, Box<dyn Any + Send + Sync>>,
     pub named_data: HashMap<NamedData, DataId>,
     pub tiling_specification: TilingSpecification,
-    pub ml_models: HashMap<PathBuf, String>,
+    pub ml_models: HashMap<MlModelId, String>,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -163,14 +167,6 @@ impl MockExecutionContext {
             abort_trigger: Some(abort_trigger),
         }
     }
-
-    pub fn initialize_ml_model(&mut self, model_path: PathBuf) -> Result<()> {
-        let model = std::fs::read_to_string(&model_path)?;
-
-        self.ml_models.insert(model_path, model);
-
-        Ok(())
-    }
 }
 
 #[async_trait::async_trait]
@@ -210,18 +206,22 @@ impl ExecutionContext for MockExecutionContext {
         op
     }
 
-    async fn read_ml_model(&self, path: PathBuf) -> Result<String> {
+    async fn load_ml_model(&self, model_id: MlModelId) -> Result<String> {
         let res = self
             .ml_models
-            .get(&path)
+            .get(&model_id)
             .ok_or(Error::MachineLearningModelNotFound)?
             .clone();
 
         Ok(res)
     }
 
-    async fn write_ml_model(&mut self, path: PathBuf, ml_model_str: String) -> Result<()> {
-        self.ml_models.insert(path, ml_model_str);
+    async fn store_ml_model_in_db(
+        &mut self,
+        model_id: MlModelId,
+        ml_model_str: String,
+    ) -> Result<()> {
+        self.ml_models.insert(model_id, ml_model_str);
 
         Ok(())
     }

@@ -1,2 +1,2 @@
-#[cfg(feature = "xgboost")]
+pub mod xg_error;
 pub mod xgboost;

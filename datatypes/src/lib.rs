@@ -30,6 +30,7 @@
 pub mod collections;
 pub mod dataset;
 pub mod error;
+pub mod ml_model;
 pub mod operations;
 pub mod plots;
 pub mod primitives;

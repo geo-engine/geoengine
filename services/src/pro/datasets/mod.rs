@@ -4,4 +4,4 @@ mod in_memory;
 mod postgres;
 
 pub use add_from_directory::add_datasets_from_directory;
-pub use in_memory::{ProHashMapDatasetDbBackend, ProHashMapStorable};
+pub use in_memory::{ProHashMapDatasetDbBackend, ProHashMapMlModelDbBackend, ProHashMapStorable};

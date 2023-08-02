@@ -6,6 +6,7 @@ use crate::datasets::upload::{Volume, Volumes};
 use crate::error::{self, Error, Result};
 use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
+use crate::machine_learning::ml_model::{MlModel, MlModelDb};
 use crate::pro::datasets::add_datasets_from_directory;
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
@@ -25,6 +26,7 @@ use bb8_postgres::{
     tokio_postgres::{tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
+use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
@@ -436,6 +438,83 @@ where
     }
 }
 
+#[async_trait]
+impl<Tls> MlModelDb for ProPostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    /// Load a machine learning model from the database by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - A MlModelId that identifies the desired model.
+    ///
+    /// # Returns
+    ///
+    /// * `MlModel` - The loaded machine learning model.
+    /// * `Error` - If the model cannot be found or loaded.
+    async fn load_ml_model(&self, model_id: MlModelId) -> Result<MlModel> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare("SELECT ml_model_id, ml_model_content FROM ml_models WHERE ml_model_id = $1")
+            .await?;
+
+        let row = conn.query_opt(&stmt, &[&model_id]).await?;
+
+        // Handle the result of the query
+        match row {
+            Some(row) => Ok(MlModel {
+                model_id: row.get(0),
+                model_content: row.get(1),
+            }),
+            None => Err(
+                error::Error::MachineLearningError { source:
+                    crate::machine_learning::ml_error::MachineLearningError::UnknownModelIdInPostgres {
+                     model_id,
+                    }
+                },
+            ),
+        }
+    }
+
+    /// Store a machine learning model in the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The MlModel to be stored.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Ok if the model was successfully stored, otherwise an error.
+    async fn store_ml_model(&self, model: MlModel) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
+            .prepare(
+                "
+                INSERT INTO ml_models (
+                    ml_model_id,
+                    ml_model_content
+                )
+                VALUES ($1, $2);",
+            )
+            .await?;
+
+        tx.execute(&stmt, &[&model.model_id, &model.model_content])
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+}
+
 impl<Tls> GeoEngineDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
@@ -477,6 +556,7 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
+    use crate::machine_learning::ml_model::{MlModel, MlModelDb};
     use crate::pro::permissions::{Permission, PermissionDb};
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
@@ -495,6 +575,7 @@ mod tests {
     use bb8_postgres::tokio_postgres::{self, NoTls};
     use futures::{join, Future};
     use geoengine_datatypes::collections::VectorDataType;
+    use geoengine_datatypes::ml_model::MlModelId;
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
@@ -3583,5 +3664,47 @@ let ctx = app_ctx.session_context(session);
             assert_eq!(db.quota_used_by_user(&user2).await.unwrap(), 3);
         })
         .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_persists_ml_models() {
+        with_temp_context(|app_ctx, _| async move {
+            let model_id = MlModelId::from_str("3db69b02-6d7a-4112-a355-e3745be18a80").unwrap();
+            let input = MlModel {
+                model_id,
+                model_content: "model content".to_owned(),
+            };
+
+            let session = app_ctx.create_anonymous_session().await.unwrap();
+
+            let db = app_ctx.session_context(session.clone()).db();
+
+            db.store_ml_model(input.clone()).await.unwrap();
+
+            let model = db.load_ml_model(model_id).await.unwrap();
+
+            assert_eq!(model, input);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_fails_to_load_nonexistent_ml_model() {
+        with_temp_context(|app_ctx, _| async move {
+            let model_id = MlModelId::from_str("3db69b02-6d7a-4112-a355-e3745be18a80").unwrap();
+
+            let session = app_ctx.create_anonymous_session().await.unwrap();
+            let db = app_ctx.session_context(session.clone()).db();
+
+            let result = db.load_ml_model(model_id).await;
+
+          match result {
+            Err(error::Error::MachineLearningError {
+                source: crate::machine_learning::ml_error::MachineLearningError::UnknownModelIdInPostgres { .. },
+            }) => (),
+            _ => panic!("Expected UnknownModelId error"),
+        }
+    })
+    .await;
     }
 }

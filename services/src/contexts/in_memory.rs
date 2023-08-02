@@ -5,7 +5,7 @@ use super::{ApplicationContext, Db, GeoEngineDb, SessionContext, SimpleSession};
 use super::{Session, SimpleApplicationContext};
 use crate::api::model::datatypes::DatasetName;
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
-use crate::datasets::in_memory::HashMapDatasetDbBackend;
+use crate::datasets::in_memory::{HashMapDatasetDbBackend, HashMapMlModelDbBackend};
 use crate::datasets::upload::{Volume, Volumes};
 use crate::error::Error;
 use crate::layers::add_from_directory::{
@@ -205,6 +205,7 @@ impl SimpleApplicationContext for InMemoryContext {
 pub struct InMemoryDbBackend {
     pub(crate) workflow_registry: RwLock<HashMapRegistryBackend>,
     pub(crate) dataset_db: RwLock<HashMapDatasetDbBackend>,
+    pub(crate) ml_model_db: RwLock<HashMapMlModelDbBackend>,
     pub(crate) project_db: RwLock<HashMapProjectDbBackend>,
     pub(crate) layer_db: HashMapLayerDb,
     pub(crate) layer_provider_db: RwLock<HashMapLayerProviderDbBackend>,
