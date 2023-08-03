@@ -51,8 +51,6 @@ fn init_geo_filetypes() -> HashMap<String, bool> {
     }
 }
 
-const DISCRETE_VRS: [&str; 1] = ["ibl#between-depth"];
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EdrDataProviderDefinition {
@@ -63,6 +61,8 @@ pub struct EdrDataProviderDefinition {
     vector_spec: Option<EdrVectorSpec>,
     #[serde(default)]
     cache_ttl: CacheTtlSeconds,
+    #[serde(default)]
+    discrete_vrs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +82,7 @@ impl DataProviderDefinition for EdrDataProviderDefinition {
             vector_spec: self.vector_spec,
             client: Client::new(),
             cache_ttl: self.cache_ttl,
+            discrete_vrs: self.discrete_vrs,
         }))
     }
 
@@ -105,6 +106,7 @@ pub struct EdrDataProvider {
     vector_spec: Option<EdrVectorSpec>,
     client: Client,
     cache_ttl: CacheTtlSeconds,
+    discrete_vrs: Vec<String>,
 }
 
 #[async_trait]
@@ -460,6 +462,7 @@ impl EdrCollectionMetaData {
         &self,
         base_url: &Url,
         height: &str,
+        discrete_vrs: &Vec<String>,
     ) -> Result<(String, String), geoengine_operators::error::Error> {
         let spatial_extent = self.extent.spatial.as_ref().ok_or_else(|| {
             geoengine_operators::error::Error::DatasetMetaData {
@@ -473,7 +476,7 @@ impl EdrCollectionMetaData {
         })?;
         let z = if height == "default" {
             String::new()
-        } else if self.extent.has_discrete_vertical_axis() {
+        } else if self.extent.has_discrete_vertical_axis(discrete_vrs) {
             format!("&z={height}")
         } else {
             format!("&z={height}%2F{height}")
@@ -513,6 +516,7 @@ impl EdrCollectionMetaData {
         parameter_name: &str,
         height: &str,
         time: &str,
+        discrete_vrs: &Vec<String>,
     ) -> Result<String, geoengine_operators::error::Error> {
         let spatial_extent = self.extent.spatial.as_ref().ok_or_else(|| {
             geoengine_operators::error::Error::DatasetMetaData {
@@ -521,7 +525,7 @@ impl EdrCollectionMetaData {
         })?;
         let z = if height == "default" {
             String::new()
-        } else if self.extent.has_discrete_vertical_axis() {
+        } else if self.extent.has_discrete_vertical_axis(discrete_vrs) {
             format!("&z={height}")
         } else {
             format!("&z={height}%2F{height}")
@@ -666,9 +670,11 @@ impl EdrCollectionMetaData {
         height: &str,
         vector_spec: EdrVectorSpec,
         cache_ttl: CacheTtlSeconds,
+        discrete_vrs: &Vec<String>,
     ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>
     {
-        let (download_url, layer_name) = self.get_vector_download_url(base_url, height)?;
+        let (download_url, layer_name) =
+            self.get_vector_download_url(base_url, height, discrete_vrs)?;
         let omd = self.get_ogr_source_ds(download_url, layer_name, vector_spec, cache_ttl);
 
         Ok(StaticMetaData {
@@ -711,7 +717,13 @@ impl EdrCollectionMetaData {
             time: data_time,
             params: Some(GdalDatasetParameters {
                 file_path: self
-                    .get_raster_download_url(&provider.base_url, parameter, height, current_time)?
+                    .get_raster_download_url(
+                        &provider.base_url,
+                        parameter,
+                        height,
+                        current_time,
+                        &provider.discrete_vrs,
+                    )?
                     .into(),
                 rasterband_channel: 1,
                 geo_transform: dataset
@@ -747,10 +759,10 @@ struct EdrExtents {
 }
 
 impl EdrExtents {
-    fn has_discrete_vertical_axis(&self) -> bool {
+    fn has_discrete_vertical_axis(&self, discrete_vrs: &Vec<String>) -> bool {
         self.vertical
             .as_ref()
-            .map_or(false, |val| DISCRETE_VRS.contains(&val.vrs.as_str()))
+            .map_or(false, |val| discrete_vrs.contains(&val.vrs))
     }
 }
 
@@ -1034,7 +1046,13 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         };
 
         let smd = collection
-            .get_ogr_metadata(&self.base_url, &height, vector_spec, self.cache_ttl)
+            .get_ogr_metadata(
+                &self.base_url,
+                &height,
+                vector_spec,
+                self.cache_ttl,
+                &self.discrete_vrs,
+            )
             .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
             })?;
@@ -1071,7 +1089,13 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             let mut previous_start = temporal_values_iter.next().unwrap();
             let dataset = gdal_open_dataset(
                 collection
-                    .get_raster_download_url(&self.base_url, &parameter, &height, previous_start)?
+                    .get_raster_download_url(
+                        &self.base_url,
+                        &parameter,
+                        &height,
+                        previous_start,
+                        &self.discrete_vrs,
+                    )?
                     .as_ref(),
             )?;
 
@@ -1104,7 +1128,13 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             let dummy_time = "2023-06-06T00:00:00Z";
             let dataset = gdal_open_dataset(
                 collection
-                    .get_raster_download_url(&self.base_url, &parameter, &height, dummy_time)?
+                    .get_raster_download_url(
+                        &self.base_url,
+                        &parameter,
+                        &height,
+                        dummy_time,
+                        &self.discrete_vrs,
+                    )?
                     .as_ref(),
             )?;
             params.push(collection.get_gdal_loading_info_temporal_slice(
