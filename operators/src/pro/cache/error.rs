@@ -19,4 +19,6 @@ pub enum CacheError {
     QueryIdAlreadyInLandingZone,
     CacheEntryIdAlreadyInCache,
     CouldNotFilterResults,
+    CouldNotDecompressElement,
+    BlockingElementConversion,
 }
