@@ -180,7 +180,9 @@ impl EdrDataProvider {
         let items = collections
             .collections
             .into_iter()
-            .filter(|collection| collection.data_queries.cube.is_some())
+            .filter(|collection| {
+                collection.data_queries.cube.is_some() && collection.extent.spatial.is_some()
+            })
             .skip(options.offset as usize)
             .take(options.limit as usize)
             .map(|collection| {
@@ -1131,7 +1133,6 @@ pub enum EdrProviderError {
     MissingTemporalExtent,
     NoSupportedOutputFormat,
     NoVectorSpecConfigured,
-    NoRasterSpecConfigured,
 }
 
 #[cfg(test)]
