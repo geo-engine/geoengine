@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
 
@@ -9,9 +11,16 @@ use crate::{
     },
 };
 
-use super::datatypes::{
-    Breakpoint, Colorizer, DefaultColors, LinearGradient, LogarithmicGradient, OverUnderColors,
-    Palette, RgbaColor,
+use super::{
+    datatypes::{
+        BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
+        DefaultColors, FeatureDataType, LinearGradient, LogarithmicGradient, Measurement,
+        OverUnderColors, Palette, RgbaColor, SpatialReferenceOption, TimeInterval, VectorDataType,
+    },
+    operators::{
+        PlotResultDescriptor, RasterResultDescriptor, TypedResultDescriptor, VectorColumnInfo,
+        VectorResultDescriptor,
+    },
 };
 
 #[derive(Debug, ToSql, FromSql)]
@@ -364,6 +373,209 @@ impl TryFrom<SymbologyDbType> for Symbology {
     }
 }
 
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "Measurement")]
+pub struct MeasurementDbType {
+    continuous: Option<ContinuousMeasurement>,
+    classification: Option<ClassificationMeasurementDbType>,
+}
+
+#[derive(Debug, ToSql, FromSql)]
+struct SmallintTextKeyValue {
+    key: i16,
+    value: String,
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "ClassificationMeasurement")]
+pub struct ClassificationMeasurementDbType {
+    measurement: String,
+    classes: Vec<SmallintTextKeyValue>,
+}
+
+impl From<&Measurement> for MeasurementDbType {
+    fn from(measurement: &Measurement) -> Self {
+        match measurement {
+            Measurement::Unitless => Self {
+                continuous: None,
+                classification: None,
+            },
+            Measurement::Continuous(measurement) => Self {
+                continuous: Some(measurement.clone()),
+                classification: None,
+            },
+            Measurement::Classification(measurement) => Self {
+                continuous: None,
+                classification: Some(ClassificationMeasurementDbType {
+                    measurement: measurement.measurement.clone(),
+                    classes: measurement
+                        .classes
+                        .iter()
+                        .map(|(key, value)| SmallintTextKeyValue {
+                            key: i16::from(*key),
+                            value: value.clone(),
+                        })
+                        .collect(),
+                }),
+            },
+        }
+    }
+}
+
+impl TryFrom<MeasurementDbType> for Measurement {
+    type Error = Error;
+
+    fn try_from(measurement: MeasurementDbType) -> Result<Self, Self::Error> {
+        match measurement {
+            MeasurementDbType {
+                continuous: None,
+                classification: None,
+            } => Ok(Self::Unitless),
+            MeasurementDbType {
+                continuous: Some(continuous),
+                classification: None,
+            } => Ok(Self::Continuous(continuous)),
+            MeasurementDbType {
+                continuous: None,
+                classification: Some(classification),
+            } => {
+                let mut classes = HashMap::with_capacity(classification.classes.len());
+                for SmallintTextKeyValue { key, value } in classification.classes {
+                    classes.insert(
+                        u8::try_from(key).map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
+                        value,
+                    );
+                }
+
+                Ok(Self::Classification(ClassificationMeasurement {
+                    measurement: classification.measurement,
+                    classes,
+                }))
+            }
+            _ => Err(Error::UnexpectedInvalidDbTypeConversion),
+        }
+    }
+}
+
+#[derive(Debug, FromSql, ToSql)]
+#[postgres(name = "VectorColumnInfo")]
+pub struct VectorColumnInfoDbType {
+    pub column: String,
+    pub data_type: FeatureDataType,
+    pub measurement: Measurement,
+}
+
+#[derive(Debug, FromSql, ToSql)]
+#[postgres(name = "VectorResultDescriptor")]
+pub struct VectorResultDescriptorDbType {
+    pub data_type: VectorDataType,
+    pub spatial_reference: SpatialReferenceOption,
+    pub columns: Vec<VectorColumnInfoDbType>,
+    pub time: Option<TimeInterval>,
+    pub bbox: Option<BoundingBox2D>,
+}
+
+impl From<&VectorResultDescriptor> for VectorResultDescriptorDbType {
+    fn from(result_descriptor: &VectorResultDescriptor) -> Self {
+        Self {
+            data_type: result_descriptor.data_type,
+            spatial_reference: result_descriptor.spatial_reference,
+            columns: result_descriptor
+                .columns
+                .iter()
+                .map(|(column, info)| VectorColumnInfoDbType {
+                    column: column.clone(),
+                    data_type: info.data_type,
+                    measurement: info.measurement.clone(),
+                })
+                .collect(),
+            time: result_descriptor.time,
+            bbox: result_descriptor.bbox,
+        }
+    }
+}
+
+impl TryFrom<VectorResultDescriptorDbType> for VectorResultDescriptor {
+    type Error = Error;
+
+    fn try_from(result_descriptor: VectorResultDescriptorDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            data_type: result_descriptor.data_type,
+            spatial_reference: result_descriptor.spatial_reference,
+            columns: result_descriptor
+                .columns
+                .into_iter()
+                .map(|info| {
+                    (
+                        info.column,
+                        VectorColumnInfo {
+                            data_type: info.data_type,
+                            measurement: info.measurement,
+                        },
+                    )
+                })
+                .collect(),
+            time: result_descriptor.time,
+            bbox: result_descriptor.bbox,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "ResultDescriptor")]
+pub struct TypedResultDescriptorDbType {
+    raster: Option<RasterResultDescriptor>,
+    vector: Option<VectorResultDescriptor>,
+    plot: Option<PlotResultDescriptor>,
+}
+
+impl From<&TypedResultDescriptor> for TypedResultDescriptorDbType {
+    fn from(result_descriptor: &TypedResultDescriptor) -> Self {
+        match result_descriptor {
+            TypedResultDescriptor::Raster(raster) => Self {
+                raster: Some(raster.clone()),
+                vector: None,
+                plot: None,
+            },
+            TypedResultDescriptor::Vector(vector) => Self {
+                raster: None,
+                vector: Some(vector.clone()),
+                plot: None,
+            },
+            TypedResultDescriptor::Plot(plot) => Self {
+                raster: None,
+                vector: None,
+                plot: Some(*plot),
+            },
+        }
+    }
+}
+
+impl TryFrom<TypedResultDescriptorDbType> for TypedResultDescriptor {
+    type Error = Error;
+
+    fn try_from(result_descriptor: TypedResultDescriptorDbType) -> Result<Self, Self::Error> {
+        match result_descriptor {
+            TypedResultDescriptorDbType {
+                raster: Some(raster),
+                vector: None,
+                plot: None,
+            } => Ok(Self::Raster(raster)),
+            TypedResultDescriptorDbType {
+                raster: None,
+                vector: Some(vector),
+                plot: None,
+            } => Ok(Self::Vector(vector)),
+            TypedResultDescriptorDbType {
+                raster: None,
+                vector: None,
+                plot: Some(plot),
+            } => Ok(Self::Plot(plot)),
+            _ => Err(Error::UnexpectedInvalidDbTypeConversion),
+        }
+    }
+}
+
 /// A macro for quickly implementing `FromSql` and `ToSql` for `$RustType` if there is a `From` and `Into`
 /// implementation for another type `$DbType` that already implements it.
 ///
@@ -406,8 +618,11 @@ macro_rules! delegate_from_to_sql {
     };
 }
 
-delegate_from_to_sql!(ColorParam, ColorParamDbType);
 delegate_from_to_sql!(Colorizer, ColorizerDbType);
+delegate_from_to_sql!(ColorParam, ColorParamDbType);
 delegate_from_to_sql!(DefaultColors, DefaultColorsDbType);
+delegate_from_to_sql!(Measurement, MeasurementDbType);
 delegate_from_to_sql!(NumberParam, NumberParamDbType);
 delegate_from_to_sql!(Symbology, SymbologyDbType);
+delegate_from_to_sql!(TypedResultDescriptor, TypedResultDescriptorDbType);
+delegate_from_to_sql!(VectorResultDescriptor, VectorResultDescriptorDbType);

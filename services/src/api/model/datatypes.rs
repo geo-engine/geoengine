@@ -422,7 +422,20 @@ impl From<geoengine_datatypes::dataset::LayerId> for LayerId {
 }
 
 /// A spatial reference authority that is part of a spatial reference definition
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    ToSchema,
+    FromSql,
+    ToSql,
+)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum SpatialReferenceAuthority {
     Epsg,
@@ -493,7 +506,7 @@ impl std::fmt::Display for SpatialReferenceAuthority {
 }
 
 /// A spatial reference consists of an authority and a code
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, FromSql, ToSql)]
 pub struct SpatialReference {
     authority: SpatialReferenceAuthority,
     code: u32,
@@ -730,9 +743,76 @@ impl From<SpatialReferenceOption> for Option<SpatialReference> {
     }
 }
 
+impl ToSql for SpatialReferenceOption {
+    fn to_sql(
+        &self,
+        ty: &postgres_types::Type,
+        out: &mut bytes::BytesMut,
+    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>>
+    where
+        Self: Sized,
+    {
+        match self {
+            SpatialReferenceOption::SpatialReference(sref) => sref.to_sql(ty, out),
+            SpatialReferenceOption::Unreferenced => Ok(postgres_types::IsNull::Yes),
+        }
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool
+    where
+        Self: Sized,
+    {
+        <SpatialReference as ToSql>::accepts(ty)
+    }
+
+    fn to_sql_checked(
+        &self,
+        ty: &postgres_types::Type,
+        out: &mut bytes::BytesMut,
+    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        match self {
+            SpatialReferenceOption::SpatialReference(sref) => sref.to_sql_checked(ty, out),
+            SpatialReferenceOption::Unreferenced => Ok(postgres_types::IsNull::Yes),
+        }
+    }
+}
+
+impl<'a> FromSql<'a> for SpatialReferenceOption {
+    fn from_sql(
+        ty: &postgres_types::Type,
+        raw: &'a [u8],
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        Ok(SpatialReferenceOption::SpatialReference(
+            SpatialReference::from_sql(ty, raw)?,
+        ))
+    }
+
+    fn from_sql_null(
+        _: &postgres_types::Type,
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        Ok(SpatialReferenceOption::Unreferenced)
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        <SpatialReference as FromSql>::accepts(ty)
+    }
+}
+
 /// An enum that contains all possible vector data types
 #[derive(
-    Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, ToSchema,
+    Debug,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Deserialize,
+    Serialize,
+    Copy,
+    Clone,
+    ToSchema,
+    FromSql,
+    ToSql,
 )]
 pub enum VectorDataType {
     Data,
@@ -765,7 +845,19 @@ impl From<VectorDataType> for geoengine_datatypes::collections::VectorDataType {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, ToSchema)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Default,
+    ToSchema,
+    ToSql,
+    FromSql,
+)]
 pub struct Coordinate2D {
     pub x: f64,
     pub y: f64,
@@ -789,7 +881,7 @@ impl From<Coordinate2D> for geoengine_datatypes::primitives::Coordinate2D {
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 /// A bounding box that includes all border points.
 /// Note: may degenerate to a point!
@@ -846,7 +938,7 @@ impl From<chrono::DateTime<chrono::FixedOffset>> for DateTime {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureDataType {
     Category,
@@ -915,7 +1007,7 @@ impl From<Measurement> for geoengine_datatypes::primitives::Measurement {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
     pub unit: Option<String>,
@@ -1009,11 +1101,11 @@ impl TryFrom<SerializableClassificationMeasurement> for ClassificationMeasuremen
 }
 
 /// A partition of space that include the upper left but excludes the lower right coordinate
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct SpatialPartition2D {
-    upper_left_coordinate: Coordinate2D,
-    lower_right_coordinate: Coordinate2D,
+    pub upper_left_coordinate: Coordinate2D,
+    pub lower_right_coordinate: Coordinate2D,
 }
 
 impl From<geoengine_datatypes::primitives::SpatialPartition2D> for SpatialPartition2D {
@@ -1049,7 +1141,7 @@ pub struct QueryRectangle<SpatialBounds> {
 }
 
 /// The spatial resolution in SRS units
-#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema, ToSql, FromSql)]
 pub struct SpatialResolution {
     pub x: f64,
     pub y: f64,
@@ -1073,8 +1165,11 @@ impl From<SpatialResolution> for geoengine_datatypes::primitives::SpatialResolut
     }
 }
 
-#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug, ToSchema)]
+#[derive(
+    Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug, ToSchema, FromSql, ToSql,
+)]
 #[repr(C)]
+#[postgres(transparent)]
 pub struct TimeInstance(i64);
 
 impl FromStr for TimeInstance {
@@ -1227,7 +1322,7 @@ impl From<TimeStep> for geoengine_datatypes::primitives::TimeStep {
 }
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql)]
 pub struct TimeInterval {
     start: TimeInstance,
     end: TimeInstance,
@@ -1273,7 +1368,19 @@ impl core::fmt::Debug for TimeInterval {
 }
 
 #[derive(
-    Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, ToSchema,
+    Debug,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Deserialize,
+    Serialize,
+    Copy,
+    Clone,
+    ToSchema,
+    FromSql,
+    ToSql,
 )]
 pub enum RasterDataType {
     U8,
