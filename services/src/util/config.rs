@@ -2,9 +2,7 @@ use crate::api::model::datatypes::TimeInterval;
 use crate::contexts::SessionId;
 use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
-use crate::util::parsing::{
-    deserialize_api_prefix, deserialize_base_url, deserialize_base_url_option,
-};
+use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
@@ -384,7 +382,7 @@ impl ConfigElement for MachineLearning {
 #[cfg(feature = "nfdi")]
 #[derive(Debug, Deserialize)]
 pub struct GFBio {
-    #[serde(deserialize_with = "deserialize_base_url")]
+    #[serde(deserialize_with = "crate::util::parsing::deserialize_base_url")]
     pub basket_api_base_url: url::Url,
     pub group_abcd_units: bool,
 }

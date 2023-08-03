@@ -499,9 +499,15 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::api::model::datatypes::{DataProviderId, DatasetName, LayerId};
+    use crate::api::model::datatypes::{
+        Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement, DataProviderId,
+        DatasetName, DefaultColors, LayerId, LinearGradient, LogarithmicGradient, Measurement,
+        NotNanF64, OverUnderColors, Palette, RgbaColor, SpatialPartition2D,
+    };
+    use crate::api::model::operators::PlotResultDescriptor;
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
+    use crate::api::model::ColorizerTypeDbType;
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
@@ -518,9 +524,10 @@ mod tests {
         INTERNAL_PROVIDER_ID,
     };
     use crate::projects::{
-        CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
+        ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LineSymbology,
+        LoadVersion, NumberParam, OrderBy, Plot, PlotUpdate, PointSymbology, PolygonSymbology,
         ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
-        STRectangle, UpdateProject,
+        RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
     };
     use crate::util::tests::register_ndvi_workflow_helper;
     use crate::util::tests::with_temp_context;
@@ -531,9 +538,8 @@ mod tests {
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, RasterQueryRectangle,
-        SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-        VectorQueryRectangle,
+        BoundingBox2D, Coordinate2D, FeatureDataType, RasterQueryRectangle, SpatialResolution,
+        TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
     };
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
@@ -551,6 +557,7 @@ mod tests {
         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
     };
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
+    use ordered_float::NotNan;
     use serde_json::json;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -824,7 +831,7 @@ mod tests {
                         "foo".to_owned(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
+                            measurement: Measurement::Unitless.into(),
                         },
                     )]
                     .into_iter()
@@ -892,7 +899,7 @@ mod tests {
                             "foo".to_owned(),
                             VectorColumnInfo {
                                 data_type: FeatureDataType::Float,
-                                measurement: Measurement::Unitless
+                                measurement: Measurement::Unitless.into()
                             }
                         )]
                         .into_iter()
@@ -1018,7 +1025,7 @@ mod tests {
                         "foo".to_owned(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
+                            measurement: Measurement::Unitless.into(),
                         },
                     )]
                     .into_iter()
@@ -1886,7 +1893,7 @@ mod tests {
                         "foo".to_owned(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
+                            measurement: Measurement::Unitless.into(),
                         },
                     )]
                     .into_iter()
@@ -1982,7 +1989,7 @@ mod tests {
                         "foo".to_owned(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
+                            measurement: Measurement::Unitless.into(),
                         },
                     )]
                     .into_iter()
@@ -2437,7 +2444,7 @@ mod tests {
                         "foo".to_owned(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
+                            measurement: Measurement::Unitless.into(),
                         },
                     )]
                     .into_iter()
@@ -2474,6 +2481,536 @@ mod tests {
                 db.resolve_dataset_name_to_id(&dataset_name1).await.unwrap(),
                 dataset_id1
             );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn test_postgres_type_serialization() {
+        pub async fn test_type<T>(
+            conn: &PooledConnection<'_, PostgresConnectionManager<tokio_postgres::NoTls>>,
+            sql_type: &str,
+            checks: impl IntoIterator<Item = T>,
+        ) where
+            T: PartialEq + postgres_types::FromSqlOwned + postgres_types::ToSql + Sync,
+        {
+            // don't quote built-in types
+            let quote = if sql_type == "double precision" {
+                ""
+            } else {
+                "\""
+            };
+
+            for value in checks {
+                let stmt = conn
+                    .prepare(&format!("SELECT $1::{quote}{sql_type}{quote}"))
+                    .await
+                    .unwrap();
+                let result: T = conn.query_one(&stmt, &[&value]).await.unwrap().get(0);
+
+                assert_eq!(value, result);
+            }
+        }
+
+        with_temp_context(|app_ctx, _| async move {
+            let pool = app_ctx.pool.get().await.unwrap();
+
+            test_type(&pool, "RgbaColor", [RgbaColor([0, 1, 2, 3])]).await;
+
+            test_type(
+                &pool,
+                "double precision",
+                [NotNanF64::from(NotNan::<f64>::new(1.0).unwrap())],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Breakpoint",
+                [Breakpoint {
+                    value: NotNan::<f64>::new(1.0).unwrap().into(),
+                    color: RgbaColor([0, 0, 0, 0]),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "DefaultColors",
+                [
+                    DefaultColors::DefaultColor {
+                        default_color: RgbaColor([0, 10, 20, 30]),
+                    },
+                    DefaultColors::OverUnder(OverUnderColors {
+                        over_color: RgbaColor([1, 2, 3, 4]),
+                        under_color: RgbaColor([5, 6, 7, 8]),
+                    }),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "ColorizerType",
+                [
+                    ColorizerTypeDbType::LinearGradient,
+                    ColorizerTypeDbType::LogarithmicGradient,
+                    ColorizerTypeDbType::Palette,
+                    ColorizerTypeDbType::Rgba,
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Colorizer",
+                [
+                    Colorizer::LinearGradient(LinearGradient {
+                        breakpoints: vec![
+                            Breakpoint {
+                                value: NotNan::<f64>::new(-10.0).unwrap().into(),
+                                color: RgbaColor([0, 0, 0, 0]),
+                            },
+                            Breakpoint {
+                                value: NotNan::<f64>::new(2.0).unwrap().into(),
+                                color: RgbaColor([255, 0, 0, 255]),
+                            },
+                        ],
+                        no_data_color: RgbaColor([0, 10, 20, 30]),
+                        color_fields: DefaultColors::OverUnder(OverUnderColors {
+                            over_color: RgbaColor([1, 2, 3, 4]),
+                            under_color: RgbaColor([5, 6, 7, 8]),
+                        }),
+                    }),
+                    Colorizer::LogarithmicGradient(LogarithmicGradient {
+                        breakpoints: vec![
+                            Breakpoint {
+                                value: NotNan::<f64>::new(1.0).unwrap().into(),
+                                color: RgbaColor([0, 0, 0, 0]),
+                            },
+                            Breakpoint {
+                                value: NotNan::<f64>::new(2.0).unwrap().into(),
+                                color: RgbaColor([255, 0, 0, 255]),
+                            },
+                        ],
+                        no_data_color: RgbaColor([0, 10, 20, 30]),
+                        color_fields: DefaultColors::OverUnder(OverUnderColors {
+                            over_color: RgbaColor([1, 2, 3, 4]),
+                            under_color: RgbaColor([5, 6, 7, 8]),
+                        }),
+                    }),
+                    Colorizer::Palette {
+                        colors: Palette(
+                            [
+                                (NotNan::<f64>::new(1.0).unwrap(), RgbaColor([0, 0, 0, 0])),
+                                (
+                                    NotNan::<f64>::new(2.0).unwrap(),
+                                    RgbaColor([255, 0, 0, 255]),
+                                ),
+                                (NotNan::<f64>::new(3.0).unwrap(), RgbaColor([0, 10, 20, 30])),
+                            ]
+                            .into(),
+                        ),
+                        no_data_color: RgbaColor([1, 2, 3, 4]),
+                        default_color: RgbaColor([5, 6, 7, 8]),
+                    },
+                    Colorizer::Rgba,
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "ColorParam",
+                [
+                    ColorParam::Static {
+                        color: RgbaColor([0, 10, 20, 30]).into(),
+                    },
+                    ColorParam::Derived(DerivedColor {
+                        attribute: "foobar".to_string(),
+                        colorizer: Colorizer::Rgba,
+                    }),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "NumberParam",
+                [
+                    NumberParam::Static { value: 42 },
+                    NumberParam::Derived(DerivedNumber {
+                        attribute: "foobar".to_string(),
+                        factor: 1.0,
+                        default_value: 42.,
+                    }),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "StrokeParam",
+                [StrokeParam {
+                    width: NumberParam::Static { value: 42 },
+                    color: ColorParam::Static {
+                        color: RgbaColor([0, 10, 20, 30]).into(),
+                    },
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "TextSymbology",
+                [TextSymbology {
+                    attribute: "attribute".to_string(),
+                    fill_color: ColorParam::Static {
+                        color: RgbaColor([0, 10, 20, 30]).into(),
+                    },
+                    stroke: StrokeParam {
+                        width: NumberParam::Static { value: 42 },
+                        color: ColorParam::Static {
+                            color: RgbaColor([0, 10, 20, 30]).into(),
+                        },
+                    },
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Symbology",
+                [
+                    Symbology::Point(PointSymbology {
+                        fill_color: ColorParam::Static {
+                            color: RgbaColor([0, 10, 20, 30]).into(),
+                        },
+                        stroke: StrokeParam {
+                            width: NumberParam::Static { value: 42 },
+                            color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                        },
+                        radius: NumberParam::Static { value: 42 },
+                        text: Some(TextSymbology {
+                            attribute: "attribute".to_string(),
+                            fill_color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                            stroke: StrokeParam {
+                                width: NumberParam::Static { value: 42 },
+                                color: ColorParam::Static {
+                                    color: RgbaColor([0, 10, 20, 30]).into(),
+                                },
+                            },
+                        }),
+                    }),
+                    Symbology::Line(LineSymbology {
+                        stroke: StrokeParam {
+                            width: NumberParam::Static { value: 42 },
+                            color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                        },
+                        text: Some(TextSymbology {
+                            attribute: "attribute".to_string(),
+                            fill_color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                            stroke: StrokeParam {
+                                width: NumberParam::Static { value: 42 },
+                                color: ColorParam::Static {
+                                    color: RgbaColor([0, 10, 20, 30]).into(),
+                                },
+                            },
+                        }),
+                        auto_simplified: true,
+                    }),
+                    Symbology::Polygon(PolygonSymbology {
+                        fill_color: ColorParam::Static {
+                            color: RgbaColor([0, 10, 20, 30]).into(),
+                        },
+                        stroke: StrokeParam {
+                            width: NumberParam::Static { value: 42 },
+                            color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                        },
+                        text: Some(TextSymbology {
+                            attribute: "attribute".to_string(),
+                            fill_color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                            stroke: StrokeParam {
+                                width: NumberParam::Static { value: 42 },
+                                color: ColorParam::Static {
+                                    color: RgbaColor([0, 10, 20, 30]).into(),
+                                },
+                            },
+                        }),
+                        auto_simplified: true,
+                    }),
+                    Symbology::Raster(RasterSymbology {
+                        opacity: 1.0,
+                        colorizer: Colorizer::LinearGradient(LinearGradient {
+                            breakpoints: vec![
+                                Breakpoint {
+                                    value: NotNan::<f64>::new(-10.0).unwrap().into(),
+                                    color: RgbaColor([0, 0, 0, 0]),
+                                },
+                                Breakpoint {
+                                    value: NotNan::<f64>::new(2.0).unwrap().into(),
+                                    color: RgbaColor([255, 0, 0, 255]),
+                                },
+                            ],
+                            no_data_color: RgbaColor([0, 10, 20, 30]),
+                            color_fields: DefaultColors::OverUnder(OverUnderColors {
+                                over_color: RgbaColor([1, 2, 3, 4]),
+                                under_color: RgbaColor([5, 6, 7, 8]),
+                            }),
+                        }),
+                    }),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "RasterDataType",
+                [
+                    crate::api::model::datatypes::RasterDataType::U8,
+                    crate::api::model::datatypes::RasterDataType::U16,
+                    crate::api::model::datatypes::RasterDataType::U32,
+                    crate::api::model::datatypes::RasterDataType::U64,
+                    crate::api::model::datatypes::RasterDataType::I8,
+                    crate::api::model::datatypes::RasterDataType::I16,
+                    crate::api::model::datatypes::RasterDataType::I32,
+                    crate::api::model::datatypes::RasterDataType::I64,
+                    crate::api::model::datatypes::RasterDataType::F32,
+                    crate::api::model::datatypes::RasterDataType::F64,
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Measurement",
+                [
+                    Measurement::Unitless,
+                    Measurement::Continuous(ContinuousMeasurement {
+                        measurement: "Temperature".to_string(),
+                        unit: Some("°C".to_string()),
+                    }),
+                    Measurement::Classification(ClassificationMeasurement {
+                        measurement: "Color".to_string(),
+                        classes: [(1, "Grayscale".to_string()), (2, "Colorful".to_string())].into(),
+                    }),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Coordinate2D",
+                [crate::api::model::datatypes::Coordinate2D::from(
+                    Coordinate2D::new(0.0f64, 1.),
+                )],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "SpatialPartition2D",
+                [crate::api::model::datatypes::SpatialPartition2D {
+                    upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                    lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "BoundingBox2D",
+                [crate::api::model::datatypes::BoundingBox2D {
+                    lower_left_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                    upper_right_coordinate: Coordinate2D::new(2., 1.0).into(),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "SpatialResolution",
+                [crate::api::model::datatypes::SpatialResolution { x: 1.2, y: 2.3 }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "VectorDataType",
+                [
+                    crate::api::model::datatypes::VectorDataType::Data,
+                    crate::api::model::datatypes::VectorDataType::MultiPoint,
+                    crate::api::model::datatypes::VectorDataType::MultiLineString,
+                    crate::api::model::datatypes::VectorDataType::MultiPolygon,
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "FeatureDataType",
+                [
+                    crate::api::model::datatypes::FeatureDataType::Category,
+                    crate::api::model::datatypes::FeatureDataType::Int,
+                    crate::api::model::datatypes::FeatureDataType::Float,
+                    crate::api::model::datatypes::FeatureDataType::Text,
+                    crate::api::model::datatypes::FeatureDataType::Bool,
+                    crate::api::model::datatypes::FeatureDataType::DateTime,
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "TimeInterval",
+                [crate::api::model::datatypes::TimeInterval::from(
+                    TimeInterval::default(),
+                )],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "SpatialReference",
+                [
+                    crate::api::model::datatypes::SpatialReferenceOption::Unreferenced,
+                    crate::api::model::datatypes::SpatialReferenceOption::SpatialReference(
+                        SpatialReference::epsg_4326().into(),
+                    ),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "PlotResultDescriptor",
+                [PlotResultDescriptor {
+                    spatial_reference: SpatialReferenceOption::Unreferenced.into(),
+                    time: None,
+                    bbox: None,
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "VectorResultDescriptor",
+                [crate::api::model::operators::VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint.into(),
+                    spatial_reference: SpatialReferenceOption::SpatialReference(
+                        SpatialReference::epsg_4326(),
+                    )
+                    .into(),
+                    columns: [(
+                        "foo".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Int,
+                            measurement: Measurement::Unitless.into(),
+                        }
+                        .into(),
+                    )]
+                    .into(),
+                    time: Some(TimeInterval::default().into()),
+                    bbox: Some(
+                        BoundingBox2D::new(
+                            Coordinate2D::new(0.0f64, 0.5),
+                            Coordinate2D::new(2., 1.0),
+                        )
+                        .unwrap()
+                        .into(),
+                    ),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "RasterResultDescriptor",
+                [crate::api::model::operators::RasterResultDescriptor {
+                    data_type: RasterDataType::U8.into(),
+                    spatial_reference: SpatialReferenceOption::SpatialReference(
+                        SpatialReference::epsg_4326(),
+                    )
+                    .into(),
+                    measurement: Measurement::Unitless,
+                    time: Some(TimeInterval::default().into()),
+                    bbox: Some(SpatialPartition2D {
+                        upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                        lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                    }),
+                    resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }.into()),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "ResultDescriptor",
+                [
+                    crate::api::model::operators::TypedResultDescriptor::Vector(
+                        VectorResultDescriptor {
+                            data_type: VectorDataType::MultiPoint,
+                            spatial_reference: SpatialReferenceOption::SpatialReference(
+                                SpatialReference::epsg_4326(),
+                            ),
+                            columns: [(
+                                "foo".to_string(),
+                                VectorColumnInfo {
+                                    data_type: FeatureDataType::Int,
+                                    measurement: Measurement::Unitless.into(),
+                                },
+                            )]
+                            .into(),
+                            time: Some(TimeInterval::default()),
+                            bbox: Some(
+                                BoundingBox2D::new(
+                                    Coordinate2D::new(0.0f64, 0.5),
+                                    Coordinate2D::new(2., 1.0),
+                                )
+                                .unwrap(),
+                            ),
+                        }
+                        .into(),
+                    ),
+                    crate::api::model::operators::TypedResultDescriptor::Raster(
+                        crate::api::model::operators::RasterResultDescriptor {
+                            data_type: RasterDataType::U8.into(),
+                            spatial_reference: SpatialReferenceOption::SpatialReference(
+                                SpatialReference::epsg_4326(),
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            time: Some(TimeInterval::default().into()),
+                            bbox: Some(SpatialPartition2D {
+                                upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                                lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                            }),
+                            resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }.into()),
+                        },
+                    ),
+                    crate::api::model::operators::TypedResultDescriptor::Plot(
+                        PlotResultDescriptor {
+                            spatial_reference: SpatialReferenceOption::Unreferenced.into(),
+                            time: None,
+                            bbox: None,
+                        },
+                    ),
+                ],
+            )
+            .await;
         })
         .await;
     }
