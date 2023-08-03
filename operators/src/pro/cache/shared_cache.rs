@@ -1062,21 +1062,21 @@ mod tests {
         .unwrap();
     }
 
-    fn process_query(tile_cache: &mut CacheBackend, op_name: CanonicOperatorName) {
+    fn process_query(tile_cache: &mut CacheBackend, op_name: &CanonicOperatorName) {
         let query_id =
             <CacheBackend as Cache<CompressedRasterTile2D<u8>>>::insert_query_into_landing_zone(
                 tile_cache,
-                &op_name,
+                op_name,
                 &query_rect(),
             )
             .unwrap();
 
         tile_cache
-            .insert_query_element_into_landing_zone(&op_name, &query_id, create_compressed_tile())
+            .insert_query_element_into_landing_zone(op_name, &query_id, create_compressed_tile())
             .unwrap();
 
         <CacheBackend as Cache<CompressedRasterTile2D<u8>>>::move_query_from_landing_zone_to_cache(
-            tile_cache, &op_name, &query_id,
+            tile_cache, op_name, &query_id,
         )
         .unwrap();
     }
@@ -1158,9 +1158,9 @@ mod tests {
         };
 
         // process three different queries
-        process_query(&mut cache_backend, op(1));
-        process_query(&mut cache_backend, op(2));
-        process_query(&mut cache_backend, op(3));
+        process_query(&mut cache_backend, &op(1));
+        process_query(&mut cache_backend, &op(2));
+        process_query(&mut cache_backend, &op(3));
 
         // query the first one s.t. it is the most recently used
         <CacheBackend as Cache<CompressedRasterTile2D<u8>>>::query_and_promote(
@@ -1171,7 +1171,7 @@ mod tests {
         .unwrap();
 
         // process a fourth query
-        process_query(&mut cache_backend, op(4));
+        process_query(&mut cache_backend, &op(4));
 
         // assure the seconds query is evicted because it is the least recently used
         assert!(
