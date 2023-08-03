@@ -1,5 +1,5 @@
 CREATE TABLE geoengine (
-    production boolean NOT NULL DEFAULT false
+    clear_database_on_start boolean NOT NULL DEFAULT false
 );
 
 CREATE TYPE "SpatialReferenceAuthority" AS ENUM (

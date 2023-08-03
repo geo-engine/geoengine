@@ -1,7 +1,7 @@
 use crate::contexts::{ApplicationContext, MockableSession, Session, SessionId};
 use crate::error;
 use crate::handlers::get_token;
-use crate::pro::contexts::{ProInMemoryContext, ProPostgresContext};
+use crate::pro::contexts::ProPostgresContext;
 use crate::pro::permissions::{Role, RoleId};
 use crate::pro::users::UserId;
 use crate::projects::{ProjectId, STRectangle};
@@ -111,18 +111,13 @@ impl FromRequest for UserSession {
             Err(error) => return Box::pin(err(error)),
         };
 
-        {
-            if let Some(pg_ctx) = req.app_data::<web::Data<ProPostgresContext<NoTls>>>() {
-                let pg_ctx = pg_ctx.get_ref().clone();
-                return async move { pg_ctx.session_by_id(token).await.map_err(Into::into) }
-                    .boxed_local();
-            }
-        }
-        let mem_ctx = req
-            .app_data::<web::Data<ProInMemoryContext>>()
-            .expect("ProInMemoryContext will be registered because Postgres was not activated");
-        let mem_ctx = mem_ctx.get_ref().clone();
-        async move { mem_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
+        let pg_ctx = req
+            .app_data::<web::Data<ProPostgresContext<NoTls>>>()
+            .expect(
+            "Application context should be present because it is set during server initialization.",
+        );
+        let pg_ctx = pg_ctx.get_ref().clone();
+        return async move { pg_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local();
     }
 }
 
