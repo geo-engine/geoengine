@@ -153,6 +153,11 @@ CREATE TYPE "Symbology" AS (
     "polygon" "PolygonSymbology"
 );
 
+CREATE TYPE "TextTextKeyValue" AS (
+    key text,
+    value text
+);
+
 -- seperate table for projects used in foreign key constraints
 
 CREATE TABLE projects (id uuid PRIMARY KEY);
@@ -274,7 +279,7 @@ CREATE TABLE layers (
     workflow json NOT NULL,
     symbology "Symbology",
     properties "PropertyType" [] NOT NULL,
-    metadata json NOT NULL
+    metadata "TextTextKeyValue" [] NOT NULL
 );
 
 CREATE TABLE collection_layers (

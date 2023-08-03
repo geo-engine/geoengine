@@ -4,4 +4,4 @@ pub mod operators;
 pub mod responses;
 pub mod services;
 
-pub use db_types::ColorizerTypeDbType;
+pub use db_types::{ColorizerTypeDbType, HashMapTextTextDbType};
