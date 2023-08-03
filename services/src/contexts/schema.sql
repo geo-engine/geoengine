@@ -25,8 +25,8 @@ CREATE TYPE "BoundingBox2D" AS (
 );
 
 CREATE TYPE "TimeInterval" AS (
-    start timestamp with time zone,
-    "end" timestamp with time zone
+    start bigint,
+    "end" bigint
 );
 
 CREATE TYPE "STRectangle" AS (
@@ -153,9 +153,108 @@ CREATE TYPE "Symbology" AS (
     "polygon" "PolygonSymbology"
 );
 
+CREATE TYPE "RasterDataType" AS ENUM (
+    'U8',
+    'U16',
+    'U32',
+    'U64',
+    'I8',
+    'I16',
+    'I32',
+    'I64',
+    'F32',
+    'F64'
+);
+
+CREATE TYPE "ContinuousMeasurement" AS (
+    measurement text,
+    unit text
+);
+
+CREATE TYPE "SmallintTextKeyValue" AS (
+    key smallint,
+    value text
+);
+
 CREATE TYPE "TextTextKeyValue" AS (
     key text,
     value text
+);
+
+CREATE TYPE "ClassificationMeasurement" AS (
+    measurement text,
+    classes "SmallintTextKeyValue" []
+);
+
+CREATE TYPE "Measurement" AS (
+    -- "unitless" if all none
+    continuous "ContinuousMeasurement",
+    classification "ClassificationMeasurement"
+);
+
+CREATE TYPE "SpatialPartition2D" AS (
+    upper_left_coordinate "Coordinate2D",
+    lower_right_coordinate "Coordinate2D"
+);
+
+CREATE TYPE "SpatialResolution" AS (
+    x double precision,
+    y double precision
+);
+
+CREATE TYPE "VectorDataType" AS ENUM (
+    'Data',
+    'MultiPoint',
+    'MultiLineString',
+    'MultiPolygon'
+);
+
+CREATE TYPE "FeatureDataType" AS ENUM (
+    'Category',
+    'Int',
+    'Float',
+    'Text',
+    'Bool',
+    'DateTime'
+);
+
+CREATE TYPE "VectorColumnInfo" AS (
+    "column" text,
+    data_type "FeatureDataType",
+    measurement "Measurement"
+);
+
+CREATE TYPE "RasterResultDescriptor" AS (
+    data_type "RasterDataType",
+    -- SpatialReferenceOption
+    spatial_reference "SpatialReference",
+    measurement "Measurement",
+    "time" "TimeInterval",
+    bbox "SpatialPartition2D",
+    resolution "SpatialResolution"
+);
+
+CREATE TYPE "VectorResultDescriptor" AS (
+    data_type "VectorDataType",
+    -- SpatialReferenceOption
+    spatial_reference "SpatialReference",
+    columns "VectorColumnInfo" [],
+    "time" "TimeInterval",
+    bbox "BoundingBox2D"
+);
+
+CREATE TYPE "PlotResultDescriptor" AS (
+    -- SpatialReferenceOption
+    spatial_reference "SpatialReference",
+    "time" "TimeInterval",
+    bbox "BoundingBox2D"
+);
+
+CREATE TYPE "ResultDescriptor" AS (
+    -- oneOf
+    raster "RasterResultDescriptor",
+    vector "VectorResultDescriptor",
+    plot "PlotResultDescriptor"
 );
 
 -- seperate table for projects used in foreign key constraints
@@ -237,7 +336,7 @@ CREATE TABLE datasets (
     description text NOT NULL,
     tags text [],
     source_operator text NOT NULL,
-    result_descriptor json NOT NULL,
+    result_descriptor "ResultDescriptor" NOT NULL,
     meta_data json NOT NULL,
     symbology "Symbology",
     provenance "Provenance" []

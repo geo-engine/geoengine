@@ -459,9 +459,11 @@ mod tests {
 
     use super::*;
     use crate::api::model::datatypes::{
-        Breakpoint, Colorizer, DataProviderId, DatasetName, DefaultColors, LayerId, LinearGradient,
-        LogarithmicGradient, NotNanF64, OverUnderColors, Palette, RgbaColor,
+        Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement, DataProviderId,
+        DatasetName, DefaultColors, LayerId, LinearGradient, LogarithmicGradient, Measurement,
+        NotNanF64, OverUnderColors, Palette, RgbaColor, SpatialPartition2D,
     };
+    use crate::api::model::operators::PlotResultDescriptor;
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
     use crate::api::model::{ColorizerTypeDbType, HashMapTextTextDbType};
@@ -495,9 +497,8 @@ mod tests {
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureDataType, Measurement, RasterQueryRectangle,
-        SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-        VectorQueryRectangle,
+        BoundingBox2D, Coordinate2D, FeatureDataType, RasterQueryRectangle, SpatialResolution,
+        TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
     };
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
@@ -789,7 +790,7 @@ mod tests {
                         "foo".to_owned(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
+                            measurement: Measurement::Unitless.into(),
                         },
                     )]
                     .into_iter()
@@ -857,7 +858,7 @@ mod tests {
                             "foo".to_owned(),
                             VectorColumnInfo {
                                 data_type: FeatureDataType::Float,
-                                measurement: Measurement::Unitless
+                                measurement: Measurement::Unitless.into()
                             }
                         )]
                         .into_iter()
@@ -983,7 +984,7 @@ mod tests {
                         "foo".to_owned(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
+                            measurement: Measurement::Unitless.into(),
                         },
                     )]
                     .into_iter()
@@ -1851,7 +1852,7 @@ mod tests {
                         "foo".to_owned(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
+                            measurement: Measurement::Unitless.into(),
                         },
                     )]
                     .into_iter()
@@ -1947,7 +1948,7 @@ mod tests {
                         "foo".to_owned(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
+                            measurement: Measurement::Unitless.into(),
                         },
                     )]
                     .into_iter()
@@ -2402,7 +2403,7 @@ mod tests {
                         "foo".to_owned(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
+                            measurement: Measurement::Unitless.into(),
                         },
                     )]
                     .into_iter()
@@ -2732,6 +2733,242 @@ mod tests {
                             }),
                         }),
                     }),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "RasterDataType",
+                [
+                    crate::api::model::datatypes::RasterDataType::U8,
+                    crate::api::model::datatypes::RasterDataType::U16,
+                    crate::api::model::datatypes::RasterDataType::U32,
+                    crate::api::model::datatypes::RasterDataType::U64,
+                    crate::api::model::datatypes::RasterDataType::I8,
+                    crate::api::model::datatypes::RasterDataType::I16,
+                    crate::api::model::datatypes::RasterDataType::I32,
+                    crate::api::model::datatypes::RasterDataType::I64,
+                    crate::api::model::datatypes::RasterDataType::F32,
+                    crate::api::model::datatypes::RasterDataType::F64,
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Measurement",
+                [
+                    Measurement::Unitless,
+                    Measurement::Continuous(ContinuousMeasurement {
+                        measurement: "Temperature".to_string(),
+                        unit: Some("°C".to_string()),
+                    }),
+                    Measurement::Classification(ClassificationMeasurement {
+                        measurement: "Color".to_string(),
+                        classes: [(1, "Grayscale".to_string()), (2, "Colorful".to_string())].into(),
+                    }),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Coordinate2D",
+                [crate::api::model::datatypes::Coordinate2D::from(
+                    Coordinate2D::new(0.0f64, 1.),
+                )],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "SpatialPartition2D",
+                [crate::api::model::datatypes::SpatialPartition2D {
+                    upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                    lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "BoundingBox2D",
+                [crate::api::model::datatypes::BoundingBox2D {
+                    lower_left_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                    upper_right_coordinate: Coordinate2D::new(2., 1.0).into(),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "SpatialResolution",
+                [crate::api::model::datatypes::SpatialResolution { x: 1.2, y: 2.3 }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "VectorDataType",
+                [
+                    crate::api::model::datatypes::VectorDataType::Data,
+                    crate::api::model::datatypes::VectorDataType::MultiPoint,
+                    crate::api::model::datatypes::VectorDataType::MultiLineString,
+                    crate::api::model::datatypes::VectorDataType::MultiPolygon,
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "FeatureDataType",
+                [
+                    crate::api::model::datatypes::FeatureDataType::Category,
+                    crate::api::model::datatypes::FeatureDataType::Int,
+                    crate::api::model::datatypes::FeatureDataType::Float,
+                    crate::api::model::datatypes::FeatureDataType::Text,
+                    crate::api::model::datatypes::FeatureDataType::Bool,
+                    crate::api::model::datatypes::FeatureDataType::DateTime,
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "TimeInterval",
+                [crate::api::model::datatypes::TimeInterval::from(
+                    TimeInterval::default(),
+                )],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "SpatialReference",
+                [
+                    crate::api::model::datatypes::SpatialReferenceOption::Unreferenced,
+                    crate::api::model::datatypes::SpatialReferenceOption::SpatialReference(
+                        SpatialReference::epsg_4326().into(),
+                    ),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "PlotResultDescriptor",
+                [PlotResultDescriptor {
+                    spatial_reference: SpatialReferenceOption::Unreferenced.into(),
+                    time: None,
+                    bbox: None,
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "VectorResultDescriptor",
+                [crate::api::model::operators::VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint.into(),
+                    spatial_reference: SpatialReferenceOption::SpatialReference(
+                        SpatialReference::epsg_4326(),
+                    )
+                    .into(),
+                    columns: [(
+                        "foo".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Int,
+                            measurement: Measurement::Unitless.into(),
+                        }
+                        .into(),
+                    )]
+                    .into(),
+                    time: Some(TimeInterval::default().into()),
+                    bbox: Some(
+                        BoundingBox2D::new(
+                            Coordinate2D::new(0.0f64, 0.5),
+                            Coordinate2D::new(2., 1.0),
+                        )
+                        .unwrap()
+                        .into(),
+                    ),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "RasterResultDescriptor",
+                [crate::api::model::operators::RasterResultDescriptor {
+                    data_type: RasterDataType::U8.into(),
+                    spatial_reference: SpatialReferenceOption::SpatialReference(
+                        SpatialReference::epsg_4326(),
+                    )
+                    .into(),
+                    measurement: Measurement::Unitless,
+                    time: Some(TimeInterval::default().into()),
+                    bbox: Some(SpatialPartition2D {
+                        upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                        lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                    }),
+                    resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }.into()),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "ResultDescriptor",
+                [
+                    crate::api::model::operators::TypedResultDescriptor::Vector(
+                        VectorResultDescriptor {
+                            data_type: VectorDataType::MultiPoint,
+                            spatial_reference: SpatialReferenceOption::SpatialReference(
+                                SpatialReference::epsg_4326(),
+                            ),
+                            columns: [(
+                                "foo".to_string(),
+                                VectorColumnInfo {
+                                    data_type: FeatureDataType::Int,
+                                    measurement: Measurement::Unitless.into(),
+                                },
+                            )]
+                            .into(),
+                            time: Some(TimeInterval::default()),
+                            bbox: Some(
+                                BoundingBox2D::new(
+                                    Coordinate2D::new(0.0f64, 0.5),
+                                    Coordinate2D::new(2., 1.0),
+                                )
+                                .unwrap(),
+                            ),
+                        }
+                        .into(),
+                    ),
+                    crate::api::model::operators::TypedResultDescriptor::Raster(
+                        crate::api::model::operators::RasterResultDescriptor {
+                            data_type: RasterDataType::U8.into(),
+                            spatial_reference: SpatialReferenceOption::SpatialReference(
+                                SpatialReference::epsg_4326(),
+                            )
+                            .into(),
+                            measurement: Measurement::Unitless,
+                            time: Some(TimeInterval::default().into()),
+                            bbox: Some(SpatialPartition2D {
+                                upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                                lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                            }),
+                            resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }.into()),
+                        },
+                    ),
+                    crate::api::model::operators::TypedResultDescriptor::Plot(
+                        PlotResultDescriptor {
+                            spatial_reference: SpatialReferenceOption::Unreferenced.into(),
+                            time: None,
+                            bbox: None,
+                        },
+                    ),
                 ],
             )
             .await;

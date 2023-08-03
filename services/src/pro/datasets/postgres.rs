@@ -104,7 +104,7 @@ where
                     description: row.get(3),
                     tags: row.get::<_, Option<_>>(4).unwrap_or_default(),
                     source_operator: row.get(5),
-                    result_descriptor: serde_json::from_value(row.get(6))?,
+                    result_descriptor: row.get(6),
                     symbology: row.get(7),
                 })
             })
@@ -146,7 +146,7 @@ where
             name: row.get(1),
             display_name: row.get(2),
             description: row.get(3),
-            result_descriptor: serde_json::from_value(row.get(4))?,
+            result_descriptor: row.get(4),
             source_operator: row.get(5),
             symbology: row.get(6),
             provenance: row.get(7),
@@ -371,7 +371,7 @@ where
 
 pub struct DatasetMetaDataJson {
     meta_data: serde_json::Value,
-    result_descriptor: serde_json::Value,
+    result_descriptor: crate::api::model::operators::TypedResultDescriptor,
 }
 
 impl<Tls> DatasetStorer for ProPostgresDb<Tls>
@@ -395,39 +395,27 @@ where
         match self {
             MetaDataDefinition::MockMetaData(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
-                    d.result_descriptor.clone(),
-                ))?,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
             MetaDataDefinition::OgrMetaData(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
-                    d.result_descriptor.clone(),
-                ))?,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
             MetaDataDefinition::GdalMetaDataRegular(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
-                    d.result_descriptor.clone(),
-                ))?,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
             MetaDataDefinition::GdalStatic(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
-                    d.result_descriptor.clone(),
-                ))?,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
             MetaDataDefinition::GdalMetadataNetCdfCf(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
-                    d.result_descriptor.clone(),
-                ))?,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
             MetaDataDefinition::GdalMetaDataList(d) => Ok(DatasetMetaDataJson {
                 meta_data: serde_json::to_value(self)?,
-                result_descriptor: serde_json::to_value(TypedResultDescriptor::from(
-                    d.result_descriptor.clone(),
-                ))?,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
         }
     }
