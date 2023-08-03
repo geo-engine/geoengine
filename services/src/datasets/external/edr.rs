@@ -1166,7 +1166,11 @@ mod tests {
 
     use crate::api::model::datatypes::ExternalDataId;
     use futures_util::StreamExt;
-    use geoengine_datatypes::{primitives::SpatialResolution, test_data, util::test::TestDefault};
+    use geoengine_datatypes::{
+        primitives::SpatialResolution,
+        test_data,
+        util::{gdal::hide_gdal_errors, test::TestDefault},
+    };
     use geoengine_operators::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, WorkflowOperatorPath,
     };
@@ -1175,7 +1179,9 @@ mod tests {
 
     #[tokio::test]
     async fn query_data() -> Result<()> {
-        let layer_id = "collections/GFS_between-depth/liquid-volumetric-soil-moisture-non-frozen";
+        hide_gdal_errors();
+
+        let layer_id = "collections!GFS_between-depth!liquid-volumetric-soil-moisture-non-frozen";
         let provider_id = "dc2ddc34-b0d9-4ee0-bf3e-414f01a805ad";
 
         let mut exe: MockExecutionContext = MockExecutionContext::test_default();
@@ -1223,8 +1229,6 @@ mod tests {
         .await
         .unwrap();
 
-        println!("{:?}", op.result_descriptor());
-
         let processor = op.query_processor()?.get_u8().unwrap();
 
         let spatial_bounds = SpatialPartition2D::new((0., 90.).into(), (180., 0.).into()).unwrap();
@@ -1232,14 +1236,14 @@ mod tests {
         let spatial_resolution = SpatialResolution::new_unchecked(1., 1.);
         let query = RasterQueryRectangle {
             spatial_bounds,
-            time_interval: TimeInterval::new_unchecked(1687867200000, 1688806800000),
+            time_interval: TimeInterval::new_unchecked(1_687_867_200_000, 1_688_806_800_000),
             spatial_resolution,
         };
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let tile_stream = processor.query(query, &ctx).await?;
-        assert_eq!(tile_stream.count().await, 4);
+        assert_eq!(tile_stream.count().await, 2);
 
         Ok(())
     }
