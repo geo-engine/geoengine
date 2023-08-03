@@ -188,7 +188,7 @@ impl EdrDataProvider {
             .skip(options.offset as usize)
             .take(options.limit as usize)
             .map(|collection| {
-                if collection.is_raster_file()? {
+                if collection.is_raster_file()? || collection.extent.vertical.is_some() {
                     Ok(CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
@@ -243,19 +243,35 @@ impl EdrDataProvider {
             .skip(options.offset as usize)
             .take(options.limit as usize)
             .map(|parameter_name| {
-                Ok(CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: self.id,
-                        collection_id: EdrCollectionId::ParameterOrHeight {
-                            collection: collection_meta.id.clone(),
-                            parameter: parameter_name.clone(),
-                        }
-                        .try_into()?,
-                    },
-                    name: parameter_name,
-                    description: String::new(),
-                    properties: vec![],
-                }))
+                if collection_meta.extent.vertical.is_some() {
+                    Ok(CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: self.id,
+                            collection_id: EdrCollectionId::ParameterOrHeight {
+                                collection: collection_meta.id.clone(),
+                                parameter: parameter_name.clone(),
+                            }
+                            .try_into()?,
+                        },
+                        name: parameter_name,
+                        description: String::new(),
+                        properties: vec![],
+                    }))
+                } else {
+                    Ok(CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: self.id,
+                            layer_id: EdrCollectionId::ParameterOrHeight {
+                                collection: collection_meta.id.clone(),
+                                parameter: parameter_name.clone(),
+                            }
+                            .try_into()?,
+                        },
+                        name: parameter_name,
+                        description: String::new(),
+                        properties: vec![],
+                    }))
+                }
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
 
@@ -278,42 +294,30 @@ impl EdrDataProvider {
         collection_meta: EdrCollectionMetaData,
         options: &LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
-        let items = match collection_meta.extent.vertical {
-            Some(vertical) => vertical
-                .values
-                .into_iter()
-                .skip(options.offset as usize)
-                .take(options.limit as usize)
-                .map(|height| {
-                    Ok(CollectionItem::Layer(LayerListing {
-                        id: ProviderLayerId {
-                            provider_id: self.id,
-                            layer_id: EdrCollectionId::ParameterOrHeight {
-                                collection: collection_meta.id.clone(),
-                                parameter: height.clone(),
-                            }
-                            .try_into()?,
-                        },
-                        name: height,
-                        description: String::new(),
-                        properties: vec![],
-                    }))
-                })
-                .collect::<Result<Vec<CollectionItem>>>()?,
-            None => vec![CollectionItem::Layer(LayerListing {
-                id: ProviderLayerId {
-                    provider_id: self.id,
-                    layer_id: EdrCollectionId::ParameterOrHeight {
-                        collection: collection_meta.id.clone(),
-                        parameter: "default".to_string(),
-                    }
-                    .try_into()?,
-                },
-                name: "default height".to_string(),
-                description: String::new(),
-                properties: vec![],
-            })],
-        };
+        let items = collection_meta
+            .extent
+            .vertical
+            .expect("checked before")
+            .values
+            .into_iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .map(|height| {
+                Ok(CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: self.id,
+                        layer_id: EdrCollectionId::ParameterOrHeight {
+                            collection: collection_meta.id.clone(),
+                            parameter: height.clone(),
+                        }
+                        .try_into()?,
+                    },
+                    name: height,
+                    description: String::new(),
+                    properties: vec![],
+                }))
+            })
+            .collect::<Result<Vec<CollectionItem>>>()?;
 
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
@@ -335,44 +339,31 @@ impl EdrDataProvider {
         parameter: &str,
         options: &LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
-        let items = match collection_meta.extent.vertical {
-            Some(vertical) => vertical
-                .values
-                .into_iter()
-                .skip(options.offset as usize)
-                .take(options.limit as usize)
-                .map(|height| {
-                    Ok(CollectionItem::Layer(LayerListing {
-                        id: ProviderLayerId {
-                            provider_id: self.id,
-                            layer_id: EdrCollectionId::ParameterAndHeight {
-                                collection: collection_meta.id.clone(),
-                                parameter: parameter.to_string(),
-                                height: height.clone(),
-                            }
-                            .try_into()?,
-                        },
-                        name: height,
-                        description: String::new(),
-                        properties: vec![],
-                    }))
-                })
-                .collect::<Result<Vec<CollectionItem>>>()?,
-            None => vec![CollectionItem::Layer(LayerListing {
-                id: ProviderLayerId {
-                    provider_id: self.id,
-                    layer_id: EdrCollectionId::ParameterAndHeight {
-                        collection: collection_meta.id.clone(),
-                        parameter: parameter.to_string(),
-                        height: "default".to_string(),
-                    }
-                    .try_into()?,
-                },
-                name: "default height".to_string(),
-                description: String::new(),
-                properties: vec![],
-            })],
-        };
+        let items = collection_meta
+            .extent
+            .vertical
+            .expect("checked before")
+            .values
+            .into_iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .map(|height| {
+                Ok(CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: self.id,
+                        layer_id: EdrCollectionId::ParameterAndHeight {
+                            collection: collection_meta.id.clone(),
+                            parameter: parameter.to_string(),
+                            height: height.clone(),
+                        }
+                        .try_into()?,
+                    },
+                    name: height,
+                    description: String::new(),
+                    properties: vec![],
+                }))
+            })
+            .collect::<Result<Vec<CollectionItem>>>()?;
 
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
@@ -462,7 +453,7 @@ impl EdrCollectionMetaData {
         &self,
         base_url: &Url,
         height: &str,
-        discrete_vrs: &Vec<String>,
+        discrete_vrs: &[String],
     ) -> Result<(String, String), geoengine_operators::error::Error> {
         let spatial_extent = self.extent.spatial.as_ref().ok_or_else(|| {
             geoengine_operators::error::Error::DatasetMetaData {
@@ -516,7 +507,7 @@ impl EdrCollectionMetaData {
         parameter_name: &str,
         height: &str,
         time: &str,
-        discrete_vrs: &Vec<String>,
+        discrete_vrs: &[String],
     ) -> Result<String, geoengine_operators::error::Error> {
         let spatial_extent = self.extent.spatial.as_ref().ok_or_else(|| {
             geoengine_operators::error::Error::DatasetMetaData {
@@ -670,7 +661,7 @@ impl EdrCollectionMetaData {
         height: &str,
         vector_spec: EdrVectorSpec,
         cache_ttl: CacheTtlSeconds,
-        discrete_vrs: &Vec<String>,
+        discrete_vrs: &[String],
     ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>
     {
         let (download_url, layer_name) =
@@ -759,7 +750,7 @@ struct EdrExtents {
 }
 
 impl EdrExtents {
-    fn has_discrete_vertical_axis(&self, discrete_vrs: &Vec<String>) -> bool {
+    fn has_discrete_vertical_axis(&self, discrete_vrs: &[String]) -> bool {
         self.vertical
             .as_ref()
             .map_or(false, |val| discrete_vrs.contains(&val.vrs))
@@ -913,8 +904,10 @@ impl LayerCollectionProvider for EdrDataProvider {
 
                 if collection_meta.is_raster_file()? {
                     self.get_raster_parameter_collection(collection_id, collection_meta, &options)
-                } else {
+                } else if collection_meta.extent.vertical.is_some() {
                     self.get_vector_height_collection(collection_id, collection_meta, &options)
+                } else {
+                    Err(Error::InvalidLayerCollectionId)
                 }
             }
             EdrCollectionId::ParameterOrHeight {
@@ -923,7 +916,7 @@ impl LayerCollectionProvider for EdrDataProvider {
             } => {
                 let collection_meta = self.load_collection_by_name(&collection).await?;
 
-                if !collection_meta.is_raster_file()? {
+                if !collection_meta.is_raster_file()? || collection_meta.extent.vertical.is_none() {
                     return Err(Error::InvalidLayerCollectionId);
                 }
                 self.get_raster_height_collection(
@@ -1040,7 +1033,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         let (edr_id, collection) = self.load_collection_by_dataid(id).await?;
 
         let height = match edr_id {
-            EdrCollectionId::Collection { .. } => "0".to_string(),
+            EdrCollectionId::Collection { .. } => "default".to_string(),
             EdrCollectionId::ParameterOrHeight { parameter, .. } => parameter,
             _ => unreachable!(),
         };
@@ -1075,7 +1068,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         let (edr_id, collection) = self.load_collection_by_dataid(id).await?;
 
         let (parameter, height) = match edr_id {
-            EdrCollectionId::ParameterOrHeight { parameter, .. } => (parameter, "0".to_string()),
+            EdrCollectionId::ParameterOrHeight { parameter, .. } => {
+                (parameter, "default".to_string())
+            }
             EdrCollectionId::ParameterAndHeight {
                 parameter, height, ..
             } => (parameter, height),
