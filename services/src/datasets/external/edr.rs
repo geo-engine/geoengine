@@ -938,16 +938,7 @@ impl LayerCollectionProvider for EdrDataProvider {
         let edr_id: EdrCollectionId = EdrCollectionId::from_str(&id.0)?;
         let collection_id = edr_id.get_collection_id()?;
 
-        let collection: EdrCollectionMetaData = self
-            .client
-            .get(
-                self.base_url
-                    .join(&format!("collections/{collection_id}?f=json"))?,
-            )
-            .send()
-            .await?
-            .json()
-            .await?;
+        let collection = self.load_collection_by_name(collection_id).await?;
 
         let operator = if collection.is_raster_file()? {
             TypedOperator::Raster(
