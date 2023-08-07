@@ -259,7 +259,7 @@ impl From<VectorResultDescriptor> for TypedResultDescriptor {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema, FromSql, ToSql)]
 pub struct MockDatasetDataSourceLoadingInfo {
     pub points: Vec<Coordinate2D>,
 }
@@ -602,7 +602,7 @@ impl From<OgrSourceTimeFormat> for geoengine_operators::source::OgrSourceTimeFor
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 pub enum UnixTimeStampType {
     EpochSeconds,
@@ -1231,7 +1231,7 @@ impl From<GdalLoadingInfoTemporalSlice>
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "lowercase")]
 pub enum CsvHeader {
     Yes,

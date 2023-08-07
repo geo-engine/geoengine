@@ -462,7 +462,7 @@ mod tests {
         DatasetName, DefaultColors, LayerId, LinearGradient, LogarithmicGradient, Measurement,
         NotNanF64, OverUnderColors, Palette, RgbaColor, SpatialPartition2D,
     };
-    use crate::api::model::operators::PlotResultDescriptor;
+    use crate::api::model::operators::{PlotResultDescriptor, UnixTimeStampType};
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
     use crate::api::model::ColorizerTypeDbType;
@@ -2967,6 +2967,91 @@ mod tests {
                         },
                     ),
                 ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "MockDatasetDataSourceLoadingInfo",
+                [
+                    crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
+                        points: vec![
+                            Coordinate2D::new(0.0f64, 0.5).into(),
+                            Coordinate2D::new(2., 1.0).into(),
+                        ],
+                    },
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "OgrSourceTimeFormat",
+                [
+                    crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                    crate::api::model::operators::OgrSourceTimeFormat::Custom {
+                        custom_format:
+                            geoengine_datatypes::primitives::DateTimeParseFormat::custom(
+                                "%Y-%m-%dT%H:%M:%S%.3fZ".to_string(),
+                            )
+                            .into(),
+                    },
+                    crate::api::model::operators::OgrSourceTimeFormat::UnixTimeStamp {
+                        timestamp_type: UnixTimeStampType::EpochSeconds,
+                        fmt: geoengine_datatypes::primitives::DateTimeParseFormat::unix().into(),
+                    },
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "OgrSourceDurationSpec",
+                [
+                    crate::api::model::operators::OgrSourceDurationSpec::Infinite,
+                    crate::api::model::operators::OgrSourceDurationSpec::Zero,
+                    crate::api::model::operators::OgrSourceDurationSpec::Value(
+                        TimeStep {
+                            granularity: TimeGranularity::Millis,
+                            step: 1000,
+                        }
+                        .into(),
+                    ),
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "OgrSourceDatasetTimeType",
+                [
+                    crate::api::model::operators::OgrSourceDatasetTimeType::None,
+                    crate::api::model::operators::OgrSourceDatasetTimeType::Start {
+                        start_field: "start".to_string(),
+                        start_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                        duration: crate::api::model::operators::OgrSourceDurationSpec::Zero,
+                    },
+                    crate::api::model::operators::OgrSourceDatasetTimeType::StartEnd {
+                        start_field: "start".to_string(),
+                        start_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                        end_field: "end".to_string(),
+                        end_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                    },
+                    crate::api::model::operators::OgrSourceDatasetTimeType::StartDuration {
+                        start_field: "start".to_string(),
+                        start_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                        duration_field: "duration".to_string(),
+                    },
+                ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "FormatSpecifics",
+                [crate::api::model::operators::FormatSpecifics::Csv {
+                    header: CsvHeader::Yes.into(),
+                }],
             )
             .await;
         })

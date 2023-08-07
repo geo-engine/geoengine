@@ -1257,7 +1257,7 @@ impl<'de> Deserialize<'de> for TimeInstance {
 }
 
 /// A time granularity.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub enum TimeGranularity {
     Millis,
@@ -1297,7 +1297,7 @@ impl From<TimeGranularity> for geoengine_datatypes::primitives::TimeGranularity 
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, FromSql, ToSql)]
 pub struct TimeStep {
     pub granularity: TimeGranularity,
     pub step: u32, // TODO: ensure on deserialization it is > 0
@@ -1859,7 +1859,7 @@ impl From<RasterPropertiesEntryType> for geoengine_datatypes::raster::RasterProp
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema, FromSql, ToSql)]
 pub struct DateTimeParseFormat {
     fmt: String,
     has_tz: bool,
@@ -1904,7 +1904,7 @@ impl From<NoGeometry> for geoengine_datatypes::primitives::NoGeometry {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema, FromSql, ToSql)]
 pub struct MultiPoint {
     coordinates: Vec<Coordinate2D>,
 }

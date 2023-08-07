@@ -252,6 +252,177 @@ CREATE TYPE "ResultDescriptor" AS (
     plot "PlotResultDescriptor"
 );
 
+CREATE TYPE "MockDatasetDataSourceLoadingInfo" AS (
+    points "Coordinate2D" []
+);
+
+CREATE TYPE "DateTimeParseFormat" AS (
+    fmt text,
+    has_tz boolean,
+    has_time boolean
+);
+
+CREATE TYPE "OgrSourceTimeFormatCustom" AS (
+    custom_format "DateTimeParseFormat"
+);
+
+CREATE TYPE "UnixTimeStampType" AS ENUM (
+    'EpochSeconds',
+    'EpochMilliseconds'
+);
+
+CREATE TYPE "OgrSourceTimeFormatUnixTimeStamp" AS (
+    timestamp_type "UnixTimeStampType",
+    fmt "DateTimeParseFormat"
+);
+
+CREATE TYPE "OgrSourceTimeFormat" AS (
+    -- oneOf
+    -- Auto
+    custom "OgrSourceTimeFormatCustom",
+    unix_time_stamp "OgrSourceTimeFormatUnixTimeStamp"
+);
+
+CREATE TYPE "OgrSourceDurationSpec" AS (
+    -- oneOf
+    infinite boolean, -- void
+    zero boolean, -- void
+    "value" "TimeStep"
+);
+
+CREATE TYPE "OgrSourceDatasetTimeTypeStart" AS (
+    start_field text,
+    start_format "OgrSourceTimeFormat",
+    duration "OgrSourceDurationSpec"
+);
+
+CREATE TYPE "OgrSourceDatasetTimeTypeStartEnd" AS (
+    start_field text,
+    start_format "OgrSourceTimeFormat",
+    end_field text,
+    end_format "OgrSourceTimeFormat"
+);
+
+CREATE TYPE "OgrSourceDatasetTimeTypeStartDuration" AS (
+    start_field text,
+    start_format "OgrSourceTimeFormat",
+    duration_field text
+);
+
+CREATE TYPE "OgrSourceDatasetTimeType" AS (
+    -- oneOf
+    -- None
+    "start" "OgrSourceDatasetTimeTypeStart",
+    start_end "OgrSourceDatasetTimeTypeStartEnd",
+    start_duration "OgrSourceDatasetTimeTypeStartDuration"
+);
+
+CREATE TYPE "CsvHeader" AS ENUM (
+    'Yes',
+    'No',
+    'Auto'
+);
+
+CREATE TYPE "FormatSpecificsCsv" AS (
+    header "CsvHeader"
+);
+
+CREATE TYPE "FormatSpecifics" AS (
+    -- oneOf
+    csv "FormatSpecificsCsv"
+);
+
+CREATE TYPE "OgrSourceColumnSpec" AS (
+    format_specifics "FormatSpecifics",
+    x text,
+    y text,
+    "int" text [],
+    "float" text [],
+    "text" text [],
+    bool text [],
+    "datetime" text [],
+    rename boolean [] -- "TextTextKeyValue" []
+);
+
+CREATE TYPE "OgrSourceErrorSpec" AS ENUM (
+    'Ignore',
+    'Abort'
+);
+
+CREATE DOMAIN "Coordinate2DArray1" AS "Coordinate2D" [];
+CREATE DOMAIN "Coordinate2DArray2" AS "Coordinate2DArray1" [];
+
+CREATE TYPE "MultiPoint" AS (
+    coordinates "Coordinate2D" []
+);
+
+CREATE TYPE "MultiLineString" AS (
+    coordinates "Coordinate2DArray1" []
+);
+
+CREATE TYPE "MultiPolygon" AS (
+    polygons "Coordinate2DArray2" []
+);
+
+CREATE TYPE "TypedGeometry" AS (
+    -- oneOf
+    data boolean, -- void
+    multi_point "MultiPoint",
+    multi_line_string "MultiLineString",
+    multi_polygon "MultiPolygon"
+);
+
+CREATE TYPE "OgrSourceDataset" AS (
+    file_name text,
+    layer_name text,
+    data_type "VectorDataType",
+    time "OgrSourceDatasetTimeType",
+    default_geometry "TypedGeometry",
+    columns "OgrSourceColumnSpec",
+    force_ogr_time_filter boolean,
+    force_ogr_spatial_filter boolean,
+    on_error "OgrSourceErrorSpec",
+    sql_query text,
+    attribute_query text,
+    cache_ttl int
+);
+
+CREATE TYPE "MockMetaData" AS (
+    loading_info "MockDatasetDataSourceLoadingInfo",
+    result_descriptor "VectorResultDescriptor"
+);
+
+CREATE TYPE "OgrMetaData" AS (
+    loading_info "OgrSourceDataset",
+    result_descriptor "VectorResultDescriptor"
+);
+
+CREATE TYPE "GdalMetaDataRegular" AS (
+    "todo" boolean
+);
+
+CREATE TYPE "GdalStatic" AS (
+    "todo" boolean
+);
+
+CREATE TYPE "GdalMetadataNetCdfCf" AS (
+    "todo" boolean
+);
+
+CREATE TYPE "GdalMetadataList" AS (
+    "todo" boolean
+);
+
+CREATE TYPE "MetaDataDefinition" AS (
+    -- oneOf
+    MockMetaData "MockMetaData",
+    OgrMetaData "OgrMetaData",
+    GdalMetaDataRegular "GdalMetaDataRegular",
+    GdalStatic "GdalStatic",
+    GdalMetadataNetCdfCf "GdalMetadataNetCdfCf",
+    GdalMetadataList "GdalMetadataList"
+);
+
 -- seperate table for projects used in foreign key constraints
 
 CREATE TABLE projects (id uuid PRIMARY KEY);

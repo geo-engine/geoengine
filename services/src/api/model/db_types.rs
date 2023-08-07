@@ -14,12 +14,14 @@ use crate::{
 use super::{
     datatypes::{
         BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-        DefaultColors, FeatureDataType, LinearGradient, LogarithmicGradient, Measurement,
-        OverUnderColors, Palette, RgbaColor, SpatialReferenceOption, TimeInterval, VectorDataType,
+        DateTimeParseFormat, DefaultColors, FeatureDataType, LinearGradient, LogarithmicGradient,
+        Measurement, OverUnderColors, Palette, RgbaColor, SpatialReferenceOption, TimeInterval,
+        TimeStep, VectorDataType,
     },
     operators::{
-        PlotResultDescriptor, RasterResultDescriptor, TypedResultDescriptor, VectorColumnInfo,
-        VectorResultDescriptor,
+        CsvHeader, FormatSpecifics, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
+        OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor, TypedResultDescriptor,
+        UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
     },
 };
 
@@ -576,6 +578,363 @@ impl TryFrom<TypedResultDescriptorDbType> for TypedResultDescriptor {
     }
 }
 
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "OgrSourceTimeFormat")]
+pub struct OgrSourceTimeFormatDbType {
+    custom: Option<OgrSourceTimeFormatCustomDbType>,
+    unix_time_stamp: Option<OgrSourceTimeFormatUnixTimeStampDbType>,
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "OgrSourceTimeFormatCustom")]
+pub struct OgrSourceTimeFormatCustomDbType {
+    custom_format: DateTimeParseFormat,
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "OgrSourceTimeFormatUnixTimeStamp")]
+pub struct OgrSourceTimeFormatUnixTimeStampDbType {
+    timestamp_type: UnixTimeStampType,
+    fmt: DateTimeParseFormat,
+}
+
+impl From<&OgrSourceTimeFormat> for OgrSourceTimeFormatDbType {
+    fn from(other: &OgrSourceTimeFormat) -> Self {
+        match other {
+            OgrSourceTimeFormat::Custom { custom_format } => Self {
+                custom: Some(OgrSourceTimeFormatCustomDbType {
+                    custom_format: custom_format.clone(),
+                }),
+                unix_time_stamp: None,
+            },
+            OgrSourceTimeFormat::UnixTimeStamp {
+                timestamp_type,
+                fmt,
+            } => Self {
+                custom: None,
+                unix_time_stamp: Some(OgrSourceTimeFormatUnixTimeStampDbType {
+                    timestamp_type: *timestamp_type,
+                    fmt: fmt.clone(),
+                }),
+            },
+            OgrSourceTimeFormat::Auto => Self {
+                custom: None,
+                unix_time_stamp: None,
+            },
+        }
+    }
+}
+
+impl TryFrom<OgrSourceTimeFormatDbType> for OgrSourceTimeFormat {
+    type Error = Error;
+
+    fn try_from(other: OgrSourceTimeFormatDbType) -> Result<Self, Self::Error> {
+        match other {
+            OgrSourceTimeFormatDbType {
+                custom: Some(custom),
+                unix_time_stamp: None,
+            } => Ok(Self::Custom {
+                custom_format: custom.custom_format,
+            }),
+            OgrSourceTimeFormatDbType {
+                custom: None,
+                unix_time_stamp: Some(unix_time_stamp),
+            } => Ok(Self::UnixTimeStamp {
+                timestamp_type: unix_time_stamp.timestamp_type,
+                fmt: unix_time_stamp.fmt,
+            }),
+            OgrSourceTimeFormatDbType {
+                custom: None,
+                unix_time_stamp: None,
+            } => Ok(Self::Auto),
+            _ => Err(Error::UnexpectedInvalidDbTypeConversion),
+        }
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "OgrSourceDurationSpec")]
+pub struct OgrSourceDurationSpecDbType {
+    infinite: bool,
+    zero: bool,
+    value: Option<TimeStep>,
+}
+
+impl From<&OgrSourceDurationSpec> for OgrSourceDurationSpecDbType {
+    fn from(other: &OgrSourceDurationSpec) -> Self {
+        match other {
+            OgrSourceDurationSpec::Infinite => Self {
+                infinite: true,
+                zero: false,
+                value: None,
+            },
+            OgrSourceDurationSpec::Zero => Self {
+                infinite: false,
+                zero: true,
+                value: None,
+            },
+            OgrSourceDurationSpec::Value(value) => Self {
+                infinite: false,
+                zero: false,
+                value: Some(*value),
+            },
+        }
+    }
+}
+
+impl TryFrom<OgrSourceDurationSpecDbType> for OgrSourceDurationSpec {
+    type Error = Error;
+
+    fn try_from(other: OgrSourceDurationSpecDbType) -> Result<Self, Self::Error> {
+        match other {
+            OgrSourceDurationSpecDbType {
+                infinite: true,
+                zero: false,
+                value: None,
+            } => Ok(Self::Infinite),
+            OgrSourceDurationSpecDbType {
+                infinite: false,
+                zero: true,
+                value: None,
+            } => Ok(Self::Zero),
+            OgrSourceDurationSpecDbType {
+                infinite: false,
+                zero: false,
+                value: Some(value),
+            } => Ok(Self::Value(value)),
+            _ => Err(Error::UnexpectedInvalidDbTypeConversion),
+        }
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "OgrSourceDatasetTimeType")]
+pub struct OgrSourceDatasetTimeTypeDbType {
+    start: Option<OgrSourceDatasetTimeTypeStartDbType>,
+    start_end: Option<OgrSourceDatasetTimeTypeStartEndDbType>,
+    start_duration: Option<OgrSourceDatasetTimeTypeStartDurationDbType>,
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "OgrSourceDatasetTimeTypeStart")]
+pub struct OgrSourceDatasetTimeTypeStartDbType {
+    start_field: String,
+    start_format: OgrSourceTimeFormat,
+    duration: OgrSourceDurationSpec,
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "OgrSourceDatasetTimeTypeStartEnd")]
+pub struct OgrSourceDatasetTimeTypeStartEndDbType {
+    start_field: String,
+    start_format: OgrSourceTimeFormat,
+    end_field: String,
+    end_format: OgrSourceTimeFormat,
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "OgrSourceDatasetTimeTypeStartDuration")]
+pub struct OgrSourceDatasetTimeTypeStartDurationDbType {
+    start_field: String,
+    start_format: OgrSourceTimeFormat,
+    duration_field: String,
+}
+
+impl From<&OgrSourceDatasetTimeType> for OgrSourceDatasetTimeTypeDbType {
+    fn from(other: &OgrSourceDatasetTimeType) -> Self {
+        match other {
+            OgrSourceDatasetTimeType::None => Self {
+                start: None,
+                start_end: None,
+                start_duration: None,
+            },
+            OgrSourceDatasetTimeType::Start {
+                start_field,
+                start_format,
+                duration,
+            } => Self {
+                start: Some(OgrSourceDatasetTimeTypeStartDbType {
+                    start_field: start_field.clone(),
+                    start_format: start_format.clone(),
+                    duration: *duration,
+                }),
+                start_end: None,
+                start_duration: None,
+            },
+            OgrSourceDatasetTimeType::StartEnd {
+                start_field,
+                start_format,
+                end_field,
+                end_format,
+            } => Self {
+                start: None,
+                start_end: Some(OgrSourceDatasetTimeTypeStartEndDbType {
+                    start_field: start_field.clone(),
+                    start_format: start_format.clone(),
+                    end_field: end_field.clone(),
+                    end_format: end_format.clone(),
+                }),
+                start_duration: None,
+            },
+            OgrSourceDatasetTimeType::StartDuration {
+                start_field,
+                start_format,
+                duration_field,
+            } => Self {
+                start: None,
+                start_end: None,
+                start_duration: Some(OgrSourceDatasetTimeTypeStartDurationDbType {
+                    start_field: start_field.clone(),
+                    start_format: start_format.clone(),
+                    duration_field: duration_field.clone(),
+                }),
+            },
+        }
+    }
+}
+
+impl TryFrom<OgrSourceDatasetTimeTypeDbType> for OgrSourceDatasetTimeType {
+    type Error = Error;
+
+    fn try_from(other: OgrSourceDatasetTimeTypeDbType) -> Result<Self, Self::Error> {
+        match other {
+            OgrSourceDatasetTimeTypeDbType {
+                start: None,
+                start_end: None,
+                start_duration: None,
+            } => Ok(Self::None),
+            OgrSourceDatasetTimeTypeDbType {
+                start: Some(start),
+                start_end: None,
+                start_duration: None,
+            } => Ok(Self::Start {
+                start_field: start.start_field,
+                start_format: start.start_format,
+                duration: start.duration,
+            }),
+            OgrSourceDatasetTimeTypeDbType {
+                start: None,
+                start_end: Some(start_end),
+                start_duration: None,
+            } => Ok(Self::StartEnd {
+                start_field: start_end.start_field,
+                start_format: start_end.start_format,
+                end_field: start_end.end_field,
+                end_format: start_end.end_format,
+            }),
+            OgrSourceDatasetTimeTypeDbType {
+                start: None,
+                start_end: None,
+                start_duration: Some(start_duration),
+            } => Ok(Self::StartDuration {
+                start_field: start_duration.start_field,
+                start_format: start_duration.start_format,
+                duration_field: start_duration.duration_field,
+            }),
+            _ => Err(Error::UnexpectedInvalidDbTypeConversion),
+        }
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "FormatSpecifics")]
+pub struct FormatSpecificsDbType {
+    csv: Option<FormatSpecificsCsvDbType>,
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "FormatSpecificsCsv")]
+pub struct FormatSpecificsCsvDbType {
+    header: CsvHeader,
+}
+
+impl From<&FormatSpecifics> for FormatSpecificsDbType {
+    fn from(other: &FormatSpecifics) -> Self {
+        match other {
+            FormatSpecifics::Csv { header } => Self {
+                csv: Some(FormatSpecificsCsvDbType { header: *header }),
+            },
+        }
+    }
+}
+
+impl TryFrom<FormatSpecificsDbType> for FormatSpecifics {
+    type Error = Error;
+
+    fn try_from(other: FormatSpecificsDbType) -> Result<Self, Self::Error> {
+        match other {
+            FormatSpecificsDbType {
+                csv: Some(FormatSpecificsCsvDbType { header }),
+            } => Ok(Self::Csv { header }),
+            _ => Err(Error::UnexpectedInvalidDbTypeConversion),
+        }
+    }
+}
+
+/// TODO: describe
+// macro_rules! create_enum {
+//     (
+//         $StructName:ident,
+//         $postgresName:literal,
+//         $EnumName:ty,
+//         ( $( $variantName:ident : $Variant:path => $VariantType:ty ),+ )
+//     ) => {
+//         #[derive(Debug, ToSql, FromSql)]
+//         #[postgres(name = $postgresName)]
+//         pub struct $StructName {
+//             $(pub $variantName: Option< $VariantType >),+
+//         }
+
+//         impl From<& $EnumName > for $StructName {
+//             fn from(other: & $EnumName) -> Self {
+//                 match other {
+//                     $(
+//                         $Variant(raster) => Self {
+//                             $variantName: Some($variantName.clone()),
+//                             ..None
+//                         }
+//                     ),+
+//                 }
+//             }
+//         }
+
+//         impl TryFrom<$StructName> for $EnumName {
+//             type Error = Error;
+
+//             fn try_from(
+//                 other: $StructName,
+//             ) -> Result<Self, Self::Error> {
+//                 match other {
+//                     $(
+//                         $StructName {
+//                             $variantName: Some($variantName),
+//                             ..
+//                         } => Ok(Self::$Variant($variantName))
+//                     ),+,
+//                     _ => Err(Error::UnexpectedInvalidDbTypeConversion),
+//                 }
+//             }
+//         }
+//     };
+// }
+
+// use crate::api::model::{
+//     datatypes::{MultiLineString, MultiPoint, MultiPolygon, NoGeometry},
+//     operators::TypedGeometry,
+// };
+
+// create_enum!(
+//     TypedGeometryDbType,
+//     "TypedGeometry",
+//     TypedGeometry,
+//     (
+//         data : TypedGeometry::Data => NoGeometry,
+//         multi_point : TypedGeometry::MultiPoint => MultiPoint,
+//         multi_line_string : TypedGeometry::MultiLineString => MultiLineString,
+//         multi_polygon : TypedGeometry::MultiPolygon => MultiPolygon
+//     )
+// );
+
 /// A macro for quickly implementing `FromSql` and `ToSql` for `$RustType` if there is a `From` and `Into`
 /// implementation for another type `$DbType` that already implements it.
 ///
@@ -621,8 +980,12 @@ macro_rules! delegate_from_to_sql {
 delegate_from_to_sql!(Colorizer, ColorizerDbType);
 delegate_from_to_sql!(ColorParam, ColorParamDbType);
 delegate_from_to_sql!(DefaultColors, DefaultColorsDbType);
+delegate_from_to_sql!(FormatSpecifics, FormatSpecificsDbType);
 delegate_from_to_sql!(Measurement, MeasurementDbType);
 delegate_from_to_sql!(NumberParam, NumberParamDbType);
+delegate_from_to_sql!(OgrSourceDatasetTimeType, OgrSourceDatasetTimeTypeDbType);
+delegate_from_to_sql!(OgrSourceDurationSpec, OgrSourceDurationSpecDbType);
+delegate_from_to_sql!(OgrSourceTimeFormat, OgrSourceTimeFormatDbType);
 delegate_from_to_sql!(Symbology, SymbologyDbType);
 delegate_from_to_sql!(TypedResultDescriptor, TypedResultDescriptorDbType);
 delegate_from_to_sql!(VectorResultDescriptor, VectorResultDescriptorDbType);
