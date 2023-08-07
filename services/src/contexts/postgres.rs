@@ -496,6 +496,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::str::FromStr;
 
     use super::*;
@@ -507,7 +508,7 @@ mod tests {
     use crate::api::model::operators::PlotResultDescriptor;
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
-    use crate::api::model::ColorizerTypeDbType;
+    use crate::api::model::{ColorizerTypeDbType, HashMapTextTextDbType};
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
@@ -2495,8 +2496,10 @@ mod tests {
         ) where
             T: PartialEq + postgres_types::FromSqlOwned + postgres_types::ToSql + Sync,
         {
+            const UNQUOTED: [&str; 1] = ["double precision"];
+
             // don't quote built-in types
-            let quote = if sql_type == "double precision" {
+            let quote = if UNQUOTED.contains(&sql_type) || sql_type.contains('[') {
                 ""
             } else {
                 "\""
@@ -3009,6 +3012,18 @@ mod tests {
                         },
                     ),
                 ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "\"TextTextKeyValue\"[]",
+                [HashMapTextTextDbType::from(
+                    &HashMap::<String, String>::from([
+                        ("foo".to_string(), "bar".to_string()),
+                        ("baz".to_string(), "fuu".to_string()),
+                    ]),
+                )],
             )
             .await;
         })

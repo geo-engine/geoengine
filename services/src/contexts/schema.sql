@@ -176,6 +176,11 @@ CREATE TYPE "SmallintTextKeyValue" AS (
     value text
 );
 
+CREATE TYPE "TextTextKeyValue" AS (
+    key text,
+    value text
+);
+
 CREATE TYPE "ClassificationMeasurement" AS (
     measurement text,
     classes "SmallintTextKeyValue" []
@@ -373,7 +378,7 @@ CREATE TABLE layers (
     workflow json NOT NULL,
     symbology "Symbology",
     properties "PropertyType" [] NOT NULL,
-    metadata json NOT NULL
+    metadata "TextTextKeyValue" [] NOT NULL
 );
 
 CREATE TABLE collection_layers (
