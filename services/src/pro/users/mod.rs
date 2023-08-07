@@ -1,11 +1,9 @@
-mod hashmap_userdb;
 mod oidc;
 mod postgres_userdb;
 mod session;
 mod user;
 mod userdb;
 
-pub use hashmap_userdb::HashMapUserDbBackend;
 pub(crate) use oidc::OidcError;
 #[cfg(test)]
 pub(super) use oidc::{

@@ -269,51 +269,52 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{InMemoryContext, Session};
+    use crate::contexts::Session;
     use crate::contexts::{SessionContext, SimpleApplicationContext};
     use crate::util::tests::send_test_request;
+    use crate::util::tests::with_temp_context;
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use float_cmp::approx_eq;
     use geoengine_datatypes::primitives::BoundingBox2D;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
-    use geoengine_datatypes::util::test::TestDefault;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_spatial_reference() {
-        let app_ctx = InMemoryContext::test_default();
+        with_temp_context(|app_ctx, _| async move {
+            let ctx = app_ctx.default_session_context().await.unwrap();
+            let session_id = ctx.session().id();
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+            let req = actix_web::test::TestRequest::get()
+                .uri("/spatialReferenceSpecification/EPSG:4326")
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let res = send_test_request(req, app_ctx).await;
 
-        let req = actix_web::test::TestRequest::get()
-            .uri("/spatialReferenceSpecification/EPSG:4326")
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+            assert_eq!(res.status(), 200);
 
-        assert_eq!(res.status(), 200);
-
-        let spec: SpatialReferenceSpecification = actix_web::test::read_body_json(res).await;
-        assert_eq!(
-            SpatialReferenceSpecification {
-                name: "WGS 84".to_owned(),
-                spatial_reference: SpatialReference::epsg_4326().into(),
-                proj_string: "+proj=longlat +datum=WGS84 +no_defs +type=crs".to_owned(),
-                extent: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into())
-                    .into(),
-                axis_labels: Some(
-                    (
-                        "Geodetic longitude".to_owned(),
-                        "Geodetic latitude".to_owned()
-                    )
-                        .into()
-                ),
-                axis_order: Some(AxisOrder::NorthEast),
-            },
-            spec
-        );
+            let spec: SpatialReferenceSpecification = actix_web::test::read_body_json(res).await;
+            assert_eq!(
+                SpatialReferenceSpecification {
+                    name: "WGS 84".to_owned(),
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    proj_string: "+proj=longlat +datum=WGS84 +no_defs +type=crs".to_owned(),
+                    extent: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into())
+                        .into(),
+                    axis_labels: Some(
+                        (
+                            "Geodetic longitude".to_owned(),
+                            "Geodetic latitude".to_owned()
+                        )
+                            .into()
+                    ),
+                    axis_order: Some(AxisOrder::NorthEast),
+                },
+                spec
+            );
+        })
+        .await;
     }
 
     #[test]

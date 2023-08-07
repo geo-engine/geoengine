@@ -165,8 +165,9 @@ mod tests {
     use super::*;
 
     use crate::util::tests::read_body_json;
+    use crate::util::tests::with_temp_context;
     use crate::{
-        contexts::{InMemoryContext, SimpleApplicationContext},
+        contexts::SimpleApplicationContext,
         tasks::{
             util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
         },
@@ -175,7 +176,7 @@ mod tests {
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::{channel::oneshot, lock::Mutex};
-    use geoengine_datatypes::{error::ErrorSource, util::test::TestDefault};
+    use geoengine_datatypes::error::ErrorSource;
     use serde_json::json;
     use std::{pin::Pin, sync::Arc};
 
@@ -331,65 +332,66 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_status() {
-        let app_ctx = InMemoryContext::test_default();
+        with_temp_context(|app_ctx, _| async move {
+            let ctx = app_ctx.default_session_context().await.unwrap();
+            let session_id = app_ctx.default_session_id().await;
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+            let (task, complete_tx) = NopTask::new_with_sender();
 
-        let (task, complete_tx) = NopTask::new_with_sender();
+            let tasks = Arc::new(ctx.tasks());
+            let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
-        let tasks = Arc::new(ctx.tasks());
-        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
+            // 1. initially, we should get a running status
 
-        // 1. initially, we should get a running status
+            let req = actix_web::test::TestRequest::get()
+                .uri(&format!("/tasks/{task_id}/status"))
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/status"))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let res = send_test_request(req, app_ctx.clone()).await;
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+            let res_status = res.status();
+            let res_body = read_body_json(res).await;
+            assert_eq!(res_status, 200, "{res_body:?}");
 
-        let res_status = res.status();
-        let res_body = read_body_json(res).await;
-        assert_eq!(res_status, 200, "{res_body:?}");
+            assert_eq!(res_body["status"], json!("running"));
+            assert_eq!(res_body["pctComplete"], json!("0.00%"));
+            assert!(res_body["info"].is_null());
+            assert_eq!(res_body["estimatedTimeRemaining"], json!("? (± ?)"));
+            assert!(res_body["timeStarted"].is_string());
 
-        assert_eq!(res_body["status"], json!("running"));
-        assert_eq!(res_body["pctComplete"], json!("0.00%"));
-        assert!(res_body["info"].is_null());
-        assert_eq!(res_body["estimatedTimeRemaining"], json!("? (± ?)"));
-        assert!(res_body["timeStarted"].is_string());
+            // 2. wait for task to finish
 
-        // 2. wait for task to finish
+            complete_tx.send(()).unwrap();
 
-        complete_tx.send(()).unwrap();
+            wait_for_task_to_finish(tasks, task_id).await;
 
-        wait_for_task_to_finish(tasks, task_id).await;
+            // 3. finally, it should complete
 
-        // 3. finally, it should complete
+            let req = actix_web::test::TestRequest::get()
+                .uri(&format!("/tasks/{task_id}/status"))
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/status"))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let app_ctx_clone = app_ctx.clone();
 
-        let app_ctx_clone = app_ctx.clone();
+            let res = send_test_request(req, app_ctx_clone).await;
 
-        let res = send_test_request(req, app_ctx_clone).await;
+            let res_status = res.status();
+            let res_body = read_body_json(res).await;
+            assert_eq!(res_status, 200, "{res_body:?}");
 
-        let res_status = res.status();
-        let res_body = read_body_json(res).await;
-        assert_eq!(res_status, 200, "{res_body:?}");
-
-        assert_eq!(res_body["status"], json!("completed"));
-        assert_eq!(res_body["info"], json!("completed"));
-        assert_eq!(res_body["timeTotal"], json!("00:00:00"));
-        assert!(res_body["timeStarted"].is_string());
+            assert_eq!(res_body["status"], json!("completed"));
+            assert_eq!(res_body["info"], json!("completed"));
+            assert_eq!(res_body["timeTotal"], json!("00:00:00"));
+            assert!(res_body["timeStarted"].is_string());
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_status_with_admin_session() {
         crate::util::config::set_config(
             "session.admin_session_token",
@@ -397,182 +399,185 @@ mod tests {
         )
         .unwrap();
 
-        let app_ctx = InMemoryContext::test_default();
+        with_temp_context(|app_ctx, _| async move {
+            let ctx = app_ctx.default_session_context().await.unwrap();
+            let session_id = app_ctx.default_session_id().await;
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+            let (task, _complete_tx) = NopTask::new_with_sender();
+            let task_id = ctx.tasks().schedule_task(task.boxed(), None).await.unwrap();
 
-        let (task, _complete_tx) = NopTask::new_with_sender();
-        let task_id = ctx.tasks().schedule_task(task.boxed(), None).await.unwrap();
+            // 1. initially, we should get a running status
 
-        // 1. initially, we should get a running status
+            let req = actix_web::test::TestRequest::get()
+                .uri(&format!("/tasks/{task_id}/status"))
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/status"))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let res = send_test_request(req, app_ctx.clone()).await;
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+            let res_status = res.status();
+            let res_body = read_body_json(res).await;
+            assert_eq!(res_status, 200, "{res_body:?}");
 
-        let res_status = res.status();
-        let res_body = read_body_json(res).await;
-        assert_eq!(res_status, 200, "{res_body:?}");
-
-        assert_eq!(res_body["status"], json!("running"));
-        assert_eq!(res_body["pctComplete"], json!("0.00%"));
-        assert!(res_body["info"].is_null());
-        assert_eq!(res_body["estimatedTimeRemaining"], json!("? (± ?)"));
-        assert!(res_body["timeStarted"].is_string());
+            assert_eq!(res_body["status"], json!("running"));
+            assert_eq!(res_body["pctComplete"], json!("0.00%"));
+            assert!(res_body["info"].is_null());
+            assert_eq!(res_body["estimatedTimeRemaining"], json!("? (± ?)"));
+            assert!(res_body["timeStarted"].is_string());
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_list() {
-        let app_ctx = InMemoryContext::test_default();
+        with_temp_context(|app_ctx, _| async move {
+            let ctx = app_ctx.default_session_context().await.unwrap();
+            let session_id = app_ctx.default_session_id().await;
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+            let tasks = Arc::new(ctx.tasks());
 
-        let tasks = Arc::new(ctx.tasks());
+            let (task, complete_tx) = NopTask::new_with_sender();
+            let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
-        let (task, complete_tx) = NopTask::new_with_sender();
-        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
+            complete_tx.send(()).unwrap();
 
-        complete_tx.send(()).unwrap();
+            wait_for_task_to_finish(tasks, task_id).await;
 
-        wait_for_task_to_finish(tasks, task_id).await;
+            let req = actix_web::test::TestRequest::get()
+                .uri("/tasks/list")
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let req = actix_web::test::TestRequest::get()
-            .uri("/tasks/list")
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let res = send_test_request(req, app_ctx.clone()).await;
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+            let res_status = res.status();
+            let res_body = read_body_json(res).await;
+            assert_eq!(res_status, 200, "{res_body:?}");
 
-        let res_status = res.status();
-        let res_body = read_body_json(res).await;
-        assert_eq!(res_status, 200, "{res_body:?}");
-
-        let res_body = res_body.get(0).unwrap();
-        assert_eq!(res_body["taskId"], json!(task_id));
-        assert_eq!(res_body["status"], json!("completed"));
-        assert_eq!(res_body["info"], json!("completed"));
-        assert_eq!(res_body["timeTotal"], json!("00:00:00"));
-        assert!(res_body["timeStarted"].is_string());
+            let res_body = res_body.get(0).unwrap();
+            assert_eq!(res_body["taskId"], json!(task_id));
+            assert_eq!(res_body["status"], json!("completed"));
+            assert_eq!(res_body["info"], json!("completed"));
+            assert_eq!(res_body["timeTotal"], json!("00:00:00"));
+            assert!(res_body["timeStarted"].is_string());
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_abort_task() {
-        let app_ctx = InMemoryContext::test_default();
+        with_temp_context(|app_ctx, _| async move {
+            let ctx = app_ctx.default_session_context().await.unwrap();
+            let session_id = app_ctx.default_session_id().await;
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+            let tasks = Arc::new(ctx.tasks());
 
-        let tasks = Arc::new(ctx.tasks());
+            // 1. Create task
 
-        // 1. Create task
+            let (task, complete_tx) = NopTask::new_with_sender();
+            let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
-        let (task, complete_tx) = NopTask::new_with_sender();
-        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
+            // 2. Abort task
 
-        // 2. Abort task
+            let req = actix_web::test::TestRequest::delete()
+                .uri(&format!("/tasks/{task_id}"))
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let req = actix_web::test::TestRequest::delete()
-            .uri(&format!("/tasks/{task_id}"))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let res = send_test_request(req, app_ctx.clone()).await;
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+            assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
-        assert_eq!(res.status(), 202, "{:?}", res.response().error());
+            // 3. Wait for abortion to complete
 
-        // 3. Wait for abortion to complete
+            complete_tx.send(()).unwrap();
 
-        complete_tx.send(()).unwrap();
+            wait_for_task_to_finish(tasks, task_id).await;
 
-        wait_for_task_to_finish(tasks, task_id).await;
+            // 4. check status
 
-        // 4. check status
+            let req = actix_web::test::TestRequest::get()
+                .uri(&format!("/tasks/{task_id}/status"))
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/status"))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let res = send_test_request(req, app_ctx.clone()).await;
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+            assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+            let status = read_body_json(res).await;
 
-        let status = read_body_json(res).await;
-
-        assert_eq!(
-            status,
-            json!({
-                "status": "aborted",
-                "cleanUp": {
-                    "status": "completed",
-                    "info": null
-                },
-            })
-        );
+            assert_eq!(
+                status,
+                json!({
+                    "status": "aborted",
+                    "cleanUp": {
+                        "status": "completed",
+                        "info": null
+                    },
+                })
+            );
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_force_abort_task() {
-        let app_ctx = InMemoryContext::test_default();
+        with_temp_context(|app_ctx, _| async move {
+            let ctx = app_ctx.default_session_context().await.unwrap();
+            let session_id = app_ctx.default_session_id().await;
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+            let tasks = Arc::new(ctx.tasks());
 
-        let tasks = Arc::new(ctx.tasks());
+            // 1. Create task
 
-        // 1. Create task
+            let (task, _complete_tx) = NopTask::new_with_sender();
+            let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
-        let (task, _complete_tx) = NopTask::new_with_sender();
-        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
+            // 2. Abort task
 
-        // 2. Abort task
+            let req = actix_web::test::TestRequest::delete()
+                .uri(&format!("/tasks/{task_id}?force=true"))
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let req = actix_web::test::TestRequest::delete()
-            .uri(&format!("/tasks/{task_id}?force=true"))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let res = send_test_request(req, app_ctx.clone()).await;
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+            assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
-        assert_eq!(res.status(), 202, "{:?}", res.response().error());
+            // 3. Wait for abortion to complete
 
-        // 3. Wait for abortion to complete
+            wait_for_task_to_finish(tasks, task_id).await;
 
-        wait_for_task_to_finish(tasks, task_id).await;
+            // 4. check status
 
-        // 4. check status
+            let req = actix_web::test::TestRequest::get()
+                .uri(&format!("/tasks/{task_id}/status"))
+                .append_header((header::CONTENT_LENGTH, 0))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/tasks/{task_id}/status"))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            let res = send_test_request(req, app_ctx.clone()).await;
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+            assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
-        assert_eq!(res.status(), 200, "{:?}", res.response().error());
+            let status = read_body_json(res).await;
 
-        let status = read_body_json(res).await;
-
-        assert_eq!(
-            status,
-            json!({
-                "status": "aborted",
-                "cleanUp": {
-                    "status": "noCleanUp"
-                },
-            })
-        );
+            assert_eq!(
+                status,
+                json!({
+                    "status": "aborted",
+                    "cleanUp": {
+                        "status": "noCleanUp"
+                    },
+                })
+            );
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_abort_after_abort() {
-        let app_ctx = InMemoryContext::test_default();
-
+        with_temp_context(|app_ctx, _| async move {
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -650,203 +655,213 @@ mod tests {
                 },
             })
         );
+
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_duplicate() {
         let unique_id = "highlander".to_string();
-        let app_ctx = InMemoryContext::test_default();
+        with_temp_context(|app_ctx, _| async move {
+            let session = app_ctx.default_session().await.unwrap();
 
-        let session = app_ctx.default_session().await.unwrap();
+            let tasks = app_ctx.session_context(session).tasks();
 
-        let tasks = app_ctx.session_context(session).tasks();
+            let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
+            tasks.schedule_task(task.boxed(), None).await.unwrap();
 
-        let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        tasks.schedule_task(task.boxed(), None).await.unwrap();
+            let (task, _) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
+            assert!(tasks.schedule_task(task.boxed(), None).await.is_err());
 
-        let (task, _) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        assert!(tasks.schedule_task(task.boxed(), None).await.is_err());
-
-        complete_tx.send(()).unwrap();
+            complete_tx.send(()).unwrap();
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_duplicate_after_finish() {
         let unique_id = "highlander".to_string();
-        let app_ctx = InMemoryContext::test_default();
+        with_temp_context(|app_ctx, _| async move {
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
+            let tasks = Arc::new(ctx.tasks());
 
-        let tasks = Arc::new(ctx.tasks());
+            // 1. start first task
 
-        // 1. start first task
+            let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
+            let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
 
-        let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
+            // 2. wait for task to finish
 
-        // 2. wait for task to finish
+            complete_tx.send(()).unwrap();
 
-        complete_tx.send(()).unwrap();
-
-        wait_for_task_to_finish(tasks.clone(), task_id).await;
-
-        // 3. start second task
-
-        let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
-        assert!(tasks.schedule_task(task.boxed(), None).await.is_ok());
-
-        complete_tx.send(()).unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_notify() {
-        let app_ctx = InMemoryContext::test_default();
-
-        let session = app_ctx.default_session().await.unwrap();
-
-        let tasks = app_ctx.session_context(session).tasks();
-
-        // 1. start first task
-
-        let (schedule_complete_tx, schedule_complete_rx) = oneshot::channel();
-        let (task, complete_tx) = NopTask::new_with_sender();
-
-        tasks
-            .schedule_task(task.boxed(), Some(schedule_complete_tx))
-            .await
-            .unwrap();
-
-        // finish task
-        complete_tx.send(()).unwrap();
-
-        // wait for completion notification
-
-        assert!(matches!(
-            schedule_complete_rx.await.unwrap(),
-            TaskStatus::Completed { .. }
-        ));
-    }
-
-    #[tokio::test]
-    async fn abort_subtasks() {
-        let app_ctx = InMemoryContext::test_default();
-
-        let ctx = app_ctx.default_session_context().await.unwrap();
-
-        let tasks = Arc::new(ctx.tasks());
-
-        // 1. start super task
-
-        let (subtask_a, complete_tx_a) = NopTask::new_with_sender();
-        let (subtask_b, complete_tx_b) = NopTask::new_with_sender();
-
-        let (task, _complete_tx) =
-            TaskTree::new_with_sender(vec![subtask_a.boxed(), subtask_b.boxed()], tasks.clone());
-
-        let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
-
-        // 2. wait for all subtasks to schedule
-
-        let all_task_ids: Vec<TaskId> =
-            geoengine_operators::util::retry::retry(5, 100, 2., None, || {
-                let task_manager = tasks.clone();
-                async move {
-                    let task_list = task_manager
-                        .list_tasks(TaskListOptions {
-                            filter: None,
-                            offset: 0,
-                            limit: 10,
-                        })
-                        .await
-                        .unwrap();
-
-                    if task_list.len() == 3 {
-                        Ok(task_list.into_iter().map(|t| t.task_id).collect())
-                    } else {
-                        Err(())
-                    }
-                }
-            })
-            .await
-            .unwrap();
-
-        // 3. abort task
-
-        tasks.abort_tasks(task_id, false).await.unwrap();
-
-        // allow clean-up to complete
-        complete_tx_a.send(()).unwrap();
-        complete_tx_b.send(()).unwrap();
-
-        // 4. wait for completion
-
-        for task_id in all_task_ids {
             wait_for_task_to_finish(tasks.clone(), task_id).await;
-        }
 
-        // 5. check results
+            // 3. start second task
 
-        let list = tasks
-            .list_tasks(TaskListOptions {
-                filter: None,
-                offset: 0,
-                limit: 10,
-            })
-            .await
-            .unwrap();
+            let (task, complete_tx) = NopTask::new_with_sender_and_unique_id(unique_id.clone());
+            assert!(tasks.schedule_task(task.boxed(), None).await.is_ok());
 
-        assert_eq!(list.len(), 3);
-        assert_eq!(
-            serde_json::to_value(&list[0].status).unwrap(),
-            json!({
-                "status": "aborted",
-                "cleanUp": {"status": "completed", "info": null}
-            })
-        );
-        assert_eq!(
-            serde_json::to_value(&list[1].status).unwrap(),
-            json!({
-                "status": "aborted",
-                "cleanUp": {"status": "completed", "info": null}
-            })
-        );
-        assert_eq!(
-            serde_json::to_value(&list[2].status).unwrap(),
-            json!({
-                "status": "aborted",
-                "cleanUp": {"status": "completed", "info": null}
-            })
-        );
+            complete_tx.send(()).unwrap();
+        })
+        .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_notify() {
+        with_temp_context(|app_ctx, _| async move {
+            let session = app_ctx.default_session().await.unwrap();
+
+            let tasks = app_ctx.session_context(session).tasks();
+
+            // 1. start first task
+
+            let (schedule_complete_tx, schedule_complete_rx) = oneshot::channel();
+            let (task, complete_tx) = NopTask::new_with_sender();
+
+            tasks
+                .schedule_task(task.boxed(), Some(schedule_complete_tx))
+                .await
+                .unwrap();
+
+            // finish task
+            complete_tx.send(()).unwrap();
+
+            // wait for completion notification
+
+            assert!(matches!(
+                schedule_complete_rx.await.unwrap(),
+                TaskStatus::Completed { .. }
+            ));
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn abort_subtasks() {
+        with_temp_context(|app_ctx, _| async move {
+            let ctx = app_ctx.default_session_context().await.unwrap();
+
+            let tasks = Arc::new(ctx.tasks());
+
+            // 1. start super task
+
+            let (subtask_a, complete_tx_a) = NopTask::new_with_sender();
+            let (subtask_b, complete_tx_b) = NopTask::new_with_sender();
+
+            let (task, _complete_tx) = TaskTree::new_with_sender(
+                vec![subtask_a.boxed(), subtask_b.boxed()],
+                tasks.clone(),
+            );
+
+            let task_id = tasks.schedule_task(task.boxed(), None).await.unwrap();
+
+            // 2. wait for all subtasks to schedule
+
+            let all_task_ids: Vec<TaskId> =
+                geoengine_operators::util::retry::retry(5, 100, 2., None, || {
+                    let task_manager = tasks.clone();
+                    async move {
+                        let task_list = task_manager
+                            .list_tasks(TaskListOptions {
+                                filter: None,
+                                offset: 0,
+                                limit: 10,
+                            })
+                            .await
+                            .unwrap();
+
+                        if task_list.len() == 3 {
+                            Ok(task_list.into_iter().map(|t| t.task_id).collect())
+                        } else {
+                            Err(())
+                        }
+                    }
+                })
+                .await
+                .unwrap();
+
+            // 3. abort task
+
+            tasks.abort_tasks(task_id, false).await.unwrap();
+
+            // allow clean-up to complete
+            complete_tx_a.send(()).unwrap();
+            complete_tx_b.send(()).unwrap();
+
+            // 4. wait for completion
+
+            for task_id in all_task_ids {
+                wait_for_task_to_finish(tasks.clone(), task_id).await;
+            }
+
+            // 5. check results
+
+            let list = tasks
+                .list_tasks(TaskListOptions {
+                    filter: None,
+                    offset: 0,
+                    limit: 10,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(list.len(), 3);
+            assert_eq!(
+                serde_json::to_value(&list[0].status).unwrap(),
+                json!({
+                    "status": "aborted",
+                    "cleanUp": {"status": "completed", "info": null}
+                })
+            );
+            assert_eq!(
+                serde_json::to_value(&list[1].status).unwrap(),
+                json!({
+                    "status": "aborted",
+                    "cleanUp": {"status": "completed", "info": null}
+                })
+            );
+            assert_eq!(
+                serde_json::to_value(&list[2].status).unwrap(),
+                json!({
+                    "status": "aborted",
+                    "cleanUp": {"status": "completed", "info": null}
+                })
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_failing_task_with_failing_cleanup() {
-        let app_ctx = InMemoryContext::test_default();
+        with_temp_context(|app_ctx, _| async move {
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
+            let tasks = Arc::new(ctx.tasks());
 
-        let tasks = Arc::new(ctx.tasks());
+            // 1. start task
 
-        // 1. start task
+            let task_id = tasks
+                .schedule_task(FailingTaskWithFailingCleanup.boxed(), None)
+                .await
+                .unwrap();
 
-        let task_id = tasks
-            .schedule_task(FailingTaskWithFailingCleanup.boxed(), None)
-            .await
-            .unwrap();
+            // 2. wait for completion
 
-        // 2. wait for completion
+            wait_for_task_to_finish(tasks.clone(), task_id).await;
 
-        wait_for_task_to_finish(tasks.clone(), task_id).await;
+            // 3. check results
 
-        // 3. check results
-
-        assert_eq!(
-            serde_json::to_value(tasks.get_task_status(task_id).await.unwrap()).unwrap(),
-            json!({
-                "status": "failed",
-                "error": "FailingTaskWithFailingCleanupError",
-                "cleanUp": {"status": "failed", "error": "FailingTaskWithFailingCleanupError"}
-            })
-        );
+            assert_eq!(
+                serde_json::to_value(tasks.get_task_status(task_id).await.unwrap()).unwrap(),
+                json!({
+                    "status": "failed",
+                    "error": "FailingTaskWithFailingCleanupError",
+                    "cleanUp": {"status": "failed", "error": "FailingTaskWithFailingCleanupError"}
+                })
+            );
+        })
+        .await;
     }
 }

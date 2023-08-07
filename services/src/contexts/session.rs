@@ -1,4 +1,4 @@
-use crate::contexts::InMemoryContext;
+use crate::contexts::PostgresContext;
 use crate::error::{self};
 use crate::handlers::get_token;
 use crate::identifier;
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use tokio_postgres::NoTls;
 use utoipa::ToSchema;
 
-use super::{ApplicationContext, PostgresContext};
+use super::ApplicationContext;
 
 identifier!(SessionId);
 
@@ -96,19 +96,11 @@ impl FromRequest for SimpleSession {
             Ok(token) => token,
             Err(error) => return Box::pin(err(error)),
         };
-
-        {
-            if let Some(pg_ctx) = req.app_data::<web::Data<PostgresContext<NoTls>>>() {
-                let pg_ctx = pg_ctx.get_ref().clone();
-                return async move { pg_ctx.session_by_id(token).await.map_err(Into::into) }
-                    .boxed_local();
-            }
-        }
-        let mem_ctx = req
-            .app_data::<web::Data<InMemoryContext>>()
-            .expect("InMemoryContext will be registered because Postgres was not activated");
-        let mem_ctx = mem_ctx.get_ref().clone();
-        async move { mem_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
+        let pg_ctx = req.app_data::<web::Data<PostgresContext<NoTls>>>().expect(
+            "Application context should be present because it is set during server initialization.",
+        );
+        let pg_ctx = pg_ctx.get_ref().clone();
+        return async move { pg_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local();
     }
 }
 
