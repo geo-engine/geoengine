@@ -1,11 +1,15 @@
 use crate::api::model::datatypes::DatasetName;
-use crate::contexts::{ApplicationContext, PostgresContext, QueryContextImpl, SessionId};
+use crate::contexts::error::{Bb8, CouldNotInitializeSchema, SessionById, SessionContextError};
+use crate::contexts::{
+    ApplicationContext, ApplicationContextError, PostgresContext, QueryContextImpl, SessionId,
+};
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::datasets::upload::{Volume, Volumes};
-use crate::error::{self, Error, Result};
+use crate::error::Error;
 use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
+use crate::pro::contexts::error::ApplicationContextInternal;
 use crate::pro::datasets::add_datasets_from_directory;
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
@@ -39,6 +43,7 @@ use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use super::error::{CreateContext, InternalError, ProApplicationContextError};
 use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 
 // TODO: do not report postgres error details to user
@@ -76,14 +81,37 @@ where
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
         quota_config: Quota,
-    ) -> Result<Self> {
+    ) -> Result<Self, ProApplicationContextError> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
-        let pool = Pool::builder().build(pg_mgr).await?;
+        let pool = Pool::builder()
+            .build(pg_mgr)
+            .await
+            .context(crate::contexts::error::Postgres)
+            .context(crate::contexts::error::CreateContext)
+            .context(super::error::ApplicationContext)?;
 
-        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
+        let created_schema = PostgresContext::create_schema(
+            pool.get()
+                .await
+                .context(Bb8)
+                .context(crate::contexts::error::CreateContext)
+                .context(super::error::ApplicationContext)?,
+        )
+        .await
+        .context(crate::contexts::error::CreateContext)
+        .context(super::error::ApplicationContext)?;
+
         if created_schema {
-            Self::create_pro_schema(pool.get().await?).await?;
+            Self::create_pro_schema(
+                pool.get()
+                    .await
+                    .context(Bb8)
+                    .context(crate::contexts::error::CreateContext)
+                    .context(super::error::ApplicationContext)?,
+            )
+            .await
+            .context(CreateContext)?;
         }
 
         let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
@@ -113,14 +141,37 @@ where
         oidc_db: OidcRequestDb,
         cache_config: Cache,
         quota_config: Quota,
-    ) -> Result<Self> {
+    ) -> Result<Self, ProApplicationContextError> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
-        let pool = Pool::builder().build(pg_mgr).await?;
+        let pool = Pool::builder()
+            .build(pg_mgr)
+            .await
+            .context(crate::contexts::error::Postgres)
+            .context(crate::contexts::error::CreateContext)
+            .context(super::error::ApplicationContext)?;
 
-        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
+        let created_schema = PostgresContext::create_schema(
+            pool.get()
+                .await
+                .context(Bb8)
+                .context(crate::contexts::error::CreateContext)
+                .context(super::error::ApplicationContext)?,
+        )
+        .await
+        .context(crate::contexts::error::CreateContext)
+        .context(super::error::ApplicationContext)?;
+
         if created_schema {
-            Self::create_pro_schema(pool.get().await?).await?;
+            Self::create_pro_schema(
+                pool.get()
+                    .await
+                    .context(Bb8)
+                    .context(crate::contexts::error::CreateContext)
+                    .context(super::error::ApplicationContext)?,
+            )
+            .await
+            .context(CreateContext)?;
         }
 
         let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
@@ -164,14 +215,37 @@ where
         oidc_config: Oidc,
         cache_config: Cache,
         quota_config: Quota,
-    ) -> Result<Self> {
+    ) -> Result<Self, ProApplicationContextError> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
-        let pool = Pool::builder().build(pg_mgr).await?;
+        let pool = Pool::builder()
+            .build(pg_mgr)
+            .await
+            .context(crate::contexts::error::Postgres)
+            .context(crate::contexts::error::CreateContext)
+            .context(super::error::ApplicationContext)?;
 
-        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
+        let created_schema = PostgresContext::create_schema(
+            pool.get()
+                .await
+                .context(Bb8)
+                .context(crate::contexts::error::CreateContext)
+                .context(super::error::ApplicationContext)?,
+        )
+        .await
+        .context(crate::contexts::error::CreateContext)
+        .context(super::error::ApplicationContext)?;
+
         if created_schema {
-            Self::create_pro_schema(pool.get().await?).await?;
+            Self::create_pro_schema(
+                pool.get()
+                    .await
+                    .context(Bb8)
+                    .context(crate::contexts::error::CreateContext)
+                    .context(super::error::ApplicationContext)?,
+            )
+            .await
+            .context(CreateContext)?;
         }
 
         let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
@@ -225,36 +299,39 @@ where
     /// Creates the database schema. Returns true if the schema was created, false if it already existed.
     pub(crate) async fn create_pro_schema(
         mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<()> {
-        let user_config = get_config_element::<crate::pro::util::config::User>()?;
+    ) -> Result<(), InternalError> {
+        let user_config = get_config_element::<crate::pro::util::config::User>()
+            .map_err(|_| crate::contexts::error::InternalError::CouldNotGetPostgresConfig)
+            .context(ApplicationContextInternal)?;
 
-        let tx = conn.build_transaction().start().await?;
+        async move {
+            let tx = conn.build_transaction().start().await?;
 
-        tx.batch_execute(include_str!("schema.sql")).await?;
+            tx.batch_execute(include_str!("schema.sql")).await?;
 
-        let stmt = tx
-            .prepare(
-                r#"
+            let stmt = tx
+                .prepare(
+                    r#"
             INSERT INTO roles (id, name) VALUES
                 ($1, 'admin'),
                 ($2, 'user'),
                 ($3, 'anonymous');"#,
+                )
+                .await?;
+
+            tx.execute(
+                &stmt,
+                &[
+                    &Role::admin_role_id(),
+                    &Role::registered_user_role_id(),
+                    &Role::anonymous_role_id(),
+                ],
             )
             .await?;
 
-        tx.execute(
-            &stmt,
-            &[
-                &Role::admin_role_id(),
-                &Role::registered_user_role_id(),
-                &Role::anonymous_role_id(),
-            ],
-        )
-        .await?;
-
-        let stmt = tx
-            .prepare(
-                r#"
+            let stmt = tx
+                .prepare(
+                    r#"
             INSERT INTO users (
                 id, 
                 email,
@@ -268,35 +345,35 @@ where
                 'admin',
                 true
             );"#,
+                )
+                .await?;
+
+            tx.execute(
+                &stmt,
+                &[
+                    &Role::admin_role_id(),
+                    &user_config.admin_email,
+                    &bcrypt::hash(user_config.admin_password)
+                        .expect("Admin password hash should be valid"),
+                ],
             )
             .await?;
 
-        tx.execute(
-            &stmt,
-            &[
-                &Role::admin_role_id(),
-                &user_config.admin_email,
-                &bcrypt::hash(user_config.admin_password)
-                    .expect("Admin password hash should be valid"),
-            ],
-        )
-        .await?;
-
-        let stmt = tx
-            .prepare(
-                r#"
+            let stmt = tx
+                .prepare(
+                    r#"
             INSERT INTO user_roles 
                 (user_id, role_id)
             VALUES 
                 ($1, $1);"#,
-            )
-            .await?;
+                )
+                .await?;
 
-        tx.execute(&stmt, &[&Role::admin_role_id()]).await?;
+            tx.execute(&stmt, &[&Role::admin_role_id()]).await?;
 
-        let stmt = tx
-            .prepare(
-                r#"
+            let stmt = tx
+                .prepare(
+                    r#"
             INSERT INTO permissions
              (role_id, layer_collection_id, permission)  
             VALUES 
@@ -306,22 +383,28 @@ where
                 ($1, $5, 'Owner'),
                 ($2, $5, 'Read'),
                 ($3, $5, 'Read');"#,
+                )
+                .await?;
+
+            tx.execute(
+                &stmt,
+                &[
+                    &Role::admin_role_id(),
+                    &Role::registered_user_role_id(),
+                    &Role::anonymous_role_id(),
+                    &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+                    &UNSORTED_COLLECTION_ID,
+                ],
             )
             .await?;
 
-        tx.execute(
-            &stmt,
-            &[
-                &Role::admin_role_id(),
-                &Role::registered_user_role_id(),
-                &Role::anonymous_role_id(),
-                &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
-                &UNSORTED_COLLECTION_ID,
-            ],
-        )
-        .await?;
+            tx.commit().await?;
 
-        tx.commit().await?;
+            Result::<(), tokio_postgres::Error>::Ok(())
+        }
+        .await
+        .context(CouldNotInitializeSchema)
+        .context(ApplicationContextInternal)?;
 
         debug!("Created pro database schema");
 
@@ -351,11 +434,15 @@ where
         }
     }
 
-    async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {
+    async fn session_by_id(
+        &self,
+        session_id: SessionId,
+    ) -> Result<Self::Session, ApplicationContextError> {
+        // TODO: properly integrate user db error
         self.user_session_by_id(session_id)
             .await
-            .map_err(Box::new)
-            .context(error::Unauthorized)
+            .map_err(|_| crate::contexts::error::InternalError::CouldNotGetSessionById)
+            .context(SessionById)
     }
 }
 
@@ -408,7 +495,7 @@ where
         ProTaskManager::new(self.context.task_manager.clone(), self.session.clone())
     }
 
-    fn query_context(&self) -> Result<Self::QueryContext> {
+    fn query_context(&self) -> Result<Self::QueryContext, SessionContextError> {
         // TODO: load config only once
 
         let mut extensions = QueryContextExtensions::default();
@@ -427,7 +514,7 @@ where
         ))
     }
 
-    fn execution_context(&self) -> Result<Self::ExecutionContext> {
+    fn execution_context(&self) -> Result<Self::ExecutionContext, SessionContextError> {
         Ok(ExecutionContextImpl::<ProPostgresDb<Tls>>::new(
             self.db(),
             self.context.thread_pool.clone(),
@@ -435,8 +522,8 @@ where
         ))
     }
 
-    fn volumes(&self) -> Result<Vec<Volume>> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
+    fn volumes(&self) -> Result<Vec<Volume>, SessionContextError> {
+        ensure!(self.session.is_admin(), crate::contexts::error::Volumes);
 
         Ok(self.context.volumes.volumes.clone())
     }
@@ -469,7 +556,7 @@ where
     }
 
     /// Check whether the namepsace of the given dataset is allowed for insertion
-    pub(crate) fn check_namespace(&self, id: &DatasetName) -> Result<()> {
+    pub(crate) fn check_namespace(&self, id: &DatasetName) -> crate::error::Result<()> {
         let is_ok = match &id.namespace {
             Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
             None => self.session.is_admin(),

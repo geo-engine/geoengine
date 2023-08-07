@@ -100,7 +100,13 @@ impl FromRequest for SimpleSession {
             "Application context should be present because it is set during server initialization.",
         );
         let pg_ctx = pg_ctx.get_ref().clone();
-        return async move { pg_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local();
+        return async move {
+            pg_ctx
+                .session_by_id(token)
+                .await
+                .map_err(|_| error::Error::InvalidSession)
+        }
+        .boxed_local();
     }
 }
 

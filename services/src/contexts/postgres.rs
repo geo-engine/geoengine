@@ -1,11 +1,12 @@
 use crate::api::model::datatypes::DatasetName;
+use crate::contexts::error::{CouldNotInitializeSchema, CouldNotRecreateDatabaseSchema};
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId, SimpleSession};
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::add_from_directory::{
     add_datasets_from_directory, add_providers_from_directory,
 };
 use crate::datasets::upload::{Volume, Volumes};
-use crate::error::{self, Error, Result};
+use crate::error::{Error, Result};
 use crate::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory, UNSORTED_COLLECTION_ID,
 };
@@ -26,10 +27,17 @@ use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, info};
 use rayon::ThreadPool;
+use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{ExecutionContextImpl, Session, SimpleApplicationContext};
+use super::error::{
+    Bb8, CouldNotCreateDefaultSession, CouldNotGetClearDatabaseOnStartConfig,
+    CouldNotLoadDefaultSession, CreateContext, DefaultSession, DefaultSessionContext,
+    InternalError, SessionById, SessionContextError, SimpleApplicationContextError,
+    UpdateDefaultSessionProject, UpdateDefaultSessionView,
+};
+use super::{ApplicationContextError, ExecutionContextImpl, Session, SimpleApplicationContext};
 
 // TODO: distinguish user-facing errors from system-facing error messages
 
@@ -69,18 +77,46 @@ where
         tls: Tls,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
-    ) -> Result<Self> {
+    ) -> Result<Self, ApplicationContextError> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
-        let pool = Pool::builder().build(pg_mgr).await?;
-        let created_schema = Self::create_schema(pool.get().await?).await?;
+        let pool = Pool::builder()
+            .build(pg_mgr)
+            .await
+            .context(super::error::Postgres)
+            .context(CreateContext)?;
+        let created_schema = Self::create_schema(
+            pool.get()
+                .await
+                .context(super::error::Bb8)
+                .context(CreateContext)?,
+        )
+        .await
+        .context(CreateContext)?;
 
         let session = if created_schema {
             let session = SimpleSession::default();
-            Self::create_default_session(pool.get().await?, session.id()).await?;
+            Self::create_default_session(
+                pool.get()
+                    .await
+                    .context(super::error::Bb8)
+                    .context(CreateContext)?,
+                session.id(),
+            )
+            .await
+            .context(CouldNotCreateDefaultSession)
+            .context(CreateContext)?;
             session
         } else {
-            Self::load_default_session(pool.get().await?).await?
+            Self::load_default_session(
+                pool.get()
+                    .await
+                    .context(super::error::Bb8)
+                    .context(CreateContext)?,
+            )
+            .await
+            .context(CouldNotLoadDefaultSession)
+            .context(CreateContext)?
         };
 
         Ok(PostgresContext {
@@ -105,18 +141,46 @@ where
         layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
-    ) -> Result<Self> {
+    ) -> Result<Self, ApplicationContextError> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
-        let pool = Pool::builder().build(pg_mgr).await?;
-        let created_schema = Self::create_schema(pool.get().await?).await?;
+        let pool = Pool::builder()
+            .build(pg_mgr)
+            .await
+            .context(super::error::Postgres)
+            .context(CreateContext)?;
+        let created_schema = Self::create_schema(
+            pool.get()
+                .await
+                .context(super::error::Bb8)
+                .context(CreateContext)?,
+        )
+        .await
+        .context(CreateContext)?;
 
         let session = if created_schema {
             let session = SimpleSession::default();
-            Self::create_default_session(pool.get().await?, session.id()).await?;
+            Self::create_default_session(
+                pool.get()
+                    .await
+                    .context(super::error::Bb8)
+                    .context(CreateContext)?,
+                session.id(),
+            )
+            .await
+            .context(CouldNotCreateDefaultSession)
+            .context(CreateContext)?;
             session
         } else {
-            Self::load_default_session(pool.get().await?).await?
+            Self::load_default_session(
+                pool.get()
+                    .await
+                    .context(super::error::Bb8)
+                    .context(CreateContext)?,
+            )
+            .await
+            .context(CouldNotLoadDefaultSession)
+            .context(CreateContext)?
         };
 
         let app_ctx = PostgresContext {
@@ -148,7 +212,7 @@ where
 
     async fn check_schema_status(
         conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<DatabaseStatus> {
+    ) -> Result<DatabaseStatus, InternalError> {
         let stmt = match conn
             .prepare("SELECT clear_database_on_start from geoengine;")
             .await
@@ -161,11 +225,14 @@ where
                         return Ok(DatabaseStatus::Unitialized);
                     }
                 }
-                return Err(error::Error::TokioPostgres { source: e });
+                return Err(InternalError::CouldNotGetSchemaStatus { source: e });
             }
         };
 
-        let row = conn.query_one(&stmt, &[]).await?;
+        let row = conn
+            .query_one(&stmt, &[])
+            .await
+            .context(CouldNotGetClearDatabaseOnStartConfig)?;
 
         if row.get(0) {
             Ok(DatabaseStatus::InitializedClearDatabase)
@@ -178,8 +245,9 @@ where
     /// Creates the database schema. Returns true if the schema was created, false if it already existed.
     pub(crate) async fn create_schema(
         mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<bool> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+    ) -> Result<bool, InternalError> {
+        let postgres_config = get_config_element::<crate::util::config::Postgres>()
+            .map_err(|_| InternalError::CouldNotGetPostgresConfig)?;
 
         let database_status = Self::check_schema_status(&conn).await?;
 
@@ -190,10 +258,11 @@ where
                 conn.batch_execute(&format!(
                     "DROP SCHEMA {schema_name} CASCADE; CREATE SCHEMA {schema_name};"
                 ))
-                .await?;
+                .await
+                .context(CouldNotRecreateDatabaseSchema {})?;
             }
             DatabaseStatus::InitializedKeepDatabase if postgres_config.clear_database_on_start => {
-                return Err(Error::ClearDatabaseOnStartupNotAllowed)
+                return Err(InternalError::ClearDatabaseOnStartupNotAllowed)
             }
             DatabaseStatus::InitializedClearDatabase | DatabaseStatus::InitializedKeepDatabase => {
                 return Ok(false)
@@ -201,23 +270,24 @@ where
             DatabaseStatus::Unitialized => (),
         };
 
-        let tx = conn.build_transaction().start().await?;
+        async move {
+            let tx = conn.build_transaction().start().await?;
 
-        tx.batch_execute(include_str!("schema.sql")).await?;
+            tx.batch_execute(include_str!("schema.sql")).await?;
 
-        let stmt = tx
-            .prepare(
-                "
+            let stmt = tx
+                .prepare(
+                    "
             INSERT INTO geoengine (clear_database_on_start) VALUES ($1);",
-            )
-            .await?;
+                )
+                .await?;
 
-        tx.execute(&stmt, &[&postgres_config.clear_database_on_start])
-            .await?;
+            tx.execute(&stmt, &[&postgres_config.clear_database_on_start])
+                .await?;
 
-        let stmt = tx
-            .prepare(
-                r#"
+            let stmt = tx
+                .prepare(
+                    r#"
             INSERT INTO layer_collections (
                 id,
                 name,
@@ -229,15 +299,15 @@ where
                 'All available Geo Engine layers',
                 ARRAY[]::"PropertyType"[]
             );"#,
-            )
-            .await?;
+                )
+                .await?;
 
-        tx.execute(&stmt, &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID])
-            .await?;
+            tx.execute(&stmt, &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID])
+                .await?;
 
-        let stmt = tx
-            .prepare(
-                r#"INSERT INTO layer_collections (
+            let stmt = tx
+                .prepare(
+                    r#"INSERT INTO layer_collections (
                 id,
                 name,
                 description,
@@ -248,29 +318,34 @@ where
                 'Unsorted Layers',
                 ARRAY[]::"PropertyType"[]
             );"#,
-            )
-            .await?;
+                )
+                .await?;
 
-        tx.execute(&stmt, &[&UNSORTED_COLLECTION_ID]).await?;
+            tx.execute(&stmt, &[&UNSORTED_COLLECTION_ID]).await?;
 
-        let stmt = tx
-            .prepare(
-                r#"
+            let stmt = tx
+                .prepare(
+                    r#"
             INSERT INTO collection_children (parent, child) 
             VALUES ($1, $2);"#,
+                )
+                .await?;
+
+            tx.execute(
+                &stmt,
+                &[
+                    &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+                    &UNSORTED_COLLECTION_ID,
+                ],
             )
             .await?;
 
-        tx.execute(
-            &stmt,
-            &[
-                &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
-                &UNSORTED_COLLECTION_ID,
-            ],
-        )
-        .await?;
+            tx.commit().await?;
 
-        tx.commit().await?;
+            Result::<(), tokio_postgres::Error>::Ok(())
+        }
+        .await
+        .context(CouldNotInitializeSchema)?;
 
         debug!("Created database schema");
 
@@ -280,7 +355,7 @@ where
     async fn create_default_session(
         conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
         session_id: SessionId,
-    ) -> Result<()> {
+    ) -> Result<(), tokio_postgres::Error> {
         let stmt = conn
             .prepare("INSERT INTO sessions (id, project_id, view) VALUES ($1, NULL ,NULL);")
             .await?;
@@ -291,7 +366,7 @@ where
     }
     async fn load_default_session(
         conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<SimpleSession> {
+    ) -> Result<SimpleSession, tokio_postgres::Error> {
         let stmt = conn
             .prepare("SELECT id, project_id, view FROM sessions LIMIT 1;")
             .await?;
@@ -299,6 +374,38 @@ where
         let row = conn.query_one(&stmt, &[]).await?;
 
         Ok(SimpleSession::new(row.get(0), row.get(1), row.get(2)))
+    }
+
+    pub(crate) async fn get_session_by_id(
+        &self,
+        session_id: SessionId,
+    ) -> Result<SimpleSession, InternalError> {
+        let mut conn = self.pool.get().await.context(Bb8)?;
+
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(super::error::Postgres)?;
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT           
+                project_id,
+                view
+            FROM sessions
+            WHERE id = $1;",
+            )
+            .await
+            .context(super::error::Postgres)?;
+
+        let row = tx
+            .query_one(&stmt, &[&session_id])
+            .await
+            .map_err(|_error| InternalError::InvalidSession)?;
+
+        Ok(SimpleSession::new(session_id, row.get(0), row.get(1)))
     }
 }
 
@@ -314,38 +421,71 @@ where
         self.default_session_id
     }
 
-    async fn default_session(&self) -> Result<SimpleSession> {
-        Self::load_default_session(self.pool.get().await?).await
+    async fn default_session(&self) -> Result<SimpleSession, SimpleApplicationContextError> {
+        Self::load_default_session(self.pool.get().await.context(Bb8).context(DefaultSession)?)
+            .await
+            .context(super::error::Postgres)
+            .context(DefaultSession)
     }
 
-    async fn update_default_session_project(&self, project: ProjectId) -> Result<()> {
-        let conn = self.pool.get().await?;
+    async fn update_default_session_project(
+        &self,
+        project: ProjectId,
+    ) -> Result<(), SimpleApplicationContextError> {
+        let conn = self
+            .pool
+            .get()
+            .await
+            .context(Bb8)
+            .context(UpdateDefaultSessionProject)?;
 
         let stmt = conn
             .prepare("UPDATE sessions SET project_id = $1 WHERE id = $2;")
-            .await?;
+            .await
+            .context(super::error::Postgres)
+            .context(UpdateDefaultSessionProject)?;
 
         conn.execute(&stmt, &[&project, &self.default_session_id])
-            .await?;
+            .await
+            .context(super::error::Postgres)
+            .context(UpdateDefaultSessionProject)?;
 
         Ok(())
     }
 
-    async fn update_default_session_view(&self, view: STRectangle) -> Result<()> {
-        let conn = self.pool.get().await?;
+    async fn update_default_session_view(
+        &self,
+        view: STRectangle,
+    ) -> Result<(), SimpleApplicationContextError> {
+        let conn = self
+            .pool
+            .get()
+            .await
+            .context(Bb8)
+            .context(UpdateDefaultSessionView)?;
 
         let stmt = conn
             .prepare("UPDATE sessions SET view = $1 WHERE id = $2;")
-            .await?;
+            .await
+            .context(super::error::Postgres)
+            .context(UpdateDefaultSessionView)?;
 
         conn.execute(&stmt, &[&view, &self.default_session_id])
-            .await?;
+            .await
+            .context(super::error::Postgres)
+            .context(UpdateDefaultSessionView)?;
 
         Ok(())
     }
 
-    async fn default_session_context(&self) -> Result<Self::SessionContext> {
-        Ok(self.session_context(self.session_by_id(self.default_session_id).await?))
+    async fn default_session_context(
+        &self,
+    ) -> Result<Self::SessionContext, SimpleApplicationContextError> {
+        Ok(self.session_context(
+            self.get_session_by_id(self.default_session_id)
+                .await
+                .context(DefaultSessionContext)?,
+        ))
     }
 }
 
@@ -367,28 +507,13 @@ where
         }
     }
 
-    async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {
-        let mut conn = self.pool.get().await?;
-
-        let tx = conn.build_transaction().start().await?;
-
-        let stmt = tx
-            .prepare(
-                "
-            SELECT           
-                project_id,
-                view
-            FROM sessions
-            WHERE id = $1;",
-            )
-            .await?;
-
-        let row = tx
-            .query_one(&stmt, &[&session_id])
+    async fn session_by_id(
+        &self,
+        session_id: SessionId,
+    ) -> Result<Self::Session, ApplicationContextError> {
+        self.get_session_by_id(session_id)
             .await
-            .map_err(|_error| error::Error::InvalidSession)?;
-
-        Ok(SimpleSession::new(session_id, row.get(0), row.get(1)))
+            .context(SessionById)
     }
 }
 
@@ -428,14 +553,14 @@ where
         SimpleTaskManager::new(self.context.task_manager.clone())
     }
 
-    fn query_context(&self) -> Result<Self::QueryContext> {
+    fn query_context(&self) -> Result<Self::QueryContext, SessionContextError> {
         Ok(QueryContextImpl::new(
             self.context.query_ctx_chunk_size,
             self.context.thread_pool.clone(),
         ))
     }
 
-    fn execution_context(&self) -> Result<Self::ExecutionContext> {
+    fn execution_context(&self) -> Result<Self::ExecutionContext, SessionContextError> {
         Ok(ExecutionContextImpl::<PostgresDb<Tls>>::new(
             self.db(),
             self.context.thread_pool.clone(),
@@ -443,7 +568,7 @@ where
         ))
     }
 
-    fn volumes(&self) -> Result<Vec<Volume>> {
+    fn volumes(&self) -> Result<Vec<Volume>, SessionContextError> {
         Ok(self.context.volumes.volumes.clone())
     }
 

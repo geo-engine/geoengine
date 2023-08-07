@@ -1,5 +1,4 @@
 use crate::datasets::upload::Volume;
-use crate::error::Result;
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionProvider};
 use crate::layers::storage::{LayerDb, LayerProviderDb};
 use crate::tasks::{TaskContext, TaskManager};
@@ -16,6 +15,7 @@ use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 
+pub mod error;
 mod postgres;
 mod session;
 mod simple_context;
@@ -34,9 +34,12 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
+pub use error::ApplicationContextError;
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
 pub use simple_context::SimpleApplicationContext;
+
+use self::error::SessionContextError;
 
 pub type Db<T> = Arc<RwLock<T>>;
 
@@ -51,7 +54,10 @@ pub trait ApplicationContext: 'static + Send + Sync + Clone {
     fn session_context(&self, session: Self::Session) -> Self::SessionContext;
 
     /// Load a session by its id
-    async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session>;
+    async fn session_by_id(
+        &self,
+        session_id: SessionId,
+    ) -> Result<Self::Session, ApplicationContextError>;
 }
 
 /// The session context bundles resources that are specific to a session.
@@ -71,13 +77,13 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
     fn tasks(&self) -> Self::TaskManager;
 
     /// Create a new query context for executing queries on processors
-    fn query_context(&self) -> Result<Self::QueryContext>;
+    fn query_context(&self) -> Result<Self::QueryContext, SessionContextError>;
 
     /// Create a new execution context initializing operators
-    fn execution_context(&self) -> Result<Self::ExecutionContext>;
+    fn execution_context(&self) -> Result<Self::ExecutionContext, SessionContextError>;
 
     /// Get the list of available data volumes
-    fn volumes(&self) -> Result<Vec<Volume>>;
+    fn volumes(&self) -> Result<Vec<Volume>, SessionContextError>;
 
     /// Get the current session
     fn session(&self) -> &Self::Session;
