@@ -1,4 +1,5 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
+use crate::api::model::HashMapTextTextDbType;
 
 use crate::error;
 use crate::layers::layer::Property;
@@ -107,8 +108,6 @@ where
 
         let layer_id = Uuid::new_v4();
 
-        let metadata = serde_json::to_value(&layer.metadata).context(crate::error::SerdeJson)?;
-
         let trans = conn.build_transaction().start().await?;
 
         let stmt = trans
@@ -129,7 +128,7 @@ where
                     &serde_json::to_value(&layer.workflow).context(crate::error::SerdeJson)?,
                     &layer.symbology,
                     &layer.properties,
-                    &metadata,
+                    &HashMapTextTextDbType::from(&layer.metadata),
                 ],
             )
             .await?;
@@ -197,8 +196,6 @@ where
 
         let layer = layer;
 
-        let metadata = serde_json::to_value(&layer.metadata).context(crate::error::SerdeJson)?;
-
         let trans = conn.build_transaction().start().await?;
 
         let stmt = trans
@@ -219,7 +216,7 @@ where
                     &serde_json::to_value(&layer.workflow).context(crate::error::SerdeJson)?,
                     &layer.symbology,
                     &layer.properties,
-                    &metadata,
+                    &HashMapTextTextDbType::from(&layer.metadata),
                 ],
             )
             .await?;
@@ -814,7 +811,7 @@ where
             workflow: serde_json::from_value(row.get(2)).context(crate::error::SerdeJson)?,
             symbology: row.get(3),
             properties: row.get(4),
-            metadata: serde_json::from_value(row.get(5)).context(crate::error::SerdeJson)?,
+            metadata: row.get::<_, HashMapTextTextDbType>(5).into(),
         })
     }
 }

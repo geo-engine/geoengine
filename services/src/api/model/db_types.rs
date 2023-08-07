@@ -1,16 +1,3 @@
-use std::collections::HashMap;
-
-use ordered_float::NotNan;
-use postgres_types::{FromSql, ToSql};
-
-use crate::{
-    error::Error,
-    projects::{
-        ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
-        PolygonSymbology, RasterSymbology, Symbology,
-    },
-};
-
 use super::{
     datatypes::{
         BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
@@ -24,6 +11,16 @@ use super::{
         UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
     },
 };
+use crate::{
+    error::Error,
+    projects::{
+        ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
+        PolygonSymbology, RasterSymbology, Symbology,
+    },
+};
+use ordered_float::NotNan;
+use postgres_types::{FromSql, ToSql};
+use std::collections::HashMap;
 
 #[derive(Debug, ToSql, FromSql)]
 #[postgres(name = "DefaultColors")]
@@ -575,6 +572,40 @@ impl TryFrom<TypedResultDescriptorDbType> for TypedResultDescriptor {
             } => Ok(Self::Plot(plot)),
             _ => Err(Error::UnexpectedInvalidDbTypeConversion),
         }
+    }
+}
+
+#[derive(Debug, PartialEq, ToSql, FromSql)]
+pub struct TextTextKeyValue {
+    key: String,
+    value: String,
+}
+
+#[derive(Debug, PartialEq, ToSql, FromSql)]
+#[postgres(transparent)]
+pub struct HashMapTextTextDbType(pub Vec<TextTextKeyValue>);
+
+impl From<&HashMap<String, String>> for HashMapTextTextDbType {
+    fn from(map: &HashMap<String, String>) -> Self {
+        Self(
+            map.iter()
+                .map(|(key, value)| TextTextKeyValue {
+                    key: key.clone(),
+                    value: value.clone(),
+                })
+                .collect(),
+        )
+    }
+}
+
+impl<S: std::hash::BuildHasher + std::default::Default> From<HashMapTextTextDbType>
+    for HashMap<String, String, S>
+{
+    fn from(map: HashMapTextTextDbType) -> Self {
+        map.0
+            .into_iter()
+            .map(|TextTextKeyValue { key, value }| (key, value))
+            .collect()
     }
 }
 

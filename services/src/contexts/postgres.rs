@@ -13,6 +13,7 @@ use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 
 use crate::projects::{ProjectId, STRectangle};
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
+use crate::util::config::get_config_element;
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -48,6 +49,12 @@ where
     task_manager: Arc<SimpleTaskManagerBackend>,
     pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
+}
+
+enum DatabaseStatus {
+    Unitialized,
+    InitializedClearDatabase,
+    InitializedKeepDatabase,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -139,25 +146,32 @@ where
         Ok(app_ctx)
     }
 
-    async fn is_schema_initialized(
+    async fn check_schema_status(
         conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<bool> {
-        let stmt = match conn.prepare("SELECT TRUE from geoengine;").await {
+    ) -> Result<DatabaseStatus> {
+        let stmt = match conn
+            .prepare("SELECT clear_database_on_start from geoengine;")
+            .await
+        {
             Ok(stmt) => stmt,
             Err(e) => {
                 if let Some(code) = e.code() {
                     if *code == SqlState::UNDEFINED_TABLE {
                         info!("Initializing schema.");
-                        return Ok(false);
+                        return Ok(DatabaseStatus::Unitialized);
                     }
                 }
                 return Err(error::Error::TokioPostgres { source: e });
             }
         };
 
-        let _row = conn.query(&stmt, &[]).await?;
+        let row = conn.query_one(&stmt, &[]).await?;
 
-        Ok(true)
+        if row.get(0) {
+            Ok(DatabaseStatus::InitializedClearDatabase)
+        } else {
+            Ok(DatabaseStatus::InitializedKeepDatabase)
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -165,13 +179,41 @@ where
     pub(crate) async fn create_schema(
         mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
     ) -> Result<bool> {
-        if Self::is_schema_initialized(&conn).await? {
-            return Ok(false);
-        }
+        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+
+        let database_status = Self::check_schema_status(&conn).await?;
+
+        match database_status {
+            DatabaseStatus::InitializedClearDatabase if postgres_config.clear_database_on_start => {
+                let schema_name = postgres_config.schema;
+                info!("Clearing schema {}.", schema_name);
+                conn.batch_execute(&format!(
+                    "DROP SCHEMA {schema_name} CASCADE; CREATE SCHEMA {schema_name};"
+                ))
+                .await?;
+            }
+            DatabaseStatus::InitializedKeepDatabase if postgres_config.clear_database_on_start => {
+                return Err(Error::ClearDatabaseOnStartupNotAllowed)
+            }
+            DatabaseStatus::InitializedClearDatabase | DatabaseStatus::InitializedKeepDatabase => {
+                return Ok(false)
+            }
+            DatabaseStatus::Unitialized => (),
+        };
 
         let tx = conn.build_transaction().start().await?;
 
         tx.batch_execute(include_str!("schema.sql")).await?;
+
+        let stmt = tx
+            .prepare(
+                "
+            INSERT INTO geoengine (clear_database_on_start) VALUES ($1);",
+            )
+            .await?;
+
+        tx.execute(&stmt, &[&postgres_config.clear_database_on_start])
+            .await?;
 
         let stmt = tx
             .prepare(
@@ -454,6 +496,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::str::FromStr;
 
     use super::*;
@@ -465,7 +508,7 @@ mod tests {
     use crate::api::model::operators::{PlotResultDescriptor, UnixTimeStampType};
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
-    use crate::api::model::ColorizerTypeDbType;
+    use crate::api::model::{ColorizerTypeDbType, HashMapTextTextDbType};
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
@@ -2453,8 +2496,10 @@ mod tests {
         ) where
             T: PartialEq + postgres_types::FromSqlOwned + postgres_types::ToSql + Sync,
         {
+            const UNQUOTED: [&str; 1] = ["double precision"];
+
             // don't quote built-in types
-            let quote = if sql_type == "double precision" {
+            let quote = if UNQUOTED.contains(&sql_type) || sql_type.contains('[') {
                 ""
             } else {
                 "\""
@@ -2967,6 +3012,18 @@ mod tests {
                         },
                     ),
                 ],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "\"TextTextKeyValue\"[]",
+                [HashMapTextTextDbType::from(
+                    &HashMap::<String, String>::from([
+                        ("foo".to_string(), "bar".to_string()),
+                        ("baz".to_string(), "fuu".to_string()),
+                    ]),
+                )],
             )
             .await;
 

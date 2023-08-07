@@ -1,4 +1,5 @@
 use crate::contexts::PostgresDb;
+use crate::error;
 use crate::error::Result;
 use crate::projects::Plot;
 use crate::projects::ProjectLayer;
@@ -17,6 +18,7 @@ use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{
     tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
+use snafu::ensure;
 
 async fn list_plots<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
@@ -321,7 +323,9 @@ where
 
         let stmt = conn.prepare("DELETE FROM projects WHERE id = $1;").await?;
 
-        conn.execute(&stmt, &[&project]).await?;
+        let rows_affected = conn.execute(&stmt, &[&project]).await?;
+
+        ensure!(rows_affected == 1, error::ProjectDeleteFailed);
 
         Ok(())
     }

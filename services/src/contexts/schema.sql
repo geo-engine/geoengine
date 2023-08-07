@@ -1,5 +1,5 @@
 CREATE TABLE geoengine (
-    production boolean NOT NULL DEFAULT false
+    clear_database_on_start boolean NOT NULL DEFAULT false
 );
 
 CREATE TYPE "SpatialReferenceAuthority" AS ENUM (
@@ -173,6 +173,11 @@ CREATE TYPE "ContinuousMeasurement" AS (
 
 CREATE TYPE "SmallintTextKeyValue" AS (
     key smallint,
+    value text
+);
+
+CREATE TYPE "TextTextKeyValue" AS (
+    key text,
     value text
 );
 
@@ -544,7 +549,7 @@ CREATE TABLE layers (
     workflow json NOT NULL,
     symbology "Symbology",
     properties "PropertyType" [] NOT NULL,
-    metadata json NOT NULL
+    metadata "TextTextKeyValue" [] NOT NULL
 );
 
 CREATE TABLE collection_layers (

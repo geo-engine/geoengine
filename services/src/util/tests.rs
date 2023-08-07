@@ -9,7 +9,7 @@ use crate::api::model::operators::GdalDatasetParameters;
 use crate::api::model::operators::GdalMetaDataStatic;
 use crate::api::model::operators::RasterResultDescriptor;
 use crate::api::model::services::AddDataset;
-use crate::contexts::InMemorySessionContext;
+use crate::contexts::GeoEngineDb;
 use crate::contexts::PostgresContext;
 use crate::contexts::SimpleApplicationContext;
 use crate::datasets::listing::Provenance;
@@ -40,17 +40,24 @@ use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::CacheTtlSeconds;
+use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::test_data;
 use geoengine_datatypes::util::test::TestDefault;
+use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use geoengine_operators::util::gdal::create_ndvi_meta_data_with_cache_ttl;
 use rand::RngCore;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::runtime::Handle;
+use tokio::sync::OwnedSemaphorePermit;
+use tokio::sync::RwLock;
+use tokio::sync::Semaphore;
 use tokio_postgres::NoTls;
 
 use super::config::get_config_element;
@@ -186,7 +193,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
 }
 
 #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
-pub async fn add_land_cover_to_datasets(ctx: &InMemorySessionContext) -> DatasetId {
+pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
     let ndvi = DatasetDefinition {
         properties: AddDataset {
             name: None,
@@ -282,8 +289,7 @@ pub async fn add_land_cover_to_datasets(ctx: &InMemorySessionContext) -> Dataset
         }.into()),
     };
 
-    ctx.db()
-        .add_dataset(ndvi.properties, Box::new(ndvi.meta_data))
+    db.add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
         .await
         .expect("dataset db access")
         .id
@@ -449,8 +455,22 @@ impl SetMultipartBody for test::TestRequest {
     }
 }
 
+/// configure the number of concurrently running tests that use the database
+const CONCURRENT_DB_TESTS: usize = 10;
+static DB: OnceLock<RwLock<Arc<Semaphore>>> = OnceLock::new();
+
 /// Setup database schema and return its name.
-async fn setup_db() -> (tokio_postgres::Config, String) {
+pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, tokio_postgres::Config, String) {
+    // acquire a permit from the semaphore that limits the number of concurrently running tests that use the database
+    let permit = DB
+        .get_or_init(|| RwLock::new(Arc::new(Semaphore::new(CONCURRENT_DB_TESTS))))
+        .read()
+        .await
+        .clone()
+        .acquire_owned()
+        .await
+        .unwrap();
+
     let mut db_config = get_config_element::<Postgres>().unwrap();
     db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
 
@@ -473,12 +493,13 @@ async fn setup_db() -> (tokio_postgres::Config, String) {
     // fix schema by providing `search_path` option
     pg_config.options(&format!("-c search_path={}", db_config.schema));
 
-    (pg_config, db_config.schema)
+    (permit, pg_config, db_config.schema)
 }
 
 /// Tear down database schema.
-async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
+pub(crate) async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
     // generate schema with prior connection
+    // TODO: backoff and retry if no connections slot are available
     PostgresConnectionManager::new(pg_config, NoTls)
         .connect()
         .await
@@ -494,15 +515,36 @@ async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
 ///
 /// Panics if the `PostgresContext` could not be created.
 ///
-pub async fn with_temp_context<F, Fut>(f: F)
+pub async fn with_temp_context<F, Fut, R>(f: F) -> R
 where
     F: FnOnce(PostgresContext<NoTls>, tokio_postgres::Config) -> Fut
         + std::panic::UnwindSafe
         + Send
         + 'static,
-    Fut: Future<Output = ()>,
+    Fut: Future<Output = R>,
 {
-    let (pg_config, schema) = setup_db().await;
+    with_temp_context_from_spec(TestDefault::test_default(), TestDefault::test_default(), f).await
+}
+
+/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
+///
+/// # Panics
+///
+/// Panics if the `PostgresContext` could not be created.
+///
+pub async fn with_temp_context_from_spec<F, Fut, R>(
+    tiling_spec: TilingSpecification,
+    query_ctx_chunk_size: ChunkByteSize,
+    f: F,
+) -> R
+where
+    F: FnOnce(PostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+        + std::panic::UnwindSafe
+        + Send
+        + 'static,
+    Fut: Future<Output = R>,
+{
+    let (_permit, pg_config, schema) = setup_db().await;
 
     // catch all panics and clean up first…
     let executed_fn = {
@@ -513,21 +555,22 @@ where
                     let ctx = PostgresContext::new_with_context_spec(
                         pg_config.clone(),
                         tokio_postgres::NoTls,
-                        TestDefault::test_default(),
-                        TestDefault::test_default(),
+                        tiling_spec,
+                        query_ctx_chunk_size,
                     )
                     .await
                     .unwrap();
-                    f(ctx, pg_config.clone()).await;
-                });
-            });
+                    f(ctx, pg_config.clone()).await
+                })
+            })
         })
     };
 
     tear_down_db(pg_config, &schema).await;
 
     // then throw errors afterwards
-    if let Err(err) = executed_fn {
-        std::panic::resume_unwind(err);
+    match executed_fn {
+        Ok(res) => res,
+        Err(err) => std::panic::resume_unwind(err),
     }
 }
