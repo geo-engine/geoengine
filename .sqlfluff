@@ -1,0 +1,4 @@
+[sqlfluff]
+dialect = postgres
+templater = jinja
+sql_file_exts = .sql

@@ -1,4 +1,5 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
+use crate::api::model::HashMapTextTextDbType;
 
 use crate::contexts::PostgresDb;
 use crate::layers::layer::Property;
@@ -98,9 +99,6 @@ where
         let layer = layer;
 
         let layer_id = Uuid::new_v4();
-        let symbology = serde_json::to_value(&layer.symbology).context(crate::error::SerdeJson)?;
-
-        let metadata = serde_json::to_value(&layer.metadata).context(crate::error::SerdeJson)?;
 
         let trans = conn.build_transaction().start().await?;
 
@@ -120,9 +118,9 @@ where
                     &layer.name,
                     &layer.description,
                     &serde_json::to_value(&layer.workflow).context(crate::error::SerdeJson)?,
-                    &symbology,
+                    &layer.symbology,
                     &layer.properties,
-                    &metadata,
+                    &HashMapTextTextDbType::from(&layer.metadata),
                 ],
             )
             .await?;
@@ -162,10 +160,6 @@ where
 
         let layer = layer;
 
-        let symbology = serde_json::to_value(&layer.symbology).context(crate::error::SerdeJson)?;
-
-        let metadata = serde_json::to_value(&layer.metadata).context(crate::error::SerdeJson)?;
-
         let trans = conn.build_transaction().start().await?;
 
         let stmt = trans
@@ -184,9 +178,9 @@ where
                     &layer.name,
                     &layer.description,
                     &serde_json::to_value(&layer.workflow).context(crate::error::SerdeJson)?,
-                    &symbology,
+                    &layer.symbology,
                     &layer.properties,
-                    &metadata,
+                    &HashMapTextTextDbType::from(&layer.metadata),
                 ],
             )
             .await?;
@@ -664,9 +658,9 @@ where
             name: row.get(0),
             description: row.get(1),
             workflow: serde_json::from_value(row.get(2)).context(crate::error::SerdeJson)?,
-            symbology: serde_json::from_value(row.get(3)).context(crate::error::SerdeJson)?,
+            symbology: row.get(3),
             properties: row.get(4),
-            metadata: serde_json::from_value(row.get(5)).context(crate::error::SerdeJson)?,
+            metadata: row.get::<_, HashMapTextTextDbType>(5).into(),
         })
     }
 }
