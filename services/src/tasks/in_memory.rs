@@ -106,7 +106,7 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManagerBackend {
         }
 
         let task_type = task.task_type();
-        let description = Some(task.task_description().await);
+        let description = Some(task.task_description());
 
         let mut task_handle = TaskHandle {
             task: Arc::new(task),

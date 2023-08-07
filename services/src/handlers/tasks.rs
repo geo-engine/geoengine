@@ -179,7 +179,7 @@ mod tests {
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use futures::{channel::oneshot, future::join_all, lock::Mutex};
+    use futures::{channel::oneshot, lock::Mutex};
     use geoengine_datatypes::error::ErrorSource;
     use serde_json::json;
     use std::{pin::Pin, sync::Arc};
@@ -241,7 +241,7 @@ mod tests {
             self.unique_id.clone()
         }
 
-        async fn task_description(&self) -> String {
+        fn task_description(&self) -> String {
             "No operation".to_string()
         }
     }
@@ -251,6 +251,7 @@ mod tests {
         subtask_ids: Arc<Mutex<Vec<TaskId>>>,
         task_manager: Arc<T>,
         complete_rx: Arc<Mutex<oneshot::Receiver<()>>>,
+        task_description: String,
     }
 
     impl<T: TaskManager<C>, C: TaskContext + 'static> TaskTree<T, C> {
@@ -258,6 +259,11 @@ mod tests {
             subtasks: Vec<Box<dyn Task<C>>>,
             task_manager: Arc<T>,
         ) -> (Self, oneshot::Sender<()>) {
+            let task_description = subtasks
+                .iter()
+                .map(|subtask| subtask.task_description())
+                .collect::<Vec<_>>()
+                .join(", ");
             let (complete_tx, complete_rx) = oneshot::channel();
 
             let this = Self {
@@ -265,6 +271,7 @@ mod tests {
                 subtask_ids: Arc::new(Mutex::new(vec![])),
                 task_manager,
                 complete_rx: Arc::new(Mutex::new(complete_rx)),
+                task_description,
             };
 
             (this, complete_tx)
@@ -303,16 +310,8 @@ mod tests {
             None
         }
 
-        async fn task_description(&self) -> String {
-            join_all(
-                self.subtasks
-                    .lock()
-                    .await
-                    .iter()
-                    .map(|subtask| subtask.task_description()),
-            )
-            .await
-            .join(", ")
+        fn task_description(&self) -> String {
+            self.task_description.clone()
         }
 
         async fn subtasks(&self) -> Vec<TaskId> {
@@ -351,7 +350,7 @@ mod tests {
             None
         }
 
-        async fn task_description(&self) -> String {
+        fn task_description(&self) -> String {
             "Failing task with failing cleanup".to_string()
         }
     }

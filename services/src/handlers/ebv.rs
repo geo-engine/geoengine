@@ -203,11 +203,11 @@ async fn create_overviews<C: ApplicationContext>(
 ) -> Result<impl Responder> {
     let ctx = Arc::new(app_ctx.into_inner().session_context(session.clone()));
 
-    let task = EbvMultiOverviewTask::<C::SessionContext> {
-        ctx: ctx.clone(),
-        resampling_method: params.as_ref().and_then(|p| p.resampling_method),
-        current_subtask_id: Arc::new(Mutex::new(None)),
-    }
+    let task = EbvMultiOverviewTask::new(
+        ctx.clone(),
+        params.as_ref().and_then(|p| p.resampling_method),
+    )
+    .await?
     .boxed();
 
     let task_id = ctx.tasks().schedule_task(task, None).await?;
@@ -219,9 +219,30 @@ struct EbvMultiOverviewTask<C: SessionContext> {
     ctx: Arc<C>,
     resampling_method: Option<ResamplingMethod>,
     current_subtask_id: Arc<Mutex<Option<TaskId>>>,
+    files: Vec<PathBuf>,
 }
 
 impl<C: SessionContext> EbvMultiOverviewTask<C> {
+    async fn new(
+        ctx: Arc<C>,
+        resampling_method: Option<ResamplingMethod>,
+    ) -> Result<Self, NetCdfCf4DProviderError> {
+        let files = with_netcdfcf_provider(ctx.as_ref(), move |provider| {
+            provider.list_files().map_err(|_| {
+                NetCdfCf4DProviderError::CdfCfProviderCannotListFiles {
+                    id: NETCDF_CF_PROVIDER_ID,
+                }
+            })
+        })
+        .await?;
+        Ok(Self {
+            ctx,
+            resampling_method,
+            current_subtask_id: Arc::new(Mutex::new(None)),
+            files,
+        })
+    }
+
     fn update_pct(task_ctx: Arc<C::TaskContext>, pct: f64, status: NetCdfCfOverviewResponse) {
         crate::util::spawn(async move {
             task_ctx.set_completion(pct, status.boxed()).await;
@@ -239,16 +260,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> {
         let resampling_method = self.resampling_method;
         let current_subtask_id = self.current_subtask_id.clone();
 
-        let files = with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
-            provider.list_files().map_err(|_| {
-                NetCdfCf4DProviderError::CdfCfProviderCannotListFiles {
-                    id: NETCDF_CF_PROVIDER_ID,
-                }
-            })
-        })
-        .await
-        .map_err(ErrorSource::boxed)?;
-        let num_files = files.len();
+        let num_files = self.files.len();
 
         let mut status = NetCdfCfOverviewResponse {
             success: vec![],
@@ -256,7 +268,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> {
             error: vec![],
         };
 
-        for (i, file) in files.into_iter().enumerate() {
+        for (i, file) in self.files.clone().into_iter().enumerate() {
             let subtask: Box<dyn Task<C::TaskContext>> = EbvOverviewTask::<C> {
                 ctx: self.ctx.clone(),
                 file: file.clone(),
@@ -331,17 +343,8 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> {
         EBV_MULTI_OVERVIEW_TASK_TYPE
     }
 
-    async fn task_description(&self) -> String {
-        let files = with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
-            provider.list_files().map_err(|_| {
-                NetCdfCf4DProviderError::CdfCfProviderCannotListFiles {
-                    id: NETCDF_CF_PROVIDER_ID,
-                }
-            })
-        })
-        .await;
-        let Ok(files) = files else { return "Failed to retrieve file list".to_string() };
-        files
+    fn task_description(&self) -> String {
+        self.files
             .iter()
             .map(|path| path.to_string_lossy().to_string())
             .collect::<Vec<_>>()
@@ -477,7 +480,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewTask<C> {
         Some(self.file.to_string_lossy().to_string())
     }
 
-    async fn task_description(&self) -> String {
+    fn task_description(&self) -> String {
         self.file.to_string_lossy().to_string()
     }
 }
@@ -574,7 +577,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvRemoveOverviewTask<C> {
         Some(self.file.to_string_lossy().to_string())
     }
 
-    async fn task_description(&self) -> String {
+    fn task_description(&self) -> String {
         self.file.to_string_lossy().to_string()
     }
 }

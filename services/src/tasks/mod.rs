@@ -67,7 +67,7 @@ pub trait Task<C: TaskContext>: Send + Sync {
         None
     }
 
-    async fn task_description(&self) -> String;
+    fn task_description(&self) -> String;
 
     /// Return subtasks of this tasks.
     ///
