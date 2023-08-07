@@ -52,6 +52,8 @@ jobs:
         run: |
           curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
           echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
+      - name: Install SQLFluff
+        run: pip install sqlfluff==2.1.4
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
@@ -89,6 +91,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Check with Clippy
         run: cargo clippy --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
+      - name: Check with SQLFluff
+        run: sqlfluff lint
       - name: Run tests
         run: cargo test ${{ matrix.features }} ${{ matrix.build }} --verbose
 

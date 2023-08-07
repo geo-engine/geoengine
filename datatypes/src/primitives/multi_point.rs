@@ -234,9 +234,23 @@ impl<'g> MultiPointRef<'g> {
             point_coordinates: coordinates,
         }
     }
+
+    pub fn bbox(&self) -> Option<BoundingBox2D> {
+        BoundingBox2D::from_coord_ref_iter(self.point_coordinates)
+    }
 }
 
-impl<'r> GeometryRef for MultiPointRef<'r> {}
+impl<'r> GeometryRef for MultiPointRef<'r> {
+    type GeometryType = MultiPoint;
+
+    fn as_geometry(&self) -> Self::GeometryType {
+        MultiPoint::from(self)
+    }
+
+    fn bbox(&self) -> Option<BoundingBox2D> {
+        self.bbox()
+    }
+}
 
 impl<'g> MultiPointAccess for MultiPointRef<'g> {
     fn points(&self) -> &[Coordinate2D] {

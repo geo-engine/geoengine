@@ -4,7 +4,6 @@ use geoengine_datatypes::util::test::TestDefault;
 use serde::Deserialize;
 
 use crate::util::config::ConfigElement;
-use crate::util::parsing::deserialize_base_url;
 
 #[derive(Debug, Deserialize)]
 pub struct User {
@@ -36,16 +35,6 @@ pub enum QuotaTrackingMode {
     Track,
     Check,
     Disabled,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Odm {
-    #[serde(deserialize_with = "deserialize_base_url")]
-    pub endpoint: url::Url,
-}
-
-impl ConfigElement for Odm {
-    const KEY: &'static str = "odm";
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,8 +72,8 @@ impl TestDefault for Cache {
     fn test_default() -> Self {
         Self {
             enabled: false,
-            cache_size_in_mb: usize::MAX,
-            landing_zone_ratio: 0.5,
+            cache_size_in_mb: 1_000, // 1 GB
+            landing_zone_ratio: 0.1, // 10% of cache size
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::collections::{FeatureCollection, FeatureCollectionInfos};
 use crate::raster::Pixel;
 use std::collections::{hash_map::RandomState, HashMap};
 
@@ -24,12 +25,6 @@ pub trait ByteSize: Sized {
 impl ByteSize for String {
     fn heap_byte_size(&self) -> usize {
         self.capacity()
-    }
-}
-
-impl ByteSize for Option<String> {
-    fn heap_byte_size(&self) -> usize {
-        self.as_ref().map_or(0, ByteSize::heap_byte_size)
     }
 }
 
@@ -62,7 +57,23 @@ where
 
 impl<P> ByteSize for P where P: Pixel {}
 
-impl<P> ByteSize for Option<P> where P: Pixel {}
+impl<P> ByteSize for Option<P>
+where
+    P: ByteSize,
+{
+    fn heap_byte_size(&self) -> usize {
+        self.as_ref().map_or(0, ByteSize::heap_byte_size)
+    }
+}
+
+impl<G> ByteSize for FeatureCollection<G>
+where
+    FeatureCollection<G>: FeatureCollectionInfos,
+{
+    fn byte_size(&self) -> usize {
+        FeatureCollectionInfos::byte_size(self)
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -256,7 +256,7 @@ pub enum Symbology {
     Polygon(PolygonSymbology),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
 pub struct RasterSymbology {
     pub opacity: f64,
     pub colorizer: Colorizer,
@@ -264,7 +264,7 @@ pub struct RasterSymbology {
 
 impl Eq for RasterSymbology {}
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 pub struct TextSymbology {
     pub attribute: String,
@@ -272,7 +272,7 @@ pub struct TextSymbology {
     pub stroke: StrokeParam,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 pub struct PointSymbology {
     pub radius: NumberParam,
@@ -305,7 +305,7 @@ impl From<PointSymbology> for Symbology {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
 pub struct LineSymbology {
     pub stroke: StrokeParam,
 
@@ -314,7 +314,7 @@ pub struct LineSymbology {
     pub auto_simplified: bool,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 pub struct PolygonSymbology {
     pub fill_color: ColorParam,
@@ -341,7 +341,7 @@ pub struct DerivedNumber {
     pub default_value: f64,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
 pub struct StrokeParam {
     pub width: NumberParam,
     pub color: ColorParam,
@@ -357,7 +357,7 @@ pub enum ColorParam {
     Derived(DerivedColor),
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
 pub struct DerivedColor {
     pub attribute: String,
     pub colorizer: Colorizer,
