@@ -387,16 +387,16 @@ impl<D, T> CompressedMaskedGrid<D, T> {
         }
     }
 
-    pub fn compressed_data_size(&self) -> usize {
+    pub fn compressed_data_len(&self) -> usize {
         self.data.len()
     }
 
-    pub fn compressed_mask_size(&self) -> usize {
+    pub fn compressed_mask_len(&self) -> usize {
         self.mask.len()
     }
 
-    pub fn compressed_size(&self) -> usize {
-        self.compressed_data_size() + self.compressed_mask_size()
+    pub fn compressed_len(&self) -> usize {
+        self.compressed_data_len() + self.compressed_mask_len()
     }
 
     pub fn compressed_data_slice(&self) -> &[u8] {
@@ -466,24 +466,24 @@ impl<D, T> CompressedMaskedGrid<D, T> {
 }
 
 impl<D, T> CompressedGridOrEmpty<D, T> {
-    pub fn compressed_data_size(&self) -> usize {
+    pub fn compressed_data_len(&self) -> usize {
         match self {
             Self::Empty(_empty_grid) => 0,
-            Self::Compressed(compressed_grid) => compressed_grid.compressed_data_size(),
+            Self::Compressed(compressed_grid) => compressed_grid.compressed_data_len(),
         }
     }
 
-    pub fn compressed_mask_size(&self) -> usize {
+    pub fn compressed_mask_len(&self) -> usize {
         match self {
             Self::Empty(_empty_grid) => 0,
-            Self::Compressed(compressed_grid) => compressed_grid.compressed_mask_size(),
+            Self::Compressed(compressed_grid) => compressed_grid.compressed_mask_len(),
         }
     }
 
-    pub fn compressed_size(&self) -> usize {
+    pub fn compressed_len(&self) -> usize {
         match self {
             Self::Empty(_empty_grid) => 0,
-            Self::Compressed(compressed_grid) => compressed_grid.compressed_size(),
+            Self::Compressed(compressed_grid) => compressed_grid.compressed_len(),
         }
     }
 
@@ -577,7 +577,7 @@ where
     where
         F: Fn(&[u8]) -> Result<Vec<u8>, CacheError>;
 
-    fn compressed_data_size(&self) -> usize;
+    fn compressed_data_len(&self) -> usize;
 }
 
 impl<T> CompressedRasterTileExt<GridShape2D, T> for BaseTile<CompressedGridOrEmpty<GridShape2D, T>>
@@ -624,8 +624,8 @@ where
         })
     }
 
-    fn compressed_data_size(&self) -> usize {
-        self.grid_array.compressed_data_size()
+    fn compressed_data_len(&self) -> usize {
+        self.grid_array.compressed_data_len()
     }
 }
 
@@ -640,14 +640,14 @@ where
     type ResultStream = CacheTileStream<T>;
 
     fn into_stored_element(self) -> Self::StoredCacheElement {
-        CompressedRasterTile2D::compress_tile(self, lz4_flex::compress_prepend_size)
+        CompressedRasterTile2D::compress_tile(self, lz4_flex::compress)
             .expect("Compression can not fail")
     }
 
     fn from_stored_element_ref(stored: &Self::StoredCacheElement) -> Self {
         stored
             .decompress_tile(|tile| {
-                lz4_flex::decompress_size_prepended(tile)
+                lz4_flex::decompress(tile, stored.grid_array.number_of_elements())
                     .map_err(|_| CacheError::CouldNotDecompressElement)
             })
             .expect("Decompression can not fail")
