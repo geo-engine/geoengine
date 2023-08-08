@@ -375,7 +375,7 @@ CREATE TABLE layers (
     id uuid PRIMARY KEY,
     name text NOT NULL,
     description text NOT NULL,
-    workflow json NOT NULL,
+    workflow_id uuid REFERENCES workflows (id) NOT NULL,
     symbology "Symbology",
     properties "PropertyType" [] NOT NULL,
     metadata "TextTextKeyValue" [] NOT NULL
