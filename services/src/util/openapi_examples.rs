@@ -10,63 +10,89 @@ use tokio_postgres::NoTls;
 use utoipa::openapi::path::{Parameter, ParameterIn};
 use utoipa::openapi::schema::AdditionalProperties;
 use utoipa::openapi::{
-    Components, KnownFormat, OpenApi, PathItemType, Ref, RefOr, Schema, SchemaFormat, SchemaType,
+    Components, KnownFormat, OpenApi, PathItemType, Ref, RefOr, Response, Schema, SchemaFormat,
+    SchemaType,
 };
 use uuid::Uuid;
 
-fn throw_if_invalid_ref(reference: &Ref, components: &Components) {
-    const SCHEMA_REF_PREFIX: &str = "#/components/schemas/";
-    const RESPONSE_REF_PREFIX: &str = "#/components/responses/";
-
-    if reference.ref_location.starts_with(SCHEMA_REF_PREFIX) {
-        let schema_name = &reference.ref_location[SCHEMA_REF_PREFIX.len()..];
-        assert!(
-            components.schemas.contains_key(schema_name),
-            "Referenced the unknown schema `{schema_name}`"
-        );
-    } else if reference.ref_location.starts_with(RESPONSE_REF_PREFIX) {
-        let response_name = &reference.ref_location[RESPONSE_REF_PREFIX.len()..];
-        assert!(
-            components.responses.contains_key(response_name),
-            "Referenced the unknown response `{response_name}`"
-        );
-    } else {
-        panic!("Invalid reference type");
-    }
-}
-
 /// Recursively checks that schemas referenced in the given schema object exist in the provided map.
-fn can_resolve_schema(schema: RefOr<Schema>, components: &Components) {
+fn can_resolve_schema(schema: &RefOr<Schema>, components: &Components) {
     match schema {
         RefOr::Ref(reference) => {
-            throw_if_invalid_ref(&reference, components);
+            can_resolve_reference(reference, components);
         }
         RefOr::T(concrete) => match concrete {
             Schema::Array(arr) => {
-                can_resolve_schema(*arr.items, components);
+                can_resolve_schema(arr.items.as_ref(), components);
             }
             Schema::Object(obj) => {
-                for property in obj.properties.into_values() {
+                for property in obj.properties.values() {
                     can_resolve_schema(property, components);
                 }
-                if let Some(additional_properties) = obj.additional_properties {
-                    if let AdditionalProperties::RefOr(properties_schema) = *additional_properties {
+                if let Some(additional_properties) = &obj.additional_properties {
+                    if let AdditionalProperties::RefOr(properties_schema) =
+                        additional_properties.as_ref()
+                    {
                         can_resolve_schema(properties_schema, components);
                     }
                 }
             }
             Schema::OneOf(oo) => {
-                for item in oo.items {
+                for item in &oo.items {
                     can_resolve_schema(item, components);
                 }
             }
             Schema::AllOf(ao) => {
-                for item in ao.items {
+                for item in &ao.items {
                     can_resolve_schema(item, components);
                 }
             }
             _ => panic!("Unknown schema type"),
         },
+    }
+}
+
+/// Recursively checks that schemas referenced in the given response object exist in the provided map.
+fn can_resolve_response(response: &RefOr<Response>, components: &Components) {
+    match response {
+        RefOr::Ref(reference) => {
+            can_resolve_reference(reference, components);
+        }
+        RefOr::T(concrete) => {
+            for content in concrete.content.values() {
+                can_resolve_schema(&content.schema, components);
+            }
+        }
+    }
+}
+
+/// Checks that the given reference can be resolved using the provided map.
+fn can_resolve_reference(reference: &Ref, components: &Components) {
+    const SCHEMA_REF_PREFIX: &str = "#/components/schemas/";
+    const RESPONSE_REF_PREFIX: &str = "#/components/responses/";
+
+    if reference.ref_location.starts_with(SCHEMA_REF_PREFIX) {
+        let schema_name = &reference.ref_location[SCHEMA_REF_PREFIX.len()..];
+
+        match components.schemas.get(schema_name) {
+            None => assert!(
+                components.schemas.contains_key(schema_name),
+                "Referenced the unknown schema `{schema_name}`"
+            ),
+            Some(resolved) => can_resolve_schema(resolved, components),
+        }
+    } else if reference.ref_location.starts_with(RESPONSE_REF_PREFIX) {
+        let response_name = &reference.ref_location[RESPONSE_REF_PREFIX.len()..];
+
+        match components.responses.get(response_name) {
+            None => assert!(
+                components.responses.contains_key(response_name),
+                "Referenced the unknown response `{response_name}`"
+            ),
+            Some(resolved) => can_resolve_response(resolved, components),
+        }
+    } else {
+        panic!("Invalid reference type");
     }
 }
 
@@ -79,14 +105,14 @@ pub fn can_resolve_api(api: OpenApi) {
         for operation in path_item.operations.into_values() {
             if let Some(request_body) = operation.request_body {
                 for content in request_body.content.into_values() {
-                    can_resolve_schema(content.schema, &components);
+                    can_resolve_schema(&content.schema, &components);
                 }
             }
 
             if let Some(parameters) = operation.parameters {
                 for parameter in parameters {
                     if let Some(schema) = parameter.schema {
-                        can_resolve_schema(schema, &components);
+                        can_resolve_schema(&schema, &components);
                     }
                 }
             }
@@ -94,11 +120,11 @@ pub fn can_resolve_api(api: OpenApi) {
             for response in operation.responses.responses.into_values() {
                 match response {
                     RefOr::Ref(reference) => {
-                        throw_if_invalid_ref(&reference, &components);
+                        can_resolve_reference(&reference, &components);
                     }
                     RefOr::T(concrete) => {
                         for content in concrete.content.into_values() {
-                            can_resolve_schema(content.schema, &components);
+                            can_resolve_schema(&content.schema, &components);
                         }
                     }
                 }
@@ -166,7 +192,7 @@ where
         match ref_or {
             RefOr::Ref(reference) => {
                 const SCHEMA_REF_PREFIX_LEN: usize = "#/components/schemas/".len();
-                throw_if_invalid_ref(reference, self.components);
+                can_resolve_reference(reference, self.components);
                 let schema_name = &reference.ref_location[SCHEMA_REF_PREFIX_LEN..];
                 self.resolve_schema(
                     self.components
@@ -297,14 +323,14 @@ pub async fn can_run_examples<F, Fut>(
     send_test_request: F,
 ) where
     F: Fn(TestRequest, PostgresContext<NoTls>) -> Fut
-        + Send
         + std::panic::UnwindSafe
-        + 'static
-        + Clone,
+        + std::marker::Send
+        + 'static,
     Fut: Future<Output = ServiceResponse>,
 {
     let components = api.components.expect("api has at least one component");
 
+    let session_id = app_ctx.default_session_id().await;
     for (uri, path_item) in api.paths.paths {
         for (http_method, operation) in path_item.operations {
             if let Some(request_body) = operation.request_body {
@@ -319,8 +345,8 @@ pub async fn can_run_examples<F, Fut>(
                             parameters: &operation.parameters,
                             body: example,
                             with_auth,
-                            session_id: app_ctx.default_session_id().await,
                             ctx: app_ctx.clone(),
+                            session_id,
                             send_test_request: &send_test_request,
                         }
                         .check_for_bad_documentation()
@@ -344,8 +370,8 @@ pub async fn can_run_examples<F, Fut>(
                                             parameters: &operation.parameters,
                                             body,
                                             with_auth,
-                                            session_id: app_ctx.default_session_id().await,
                                             ctx: app_ctx.clone(),
+                                            session_id,
                                             send_test_request: &send_test_request,
                                         }
                                         .check_for_bad_documentation()
@@ -371,9 +397,7 @@ mod tests {
     use crate::util::server::{configure_extractors, render_404, render_405};
     use crate::util::tests::with_temp_context;
     use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
-
     use serde::Deserialize;
-
     use serde_json::json;
     use utoipa::openapi::path::{OperationBuilder, ParameterBuilder, PathItemBuilder};
     use utoipa::openapi::request_body::RequestBodyBuilder;
@@ -385,25 +409,9 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "MissingSchema")]
-    fn throws_because_of_invalid_ref() {
-        throw_if_invalid_ref(&Ref::from_schema_name("MissingSchema"), &Components::new());
-    }
-
-    #[test]
-    fn finds_ref() {
-        throw_if_invalid_ref(
-            &Ref::from_schema_name("ExistingSchema"),
-            &ComponentsBuilder::new()
-                .schema("ExistingSchema", RefOr::T(Schema::default()))
-                .into(),
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "MissingSchema")]
     fn detects_missing_array_ref() {
         can_resolve_schema(
-            RefOr::T(
+            &RefOr::T(
                 ArrayBuilder::new()
                     .items(Ref::from_schema_name("MissingSchema"))
                     .into(),
@@ -416,7 +424,7 @@ mod tests {
     #[should_panic(expected = "MissingSchema")]
     fn detects_missing_object_ref() {
         can_resolve_schema(
-            RefOr::T(
+            &RefOr::T(
                 ObjectBuilder::new()
                     .property("Prop", Ref::from_schema_name("MissingSchema"))
                     .into(),
@@ -429,7 +437,7 @@ mod tests {
     #[should_panic(expected = "MissingSchema")]
     fn detects_missing_oneof_ref() {
         can_resolve_schema(
-            RefOr::T(
+            &RefOr::T(
                 OneOfBuilder::new()
                     .item(Ref::from_schema_name("MissingSchema"))
                     .into(),
@@ -442,12 +450,23 @@ mod tests {
     #[should_panic(expected = "MissingSchema")]
     fn detects_missing_allof_ref() {
         can_resolve_schema(
-            RefOr::T(
+            &RefOr::T(
                 AllOfBuilder::new()
                     .item(Ref::from_schema_name("MissingSchema"))
                     .into(),
             ),
             &Components::new(),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Inner")]
+    fn detects_missing_nested_schema() {
+        can_resolve_reference(
+            &Ref::from_schema_name("Outer"),
+            &ComponentsBuilder::new()
+                .schema("Outer", RefOr::Ref(Ref::from_schema_name("Inner")))
+                .into(),
         );
     }
 
