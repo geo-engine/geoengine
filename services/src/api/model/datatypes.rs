@@ -2039,3 +2039,18 @@ pub enum PlotOutputFormat {
     JsonVega,
     ImagePng,
 }
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, PartialOrd, Deserialize, ToSchema)]
+pub struct CacheTtlSeconds(u32);
+
+impl From<geoengine_datatypes::primitives::CacheTtlSeconds> for CacheTtlSeconds {
+    fn from(value: geoengine_datatypes::primitives::CacheTtlSeconds) -> Self {
+        Self(value.seconds())
+    }
+}
+
+impl From<CacheTtlSeconds> for geoengine_datatypes::primitives::CacheTtlSeconds {
+    fn from(value: CacheTtlSeconds) -> Self {
+        Self::new(value.0)
+    }
+}

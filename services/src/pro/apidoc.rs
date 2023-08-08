@@ -7,6 +7,7 @@ use crate::api::model::datatypes::{
     RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
     RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority, SpatialResolution,
     TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
+    CacheTtlSeconds,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -354,6 +355,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             ResourceId,
             Permission,
             AddRole,
+
+            CacheTtlSeconds
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

@@ -285,7 +285,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                     x: 0.1, y: 0.1,
                 }),
             },
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: CacheTtlSeconds::default().into(),
         }.into()),
     };
 

@@ -21,6 +21,10 @@ impl CacheTtlSeconds {
     pub fn max() -> Self {
         Self(MAX_CACHE_TTL_SECONDS)
     }
+
+    pub fn seconds(&self) -> u32 {
+        self.0
+    }
 }
 
 impl From<CacheTtlSeconds> for CacheHint {

@@ -7,6 +7,7 @@ use crate::api::model::datatypes::{
     RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
     RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority, SpatialResolution,
     TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
+    CacheTtlSeconds,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -325,7 +326,9 @@ use utoipa::{Modify, OpenApi};
             ProjectFilter,
             Plot,
             ProjectVersion,
-            RasterStreamWebsocketResultType
+            RasterStreamWebsocketResultType,
+
+            CacheTtlSeconds
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
