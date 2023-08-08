@@ -1,7 +1,8 @@
 use super::error::CacheError;
 use super::shared_cache::{
     CacheBackendElement, CacheBackendElementExt, CacheElement, CacheElementsContainer,
-    CacheElementsContainerInfos, LandingZoneElementsContainer,
+    CacheElementsContainerInfos, LandingZoneElementsContainer, VectorCacheQueryEntry,
+    VectorLandingQueryEntry,
 };
 use crate::util::Result;
 use futures::stream::FusedStream;
@@ -216,6 +217,12 @@ macro_rules! impl_cache_element_subtype {
                 } else {
                     None
                 }
+            }
+
+            fn landing_zone_to_cache_entry(
+                landing_zone_entry: VectorLandingQueryEntry,
+            ) -> VectorCacheQueryEntry {
+                landing_zone_entry.into()
             }
         }
     };

@@ -390,10 +390,6 @@ pub trait Cache<C: CacheBackendElementExt>:
 >
 where
     C::Query: Clone + CacheQueryMatch,
-    CacheQueryEntry<C::Query, C::LandingZoneContainer>: ByteSize,
-    CacheQueryEntry<C::Query, C::CacheContainer>: ByteSize,
-    CacheQueryEntry<C::Query, C::CacheContainer>:
-        From<CacheQueryEntry<C::Query, C::LandingZoneContainer>>,
 {
     /// This method returns a mutable reference to the cache entry of an operator.
     /// If there is no cache entry for the operator, this method returns None.
@@ -529,7 +525,7 @@ where
         let cache_entry: CacheQueryEntry<
             <C as CacheBackendElement>::Query,
             <C as CacheBackendElementExt>::CacheContainer,
-        > = landing_zone_entry.into();
+        > = C::landing_zone_to_cache_entry(landing_zone_entry);
         // when moving an element from the landing zone to the cache, we allow the cache size to overflow.
         // This is done because the total cache size is the cache size + the landing zone size.
         let cache_entry_id = operator_cache.insert_cache_entry_allow_overflow(cache_entry, key)?;
@@ -622,8 +618,9 @@ where
 }
 
 pub trait CacheBackendElementExt: CacheBackendElement {
-    type LandingZoneContainer: LandingZoneElementsContainer<Self>;
+    type LandingZoneContainer: LandingZoneElementsContainer<Self> + ByteSize;
     type CacheContainer: CacheElementsContainer<Self::Query, Self>
+        + ByteSize
         + From<Self::LandingZoneContainer>;
 
     fn move_element_into_landing_zone(
@@ -634,6 +631,10 @@ pub trait CacheBackendElementExt: CacheBackendElement {
     fn create_empty_landing_zone() -> Self::LandingZoneContainer;
 
     fn results_arc(cache_elements_container: &Self::CacheContainer) -> Option<Arc<Vec<Self>>>;
+
+    fn landing_zone_to_cache_entry(
+        landing_zone_entry: CacheQueryEntry<Self::Query, Self::LandingZoneContainer>,
+    ) -> CacheQueryEntry<Self::Query, Self::CacheContainer>;
 }
 
 #[derive(Debug)]
@@ -782,12 +783,12 @@ pub struct CacheQueryEntry<Query, Elements> {
     elements: Elements,
 }
 type RasterOperatorCacheEntry = OperatorCacheEntry<RasterCacheQueryEntry, RasterLandingQueryEntry>;
-type RasterCacheQueryEntry = CacheQueryEntry<RasterQueryRectangle, CachedTiles>;
-type RasterLandingQueryEntry = CacheQueryEntry<RasterQueryRectangle, LandingZoneQueryTiles>;
+pub type RasterCacheQueryEntry = CacheQueryEntry<RasterQueryRectangle, CachedTiles>;
+pub type RasterLandingQueryEntry = CacheQueryEntry<RasterQueryRectangle, LandingZoneQueryTiles>;
 
 type VectorOperatorCacheEntry = OperatorCacheEntry<VectorCacheQueryEntry, VectorLandingQueryEntry>;
-type VectorCacheQueryEntry = CacheQueryEntry<VectorQueryRectangle, CachedFeatures>;
-type VectorLandingQueryEntry = CacheQueryEntry<VectorQueryRectangle, LandingZoneQueryFeatures>;
+pub type VectorCacheQueryEntry = CacheQueryEntry<VectorQueryRectangle, CachedFeatures>;
+pub type VectorLandingQueryEntry = CacheQueryEntry<VectorQueryRectangle, LandingZoneQueryFeatures>;
 
 impl<Query, Elements> CacheQueryEntry<Query, Elements> {
     pub fn create_empty<E>(query: Query) -> Self
@@ -889,7 +890,7 @@ impl From<VectorLandingQueryEntry> for VectorCacheQueryEntry {
 
 pub trait CacheElement: Sized {
     type StoredCacheElement: CacheBackendElementExt<Query = Self::Query>;
-    type Query;
+    type Query: CacheQueryMatch;
     type ResultStream: Stream<Item = Result<Self, CacheError>>;
 
     fn into_stored_element(self) -> Self::StoredCacheElement;
@@ -937,20 +938,6 @@ where
     C: CacheElement + Send + Sync + 'static + ByteSize,
     CacheBackend: Cache<C::StoredCacheElement>,
     C::Query: Clone + CacheQueryMatch + Send + Sync,
-    C::StoredCacheElement: CacheBackendElementExt<Query = C::Query> + Send + ByteSize,
-    <C::StoredCacheElement as CacheBackendElementExt>::LandingZoneContainer:
-        LandingZoneElementsContainer<C::StoredCacheElement> + ByteSize,
-    <C::StoredCacheElement as CacheBackendElementExt>::CacheContainer:
-        CacheElementsContainer<C::Query, C::StoredCacheElement> + ByteSize,
-    CacheQueryEntry<
-        <C as CacheElement>::Query,
-        <<C as CacheElement>::StoredCacheElement as CacheBackendElementExt>::CacheContainer,
-    >: From<
-        CacheQueryEntry<
-            <C as CacheElement>::Query,
-            <<C as CacheElement>::StoredCacheElement as CacheBackendElementExt>::LandingZoneContainer,
-        >,
-    >,
 {
     /// Query the cache and on hit create a stream of cache elements
     async fn query_cache(

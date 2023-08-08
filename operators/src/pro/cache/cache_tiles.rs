@@ -1,7 +1,8 @@
 use super::error::CacheError;
 use super::shared_cache::{
     CacheBackendElement, CacheBackendElementExt, CacheElement, CacheElementsContainer,
-    CacheElementsContainerInfos, LandingZoneElementsContainer,
+    CacheElementsContainerInfos, LandingZoneElementsContainer, RasterCacheQueryEntry,
+    RasterLandingQueryEntry,
 };
 use crate::util::Result;
 use futures::{Future, Stream};
@@ -226,6 +227,12 @@ macro_rules! impl_cache_element_subtype {
                 } else {
                     None
                 }
+            }
+
+            fn landing_zone_to_cache_entry(
+                landing_zone_entry: RasterLandingQueryEntry,
+            ) -> RasterCacheQueryEntry {
+                landing_zone_entry.into()
             }
         }
     };
