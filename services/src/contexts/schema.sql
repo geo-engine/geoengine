@@ -346,7 +346,7 @@ CREATE TYPE "OgrSourceColumnSpec" AS (
     "text" text [],
     bool text [],
     "datetime" text [],
-    rename boolean [] -- "TextTextKeyValue" []
+    rename "TextTextKeyValue" []
 );
 
 CREATE TYPE "OgrSourceErrorSpec" AS ENUM (
@@ -371,7 +371,7 @@ CREATE TYPE "MultiPolygon" AS (
 
 CREATE TYPE "TypedGeometry" AS (
     -- oneOf
-    data boolean, -- void
+    "data" boolean, -- void
     multi_point "MultiPoint",
     multi_line_string "MultiLineString",
     multi_polygon "MultiPolygon"
@@ -381,7 +381,7 @@ CREATE TYPE "OgrSourceDataset" AS (
     file_name text,
     layer_name text,
     data_type "VectorDataType",
-    time "OgrSourceDatasetTimeType",
+    "time" "OgrSourceDatasetTimeType",
     default_geometry "TypedGeometry",
     columns "OgrSourceColumnSpec",
     force_ogr_time_filter boolean,

@@ -2236,6 +2236,7 @@ version = "0.7.0"
 dependencies = [
  "arrow",
  "async-trait",
+ "bytes",
  "chrono",
  "criterion",
  "float-cmp",

@@ -1906,7 +1906,7 @@ impl From<NoGeometry> for geoengine_datatypes::primitives::NoGeometry {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema, FromSql, ToSql)]
 pub struct MultiPoint {
-    coordinates: Vec<Coordinate2D>,
+    pub coordinates: Vec<Coordinate2D>,
 }
 
 impl From<geoengine_datatypes::primitives::MultiPoint> for MultiPoint {
@@ -1925,7 +1925,7 @@ impl From<MultiPoint> for geoengine_datatypes::primitives::MultiPoint {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct MultiLineString {
-    coordinates: Vec<Vec<Coordinate2D>>,
+    pub coordinates: Vec<Vec<Coordinate2D>>,
 }
 
 impl From<geoengine_datatypes::primitives::MultiLineString> for MultiLineString {
@@ -1955,7 +1955,7 @@ impl From<MultiLineString> for geoengine_datatypes::primitives::MultiLineString 
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct MultiPolygon {
-    polygons: Vec<Vec<Vec<Coordinate2D>>>,
+    pub polygons: Vec<Vec<Vec<Coordinate2D>>>,
 }
 
 impl From<geoengine_datatypes::primitives::MultiPolygon> for MultiPolygon {

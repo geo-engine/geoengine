@@ -1,14 +1,17 @@
 use super::{
     datatypes::{
         BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-        DateTimeParseFormat, DefaultColors, FeatureDataType, LinearGradient, LogarithmicGradient,
-        Measurement, OverUnderColors, Palette, RgbaColor, SpatialReferenceOption, TimeInterval,
-        TimeStep, VectorDataType,
+        Coordinate2D, DateTimeParseFormat, DefaultColors, FeatureDataType, LinearGradient,
+        LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+        OverUnderColors, Palette, RgbaColor, SpatialReferenceOption, TimeInterval, TimeStep,
+        VectorDataType,
     },
     operators::{
-        CsvHeader, FormatSpecifics, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
-        OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor, TypedResultDescriptor,
-        UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
+        CsvHeader, FormatSpecifics, MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData,
+        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
+        OgrSourceErrorSpec, OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor,
+        TypedGeometry, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
+        VectorResultDescriptor,
     },
 };
 use crate::{
@@ -18,9 +21,10 @@ use crate::{
         PolygonSymbology, RasterSymbology, Symbology,
     },
 };
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
 #[derive(Debug, ToSql, FromSql)]
 #[postgres(name = "DefaultColors")]
@@ -902,6 +906,391 @@ impl TryFrom<FormatSpecificsDbType> for FormatSpecifics {
     }
 }
 
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "OgrSourceColumnSpec")]
+pub struct OgrSourceColumnSpecDbType {
+    pub format_specifics: Option<FormatSpecifics>,
+    pub x: String,
+    pub y: Option<String>,
+    pub int: Vec<String>,
+    pub float: Vec<String>,
+    pub text: Vec<String>,
+    pub bool: Vec<String>,
+    pub datetime: Vec<String>,
+    pub rename: Option<HashMapTextTextDbType>,
+}
+
+impl From<&OgrSourceColumnSpec> for OgrSourceColumnSpecDbType {
+    fn from(other: &OgrSourceColumnSpec) -> Self {
+        Self {
+            format_specifics: other.format_specifics.clone(),
+            x: other.x.clone(),
+            y: other.y.clone(),
+            int: other.int.clone(),
+            float: other.float.clone(),
+            text: other.text.clone(),
+            bool: other.bool.clone(),
+            datetime: other.datetime.clone(),
+            rename: other.rename.as_ref().map(Into::into),
+        }
+    }
+}
+
+impl TryFrom<OgrSourceColumnSpecDbType> for OgrSourceColumnSpec {
+    type Error = Error;
+
+    fn try_from(other: OgrSourceColumnSpecDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            format_specifics: other.format_specifics,
+            x: other.x,
+            y: other.y,
+            int: other.int,
+            float: other.float,
+            text: other.text,
+            bool: other.bool,
+            datetime: other.datetime,
+            rename: other.rename.map(Into::into),
+        })
+    }
+}
+
+// TODO: derive `FromSql` when it works with domains that encapuslate arrays
+#[derive(Debug, PartialEq, ToSql)]
+pub struct Coordinate2DArray1(pub Vec<Coordinate2D>);
+
+impl<'a> postgres_types::FromSql<'a> for Coordinate2DArray1 {
+    fn from_sql(
+        type_: &postgres_types::Type,
+        buf: &'a [u8],
+    ) -> std::result::Result<
+        Coordinate2DArray1,
+        std::boxed::Box<dyn std::error::Error + std::marker::Sync + std::marker::Send>,
+    > {
+        // unpack domain type if necessary
+        let type_ = match *type_.kind() {
+            postgres_types::Kind::Domain(ref type_) => type_,
+            _ => type_,
+        };
+
+        <Vec<Coordinate2D> as postgres_types::FromSql>::from_sql(type_, buf).map(Coordinate2DArray1)
+    }
+    fn accepts(type_: &postgres_types::Type) -> bool {
+        if <Vec<Coordinate2D> as postgres_types::FromSql>::accepts(type_) {
+            return true;
+        }
+        if type_.name() != "Coordinate2DArray1" {
+            return false;
+        }
+        match *type_.kind() {
+            ::postgres_types::Kind::Domain(ref type_) => {
+                <Vec<Coordinate2D> as ::postgres_types::ToSql>::accepts(type_)
+            }
+            _ => false,
+        }
+    }
+}
+
+// TODO: derive `FromSql` when it works with domains that encapuslate arrays
+#[derive(Debug, PartialEq, ToSql)]
+pub struct Coordinate2DArray2(pub Vec<Coordinate2DArray1>);
+
+impl<'a> postgres_types::FromSql<'a> for Coordinate2DArray2 {
+    fn from_sql(
+        type_: &postgres_types::Type,
+        buf: &'a [u8],
+    ) -> std::result::Result<
+        Coordinate2DArray2,
+        std::boxed::Box<dyn std::error::Error + std::marker::Sync + std::marker::Send>,
+    > {
+        // unpack domain type if necessary
+        let type_ = match *type_.kind() {
+            postgres_types::Kind::Domain(ref type_) => type_,
+            _ => type_,
+        };
+
+        <Vec<Coordinate2DArray1> as postgres_types::FromSql>::from_sql(type_, buf)
+            .map(Coordinate2DArray2)
+    }
+    fn accepts(type_: &postgres_types::Type) -> bool {
+        if <Vec<Coordinate2DArray1> as postgres_types::FromSql>::accepts(type_) {
+            return true;
+        }
+        if type_.name() != "Coordinate2DArray2" {
+            return false;
+        }
+        match *type_.kind() {
+            ::postgres_types::Kind::Domain(ref type_) => {
+                <Vec<Coordinate2DArray1> as ::postgres_types::ToSql>::accepts(type_)
+            }
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "MultiLineString")]
+pub struct MultiLineStringDbType {
+    coordinates: Vec<Coordinate2DArray1>,
+}
+
+impl From<&MultiLineString> for MultiLineStringDbType {
+    fn from(other: &MultiLineString) -> Self {
+        Self {
+            coordinates: other
+                .coordinates
+                .iter()
+                .map(|coordinates| Coordinate2DArray1(coordinates.clone()))
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<MultiLineStringDbType> for MultiLineString {
+    type Error = Error;
+
+    fn try_from(other: MultiLineStringDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            coordinates: other
+                .coordinates
+                .into_iter()
+                .map(|coordinates| coordinates.0)
+                .collect(),
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "MultiPolygon")]
+pub struct MultiPolygonDbType {
+    polygons: Vec<Coordinate2DArray2>,
+}
+
+impl From<&MultiPolygon> for MultiPolygonDbType {
+    fn from(other: &MultiPolygon) -> Self {
+        Self {
+            polygons: other
+                .polygons
+                .iter()
+                .map(|polygon| {
+                    Coordinate2DArray2(
+                        polygon
+                            .iter()
+                            .map(|coordinates| Coordinate2DArray1(coordinates.clone()))
+                            .collect(),
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<MultiPolygonDbType> for MultiPolygon {
+    type Error = Error;
+
+    fn try_from(other: MultiPolygonDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            polygons: other
+                .polygons
+                .into_iter()
+                .map(|coordinates| {
+                    coordinates
+                        .0
+                        .into_iter()
+                        .map(|coordinates| coordinates.0)
+                        .collect()
+                })
+                .collect(),
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "TypedGeometry")]
+pub struct TypedGeometryDbType {
+    data: bool,
+    multi_point: Option<MultiPoint>,
+    multi_line_string: Option<MultiLineString>,
+    multi_polygon: Option<MultiPolygon>,
+}
+
+impl From<&TypedGeometry> for TypedGeometryDbType {
+    fn from(other: &TypedGeometry) -> Self {
+        match other {
+            TypedGeometry::Data(_) => Self {
+                data: true,
+                multi_point: None,
+                multi_line_string: None,
+                multi_polygon: None,
+            },
+            TypedGeometry::MultiPoint(points) => Self {
+                data: false,
+                multi_point: Some(points.clone()),
+                multi_line_string: None,
+                multi_polygon: None,
+            },
+            TypedGeometry::MultiLineString(lines) => Self {
+                data: false,
+                multi_point: None,
+                multi_line_string: Some(lines.clone()),
+                multi_polygon: None,
+            },
+            TypedGeometry::MultiPolygon(polygons) => Self {
+                data: false,
+                multi_point: None,
+                multi_line_string: None,
+                multi_polygon: Some(polygons.clone()),
+            },
+        }
+    }
+}
+
+impl TryFrom<TypedGeometryDbType> for TypedGeometry {
+    type Error = Error;
+
+    fn try_from(other: TypedGeometryDbType) -> Result<Self, Self::Error> {
+        match other {
+            TypedGeometryDbType {
+                data: true,
+                multi_point: None,
+                multi_line_string: None,
+                multi_polygon: None,
+            } => Ok(TypedGeometry::Data(NoGeometry)),
+            TypedGeometryDbType {
+                data: false,
+                multi_point: Some(multi_point),
+                multi_line_string: None,
+                multi_polygon: None,
+            } => Ok(TypedGeometry::MultiPoint(multi_point)),
+            TypedGeometryDbType {
+                data: false,
+                multi_point: None,
+                multi_line_string: Some(multi_line_string),
+                multi_polygon: None,
+            } => Ok(TypedGeometry::MultiLineString(multi_line_string)),
+            TypedGeometryDbType {
+                data: false,
+                multi_point: None,
+                multi_line_string: None,
+                multi_polygon: Some(multi_polygon),
+            } => Ok(TypedGeometry::MultiPolygon(multi_polygon)),
+            _ => Err(Error::UnexpectedInvalidDbTypeConversion),
+        }
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "OgrSourceDataset")]
+pub struct OgrSourceDatasetDbType {
+    pub file_name: String,
+    pub layer_name: String,
+    pub data_type: Option<VectorDataType>,
+    pub time: OgrSourceDatasetTimeType,
+    pub default_geometry: Option<TypedGeometry>,
+    pub columns: Option<OgrSourceColumnSpec>,
+    pub force_ogr_time_filter: bool,
+    pub force_ogr_spatial_filter: bool,
+    pub on_error: OgrSourceErrorSpec,
+    pub sql_query: Option<String>,
+    pub attribute_query: Option<String>,
+    pub cache_ttl: CacheTtlSeconds,
+}
+
+impl From<&OgrSourceDataset> for OgrSourceDatasetDbType {
+    fn from(other: &OgrSourceDataset) -> Self {
+        Self {
+            file_name: other.file_name.to_string_lossy().to_string(),
+            layer_name: other.layer_name.clone(),
+            data_type: other.data_type,
+            time: other.time.clone(),
+            default_geometry: other.default_geometry.clone(),
+            columns: other.columns.clone(),
+            force_ogr_time_filter: other.force_ogr_time_filter,
+            force_ogr_spatial_filter: other.force_ogr_spatial_filter,
+            on_error: other.on_error,
+            sql_query: other.sql_query.clone(),
+            attribute_query: other.attribute_query.clone(),
+            cache_ttl: other.cache_ttl,
+        }
+    }
+}
+
+impl TryFrom<OgrSourceDatasetDbType> for OgrSourceDataset {
+    type Error = Error;
+
+    fn try_from(other: OgrSourceDatasetDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            file_name: other.file_name.into(),
+            layer_name: other.layer_name,
+            data_type: other.data_type,
+            time: other.time,
+            default_geometry: other.default_geometry,
+            columns: other.columns,
+            force_ogr_time_filter: other.force_ogr_time_filter,
+            force_ogr_spatial_filter: other.force_ogr_spatial_filter,
+            on_error: other.on_error,
+            sql_query: other.sql_query,
+            attribute_query: other.attribute_query,
+            cache_ttl: other.cache_ttl,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "OgrMetaData")]
+pub struct OgrMetaDataDbType {
+    pub loading_info: OgrSourceDataset,
+    pub result_descriptor: VectorResultDescriptor,
+}
+
+impl From<&OgrMetaData> for OgrMetaDataDbType {
+    fn from(other: &OgrMetaData) -> Self {
+        Self {
+            loading_info: other.loading_info.clone(),
+            result_descriptor: other.result_descriptor.clone(),
+        }
+    }
+}
+
+impl TryFrom<OgrMetaDataDbType> for OgrMetaData {
+    type Error = Error;
+
+    fn try_from(other: OgrMetaDataDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            loading_info: other.loading_info,
+            result_descriptor: other.result_descriptor,
+            phantom: PhantomData,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "MockMetaData")]
+pub struct MockMetaDataDbType {
+    pub loading_info: MockDatasetDataSourceLoadingInfo,
+    pub result_descriptor: VectorResultDescriptor,
+}
+
+impl From<&MockMetaData> for MockMetaDataDbType {
+    fn from(other: &MockMetaData) -> Self {
+        Self {
+            loading_info: other.loading_info.clone(),
+            result_descriptor: other.result_descriptor.clone(),
+        }
+    }
+}
+
+impl TryFrom<MockMetaDataDbType> for MockMetaData {
+    type Error = Error;
+
+    fn try_from(other: MockMetaDataDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            loading_info: other.loading_info,
+            result_descriptor: other.result_descriptor,
+            phantom: PhantomData,
+        })
+    }
+}
+
 /// TODO: describe
 // macro_rules! create_enum {
 //     (
@@ -1013,10 +1402,17 @@ delegate_from_to_sql!(ColorParam, ColorParamDbType);
 delegate_from_to_sql!(DefaultColors, DefaultColorsDbType);
 delegate_from_to_sql!(FormatSpecifics, FormatSpecificsDbType);
 delegate_from_to_sql!(Measurement, MeasurementDbType);
+delegate_from_to_sql!(MockMetaData, MockMetaDataDbType);
+delegate_from_to_sql!(MultiLineString, MultiLineStringDbType);
+delegate_from_to_sql!(MultiPolygon, MultiPolygonDbType);
 delegate_from_to_sql!(NumberParam, NumberParamDbType);
+delegate_from_to_sql!(OgrMetaData, OgrMetaDataDbType);
+delegate_from_to_sql!(OgrSourceColumnSpec, OgrSourceColumnSpecDbType);
+delegate_from_to_sql!(OgrSourceDataset, OgrSourceDatasetDbType);
 delegate_from_to_sql!(OgrSourceDatasetTimeType, OgrSourceDatasetTimeTypeDbType);
 delegate_from_to_sql!(OgrSourceDurationSpec, OgrSourceDurationSpecDbType);
 delegate_from_to_sql!(OgrSourceTimeFormat, OgrSourceTimeFormatDbType);
 delegate_from_to_sql!(Symbology, SymbologyDbType);
+delegate_from_to_sql!(TypedGeometry, TypedGeometryDbType);
 delegate_from_to_sql!(TypedResultDescriptor, TypedResultDescriptorDbType);
 delegate_from_to_sql!(VectorResultDescriptor, VectorResultDescriptorDbType);

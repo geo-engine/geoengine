@@ -497,18 +497,22 @@ where
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::marker::PhantomData;
     use std::str::FromStr;
 
     use super::*;
     use crate::api::model::datatypes::{
         Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement, DataProviderId,
         DatasetName, DefaultColors, LayerId, LinearGradient, LogarithmicGradient, Measurement,
-        NotNanF64, OverUnderColors, Palette, RgbaColor, SpatialPartition2D,
+        MultiLineString, MultiPoint, MultiPolygon, NoGeometry, NotNanF64, OverUnderColors, Palette,
+        RgbaColor, SpatialPartition2D,
     };
     use crate::api::model::operators::{PlotResultDescriptor, UnixTimeStampType};
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
-    use crate::api::model::{ColorizerTypeDbType, HashMapTextTextDbType};
+    use crate::api::model::{
+        ColorizerTypeDbType, Coordinate2DArray1, Coordinate2DArray2, HashMapTextTextDbType,
+    };
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
@@ -2496,7 +2500,7 @@ mod tests {
         ) where
             T: PartialEq + postgres_types::FromSqlOwned + postgres_types::ToSql + Sync,
         {
-            const UNQUOTED: [&str; 1] = ["double precision"];
+            const UNQUOTED: [&str; 2] = ["double precision", "int"];
 
             // don't quote built-in types
             let quote = if UNQUOTED.contains(&sql_type) || sql_type.contains('[') {
@@ -3111,7 +3115,440 @@ mod tests {
                 }],
             )
             .await;
+
+            test_type(
+                &pool,
+                "OgrSourceColumnSpec",
+                [crate::api::model::operators::OgrSourceColumnSpec {
+                    format_specifics: Some(crate::api::model::operators::FormatSpecifics::Csv {
+                        header: CsvHeader::Auto.into(),
+                    }),
+                    x: "x".to_string(),
+                    y: Some("y".to_string()),
+                    int: vec!["int".to_string()],
+                    float: vec!["float".to_string()],
+                    text: vec!["text".to_string()],
+                    bool: vec!["bool".to_string()],
+                    datetime: vec!["datetime".to_string()],
+                    rename: Some(
+                        [
+                            ("xx".to_string(), "xx_renamed".to_string()),
+                            ("yx".to_string(), "yy_renamed".to_string()),
+                        ]
+                        .into(),
+                    ),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "MultiPoint",
+                [MultiPoint {
+                    coordinates: vec![
+                        Coordinate2D::new(0.0f64, 0.5).into(),
+                        Coordinate2D::new(2., 1.0).into(),
+                    ],
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Coordinate2DArray1",
+                [Coordinate2DArray1(vec![
+                    Coordinate2D::new(0.0f64, 0.5).into(),
+                    Coordinate2D::new(2., 1.0).into(),
+                ])],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "Coordinate2DArray2",
+                [Coordinate2DArray2(vec![
+                    Coordinate2DArray1(vec![
+                        Coordinate2D::new(0.0f64, 0.5).into(),
+                        Coordinate2D::new(2., 1.0).into(),
+                    ]),
+                    Coordinate2DArray1(vec![
+                        Coordinate2D::new(0.0f64, 0.5).into(),
+                        Coordinate2D::new(2., 1.0).into(),
+                    ]),
+                ])],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "MultiLineString",
+                [MultiLineString {
+                    coordinates: vec![
+                        vec![
+                            Coordinate2D::new(0.0f64, 0.5).into(),
+                            Coordinate2D::new(2., 1.0).into(),
+                        ],
+                        vec![
+                            Coordinate2D::new(0.0f64, 0.5).into(),
+                            Coordinate2D::new(2., 1.0).into(),
+                        ],
+                    ],
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "MultiPolygon",
+                [MultiPolygon {
+                    polygons: vec![
+                        vec![
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                            ],
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                            ],
+                        ],
+                        vec![
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                            ],
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                            ],
+                        ],
+                    ],
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "TypedGeometry",
+                [
+                    crate::api::model::operators::TypedGeometry::Data(NoGeometry),
+                    crate::api::model::operators::TypedGeometry::MultiPoint(MultiPoint {
+                        coordinates: vec![
+                            Coordinate2D::new(0.0f64, 0.5).into(),
+                            Coordinate2D::new(2., 1.0).into(),
+                        ],
+                    }),
+                    crate::api::model::operators::TypedGeometry::MultiLineString(MultiLineString {
+                        coordinates: vec![
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                            ],
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                            ],
+                        ],
+                    }),
+                    crate::api::model::operators::TypedGeometry::MultiPolygon(MultiPolygon {
+                        polygons: vec![
+                            vec![
+                                vec![
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                ],
+                                vec![
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                ],
+                            ],
+                            vec![
+                                vec![
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                ],
+                                vec![
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                ],
+                            ],
+                        ],
+                    }),
+                ],
+            )
+            .await;
+
+            test_type(&pool, "int", [CacheTtlSeconds::new(100)]).await;
+
+            test_type(
+                &pool,
+                "OgrSourceDataset",
+                [crate::api::model::operators::OgrSourceDataset {
+                    file_name: "test".into(),
+                    layer_name: "test".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint.into()),
+                    time: crate::api::model::operators::OgrSourceDatasetTimeType::Start {
+                        start_field: "start".to_string(),
+                        start_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                        duration: crate::api::model::operators::OgrSourceDurationSpec::Zero,
+                    },
+                    default_geometry: Some(
+                        crate::api::model::operators::TypedGeometry::MultiPoint(MultiPoint {
+                            coordinates: vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                            ],
+                        }),
+                    ),
+                    columns: Some(crate::api::model::operators::OgrSourceColumnSpec {
+                        format_specifics: Some(
+                            crate::api::model::operators::FormatSpecifics::Csv {
+                                header: CsvHeader::Auto.into(),
+                            },
+                        ),
+                        x: "x".to_string(),
+                        y: Some("y".to_string()),
+                        int: vec!["int".to_string()],
+                        float: vec!["float".to_string()],
+                        text: vec!["text".to_string()],
+                        bool: vec!["bool".to_string()],
+                        datetime: vec!["datetime".to_string()],
+                        rename: Some(
+                            [
+                                ("xx".to_string(), "xx_renamed".to_string()),
+                                ("yx".to_string(), "yy_renamed".to_string()),
+                            ]
+                            .into(),
+                        ),
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: true,
+                    on_error: crate::api::model::operators::OgrSourceErrorSpec::Abort,
+                    sql_query: None,
+                    attribute_query: Some("foo = 'bar'".to_string()),
+                    cache_ttl: CacheTtlSeconds::new(5),
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "MockMetaData",
+                [crate::api::model::operators::MockMetaData {
+                    loading_info: crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
+                        points: vec![
+                            Coordinate2D::new(0.0f64, 0.5).into(),
+                            Coordinate2D::new(2., 1.0).into(),
+                        ],
+                    },
+                    result_descriptor: VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReferenceOption::SpatialReference(
+                            SpatialReference::epsg_4326(),
+                        ),
+                        columns: [(
+                            "foo".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Int,
+                                measurement: Measurement::Unitless.into(),
+                            },
+                        )]
+                        .into(),
+                        time: Some(TimeInterval::default()),
+                        bbox: Some(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(0.0f64, 0.5),
+                                Coordinate2D::new(2., 1.0),
+                            )
+                            .unwrap(),
+                        ),
+                    }
+                    .into(),
+                    phantom: PhantomData,
+                }],
+            )
+            .await;
+
+            test_type(
+                &pool,
+                "OgrMetaData",
+                [crate::api::model::operators::OgrMetaData {
+                    loading_info: crate::api::model::operators::OgrSourceDataset {
+                        file_name: "test".into(),
+                        layer_name: "test".to_string(),
+                        data_type: Some(VectorDataType::MultiPoint.into()),
+                        time: crate::api::model::operators::OgrSourceDatasetTimeType::Start {
+                            start_field: "start".to_string(),
+                            start_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                            duration: crate::api::model::operators::OgrSourceDurationSpec::Zero,
+                        },
+                        default_geometry: Some(
+                            crate::api::model::operators::TypedGeometry::MultiPoint(MultiPoint {
+                                coordinates: vec![
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                ],
+                            }),
+                        ),
+                        columns: Some(crate::api::model::operators::OgrSourceColumnSpec {
+                            format_specifics: Some(
+                                crate::api::model::operators::FormatSpecifics::Csv {
+                                    header: CsvHeader::Auto.into(),
+                                },
+                            ),
+                            x: "x".to_string(),
+                            y: Some("y".to_string()),
+                            int: vec!["int".to_string()],
+                            float: vec!["float".to_string()],
+                            text: vec!["text".to_string()],
+                            bool: vec!["bool".to_string()],
+                            datetime: vec!["datetime".to_string()],
+                            rename: Some(
+                                [
+                                    ("xx".to_string(), "xx_renamed".to_string()),
+                                    ("yx".to_string(), "yy_renamed".to_string()),
+                                ]
+                                .into(),
+                            ),
+                        }),
+                        force_ogr_time_filter: false,
+                        force_ogr_spatial_filter: true,
+                        on_error: crate::api::model::operators::OgrSourceErrorSpec::Abort,
+                        sql_query: None,
+                        attribute_query: Some("foo = 'bar'".to_string()),
+                        cache_ttl: CacheTtlSeconds::new(5),
+                    },
+                    result_descriptor: VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReferenceOption::SpatialReference(
+                            SpatialReference::epsg_4326(),
+                        ),
+                        columns: [(
+                            "foo".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Int,
+                                measurement: Measurement::Unitless.into(),
+                            },
+                        )]
+                        .into(),
+                        time: Some(TimeInterval::default()),
+                        bbox: Some(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(0.0f64, 0.5),
+                                Coordinate2D::new(2., 1.0),
+                            )
+                            .unwrap(),
+                        ),
+                    }
+                    .into(),
+                    phantom: PhantomData,
+                }],
+            )
+            .await;
         })
         .await;
     }
+
+    // TODO: remove
+    // #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    // #[allow(clippy::too_many_lines)]
+    // async fn test_postgres_type_serialization_single() {
+    //     pub async fn test_type<T>(
+    //         conn: &PooledConnection<'_, PostgresConnectionManager<tokio_postgres::NoTls>>,
+    //         sql_type: &str,
+    //         checks: impl IntoIterator<Item = T>,
+    //     ) where
+    //         T: PartialEq + postgres_types::FromSqlOwned + postgres_types::ToSql + Sync,
+    //     {
+    //         const UNQUOTED: [&str; 1] = ["double precision"];
+
+    //         // don't quote built-in types
+    //         let quote = if UNQUOTED.contains(&sql_type) || sql_type.contains('[') {
+    //             ""
+    //         } else {
+    //             "\""
+    //         };
+
+    //         for value in checks {
+    //             let stmt = conn
+    //                 .prepare(&format!("SELECT $1::{quote}{sql_type}{quote}"))
+    //                 .await
+    //                 .unwrap();
+    //             let result: T = conn.query_one(&stmt, &[&value]).await.unwrap().get(0);
+
+    //             assert_eq!(value, result);
+    //         }
+    //     }
+
+    //     with_temp_context(|app_ctx, _| async move {
+    //         let pool = app_ctx.pool.get().await.unwrap();
+
+    //         dbg!("Coordinate2DArray1");
+
+    //         test_type(
+    //             &pool,
+    //             "Coordinate2DArray1",
+    //             [Coordinate2DArray1(vec![
+    //                 Coordinate2D::new(0.0f64, 0.5).into(),
+    //                 Coordinate2D::new(2., 1.0).into(),
+    //             ])],
+    //         )
+    //         .await;
+
+    //         dbg!("Coordinate2DArray2");
+
+    //         test_type(
+    //             &pool,
+    //             "Coordinate2DArray2",
+    //             [Coordinate2DArray2(vec![
+    //                 Coordinate2DArray1(vec![
+    //                     Coordinate2D::new(0.0f64, 0.5).into(),
+    //                     Coordinate2D::new(2., 1.0).into(),
+    //                 ]),
+    //                 Coordinate2DArray1(vec![
+    //                     Coordinate2D::new(0.0f64, 0.5).into(),
+    //                     Coordinate2D::new(2., 1.0).into(),
+    //                 ]),
+    //             ])],
+    //         )
+    //         .await;
+
+    //         dbg!("MultiLineString");
+
+    //         test_type(
+    //             &pool,
+    //             "MultiLineString",
+    //             [MultiLineString {
+    //                 coordinates: vec![
+    //                     vec![
+    //                         Coordinate2D::new(0.0f64, 0.5).into(),
+    //                         Coordinate2D::new(2., 1.0).into(),
+    //                     ],
+    //                     vec![
+    //                         Coordinate2D::new(0.0f64, 0.5).into(),
+    //                         Coordinate2D::new(2., 1.0).into(),
+    //                     ],
+    //                 ],
+    //             }],
+    //         )
+    //         .await;
+    //     })
+    //     .await;
+    // }
 }

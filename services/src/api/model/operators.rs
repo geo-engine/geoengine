@@ -629,7 +629,7 @@ impl From<UnixTimeStampType> for geoengine_operators::source::UnixTimeStampType 
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "lowercase")]
 pub enum OgrSourceErrorSpec {
     Ignore,
