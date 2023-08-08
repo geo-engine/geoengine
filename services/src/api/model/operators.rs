@@ -1,7 +1,7 @@
 use crate::api::model::datatypes::{
-    Coordinate2D, DateTimeParseFormat, GdalConfigOption, MultiLineString, MultiPoint, MultiPolygon,
-    NoGeometry, QueryRectangle, RasterPropertiesEntryType, RasterPropertiesKey, SpatialResolution,
-    TimeInstance, TimeStep, VectorQueryRectangle, CacheTtlSeconds,
+    CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, GdalConfigOption, MultiLineString,
+    MultiPoint, MultiPolygon, NoGeometry, QueryRectangle, RasterPropertiesEntryType,
+    RasterPropertiesKey, SpatialResolution, TimeInstance, TimeStep, VectorQueryRectangle,
 };
 use async_trait::async_trait;
 use geoengine_operators::{

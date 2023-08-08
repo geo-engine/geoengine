@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{
-    AxisLabels, BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer,
+    AxisLabels, BoundingBox2D, Breakpoint, CacheTtlSeconds, ClassificationMeasurement, Colorizer,
     ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DatasetName,
     DateTimeParseFormat, DefaultColors, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId,
     LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon,
@@ -7,7 +7,6 @@ use crate::api::model::datatypes::{
     RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
     RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority, SpatialResolution,
     TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
-    CacheTtlSeconds,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
