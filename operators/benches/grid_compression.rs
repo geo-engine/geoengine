@@ -99,7 +99,7 @@ async fn main() {
             };
             let time_end = std::time::Instant::now();
             times.add((time_end - time_start).as_micros());
-            tile_sizes.add(tile.compressed_data_size());
+            tile_sizes.add(tile.compressed_data_len());
         }
 
         mode_times.insert(compression_mode.to_string(), times);
