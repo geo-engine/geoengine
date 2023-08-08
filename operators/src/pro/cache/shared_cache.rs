@@ -135,7 +135,7 @@ pub trait CacheView<C, L>: CacheEvictUntilFit {
 }
 
 #[allow(clippy::type_complexity)]
-pub struct OperatorCacheEntryView<'a, C: CacheBackendElement> {
+pub struct OperatorCacheEntryView<'a, C: CacheBackendElementExt> {
     operator_cache: &'a mut OperatorCacheEntry<
         CacheQueryEntry<C::Query, C::CacheContainer>,
         CacheQueryEntry<C::Query, C::LandingZoneContainer>,
@@ -147,7 +147,7 @@ pub struct OperatorCacheEntryView<'a, C: CacheBackendElement> {
 
 impl<'a, C> OperatorCacheEntryView<'a, C>
 where
-    C: CacheBackendElement + ByteSize,
+    C: CacheBackendElementExt + ByteSize,
     C::Query: Clone + CacheQueryMatch,
     CacheQueryEntry<C::Query, C::LandingZoneContainer>: ByteSize,
     CacheQueryEntry<C::Query, C::CacheContainer>: ByteSize,
@@ -383,7 +383,7 @@ struct CacheQueryResult<'a, Query, CE> {
     expired_cache_entry_ids: Vec<CacheEntryId>,
 }
 
-pub trait Cache<C: CacheBackendElement>:
+pub trait Cache<C: CacheBackendElementExt>:
     CacheView<
     CacheQueryEntry<C::Query, C::CacheContainer>,
     CacheQueryEntry<C::Query, C::LandingZoneContainer>,
@@ -528,7 +528,7 @@ where
             .ok_or(CacheError::QueryNotFoundInLandingZone)?;
         let cache_entry: CacheQueryEntry<
             <C as CacheBackendElement>::Query,
-            <C as CacheBackendElement>::CacheContainer,
+            <C as CacheBackendElementExt>::CacheContainer,
         > = landing_zone_entry.into();
         // when moving an element from the landing zone to the cache, we allow the cache size to overflow.
         // This is done because the total cache size is the cache size + the landing zone size.
@@ -545,7 +545,12 @@ where
 
 impl<T> Cache<CompressedRasterTile2D<T>> for CacheBackend
 where
-    T: Pixel + CacheElementSubType<CacheElementType = CompressedRasterTile2D<T>>,
+    T: Pixel,
+    CompressedRasterTile2D<T>: CacheBackendElementExt<
+        Query = RasterQueryRectangle,
+        LandingZoneContainer = LandingZoneQueryTiles,
+        CacheContainer = CachedTiles,
+    >,
 {
     fn operator_cache_view_mut(
         &mut self,
@@ -564,8 +569,13 @@ where
 
 impl<T> Cache<FeatureCollection<T>> for CacheBackend
 where
-    T: Geometry + CacheElementSubType<CacheElementType = FeatureCollection<T>> + ArrowTyped,
-    FeatureCollection<T>: CacheElementHitCheck,
+    T: Geometry + ArrowTyped,
+    FeatureCollection<T>: CacheElementHitCheck
+        + CacheBackendElementExt<
+            Query = VectorQueryRectangle,
+            LandingZoneContainer = LandingZoneQueryFeatures,
+            CacheContainer = CachedFeatures,
+        >,
 {
     fn operator_cache_view_mut(
         &mut self,
@@ -603,17 +613,6 @@ where
     Self: Sized,
 {
     type Query: CacheQueryMatch + Clone + Send + Sync;
-    type LandingZoneContainer: LandingZoneElementsContainer<Self>;
-    type CacheContainer: CacheElementsContainer<Self::Query, Self>
-        + From<Self::LandingZoneContainer>;
-    type CacheElementSubType: CacheElementSubType<CacheElementType = Self>;
-
-    fn move_into_landing_zone(
-        self,
-        landing_zone: &mut Self::LandingZoneContainer,
-    ) -> Result<(), CacheError> {
-        landing_zone.insert_element(self)
-    }
 
     fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError>;
 
@@ -622,20 +621,19 @@ where
     fn typed_canonical_operator_name(key: CanonicOperatorName) -> TypedCanonicOperatorName;
 }
 
-pub trait CacheElementSubType {
-    type CacheElementType: CacheBackendElement;
+pub trait CacheBackendElementExt: CacheBackendElement {
+    type LandingZoneContainer: LandingZoneElementsContainer<Self>;
+    type CacheContainer: CacheElementsContainer<Self::Query, Self>
+        + From<Self::LandingZoneContainer>;
 
-    fn insert_element_into_landing_zone(
-        landing_zone: &mut <Self::CacheElementType as CacheBackendElement>::LandingZoneContainer,
-        element: Self::CacheElementType,
+    fn move_element_into_landing_zone(
+        self,
+        landing_zone: &mut Self::LandingZoneContainer,
     ) -> Result<(), super::error::CacheError>;
 
-    fn create_empty_landing_zone(
-    ) -> <Self::CacheElementType as CacheBackendElement>::LandingZoneContainer;
+    fn create_empty_landing_zone() -> Self::LandingZoneContainer;
 
-    fn results_arc(
-        cache_elements_container: &<Self::CacheElementType as CacheBackendElement>::CacheContainer,
-    ) -> Option<Arc<Vec<Self::CacheElementType>>>;
+    fn results_arc(cache_elements_container: &Self::CacheContainer) -> Option<Arc<Vec<Self>>>;
 }
 
 #[derive(Debug)]
@@ -890,7 +888,7 @@ impl From<VectorLandingQueryEntry> for VectorCacheQueryEntry {
 }
 
 pub trait CacheElement: Sized {
-    type StoredCacheElement: CacheBackendElement<Query = Self::Query>;
+    type StoredCacheElement: CacheBackendElementExt<Query = Self::Query>;
     type Query;
     type ResultStream: Stream<Item = Result<Self, CacheError>>;
 
@@ -939,18 +937,18 @@ where
     C: CacheElement + Send + Sync + 'static + ByteSize,
     CacheBackend: Cache<C::StoredCacheElement>,
     C::Query: Clone + CacheQueryMatch + Send + Sync,
-    C::StoredCacheElement: CacheBackendElement<Query = C::Query> + Send + ByteSize,
-    <C::StoredCacheElement as CacheBackendElement>::LandingZoneContainer:
+    C::StoredCacheElement: CacheBackendElementExt<Query = C::Query> + Send + ByteSize,
+    <C::StoredCacheElement as CacheBackendElementExt>::LandingZoneContainer:
         LandingZoneElementsContainer<C::StoredCacheElement> + ByteSize,
-    <C::StoredCacheElement as CacheBackendElement>::CacheContainer:
+    <C::StoredCacheElement as CacheBackendElementExt>::CacheContainer:
         CacheElementsContainer<C::Query, C::StoredCacheElement> + ByteSize,
     CacheQueryEntry<
         <C as CacheElement>::Query,
-        <<C as CacheElement>::StoredCacheElement as CacheBackendElement>::CacheContainer,
+        <<C as CacheElement>::StoredCacheElement as CacheBackendElementExt>::CacheContainer,
     >: From<
         CacheQueryEntry<
             <C as CacheElement>::Query,
-            <<C as CacheElement>::StoredCacheElement as CacheBackendElement>::LandingZoneContainer,
+            <<C as CacheElement>::StoredCacheElement as CacheBackendElementExt>::LandingZoneContainer,
         >,
     >,
 {

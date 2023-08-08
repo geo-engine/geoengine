@@ -1,9 +1,8 @@
 use super::error::CacheError;
 use super::shared_cache::{
-    CacheBackendElement, CacheElementsContainer, CacheElementsContainerInfos,
-    LandingZoneElementsContainer,
+    CacheBackendElement, CacheBackendElementExt, CacheElement, CacheElementsContainer,
+    CacheElementsContainerInfos, LandingZoneElementsContainer,
 };
-use super::shared_cache::{CacheElement, CacheElementSubType};
 use crate::util::Result;
 use futures::stream::FusedStream;
 use futures::Stream;
@@ -135,40 +134,38 @@ impl CacheElementsContainerInfos<VectorQueryRectangle> for CachedFeatures {
 
 impl<G> CacheElementsContainer<VectorQueryRectangle, FeatureCollection<G>> for CachedFeatures
 where
-    G: CacheElementSubType<CacheElementType = FeatureCollection<G>> + Geometry + ArrowTyped,
-    FeatureCollection<G>: CacheElementHitCheck,
+    G: Geometry + ArrowTyped,
+    FeatureCollection<G>: CacheBackendElementExt<CacheContainer = Self> + CacheElementHitCheck,
 {
     fn results_arc(&self) -> Option<Arc<Vec<FeatureCollection<G>>>> {
-        G::results_arc(self)
+        FeatureCollection::<G>::results_arc(self)
     }
 }
 
 impl<G> LandingZoneElementsContainer<FeatureCollection<G>> for LandingZoneQueryFeatures
 where
-    G: CacheElementSubType<CacheElementType = FeatureCollection<G>> + Geometry + ArrowTyped,
-    FeatureCollection<G>: CacheElementHitCheck,
+    G: Geometry + ArrowTyped,
+    FeatureCollection<G>:
+        CacheBackendElementExt<LandingZoneContainer = Self> + CacheElementHitCheck,
 {
     fn insert_element(
         &mut self,
         element: FeatureCollection<G>,
     ) -> Result<(), super::error::CacheError> {
-        G::insert_element_into_landing_zone(self, element)
+        FeatureCollection::<G>::move_element_into_landing_zone(element, self)
     }
 
     fn create_empty() -> Self {
-        G::create_empty_landing_zone()
+        FeatureCollection::<G>::create_empty_landing_zone()
     }
 }
 
 impl<G> CacheBackendElement for FeatureCollection<G>
 where
-    G: Geometry + ArrowTyped + CacheElementSubType<CacheElementType = Self> + ArrowTyped + Sized,
+    G: Geometry + ArrowTyped + ArrowTyped + Sized,
     FeatureCollection<G>: CacheElementHitCheck,
 {
     type Query = VectorQueryRectangle;
-    type LandingZoneContainer = LandingZoneQueryFeatures;
-    type CacheContainer = CachedFeatures;
-    type CacheElementSubType = G;
 
     fn cache_hint(&self) -> geoengine_datatypes::primitives::CacheHint {
         self.cache_hint
@@ -192,16 +189,17 @@ where
 
 macro_rules! impl_cache_element_subtype {
     ($g:ty, $variant:ident) => {
-        impl CacheElementSubType for $g {
-            type CacheElementType = FeatureCollection<$g>;
+        impl CacheBackendElementExt for FeatureCollection<$g> {
+            type LandingZoneContainer = LandingZoneQueryFeatures;
+            type CacheContainer = CachedFeatures;
 
-            fn insert_element_into_landing_zone(
+            fn move_element_into_landing_zone(
+                self,
                 landing_zone: &mut LandingZoneQueryFeatures,
-                element: Self::CacheElementType,
             ) -> Result<(), super::error::CacheError> {
                 match landing_zone {
                     LandingZoneQueryFeatures::$variant(v) => {
-                        v.push(element);
+                        v.push(self);
                         Ok(())
                     }
                     _ => Err(super::error::CacheError::InvalidTypeForInsertion),
@@ -212,9 +210,7 @@ macro_rules! impl_cache_element_subtype {
                 LandingZoneQueryFeatures::$variant(Vec::new())
             }
 
-            fn results_arc(
-                cache_elements_container: &CachedFeatures,
-            ) -> Option<Arc<Vec<Self::CacheElementType>>> {
+            fn results_arc(cache_elements_container: &CachedFeatures) -> Option<Arc<Vec<Self>>> {
                 if let CachedFeatures::$variant(v) = cache_elements_container {
                     Some(v.clone())
                 } else {
@@ -388,8 +384,14 @@ impl_cache_result_check!(MultiPolygon);
 
 impl<G> CacheElement for FeatureCollection<G>
 where
-    G: Geometry + ArrowTyped + CacheElementSubType<CacheElementType = Self>,
-    FeatureCollection<G>: ByteSize + CacheElementHitCheck,
+    G: Geometry + ArrowTyped,
+    FeatureCollection<G>: ByteSize
+        + CacheElementHitCheck
+        + CacheBackendElementExt<
+            Query = VectorQueryRectangle,
+            LandingZoneContainer = LandingZoneQueryFeatures,
+            CacheContainer = CachedFeatures,
+        >,
 {
     type StoredCacheElement = FeatureCollection<G>;
     type Query = VectorQueryRectangle;

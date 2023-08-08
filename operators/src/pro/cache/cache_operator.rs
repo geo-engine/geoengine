@@ -1,5 +1,5 @@
 use super::error::CacheError;
-use super::shared_cache::{CacheElement, CacheElementSubType};
+use super::shared_cache::CacheElement;
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
     CanonicOperatorName, ChunkByteSize, InitializedRasterOperator, InitializedVectorOperator,
@@ -358,7 +358,7 @@ trait ResultStreamWrapper: CacheElement {
 
 impl<G> ResultStreamWrapper for FeatureCollection<G>
 where
-    G: Geometry + ArrowTyped + Send + Sync + 'static + CacheElementSubType,
+    G: Geometry + ArrowTyped + Send + Sync + 'static,
     FeatureCollection<G>: CacheElement + Send + Sync,
     Self::ResultStream: FusedStream + Send + Sync,
 {
@@ -375,7 +375,7 @@ where
 
 impl<P> ResultStreamWrapper for RasterTile2D<P>
 where
-    P: 'static + CacheElementSubType + Pixel,
+    P: 'static + Pixel,
     RasterTile2D<P>: CacheElement,
     Self::ResultStream: Send + Sync,
 {

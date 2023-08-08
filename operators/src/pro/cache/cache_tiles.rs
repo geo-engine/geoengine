@@ -1,6 +1,6 @@
 use super::error::CacheError;
 use super::shared_cache::{
-    CacheBackendElement, CacheElement, CacheElementSubType, CacheElementsContainer,
+    CacheBackendElement, CacheBackendElementExt, CacheElement, CacheElementsContainer,
     CacheElementsContainerInfos, LandingZoneElementsContainer,
 };
 use crate::util::Result;
@@ -146,37 +146,36 @@ impl CacheElementsContainerInfos<RasterQueryRectangle> for CachedTiles {
 
 impl<T> CacheElementsContainer<RasterQueryRectangle, CompressedRasterTile2D<T>> for CachedTiles
 where
-    T: CacheElementSubType<CacheElementType = CompressedRasterTile2D<T>> + Pixel,
+    T: Pixel,
+    CompressedRasterTile2D<T>: CacheBackendElementExt<CacheContainer = CachedTiles>,
 {
     fn results_arc(&self) -> Option<Arc<Vec<CompressedRasterTile2D<T>>>> {
-        T::results_arc(self)
+        CompressedRasterTile2D::<T>::results_arc(self)
     }
 }
 
 impl<T> LandingZoneElementsContainer<CompressedRasterTile2D<T>> for LandingZoneQueryTiles
 where
-    T: CacheElementSubType<CacheElementType = CompressedRasterTile2D<T>> + Pixel,
+    T: Pixel,
+    CompressedRasterTile2D<T>: CacheBackendElementExt<LandingZoneContainer = LandingZoneQueryTiles>,
 {
     fn insert_element(
         &mut self,
         element: CompressedRasterTile2D<T>,
     ) -> Result<(), super::error::CacheError> {
-        T::insert_element_into_landing_zone(self, element)
+        CompressedRasterTile2D::<T>::move_element_into_landing_zone(element, self)
     }
 
     fn create_empty() -> Self {
-        T::create_empty_landing_zone()
+        CompressedRasterTile2D::<T>::create_empty_landing_zone()
     }
 }
 
 impl<T> CacheBackendElement for CompressedRasterTile2D<T>
 where
-    T: Pixel + CacheElementSubType<CacheElementType = Self>,
+    T: Pixel,
 {
     type Query = RasterQueryRectangle;
-    type LandingZoneContainer = LandingZoneQueryTiles;
-    type CacheContainer = CachedTiles;
-    type CacheElementSubType = T;
 
     fn cache_hint(&self) -> geoengine_datatypes::primitives::CacheHint {
         self.cache_hint
@@ -200,16 +199,17 @@ where
 
 macro_rules! impl_cache_element_subtype {
     ($t:ty, $variant:ident) => {
-        impl CacheElementSubType for $t {
-            type CacheElementType = CompressedRasterTile2D<$t>;
+        impl CacheBackendElementExt for CompressedRasterTile2D<$t> {
+            type LandingZoneContainer = LandingZoneQueryTiles;
+            type CacheContainer = CachedTiles;
 
-            fn insert_element_into_landing_zone(
+            fn move_element_into_landing_zone(
+                self,
                 landing_zone: &mut LandingZoneQueryTiles,
-                element: Self::CacheElementType,
             ) -> Result<(), super::error::CacheError> {
                 match landing_zone {
                     LandingZoneQueryTiles::$variant(v) => {
-                        v.push(element);
+                        v.push(self);
                         Ok(())
                     }
                     _ => Err(super::error::CacheError::InvalidTypeForInsertion),
@@ -220,9 +220,7 @@ macro_rules! impl_cache_element_subtype {
                 LandingZoneQueryTiles::$variant(Vec::new())
             }
 
-            fn results_arc(
-                cache_elements_container: &CachedTiles,
-            ) -> Option<Arc<Vec<Self::CacheElementType>>> {
+            fn results_arc(cache_elements_container: &CachedTiles) -> Option<Arc<Vec<Self>>> {
                 if let CachedTiles::$variant(v) = cache_elements_container {
                     Some(v.clone())
                 } else {
@@ -631,9 +629,10 @@ where
 
 impl<T> CacheElement for RasterTile2D<T>
 where
-    T: Pixel + CacheElementSubType,
-    CompressedRasterTile2D<T>:
-        CompressedRasterTileExt<GridShape2D, T> + CacheBackendElement<Query = RasterQueryRectangle>,
+    T: Pixel,
+    CompressedRasterTile2D<T>: CompressedRasterTileExt<GridShape2D, T>
+        + CacheBackendElement<Query = RasterQueryRectangle>
+        + CacheBackendElementExt,
 {
     type StoredCacheElement = CompressedRasterTile2D<T>;
     type Query = RasterQueryRectangle;
