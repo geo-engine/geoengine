@@ -586,7 +586,7 @@ CREATE TABLE datasets (
     tags text [],
     source_operator text NOT NULL,
     result_descriptor "ResultDescriptor" NOT NULL,
-    meta_data json NOT NULL,
+    meta_data "MetaDataDefinition" NOT NULL,
     symbology "Symbology",
     provenance "Provenance" []
 );

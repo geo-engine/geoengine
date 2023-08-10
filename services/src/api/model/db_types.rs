@@ -15,9 +15,9 @@ use super::{
         OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor, TypedGeometry,
         TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
     },
-    services::MetaDataDefinition,
 };
 use crate::{
+    datasets::storage::MetaDataDefinition,
     error::Error,
     projects::{
         ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
@@ -1461,7 +1461,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
     fn from(other: &MetaDataDefinition) -> Self {
         match other {
             MetaDataDefinition::MockMetaData(meta_data) => Self {
-                mock_meta_data: Some(meta_data.clone()),
+                mock_meta_data: Some(meta_data.clone().into()),
                 ogr_meta_data: None,
                 gdal_meta_data_regular: None,
                 gdal_static: None,
@@ -1470,7 +1470,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
             },
             MetaDataDefinition::OgrMetaData(meta_data) => Self {
                 mock_meta_data: None,
-                ogr_meta_data: Some(meta_data.clone()),
+                ogr_meta_data: Some(meta_data.clone().into()),
                 gdal_meta_data_regular: None,
                 gdal_static: None,
                 gdal_metadata_net_cdf_cf: None,
@@ -1479,7 +1479,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
             MetaDataDefinition::GdalMetaDataRegular(meta_data) => Self {
                 mock_meta_data: None,
                 ogr_meta_data: None,
-                gdal_meta_data_regular: Some(meta_data.clone()),
+                gdal_meta_data_regular: Some(meta_data.clone().into()),
                 gdal_static: None,
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
@@ -1488,7 +1488,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
                 mock_meta_data: None,
                 ogr_meta_data: None,
                 gdal_meta_data_regular: None,
-                gdal_static: Some(meta_data.clone()),
+                gdal_static: Some(meta_data.clone().into()),
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
             },
@@ -1497,7 +1497,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
                 ogr_meta_data: None,
                 gdal_meta_data_regular: None,
                 gdal_static: None,
-                gdal_metadata_net_cdf_cf: Some(meta_data.clone()),
+                gdal_metadata_net_cdf_cf: Some(meta_data.clone().into()),
                 gdal_meta_data_list: None,
             },
             MetaDataDefinition::GdalMetaDataList(meta_data) => Self {
@@ -1506,7 +1506,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
                 gdal_meta_data_regular: None,
                 gdal_static: None,
                 gdal_metadata_net_cdf_cf: None,
-                gdal_meta_data_list: Some(meta_data.clone()),
+                gdal_meta_data_list: Some(meta_data.clone().into()),
             },
         }
     }
@@ -1524,7 +1524,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_static: None,
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
-            } => Ok(MetaDataDefinition::MockMetaData(meta_data)),
+            } => Ok(MetaDataDefinition::MockMetaData(meta_data.into())),
             MetaDataDefinitionDbType {
                 mock_meta_data: None,
                 ogr_meta_data: Some(meta_data),
@@ -1532,7 +1532,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_static: None,
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
-            } => Ok(MetaDataDefinition::OgrMetaData(meta_data)),
+            } => Ok(MetaDataDefinition::OgrMetaData(meta_data.into())),
             MetaDataDefinitionDbType {
                 mock_meta_data: None,
                 ogr_meta_data: None,
@@ -1540,7 +1540,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_static: None,
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
-            } => Ok(MetaDataDefinition::GdalMetaDataRegular(meta_data)),
+            } => Ok(MetaDataDefinition::GdalMetaDataRegular(meta_data.into())),
             MetaDataDefinitionDbType {
                 mock_meta_data: None,
                 ogr_meta_data: None,
@@ -1548,7 +1548,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_static: Some(meta_data),
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
-            } => Ok(MetaDataDefinition::GdalStatic(meta_data)),
+            } => Ok(MetaDataDefinition::GdalStatic(meta_data.into())),
             MetaDataDefinitionDbType {
                 mock_meta_data: None,
                 ogr_meta_data: None,
@@ -1556,7 +1556,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_static: None,
                 gdal_metadata_net_cdf_cf: Some(meta_data),
                 gdal_meta_data_list: None,
-            } => Ok(MetaDataDefinition::GdalMetadataNetCdfCf(meta_data)),
+            } => Ok(MetaDataDefinition::GdalMetadataNetCdfCf(meta_data.into())),
             MetaDataDefinitionDbType {
                 mock_meta_data: None,
                 ogr_meta_data: None,
@@ -1564,7 +1564,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_static: None,
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: Some(meta_data),
-            } => Ok(MetaDataDefinition::GdalMetaDataList(meta_data)),
+            } => Ok(MetaDataDefinition::GdalMetaDataList(meta_data.into())),
             _ => Err(Error::UnexpectedInvalidDbTypeConversion),
         }
     }

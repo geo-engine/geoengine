@@ -3846,7 +3846,7 @@ mod tests {
                 &pool,
                 "MetaDataDefinition",
                 [
-                    crate::api::model::services::MetaDataDefinition::MockMetaData(
+                    crate::datasets::storage::MetaDataDefinition::MockMetaData(
                         crate::api::model::operators::MockMetaData {
                             loading_info:
                                 crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
@@ -3879,7 +3879,7 @@ mod tests {
                             }
                             .into(),
                             phantom: PhantomData,
-                        },
+                        }.into(),
                     ),
                     crate::api::model::services::MetaDataDefinition::OgrMetaData(crate::api::model::operators::OgrMetaData {
                         loading_info: crate::api::model::operators::OgrSourceDataset {
@@ -3951,7 +3951,7 @@ mod tests {
                         }
                         .into(),
                         phantom: PhantomData,
-                    }),
+                    }).into(),
                     crate::api::model::services::MetaDataDefinition::GdalMetaDataRegular(crate::api::model::operators::GdalMetaDataRegular {
                         result_descriptor: RasterResultDescriptor {
                             data_type: RasterDataType::U8,
@@ -4023,7 +4023,7 @@ mod tests {
                         }
                         .into(),
                         cache_ttl: CacheTtlSeconds::max(),
-                    }),
+                    }).into(),
                     crate::api::model::services::MetaDataDefinition::GdalStatic(crate::api::model::operators::GdalMetaDataStatic {
                         time: Some(TimeInterval::new_unchecked(0, 1).into()),
                         result_descriptor: RasterResultDescriptor {
@@ -4081,7 +4081,7 @@ mod tests {
                             allow_alphaband_as_mask: false,
                         },
                         cache_ttl: CacheTtlSeconds::max(),
-                    }),
+                    }).into(),
                     crate::api::model::services::MetaDataDefinition::GdalMetadataNetCdfCf(crate::api::model::operators::GdalMetadataNetCdfCf {
                         result_descriptor: RasterResultDescriptor {
                             data_type: RasterDataType::U8,
@@ -4146,7 +4146,7 @@ mod tests {
                         }
                         .into(),
                         band_offset: 3,
-                    }),
+                    }).into(),
                     crate::api::model::services::MetaDataDefinition::GdalMetaDataList(
                         crate::api::model::operators::GdalMetaDataList {
                             result_descriptor: RasterResultDescriptor {
@@ -4168,48 +4168,47 @@ mod tests {
                                 resolution: Some(SpatialResolution::zero_point_one()),
                             }
                             .into(),
-                            params:
-                                vec![crate::api::model::operators::GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new_unchecked(0, 1).into(),
-                        params: Some(crate::api::model::operators::GdalDatasetParameters {
-                            file_path: "text".into(),
-                            rasterband_channel: 1,
-                            geo_transform: crate::api::model::operators::GdalDatasetGeoTransform {
-                                origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
-                                x_pixel_size: 1.0,
-                                y_pixel_size: 2.0,
-                            },
-                            width: 42,
-                            height: 23,
-                            file_not_found_handling:
-                                crate::api::model::operators::FileNotFoundHandling::NoData,
-                            no_data_value: Some(42.0),
-                            properties_mapping: Some(vec![
-                                crate::api::model::operators::GdalMetadataMapping {
-                                    source_key: RasterPropertiesKey {
-                                        domain: None,
-                                        key: "foo".to_string(),
+                            params: vec![crate::api::model::operators::GdalLoadingInfoTemporalSlice {
+                                time: TimeInterval::new_unchecked(0, 1).into(),
+                                params: Some(crate::api::model::operators::GdalDatasetParameters {
+                                    file_path: "text".into(),
+                                    rasterband_channel: 1,
+                                    geo_transform: crate::api::model::operators::GdalDatasetGeoTransform {
+                                        origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                                        x_pixel_size: 1.0,
+                                        y_pixel_size: 2.0,
                                     },
-                                    target_key: RasterPropertiesKey {
-                                        domain: Some("bar".to_string()),
-                                        key: "foo".to_string(),
-                                    },
-                                    target_type: RasterPropertiesEntryType::String,
-                                },
-                            ]),
-                            gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                            gdal_config_options: Some(vec![
-                                crate::api::model::operators::GdalConfigOption::from((
-                                    "foo".to_string(),
-                                    "bar".to_string(),
-                                )),
-                            ]),
-                            allow_alphaband_as_mask: false,
-                        }),
-                        cache_ttl: CacheTtlSeconds::max(),
-                    }],
+                                    width: 42,
+                                    height: 23,
+                                    file_not_found_handling:
+                                        crate::api::model::operators::FileNotFoundHandling::NoData,
+                                    no_data_value: Some(42.0),
+                                    properties_mapping: Some(vec![
+                                        crate::api::model::operators::GdalMetadataMapping {
+                                            source_key: RasterPropertiesKey {
+                                                domain: None,
+                                                key: "foo".to_string(),
+                                            },
+                                            target_key: RasterPropertiesKey {
+                                                domain: Some("bar".to_string()),
+                                                key: "foo".to_string(),
+                                            },
+                                            target_type: RasterPropertiesEntryType::String,
+                                        },
+                                    ]),
+                                    gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                                    gdal_config_options: Some(vec![
+                                        crate::api::model::operators::GdalConfigOption::from((
+                                            "foo".to_string(),
+                                            "bar".to_string(),
+                                        )),
+                                    ]),
+                                    allow_alphaband_as_mask: false,
+                                }),
+                                cache_ttl: CacheTtlSeconds::max(),
+                            }],
                         },
-                    ),
+                    ).into(),
                 ],
             )
             .await;
