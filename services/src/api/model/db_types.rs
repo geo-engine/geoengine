@@ -3,16 +3,19 @@ use super::{
         BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
         Coordinate2D, DateTimeParseFormat, DefaultColors, FeatureDataType, LinearGradient,
         LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
-        OverUnderColors, Palette, RgbaColor, SpatialReferenceOption, TimeInterval, TimeStep,
-        VectorDataType,
+        OverUnderColors, Palette, RgbaColor, SpatialReferenceOption, TimeInstance, TimeInterval,
+        TimeStep, VectorDataType,
     },
     operators::{
-        CsvHeader, FormatSpecifics, MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData,
-        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
-        OgrSourceErrorSpec, OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor,
-        TypedGeometry, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
-        VectorResultDescriptor,
+        CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption,
+        GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataList, GdalMetaDataRegular,
+        GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
+        MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
+        OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
+        OgrSourceTimeFormat, PlotResultDescriptor, RasterResultDescriptor, TypedGeometry,
+        TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
     },
+    services::MetaDataDefinition,
 };
 use crate::{
     error::Error,
@@ -1291,69 +1294,281 @@ impl TryFrom<MockMetaDataDbType> for MockMetaData {
     }
 }
 
-/// TODO: describe
-// macro_rules! create_enum {
-//     (
-//         $StructName:ident,
-//         $postgresName:literal,
-//         $EnumName:ty,
-//         ( $( $variantName:ident : $Variant:path => $VariantType:ty ),+ )
-//     ) => {
-//         #[derive(Debug, ToSql, FromSql)]
-//         #[postgres(name = $postgresName)]
-//         pub struct $StructName {
-//             $(pub $variantName: Option< $VariantType >),+
-//         }
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "GdalDatasetParameters")]
+pub struct GdalDatasetParametersDbType {
+    pub file_path: String,
+    pub rasterband_channel: i64,
+    pub geo_transform: GdalDatasetGeoTransform,
+    pub width: i64,
+    pub height: i64,
+    pub file_not_found_handling: FileNotFoundHandling,
+    pub no_data_value: Option<f64>,
+    pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
+    pub gdal_open_options: Option<Vec<String>>,
+    pub gdal_config_options: Option<Vec<GdalConfigOption>>,
+    pub allow_alphaband_as_mask: bool,
+}
 
-//         impl From<& $EnumName > for $StructName {
-//             fn from(other: & $EnumName) -> Self {
-//                 match other {
-//                     $(
-//                         $Variant(raster) => Self {
-//                             $variantName: Some($variantName.clone()),
-//                             ..None
-//                         }
-//                     ),+
-//                 }
-//             }
-//         }
+impl From<&GdalDatasetParameters> for GdalDatasetParametersDbType {
+    fn from(other: &GdalDatasetParameters) -> Self {
+        Self {
+            file_path: other.file_path.to_string_lossy().to_string(),
+            rasterband_channel: other.rasterband_channel as i64,
+            geo_transform: other.geo_transform,
+            width: other.width as i64,
+            height: other.height as i64,
+            file_not_found_handling: other.file_not_found_handling,
+            no_data_value: other.no_data_value,
+            properties_mapping: other.properties_mapping.clone(),
+            gdal_open_options: other.gdal_open_options.clone(),
+            gdal_config_options: other.gdal_config_options.clone(),
+            allow_alphaband_as_mask: other.allow_alphaband_as_mask,
+        }
+    }
+}
 
-//         impl TryFrom<$StructName> for $EnumName {
-//             type Error = Error;
+impl TryFrom<GdalDatasetParametersDbType> for GdalDatasetParameters {
+    type Error = Error;
 
-//             fn try_from(
-//                 other: $StructName,
-//             ) -> Result<Self, Self::Error> {
-//                 match other {
-//                     $(
-//                         $StructName {
-//                             $variantName: Some($variantName),
-//                             ..
-//                         } => Ok(Self::$Variant($variantName))
-//                     ),+,
-//                     _ => Err(Error::UnexpectedInvalidDbTypeConversion),
-//                 }
-//             }
-//         }
-//     };
-// }
+    fn try_from(other: GdalDatasetParametersDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            file_path: other.file_path.into(),
+            rasterband_channel: other.rasterband_channel as usize,
+            geo_transform: other.geo_transform,
+            width: other.width as usize,
+            height: other.height as usize,
+            file_not_found_handling: other.file_not_found_handling,
+            no_data_value: other.no_data_value,
+            properties_mapping: other.properties_mapping,
+            gdal_open_options: other.gdal_open_options,
+            gdal_config_options: other.gdal_config_options,
+            allow_alphaband_as_mask: other.allow_alphaband_as_mask,
+        })
+    }
+}
 
-// use crate::api::model::{
-//     datatypes::{MultiLineString, MultiPoint, MultiPolygon, NoGeometry},
-//     operators::TypedGeometry,
-// };
+#[derive(Debug, ToSql, FromSql, PartialEq)]
+pub struct TextGdalSourceTimePlaceholderKeyValue {
+    pub key: String,
+    pub value: GdalSourceTimePlaceholder,
+}
 
-// create_enum!(
-//     TypedGeometryDbType,
-//     "TypedGeometry",
-//     TypedGeometry,
-//     (
-//         data : TypedGeometry::Data => NoGeometry,
-//         multi_point : TypedGeometry::MultiPoint => MultiPoint,
-//         multi_line_string : TypedGeometry::MultiLineString => MultiLineString,
-//         multi_polygon : TypedGeometry::MultiPolygon => MultiPolygon
-//     )
-// );
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "GdalMetaDataRegular")]
+pub struct GdalMetaDataRegularDbType {
+    pub result_descriptor: RasterResultDescriptor,
+    pub params: GdalDatasetParameters,
+    pub time_placeholders: Vec<TextGdalSourceTimePlaceholderKeyValue>,
+    pub data_time: TimeInterval,
+    pub step: TimeStep,
+    pub cache_ttl: CacheTtlSeconds,
+}
+
+impl From<&GdalMetaDataRegular> for GdalMetaDataRegularDbType {
+    fn from(other: &GdalMetaDataRegular) -> Self {
+        Self {
+            result_descriptor: other.result_descriptor.clone(),
+            params: other.params.clone(),
+            time_placeholders: other
+                .time_placeholders
+                .iter()
+                .map(|(key, value)| TextGdalSourceTimePlaceholderKeyValue {
+                    key: key.clone(),
+                    value: value.clone(),
+                })
+                .collect(),
+            data_time: other.data_time,
+            step: other.step,
+            cache_ttl: other.cache_ttl,
+        }
+    }
+}
+
+impl TryFrom<GdalMetaDataRegularDbType> for GdalMetaDataRegular {
+    type Error = Error;
+
+    fn try_from(other: GdalMetaDataRegularDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            result_descriptor: other.result_descriptor,
+            params: other.params,
+            time_placeholders: other
+                .time_placeholders
+                .iter()
+                .map(|item| (item.key.clone(), item.value.clone()))
+                .collect(),
+            data_time: other.data_time,
+            step: other.step,
+            cache_ttl: other.cache_ttl,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "GdalMetadataNetCdfCf")]
+pub struct GdalMetadataNetCdfCfDbType {
+    pub result_descriptor: RasterResultDescriptor,
+    pub params: GdalDatasetParameters,
+    pub start: TimeInstance,
+    pub end: TimeInstance,
+    pub step: TimeStep,
+    pub band_offset: i64,
+    pub cache_ttl: CacheTtlSeconds,
+}
+
+impl From<&GdalMetadataNetCdfCf> for GdalMetadataNetCdfCfDbType {
+    fn from(other: &GdalMetadataNetCdfCf) -> Self {
+        Self {
+            result_descriptor: other.result_descriptor.clone(),
+            params: other.params.clone(),
+            start: other.start,
+            end: other.end,
+            step: other.step,
+            band_offset: other.band_offset as i64,
+            cache_ttl: other.cache_ttl,
+        }
+    }
+}
+
+impl TryFrom<GdalMetadataNetCdfCfDbType> for GdalMetadataNetCdfCf {
+    type Error = Error;
+
+    fn try_from(other: GdalMetadataNetCdfCfDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            result_descriptor: other.result_descriptor,
+            params: other.params,
+            start: other.start,
+            end: other.end,
+            step: other.step,
+            band_offset: other.band_offset as usize,
+            cache_ttl: other.cache_ttl,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "MetaDataDefinition")]
+pub struct MetaDataDefinitionDbType {
+    mock_meta_data: Option<MockMetaData>,
+    ogr_meta_data: Option<OgrMetaData>,
+    gdal_meta_data_regular: Option<GdalMetaDataRegular>,
+    gdal_static: Option<GdalMetaDataStatic>,
+    gdal_metadata_net_cdf_cf: Option<GdalMetadataNetCdfCf>,
+    gdal_meta_data_list: Option<GdalMetaDataList>,
+}
+
+impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
+    fn from(other: &MetaDataDefinition) -> Self {
+        match other {
+            MetaDataDefinition::MockMetaData(meta_data) => Self {
+                mock_meta_data: Some(meta_data.clone()),
+                ogr_meta_data: None,
+                gdal_meta_data_regular: None,
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: None,
+            },
+            MetaDataDefinition::OgrMetaData(meta_data) => Self {
+                mock_meta_data: None,
+                ogr_meta_data: Some(meta_data.clone()),
+                gdal_meta_data_regular: None,
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: None,
+            },
+            MetaDataDefinition::GdalMetaDataRegular(meta_data) => Self {
+                mock_meta_data: None,
+                ogr_meta_data: None,
+                gdal_meta_data_regular: Some(meta_data.clone()),
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: None,
+            },
+            MetaDataDefinition::GdalStatic(meta_data) => Self {
+                mock_meta_data: None,
+                ogr_meta_data: None,
+                gdal_meta_data_regular: None,
+                gdal_static: Some(meta_data.clone()),
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: None,
+            },
+            MetaDataDefinition::GdalMetadataNetCdfCf(meta_data) => Self {
+                mock_meta_data: None,
+                ogr_meta_data: None,
+                gdal_meta_data_regular: None,
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: Some(meta_data.clone()),
+                gdal_meta_data_list: None,
+            },
+            MetaDataDefinition::GdalMetaDataList(meta_data) => Self {
+                mock_meta_data: None,
+                ogr_meta_data: None,
+                gdal_meta_data_regular: None,
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: Some(meta_data.clone()),
+            },
+        }
+    }
+}
+
+impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
+    type Error = Error;
+
+    fn try_from(other: MetaDataDefinitionDbType) -> Result<Self, Self::Error> {
+        match other {
+            MetaDataDefinitionDbType {
+                mock_meta_data: Some(meta_data),
+                ogr_meta_data: None,
+                gdal_meta_data_regular: None,
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: None,
+            } => Ok(MetaDataDefinition::MockMetaData(meta_data)),
+            MetaDataDefinitionDbType {
+                mock_meta_data: None,
+                ogr_meta_data: Some(meta_data),
+                gdal_meta_data_regular: None,
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: None,
+            } => Ok(MetaDataDefinition::OgrMetaData(meta_data)),
+            MetaDataDefinitionDbType {
+                mock_meta_data: None,
+                ogr_meta_data: None,
+                gdal_meta_data_regular: Some(meta_data),
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: None,
+            } => Ok(MetaDataDefinition::GdalMetaDataRegular(meta_data)),
+            MetaDataDefinitionDbType {
+                mock_meta_data: None,
+                ogr_meta_data: None,
+                gdal_meta_data_regular: None,
+                gdal_static: Some(meta_data),
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: None,
+            } => Ok(MetaDataDefinition::GdalStatic(meta_data)),
+            MetaDataDefinitionDbType {
+                mock_meta_data: None,
+                ogr_meta_data: None,
+                gdal_meta_data_regular: None,
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: Some(meta_data),
+                gdal_meta_data_list: None,
+            } => Ok(MetaDataDefinition::GdalMetadataNetCdfCf(meta_data)),
+            MetaDataDefinitionDbType {
+                mock_meta_data: None,
+                ogr_meta_data: None,
+                gdal_meta_data_regular: None,
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: Some(meta_data),
+            } => Ok(MetaDataDefinition::GdalMetaDataList(meta_data)),
+            _ => Err(Error::UnexpectedInvalidDbTypeConversion),
+        }
+    }
+}
 
 /// A macro for quickly implementing `FromSql` and `ToSql` for `$RustType` if there is a `From` and `Into`
 /// implementation for another type `$DbType` that already implements it.
@@ -1401,7 +1616,11 @@ delegate_from_to_sql!(Colorizer, ColorizerDbType);
 delegate_from_to_sql!(ColorParam, ColorParamDbType);
 delegate_from_to_sql!(DefaultColors, DefaultColorsDbType);
 delegate_from_to_sql!(FormatSpecifics, FormatSpecificsDbType);
+delegate_from_to_sql!(GdalDatasetParameters, GdalDatasetParametersDbType);
+delegate_from_to_sql!(GdalMetadataNetCdfCf, GdalMetadataNetCdfCfDbType);
+delegate_from_to_sql!(GdalMetaDataRegular, GdalMetaDataRegularDbType);
 delegate_from_to_sql!(Measurement, MeasurementDbType);
+delegate_from_to_sql!(MetaDataDefinition, MetaDataDefinitionDbType);
 delegate_from_to_sql!(MockMetaData, MockMetaDataDbType);
 delegate_from_to_sql!(MultiLineString, MultiLineStringDbType);
 delegate_from_to_sql!(MultiPolygon, MultiPolygonDbType);

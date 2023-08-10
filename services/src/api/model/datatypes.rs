@@ -1811,7 +1811,20 @@ impl TryFrom<SerializablePalette> for Palette {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq, PartialOrd, Ord, ToSchema)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Hash,
+    Eq,
+    PartialOrd,
+    Ord,
+    ToSchema,
+    FromSql,
+    ToSql,
+)]
 pub struct RasterPropertiesKey {
     pub domain: Option<String>,
     pub key: String,
@@ -1835,7 +1848,7 @@ impl From<RasterPropertiesKey> for geoengine_datatypes::raster::RasterProperties
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema, FromSql, ToSql)]
 pub enum RasterPropertiesEntryType {
     Number,
     String,
@@ -2005,6 +2018,62 @@ impl<'a> ToSchema<'a> for StringPair {
                 .max_items(Some(2))
                 .into(),
         )
+    }
+}
+
+impl ToSql for StringPair {
+    fn to_sql(
+        &self,
+        ty: &postgres_types::Type,
+        w: &mut bytes::BytesMut,
+    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        // unpack domain type
+        let ty = match ty.kind() {
+            postgres_types::Kind::Domain(ty) => ty,
+            _ => ty,
+        };
+
+        let (a, b) = &self.0;
+        <[&String; 2] as ToSql>::to_sql(&[a, b], ty, w)
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        // unpack domain type
+        let ty = match ty.kind() {
+            postgres_types::Kind::Domain(ty) => ty,
+            _ => ty,
+        };
+
+        <[String; 2] as ToSql>::accepts(ty)
+    }
+
+    postgres_types::to_sql_checked!();
+}
+
+impl<'a> FromSql<'a> for StringPair {
+    fn from_sql(
+        ty: &postgres_types::Type,
+        raw: &'a [u8],
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        // unpack domain type
+        let ty = match ty.kind() {
+            postgres_types::Kind::Domain(ty) => ty,
+            _ => ty,
+        };
+
+        let [a, b] = <[String; 2] as FromSql>::from_sql(ty, raw)?;
+
+        Ok(Self((a, b)))
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        // unpack domain type
+        let ty = match ty.kind() {
+            postgres_types::Kind::Domain(ty) => ty,
+            _ => ty,
+        };
+
+        <[String; 2] as FromSql>::accepts(ty)
     }
 }
 

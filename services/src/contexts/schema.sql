@@ -402,34 +402,112 @@ CREATE TYPE "OgrMetaData" AS (
     result_descriptor "VectorResultDescriptor"
 );
 
-CREATE TYPE "GdalMetaDataRegular" AS (
-    "todo" boolean
+CREATE TYPE "GdalDatasetGeoTransform" AS (
+    origin_coordinate "Coordinate2D",
+    x_pixel_size double precision,
+    y_pixel_size double precision
 );
 
-CREATE TYPE "GdalStatic" AS (
-    "todo" boolean
+CREATE TYPE "FileNotFoundHandling" AS ENUM (
+    'NoData',
+    'Error'
+);
+
+CREATE TYPE "RasterPropertiesKey" AS (
+    domain text,
+    key text
+);
+
+CREATE TYPE "RasterPropertiesEntryType" AS ENUM (
+    'Number',
+    'String'
+);
+
+CREATE TYPE "GdalMetadataMapping" AS (
+    source_key "RasterPropertiesKey",
+    target_key "RasterPropertiesKey",
+    target_type "RasterPropertiesEntryType"
+);
+
+CREATE DOMAIN "StringPair" AS text [2];
+
+CREATE TYPE "GdalDatasetParameters" AS (
+    file_path text,
+    rasterband_channel bigint,
+    geo_transform "GdalDatasetGeoTransform",
+    width bigint,
+    height bigint,
+    file_not_found_handling "FileNotFoundHandling",
+    no_data_value double precision,
+    properties_mapping "GdalMetadataMapping" [],
+    gdal_open_options text [],
+    gdal_config_options "StringPair" [],
+    allow_alphaband_as_mask boolean
+);
+
+CREATE TYPE "TimeReference" AS ENUM (
+    'Start',
+    'End'
+);
+
+CREATE TYPE "GdalSourceTimePlaceholder" AS (
+    "format" "DateTimeParseFormat",
+    reference "TimeReference"
+);
+
+CREATE TYPE "TextGdalSourceTimePlaceholderKeyValue" AS (
+    "key" text,
+    "value" "GdalSourceTimePlaceholder"
+);
+
+CREATE TYPE "GdalMetaDataRegular" AS (
+    result_descriptor "RasterResultDescriptor",
+    params "GdalDatasetParameters",
+    time_placeholders "TextGdalSourceTimePlaceholderKeyValue" [],
+    data_time "TimeInterval",
+    step "TimeStep",
+    cache_ttl int
+);
+
+CREATE TYPE "GdalMetaDataStatic" AS (
+    time "TimeInterval",
+    params "GdalDatasetParameters",
+    result_descriptor "RasterResultDescriptor",
+    cache_ttl int
 );
 
 CREATE TYPE "GdalMetadataNetCdfCf" AS (
-    "todo" boolean
+    result_descriptor "RasterResultDescriptor",
+    params "GdalDatasetParameters",
+    "start" bigint,
+    "end" bigint,
+    step "TimeStep",
+    band_offset bigint,
+    cache_ttl int
 );
 
-CREATE TYPE "GdalMetadataList" AS (
-    "todo" boolean
+CREATE TYPE "GdalLoadingInfoTemporalSlice" AS (
+    time "TimeInterval",
+    params "GdalDatasetParameters",
+    cache_ttl int
+);
+
+CREATE TYPE "GdalMetaDataList" AS (
+    result_descriptor "RasterResultDescriptor",
+    params "GdalLoadingInfoTemporalSlice" []
 );
 
 CREATE TYPE "MetaDataDefinition" AS (
     -- oneOf
-    MockMetaData "MockMetaData",
-    OgrMetaData "OgrMetaData",
-    GdalMetaDataRegular "GdalMetaDataRegular",
-    GdalStatic "GdalStatic",
-    GdalMetadataNetCdfCf "GdalMetadataNetCdfCf",
-    GdalMetadataList "GdalMetadataList"
+    mock_meta_data "MockMetaData",
+    ogr_meta_data "OgrMetaData",
+    gdal_meta_data_regular "GdalMetaDataRegular",
+    gdal_static "GdalMetaDataStatic",
+    gdal_metadata_net_cdf_cf "GdalMetadataNetCdfCf",
+    gdal_meta_data_list "GdalMetaDataList"
 );
 
 -- seperate table for projects used in foreign key constraints
-
 CREATE TABLE projects (id uuid PRIMARY KEY);
 
 CREATE TABLE sessions (
