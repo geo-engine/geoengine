@@ -425,25 +425,6 @@ pub enum CompressedGridOrEmpty<D, T> {
 pub type CompressedRasterTile<D, T> = BaseTile<CompressedGridOrEmpty<D, T>>;
 pub type CompressedRasterTile2D<T> = CompressedRasterTile<GridShape2D, T>;
 
-fn unsafe_cast_data_slice_to_u8_slice<T>(data: &[T]) -> &[u8]
-where
-    T: Copy,
-{
-    unsafe { std::slice::from_raw_parts(data.as_ptr().cast::<u8>(), std::mem::size_of_val(data)) }
-}
-
-fn unsafe_cast_u8_slice_to_data_slice<T>(data: &[u8]) -> &[T]
-where
-    T: Copy,
-{
-    unsafe {
-        std::slice::from_raw_parts(
-            data.as_ptr().cast::<T>(),
-            data.len() / std::mem::size_of::<T>(),
-        )
-    }
-}
-
 impl<D, T> CompressedMaskedGrid<D, T> {
     #[cfg(test)]
     pub(crate) fn new(shape: D, data: Vec<u8>, mask: Vec<u8>) -> Self {
@@ -479,17 +460,13 @@ impl<D, T> CompressedMaskedGrid<D, T> {
         &self.shape
     }
 
-    pub fn compress_masked_grid<F>(grid: &MaskedGrid<D, T>, compression: F) -> Self
+    pub fn compress_masked_grid<F: TileCompression>(grid: &MaskedGrid<D, T>) -> Self
     where
-        F: Fn(&[u8]) -> Vec<u8>,
         D: Clone + GridSize + PartialEq,
         T: Copy,
     {
-        let grid_data_as_u8_slice = unsafe_cast_data_slice_to_u8_slice(&grid.inner_grid.data);
-        let grid_mask_as_u8_slice = unsafe_cast_data_slice_to_u8_slice(&grid.validity_mask.data);
-
-        let grid_data_compressed = compression(grid_data_as_u8_slice);
-        let grid_mask_compressed = compression(grid_mask_as_u8_slice);
+        let grid_data_compressed = F::compress(&grid.inner_grid.data);
+        let grid_mask_compressed = F::compress(&grid.validity_mask.data);
 
         Self {
             shape: grid.shape().clone(),
@@ -499,24 +476,15 @@ impl<D, T> CompressedMaskedGrid<D, T> {
         }
     }
 
-    pub fn decompress_masked_grid<F>(
-        &self,
-        decompression: F,
-    ) -> Result<MaskedGrid<D, T>, CacheError>
+    pub fn decompress_masked_grid<F: TileCompression>(&self) -> Result<MaskedGrid<D, T>, CacheError>
     where
-        F: Fn(&[u8]) -> Result<Vec<u8>, CacheError>,
         D: Clone + GridSize + PartialEq,
         T: Copy,
     {
-        let grid_data_decompressed = decompression(&self.data)?;
-        let grid_mask_decompressed = decompression(&self.mask)?;
+        let elements = self.shape().number_of_elements();
 
-        let grid_data_as_t_slice = unsafe_cast_u8_slice_to_data_slice(&grid_data_decompressed);
-        let grid_mask_as_bool_slice =
-            unsafe_cast_u8_slice_to_data_slice(grid_mask_decompressed.as_slice());
-
-        let grid_data = grid_data_as_t_slice.to_vec();
-        let grid_mask = grid_mask_as_bool_slice.to_vec();
+        let grid_data = F::decompress(&self.data, elements)?;
+        let grid_mask = F::decompress(&self.mask, elements)?;
 
         let masked_grid = MaskedGrid {
             inner_grid: Grid {
@@ -569,31 +537,29 @@ impl<D, T> CompressedGridOrEmpty<D, T> {
         }
     }
 
-    pub fn compress_grid<F>(grid: &GridOrEmpty<D, T>, compression: F) -> Self
+    pub fn compress_grid<F: TileCompression>(grid: &GridOrEmpty<D, T>) -> Self
     where
-        F: Fn(&[u8]) -> Vec<u8>,
         D: Clone + GridSize + PartialEq,
         T: Copy,
     {
         match grid {
             GridOrEmpty::Empty(empty_grid) => Self::Empty(empty_grid.clone()),
             GridOrEmpty::Grid(grid) => {
-                let compressed_grid = CompressedMaskedGrid::compress_masked_grid(grid, compression);
+                let compressed_grid = CompressedMaskedGrid::compress_masked_grid::<F>(grid);
                 Self::Compressed(compressed_grid)
             }
         }
     }
 
-    pub fn decompress_grid<F>(&self, compression: F) -> Result<GridOrEmpty<D, T>, CacheError>
+    pub fn decompress_grid<F: TileCompression>(&self) -> Result<GridOrEmpty<D, T>, CacheError>
     where
         D: Clone + GridSize + PartialEq,
         T: Copy,
-        F: Fn(&[u8]) -> Result<Vec<u8>, CacheError>,
     {
         match self {
             Self::Empty(empty_grid) => Ok(GridOrEmpty::Empty(empty_grid.clone())),
             Self::Compressed(compressed_grid) => {
-                let decompressed_grid = compressed_grid.decompress_masked_grid(compression)?;
+                let decompressed_grid = compressed_grid.decompress_masked_grid::<F>()?;
                 Ok(GridOrEmpty::Grid(decompressed_grid))
             }
         }
@@ -637,13 +603,9 @@ pub trait CompressedRasterTileExt<D, T>
 where
     Self: Sized,
 {
-    fn compress_tile<F>(tile: RasterTile<D, T>, compression: F) -> Result<Self, CacheError>
-    where
-        F: Fn(&[u8]) -> Vec<u8>;
+    fn compress_tile<F: TileCompression>(tile: RasterTile<D, T>) -> Self;
 
-    fn decompress_tile<F>(&self, decompression: F) -> Result<RasterTile<D, T>, CacheError>
-    where
-        F: Fn(&[u8]) -> Result<Vec<u8>, CacheError>;
+    fn decompress_tile<F: TileCompression>(&self) -> Result<RasterTile<D, T>, CacheError>;
 
     fn compressed_data_len(&self) -> usize;
 }
@@ -652,32 +614,25 @@ impl<T> CompressedRasterTileExt<GridShape2D, T> for BaseTile<CompressedGridOrEmp
 where
     T: Copy,
 {
-    fn compress_tile<F>(
-        tile: RasterTile<GridShape2D, T>,
-        compression: F,
-    ) -> Result<Self, CacheError>
-    where
-        F: Fn(&[u8]) -> Vec<u8>,
-    {
-        let compressed_grid = CompressedGridOrEmpty::compress_grid(&tile.grid_array, compression);
-        Ok(Self {
+    fn compress_tile<F: TileCompression>(tile: RasterTile<GridShape2D, T>) -> Self {
+        let compressed_grid = CompressedGridOrEmpty::compress_grid::<F>(&tile.grid_array);
+        Self {
             grid_array: compressed_grid,
             time: tile.time,
             cache_hint: tile.cache_hint,
             global_geo_transform: tile.global_geo_transform,
             properties: tile.properties,
             tile_position: tile.tile_position,
-        })
+        }
     }
 
-    fn decompress_tile<F>(&self, decompression: F) -> Result<RasterTile<GridShape2D, T>, CacheError>
-    where
-        F: Fn(&[u8]) -> Result<Vec<u8>, CacheError>,
-    {
+    fn decompress_tile<F: TileCompression>(
+        &self,
+    ) -> Result<RasterTile<GridShape2D, T>, CacheError> {
         let grid_array = match &self.grid_array {
             CompressedGridOrEmpty::Empty(empty_grid) => GridOrEmpty::Empty(*empty_grid),
             CompressedGridOrEmpty::Compressed(compressed_grid) => {
-                let decompressed_grid = compressed_grid.decompress_masked_grid(decompression)?;
+                let decompressed_grid = compressed_grid.decompress_masked_grid::<F>()?;
                 GridOrEmpty::Grid(decompressed_grid)
             }
         };
@@ -709,16 +664,11 @@ where
     type ResultStream = CacheTileStream<T>;
 
     fn into_stored_element(self) -> Self::StoredCacheElement {
-        CompressedRasterTile2D::compress_tile(self, lz4_flex::compress)
-            .expect("Compression can not fail")
+        CompressedRasterTile2D::compress_tile::<Lz4FlexCompression>(self)
     }
 
     fn from_stored_element_ref(stored: &Self::StoredCacheElement) -> Result<Self, CacheError> {
-        let stored_bytes = stored.grid_array.number_of_elements() * std::mem::size_of::<T>();
-        stored.decompress_tile(|tile| {
-            lz4_flex::decompress(tile, stored_bytes)
-                .map_err(|source| CacheError::CouldNotDecompressElement { source })
-        })
+        stored.decompress_tile::<Lz4FlexCompression>()
     }
 
     fn result_stream(
@@ -726,5 +676,58 @@ where
         query: Self::Query,
     ) -> Self::ResultStream {
         CacheTileStream::new(stored_data, query)
+    }
+}
+
+pub trait TileCompression {
+    fn compress<T>(data: &[T]) -> Vec<u8>
+    where
+        T: Copy;
+
+    fn decompress<T>(data: &[u8], elements: usize) -> Result<Vec<T>, CacheError>
+    where
+        T: Copy;
+}
+
+pub struct Lz4FlexCompression;
+
+impl TileCompression for Lz4FlexCompression {
+    fn compress<T>(data: &[T]) -> Vec<u8>
+    where
+        T: Copy,
+    {
+        let data_as_u8_slice = unsafe_cast_data_slice_to_u8_slice(data);
+        lz4_flex::compress(data_as_u8_slice)
+    }
+
+    fn decompress<T>(data: &[u8], elements: usize) -> Result<Vec<T>, CacheError>
+    where
+        T: Copy,
+    {
+        let stored_bytes = elements * std::mem::size_of::<T>();
+        let decompressed_data = lz4_flex::decompress(data, stored_bytes)
+            .map_err(|source| CacheError::CouldNotDecompressElement { source })?;
+        let decompressed_data_as_t_slice =
+            unsafe_cast_u8_slice_to_data_slice(decompressed_data.as_slice());
+        Ok(decompressed_data_as_t_slice.to_vec())
+    }
+}
+
+fn unsafe_cast_data_slice_to_u8_slice<T>(data: &[T]) -> &[u8]
+where
+    T: Copy,
+{
+    unsafe { std::slice::from_raw_parts(data.as_ptr().cast::<u8>(), std::mem::size_of_val(data)) }
+}
+
+fn unsafe_cast_u8_slice_to_data_slice<T>(data: &[u8]) -> &[T]
+where
+    T: Copy,
+{
+    unsafe {
+        std::slice::from_raw_parts(
+            data.as_ptr().cast::<T>(),
+            data.len() / std::mem::size_of::<T>(),
+        )
     }
 }

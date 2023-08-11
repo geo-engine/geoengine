@@ -103,8 +103,3 @@ harness = false
 name = "query_chunks"
 harness = false
 required-features = ["pro"]
-
-[[bench]]
-name = "grid_compression"
-harness = false
-required-features = ["pro"]
