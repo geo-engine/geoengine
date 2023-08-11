@@ -970,12 +970,19 @@ where
         query_id: &QueryId,
         landing_zone_element: C,
     ) -> Result<(), CacheError> {
-        let storeable_element = if log_enabled!(log::Level::Trace) {
-            let element_size = landing_zone_element.byte_size();
-            let storeable_element =
-                crate::util::spawn_blocking(|| landing_zone_element.into_stored_element())
-                    .await
-                    .map_err(|_| CacheError::BlockingElementConversion)?;
+        const LOG_LEVEL_THRESHOLD: log::Level = log::Level::Trace;
+        let element_size = if log_enabled!(LOG_LEVEL_THRESHOLD) {
+            landing_zone_element.byte_size()
+        } else {
+            0
+        };
+
+        let storeable_element =
+            crate::util::spawn_blocking(|| landing_zone_element.into_stored_element())
+                .await
+                .map_err(|_| CacheError::BlockingElementConversion)?;
+
+        if log_enabled!(LOG_LEVEL_THRESHOLD) {
             let storeable_element_size = storeable_element.byte_size();
             tracing::trace!(
                 "Inserting element into landing zone for query {:?} on operator {}. Element size: {} bytes, storable element size: {} bytes, ratio: {}",
@@ -985,12 +992,7 @@ where
                 storeable_element_size,
                 storeable_element_size as f64 / element_size as f64
             );
-            storeable_element
-        } else {
-            crate::util::spawn_blocking(|| landing_zone_element.into_stored_element())
-                .await
-                .map_err(|_| CacheError::BlockingElementConversion)?
-        };
+        }
 
         let mut backend = self.backend.write().await;
         backend.insert_query_element_into_landing_zone(key, query_id, storeable_element)
