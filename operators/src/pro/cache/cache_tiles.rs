@@ -281,6 +281,7 @@ where
             if tile_bbox.intersects(&query_st_bounds)
                 && tile_ref.time.intersects(&query_time_bounds)
             {
+                self.idx = i + 1;
                 return Some(i);
             }
         }
