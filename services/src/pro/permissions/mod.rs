@@ -15,7 +15,6 @@ use crate::projects::ProjectId;
 
 use super::users::UserId;
 
-pub mod in_memory_permissiondb;
 pub mod postgres_permissiondb;
 
 identifier!(RoleId);

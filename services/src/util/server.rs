@@ -301,6 +301,13 @@ pub(crate) fn log_server_info() -> Result<()> {
         external_address.join("swagger-ui/")?
     );
 
+    let postgres_config: crate::util::config::Postgres = get_config_element()?;
+    if postgres_config.clear_database_on_start {
+        info!("Clear Database on Start: enabled");
+    } else {
+        info!("Clear Database on Start: disabled");
+    }
+
     let session_config: crate::util::config::Session = get_config_element()?;
 
     if session_config.anonymous_access {

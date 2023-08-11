@@ -129,6 +129,11 @@ pub enum Error {
 
     TokioPostgresTimeout,
 
+    #[snafu(display(
+        "Database cannot be cleared on startup because it was started without that setting before."
+    ))]
+    ClearDatabaseOnStartupNotAllowed,
+
     #[snafu(display("Identifier does not have the right format."))]
     InvalidUuid,
     SessionNotInitialized,
@@ -450,6 +455,8 @@ pub enum Error {
     InvalidNotNanFloatKey {
         source: ordered_float::FloatIsNan,
     },
+
+    UnexpectedInvalidDbTypeConversion,
 }
 
 impl actix_web::error::ResponseError for Error {

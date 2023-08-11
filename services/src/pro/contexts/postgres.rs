@@ -109,6 +109,49 @@ where
         })
     }
 
+    pub async fn new_with_oidc(
+        config: Config,
+        tls: Tls,
+        oidc_db: OidcRequestDb,
+        cache_config: Cache,
+        quota_config: Quota,
+    ) -> Result<Self> {
+        let pg_mgr = PostgresConnectionManager::new(config, tls);
+
+        let pool = Pool::builder().build(pg_mgr).await?;
+
+        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
+        if created_schema {
+            Self::create_pro_schema(pool.get().await?).await?;
+        }
+
+        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
+        );
+
+        Ok(ProPostgresContext {
+            task_manager: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
+            exe_ctx_tiling_spec: TestDefault::test_default(),
+            query_ctx_chunk_size: TestDefault::test_default(),
+            oidc_request_db: Arc::new(Some(oidc_db)),
+            quota,
+            pool,
+            volumes: Default::default(),
+            tile_cache: Arc::new(
+                SharedCache::new(
+                    cache_config.cache_size_in_mb,
+                    cache_config.landing_zone_ratio,
+                )
+                .expect("tile cache creation should work because the config is valid"),
+            ),
+        })
+    }
+
     // TODO: check if the datasets exist already and don't output warnings when skipping them
     #[allow(clippy::too_many_arguments)]
     pub async fn new_with_data(
@@ -285,6 +328,10 @@ where
         debug!("Created pro database schema");
 
         Ok(())
+    }
+
+    pub fn oidc_request_db(&self) -> Arc<Option<OidcRequestDb>> {
+        self.oidc_request_db.clone()
     }
 }
 
@@ -562,18 +609,19 @@ mod tests {
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
     };
     use crate::pro::util::config::QuotaTrackingMode;
+    use crate::pro::util::tests::with_pro_temp_context;
     use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::projects::{
         CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
         ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
         STRectangle, UpdateProject,
     };
-    use crate::util::config::{get_config_element, Postgres};
+
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
-    use bb8_postgres::bb8::ManageConnection;
-    use bb8_postgres::tokio_postgres::{self, NoTls};
-    use futures::{join, Future};
+
+    use bb8_postgres::tokio_postgres::NoTls;
+    use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::ml_model::MlModelId;
     use geoengine_datatypes::primitives::CacheTtlSeconds;
@@ -584,7 +632,6 @@ mod tests {
     };
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
@@ -601,91 +648,11 @@ mod tests {
     };
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use openidconnect::SubjectIdentifier;
-    use rand::RngCore;
     use serde_json::json;
-    use tokio::runtime::Handle;
-
-    /// Setup database schema and return its name.
-    async fn setup_db() -> (tokio_postgres::Config, String) {
-        let mut db_config = get_config_element::<Postgres>().unwrap();
-        db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
-
-        let mut pg_config = tokio_postgres::Config::new();
-        pg_config
-            .user(&db_config.user)
-            .password(&db_config.password)
-            .host(&db_config.host)
-            .dbname(&db_config.database);
-
-        // generate schema with prior connection
-        PostgresConnectionManager::new(pg_config.clone(), NoTls)
-            .connect()
-            .await
-            .unwrap()
-            .batch_execute(&format!("CREATE SCHEMA {};", &db_config.schema))
-            .await
-            .unwrap();
-
-        // fix schema by providing `search_path` option
-        pg_config.options(&format!("-c search_path={}", db_config.schema));
-
-        (pg_config, db_config.schema)
-    }
-
-    /// Tear down database schema.
-    async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str) {
-        // generate schema with prior connection
-        PostgresConnectionManager::new(pg_config, NoTls)
-            .connect()
-            .await
-            .unwrap()
-            .batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
-            .await
-            .unwrap();
-    }
-
-    async fn with_temp_context<F, Fut>(f: F)
-    where
-        F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
-            + std::panic::UnwindSafe
-            + Send
-            + 'static,
-        Fut: Future<Output = ()> + Send,
-    {
-        let (pg_config, schema) = setup_db().await;
-
-        // catch all panics and clean up first…
-        let executed_fn = {
-            let pg_config = pg_config.clone();
-            std::panic::catch_unwind(move || {
-                tokio::task::block_in_place(move || {
-                    Handle::current().block_on(async move {
-                        let ctx = ProPostgresContext::new_with_context_spec(
-                            pg_config.clone(),
-                            tokio_postgres::NoTls,
-                            TestDefault::test_default(),
-                            TestDefault::test_default(),
-                            get_config_element::<Quota>().unwrap(),
-                        )
-                        .await
-                        .unwrap();
-                        f(ctx, pg_config.clone()).await;
-                    });
-                });
-            })
-        };
-
-        tear_down_db(pg_config, &schema).await;
-
-        // then throw errors afterwards
-        if let Err(err) = executed_fn {
-            std::panic::resume_unwind(err);
-        }
-    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             anonymous(&app_ctx).await;
 
             let _user_id = user_reg_login(&app_ctx).await;
@@ -717,7 +684,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_external() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             anonymous(&app_ctx).await;
 
             let session = external_user_login_twice(&app_ctx).await;
@@ -1109,7 +1076,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_workflows() {
-        with_temp_context(|app_ctx, _pg_config| async move {
+        with_pro_temp_context(|app_ctx, _pg_config| async move {
             let workflow = Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
@@ -1144,7 +1111,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_datasets() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
                 layer_name: "test.csv".to_owned(),
@@ -1306,7 +1273,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_uploads() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
             let input = Upload {
                 id,
@@ -1333,7 +1300,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_layer_providers() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let db = app_ctx.session_context(UserSession::admin_session()).db();
 
             let provider_id =
@@ -1453,7 +1420,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_only_permitted_datasets() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session1 = app_ctx.create_anonymous_session().await.unwrap();
             let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1529,7 +1496,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_shows_only_permitted_provenance() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session1 = app_ctx.create_anonymous_session().await.unwrap();
             let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1585,7 +1552,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_updates_permissions() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session1 = app_ctx.create_anonymous_session().await.unwrap();
             let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1647,7 +1614,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_uses_roles_for_permissions() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session1 = app_ctx.create_anonymous_session().await.unwrap();
             let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1709,7 +1676,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_meta_data() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session1 = app_ctx.create_anonymous_session().await.unwrap();
             let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1784,7 +1751,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_loads_all_meta_data_types() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session = app_ctx.create_anonymous_session().await.unwrap();
 
             let db = app_ctx.session_context(session.clone()).db();
@@ -1954,7 +1921,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_secures_uploads() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session1 = app_ctx.create_anonymous_session().await.unwrap();
             let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1984,7 +1951,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_collects_layers() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session = admin_login(&app_ctx).await;
 
             let layer_db = app_ctx.session_context(session).db();
@@ -2183,7 +2150,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_tracks_used_quota_in_postgres() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let _user = app_ctx
                 .register_user(UserRegistration {
                     email: "foo@example.com".to_string(),
@@ -2236,7 +2203,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_tracks_available_quota() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let user = app_ctx
                 .register_user(UserRegistration {
                     email: "foo@example.com".to_string(),
@@ -2296,7 +2263,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_updates_quota_in_postgres() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let user = app_ctx
                 .register_user(UserRegistration {
                     email: "foo@example.com".to_string(),
@@ -2346,7 +2313,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_removes_layer_collections() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session = admin_login(&app_ctx).await;
 
             let layer_db = app_ctx.session_context(session).db();
@@ -2516,7 +2483,7 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_removes_collections_from_collections() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session = admin_login(&app_ctx).await;
 
             let db = app_ctx.session_context(session).db();
@@ -2600,7 +2567,7 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_removes_layers_from_collections() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session = admin_login(&app_ctx).await;
 
             let db = app_ctx.session_context(session).db();
@@ -2727,7 +2694,7 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_deletes_dataset() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let loading_info = OgrSourceDataset {
                 file_name: PathBuf::from("test.csv"),
                 layer_name: "test.csv".to_owned(),
@@ -2821,7 +2788,7 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_deletes_admin_dataset() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let dataset_name = DatasetName::new(None, "my_dataset");
 
             let loading_info = OgrSourceDataset {
@@ -2914,7 +2881,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_missing_layer_dataset_in_collection_listing() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session = admin_login(&app_ctx).await;
             let db = app_ctx.session_context(session).db();
 
@@ -2973,7 +2940,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_restricts_layer_permissions() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let admin_session = admin_login(&app_ctx).await;
             let session1 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -3127,7 +3094,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_handles_user_roles() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let admin_session = admin_login(&app_ctx).await;
             let user_id = app_ctx
                 .register_user(UserRegistration {
@@ -3205,7 +3172,7 @@ let ctx = app_ctx.session_context(session);
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_updates_project_layer_symbology() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let session = app_ctx.create_anonymous_session().await.unwrap();
 
             let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -3507,7 +3474,7 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_resolves_dataset_names_to_ids() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let admin_session = UserSession::admin_session();
             let db = app_ctx.session_context(admin_session.clone()).db();
 
@@ -3628,7 +3595,7 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_bulk_updates_quota() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let admin_session = UserSession::admin_session();
             let db = app_ctx.session_context(admin_session.clone()).db();
 
@@ -3668,7 +3635,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_ml_models() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let model_id = MlModelId::from_str("3db69b02-6d7a-4112-a355-e3745be18a80").unwrap();
             let input = MlModel {
                 model_id,
@@ -3690,7 +3657,7 @@ let ctx = app_ctx.session_context(session);
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_fails_to_load_nonexistent_ml_model() {
-        with_temp_context(|app_ctx, _| async move {
+        with_pro_temp_context(|app_ctx, _| async move {
             let model_id = MlModelId::from_str("3db69b02-6d7a-4112-a355-e3745be18a80").unwrap();
 
             let session = app_ctx.create_anonymous_session().await.unwrap();

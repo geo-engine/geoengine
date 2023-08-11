@@ -10,28 +10,43 @@ use crate::{
     },
     handlers, pro,
     pro::{
-        contexts::{ProApplicationContext, ProGeoEngineDb},
+        contexts::{ProApplicationContext, ProGeoEngineDb, ProPostgresContext},
         permissions::{Permission, PermissionDb, Role},
-        users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
+        users::{
+            OidcRequestDb, UserAuth, UserCredentials, UserId, UserInfo, UserRegistration,
+            UserSession,
+        },
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
     util::config::get_config_element,
-    util::server::{configure_extractors, render_404, render_405},
+    util::{
+        server::{configure_extractors, render_404, render_405},
+        tests::{setup_db, tear_down_db},
+    },
     workflows::{
         registry::WorkflowRegistry,
         workflow::{Workflow, WorkflowId},
     },
 };
-use actix_web::{dev::ServiceResponse, FromRequest};
+use actix_web::dev::ServiceResponse;
 use actix_web::{http, middleware, test, web, App};
+use futures_util::Future;
 use geoengine_datatypes::{
-    primitives::DateTime, spatial_reference::SpatialReferenceOption, test_data, util::Identifier,
+    primitives::DateTime,
+    raster::TilingSpecification,
+    spatial_reference::SpatialReferenceOption,
+    test_data,
+    util::{test::TestDefault, Identifier},
 };
 use geoengine_operators::{
-    engine::{RasterOperator, TypedOperator},
+    engine::{ChunkByteSize, RasterOperator, TypedOperator},
     source::{GdalSource, GdalSourceParameters},
     util::gdal::{create_ndvi_meta_data, create_ports_meta_data},
 };
+use tokio::runtime::Handle;
+use tokio_postgres::NoTls;
+
+use super::config::{Cache, Quota};
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: UserAuth>(app_ctx: &C) -> UserSession {
@@ -96,38 +111,40 @@ where
     (session, project)
 }
 
-pub async fn send_pro_test_request<C>(req: test::TestRequest, app_ctx: C) -> ServiceResponse
-where
-    C: ProApplicationContext,
-    C::Session: FromRequest,
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-{
+pub async fn send_pro_test_request(
+    req: test::TestRequest,
+    app_ctx: ProPostgresContext<NoTls>,
+) -> ServiceResponse {
     #[allow(unused_mut)]
-    let mut app = App::new()
-        .app_data(web::Data::new(app_ctx))
-        .wrap(
-            middleware::ErrorHandlers::default()
-                .handler(http::StatusCode::NOT_FOUND, render_404)
-                .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
-        )
-        .wrap(middleware::NormalizePath::trim())
-        .configure(configure_extractors)
-        .configure(pro::handlers::datasets::init_dataset_routes::<C>)
-        .configure(handlers::layers::init_layer_routes::<C>)
-        .configure(pro::handlers::permissions::init_permissions_routes::<C>)
-        .configure(handlers::plots::init_plot_routes::<C>)
-        .configure(handlers::projects::init_project_routes::<C>)
-        .configure(pro::handlers::users::init_user_routes::<C>)
-        .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
-        .configure(handlers::upload::init_upload_routes::<C>)
-        .configure(handlers::wcs::init_wcs_routes::<C>)
-        .configure(handlers::wfs::init_wfs_routes::<C>)
-        .configure(handlers::wms::init_wms_routes::<C>)
-        .configure(handlers::workflows::init_workflow_routes::<C>);
-    #[cfg(feature = "odm")]
-    {
-        app = app.configure(pro::handlers::drone_mapping::init_drone_mapping_routes::<C>);
-    }
+    let mut app =
+        App::new()
+            .app_data(web::Data::new(app_ctx))
+            .wrap(
+                middleware::ErrorHandlers::default()
+                    .handler(http::StatusCode::NOT_FOUND, render_404)
+                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+            )
+            .wrap(middleware::NormalizePath::trim())
+            .configure(configure_extractors)
+            .configure(pro::handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::layers::init_layer_routes::<ProPostgresContext<NoTls>>)
+            .configure(
+                pro::handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>,
+            )
+            .configure(handlers::plots::init_plot_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::projects::init_project_routes::<ProPostgresContext<NoTls>>)
+            .configure(pro::handlers::users::init_user_routes::<ProPostgresContext<NoTls>>)
+            .configure(
+                handlers::spatial_references::init_spatial_reference_routes::<
+                    ProPostgresContext<NoTls>,
+                >,
+            )
+            .configure(handlers::upload::init_upload_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::wcs::init_wcs_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::wfs::init_wfs_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::wms::init_wms_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::workflows::init_workflow_routes::<ProPostgresContext<NoTls>>);
+
     let app = test::init_service(app).await;
     test::call_service(&app, req.to_request())
         .await
@@ -479,4 +496,128 @@ pub async fn load_mock_model_from_disk() -> Result<String, std::io::Error> {
         .join("mock_model.json");
 
     tokio::fs::read_to_string(path).await
+}
+
+/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
+///
+/// # Panics
+///
+/// Panics if the `PostgresContext` could not be created.
+///
+pub async fn with_pro_temp_context<F, Fut, R>(f: F) -> R
+where
+    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+        + std::panic::UnwindSafe
+        + Send
+        + 'static,
+    Fut: Future<Output = R>,
+{
+    with_pro_temp_context_from_spec(
+        TestDefault::test_default(),
+        TestDefault::test_default(),
+        get_config_element::<Quota>().unwrap(),
+        f,
+    )
+    .await
+}
+
+/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
+///
+/// # Panics
+///
+/// Panics if the `PostgresContext` could not be created.
+///
+pub async fn with_pro_temp_context_from_spec<F, Fut, R>(
+    exe_ctx_tiling_spec: TilingSpecification,
+    query_ctx_chunk_size: ChunkByteSize,
+    quota_config: Quota,
+    f: F,
+) -> R
+where
+    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+        + std::panic::UnwindSafe
+        + Send
+        + 'static,
+    Fut: Future<Output = R>,
+{
+    let (_permit, pg_config, schema) = setup_db().await;
+
+    // catch all panics and clean up first…
+    let executed_fn = {
+        let pg_config = pg_config.clone();
+        std::panic::catch_unwind(move || {
+            tokio::task::block_in_place(move || {
+                Handle::current().block_on(async move {
+                    let ctx = ProPostgresContext::new_with_context_spec(
+                        pg_config.clone(),
+                        tokio_postgres::NoTls,
+                        exe_ctx_tiling_spec,
+                        query_ctx_chunk_size,
+                        quota_config,
+                    )
+                    .await
+                    .unwrap();
+                    f(ctx, pg_config.clone()).await
+                })
+            })
+        })
+    };
+
+    tear_down_db(pg_config, &schema).await;
+
+    match executed_fn {
+        Ok(res) => res,
+        Err(err) => std::panic::resume_unwind(err),
+    }
+}
+
+/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
+///
+/// # Panics
+///
+/// Panics if the `PostgresContext` could not be created.
+///
+pub async fn with_pro_temp_context_and_oidc<O, F, Fut, R>(
+    oidc_db: O,
+    cache_config: Cache,
+    quota_config: Quota,
+    f: F,
+) -> R
+where
+    O: FnOnce() -> OidcRequestDb + std::panic::UnwindSafe + Send + 'static,
+    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+        + std::panic::UnwindSafe
+        + Send
+        + 'static,
+    Fut: Future<Output = R>,
+{
+    let (_permit, pg_config, schema) = setup_db().await;
+
+    // catch all panics and clean up first…
+    let executed_fn = {
+        let pg_config = pg_config.clone();
+        std::panic::catch_unwind(move || {
+            tokio::task::block_in_place(move || {
+                Handle::current().block_on(async move {
+                    let ctx = ProPostgresContext::new_with_oidc(
+                        pg_config.clone(),
+                        tokio_postgres::NoTls,
+                        oidc_db(),
+                        cache_config,
+                        quota_config,
+                    )
+                    .await
+                    .unwrap();
+                    f(ctx, pg_config.clone()).await
+                })
+            })
+        })
+    };
+
+    tear_down_db(pg_config, &schema).await;
+
+    match executed_fn {
+        Ok(res) => res,
+        Err(err) => std::panic::resume_unwind(err),
+    }
 }

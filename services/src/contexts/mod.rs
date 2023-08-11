@@ -13,7 +13,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-mod in_memory;
 mod postgres;
 mod session;
 mod simple_context;
@@ -32,7 +31,6 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
-pub use in_memory::{InMemoryContext, InMemoryDb, InMemorySessionContext};
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
 pub use simple_context::SimpleApplicationContext;
@@ -426,100 +424,5 @@ where
                     .await
             }
         }
-    }
-}
-
-#[cfg(test)]
-
-mod tests {
-    use super::*;
-    use std::str::FromStr;
-
-    use geoengine_datatypes::{test_data, util::test::TestDefault};
-    use serial_test::serial;
-
-    use crate::contexts::{InMemoryContext, SessionContext};
-
-    #[cfg(feature = "xgboost")]
-    use crate::machine_learning::ml_model::MlModel;
-
-    /// Loads a pretrained mock model from disk
-    async fn load_mock_model_from_disk() -> String {
-        let path = test_data!("pro/ml/")
-            .join("b764bf81-e21d-4eb8-bf01-fac9af13faee")
-            .join("mock_model.json");
-
-        tokio::fs::read_to_string(path).await.unwrap()
-    }
-
-    #[tokio::test]
-    #[serial]
-    /// Verify, that a stored model can be read from the `InMemoryDb` backend.
-    async fn load_ml_model_from_db_test() {
-        let model_content = load_mock_model_from_disk().await;
-
-        let model = MlModel {
-            model_id: MlModelId::from_str("b764bf81-e21d-4eb8-bf01-fac9af13faee")
-                .expect("Could not create a new ModelId."),
-            model_content,
-        };
-
-        let ctx = InMemoryContext::test_default()
-            .default_session_context()
-            .await
-            .unwrap();
-
-        ctx.db()
-            .store_ml_model(model)
-            .await
-            .expect("Could not store the model in the db.");
-
-        let exe_ctx = ctx.execution_context().unwrap();
-
-        let model_id = MlModelId::from_str("b764bf81-e21d-4eb8-bf01-fac9af13faee")
-            .expect("Should have generated a ModelId from the given uuid string.");
-
-        let mut model = exe_ctx
-            .load_ml_model(model_id)
-            .await
-            .expect("Could not load ml model from backend db.");
-
-        let actual: String = model.drain(0..350).collect();
-
-        let expected = "{\"learner\":{\"attributes\":{},\"feature_names\":[],\"feature_types\":[],\"gradient_booster\":{\"model\":{\"gbtree_model_param\":{\"num_parallel_tree\":\"1\",\"num_trees\":\"48\",\"size_leaf_vector\":\"0\"},\"tree_info\":[0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2],\"trees\":[{\"base_weights\":[0.2127139,-0.5411393,1.0690608],";
-
-        assert_eq!(actual, expected);
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn store_model_in_db_test() {
-        // get a mock model, to store in the database
-        let expected = load_mock_model_from_disk().await;
-
-        let model = MlModel {
-            model_id: MlModelId::from_str("b764bf81-e21d-4eb8-bf01-fac9af13faee")
-                .expect("Could not create a new ModelId."),
-            model_content: expected.clone(),
-        };
-
-        let ctx = InMemoryContext::test_default()
-            .default_session_context()
-            .await
-            .unwrap();
-
-        let mut exe_ctx = ctx.execution_context().unwrap();
-
-        exe_ctx
-            .store_ml_model_in_db(model.model_id, model.model_content)
-            .await
-            .expect("Could not store ml model in backend db.");
-
-        let actual = exe_ctx
-            .load_ml_model(model.model_id)
-            .await
-            .expect("Could not load ml model from backend db.");
-
-        assert_eq!(actual, expected);
     }
 }

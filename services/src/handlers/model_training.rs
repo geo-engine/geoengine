@@ -46,13 +46,12 @@ mod tests {
         pro::ml::xgboost::{XgboostOperator, XgboostParams},
     };
 
-    use crate::contexts::{InMemoryContext, Session, SessionContext, SimpleApplicationContext};
     use crate::machine_learning::ModelType::XGBoost;
     use crate::machine_learning::{
         MachineLearningAggregator, TrainingParams, XGBoostModel, XgboostTrainingParams,
     };
     use crate::tasks::util::test::wait_for_task_to_finish;
-    use crate::tasks::{TaskManager, TaskStatus};
+    use crate::tasks::TaskStatus;
     use crate::util::config::get_config_element;
     use crate::util::tests::{read_body_string, send_test_request};
     use crate::workflows::workflow::Workflow;
@@ -62,7 +61,7 @@ mod tests {
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_operators::engine::{ExecutionContext, SourceOperator};
+    use geoengine_operators::engine::SourceOperator;
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor};
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::util::Result;

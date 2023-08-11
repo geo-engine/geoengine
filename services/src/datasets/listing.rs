@@ -12,6 +12,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use utoipa::{IntoParams, ToSchema};
@@ -89,7 +90,7 @@ pub struct ProvenanceOutput {
     pub provenance: Option<Vec<Provenance>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, ToSql, FromSql)]
 pub struct Provenance {
     pub citation: String,
     pub license: String,

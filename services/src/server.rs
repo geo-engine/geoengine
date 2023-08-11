@@ -1,9 +1,9 @@
 use crate::apidoc::ApiDoc;
-use crate::contexts::{InMemoryContext, PostgresContext, SimpleApplicationContext};
+use crate::contexts::{PostgresContext, SimpleApplicationContext};
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::util::config;
-use crate::util::config::{get_config_element, Backend};
+use crate::util::config::get_config_element;
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
     log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
@@ -44,64 +44,36 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     register_gdal_drivers_from_list(config::get_config_element::<config::Gdal>()?.allowed_drivers);
 
-    match web_config.backend {
-        Backend::InMemory => {
-            info!("Using in memory backend");
+    let db_config = config::get_config_element::<config::Postgres>()?;
+    let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
+    pg_config
+        .user(&db_config.user)
+        .password(&db_config.password)
+        .host(&db_config.host)
+        .dbname(&db_config.database)
+        // fix schema by providing `search_path` option
+        .options(&format!("-c search_path={}", db_config.schema));
 
-            let ctx = InMemoryContext::new_with_data(
-                data_path_config.dataset_defs_path,
-                data_path_config.provider_defs_path,
-                data_path_config.layer_defs_path,
-                data_path_config.layer_collection_defs_path,
-                tiling_spec,
-                chunk_byte_size,
-            )
-            .await;
+    let ctx = PostgresContext::new_with_data(
+        pg_config,
+        tokio_postgres::NoTls,
+        data_path_config.dataset_defs_path,
+        data_path_config.provider_defs_path,
+        data_path_config.layer_defs_path,
+        data_path_config.layer_collection_defs_path,
+        tiling_spec,
+        chunk_byte_size,
+    )
+    .await?;
 
-            start(
-                static_files_dir,
-                web_config.bind_address,
-                web_config.api_prefix,
-                web_config.version_api,
-                ctx,
-            )
-            .await
-        }
-        Backend::Postgres => {
-            info!("Using Postgres backend");
-
-            let db_config = config::get_config_element::<config::Postgres>()?;
-            let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
-            pg_config
-                .user(&db_config.user)
-                .password(&db_config.password)
-                .host(&db_config.host)
-                .dbname(&db_config.database)
-                // fix schema by providing `search_path` option
-                .options(&format!("-c search_path={}", db_config.schema));
-
-            let ctx = PostgresContext::new_with_data(
-                pg_config,
-                tokio_postgres::NoTls,
-                data_path_config.dataset_defs_path,
-                data_path_config.provider_defs_path,
-                data_path_config.layer_defs_path,
-                data_path_config.layer_collection_defs_path,
-                tiling_spec,
-                chunk_byte_size,
-            )
-            .await?;
-
-            start(
-                static_files_dir,
-                web_config.bind_address,
-                web_config.api_prefix,
-                web_config.version_api,
-                ctx,
-            )
-            .await
-        }
-    }
+    start(
+        static_files_dir,
+        web_config.bind_address,
+        web_config.api_prefix,
+        web_config.version_api,
+        ctx,
+    )
+    .await
 }
 
 async fn start<C>(
@@ -192,84 +164,4 @@ where
     .run()
     .await
     .map_err(Into::into)
-}
-
-#[cfg(test)]
-mod tests {
-    use url::Url;
-
-    use super::*;
-    use crate::contexts::{Session, SimpleSession};
-    use crate::handlers::ErrorResponse;
-
-    /// Test the webserver startup to ensure that `tokio` and `actix` are working properly
-    #[actix_rt::test]
-    async fn webserver_start() {
-        tokio::select! {
-            server = start_server(None) => {
-                server.expect("server run");
-            }
-            _ = queries() => {}
-        }
-    }
-
-    async fn queries() {
-        let web_config: config::Web = get_config_element().unwrap();
-        let base_url = Url::parse(&format!(
-            "http://{}{}/",
-            web_config.bind_address, web_config.api_prefix
-        ))
-        .unwrap();
-
-        assert!(wait_for_server(&base_url).await);
-        issue_queries(&base_url).await;
-    }
-
-    async fn issue_queries(base_url: &Url) {
-        let client = reqwest::Client::new();
-
-        let body = client
-            .post(base_url.join("anonymous").unwrap())
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-
-        let session: SimpleSession = serde_json::from_str(&body).unwrap();
-
-        let body = client
-            .post(base_url.join("project").unwrap())
-            .header("Authorization", format!("Bearer {}", session.id()))
-            .header("Content-Type", "application/json")
-            .body("no json")
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(&body).unwrap(),
-            ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: "expected ident at line 1 column 2".to_string()
-            }
-        );
-    }
-
-    const WAIT_SERVER_RETRIES: i32 = 5;
-    const WAIT_SERVER_RETRY_INTERVAL: u64 = 1;
-
-    async fn wait_for_server(base_url: &Url) -> bool {
-        for _ in 0..WAIT_SERVER_RETRIES {
-            if reqwest::get(base_url.clone()).await.is_ok() {
-                return true;
-            }
-            std::thread::sleep(std::time::Duration::from_secs(WAIT_SERVER_RETRY_INTERVAL));
-        }
-        false
-    }
 }

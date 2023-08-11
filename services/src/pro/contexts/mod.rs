@@ -1,5 +1,3 @@
-mod in_memory;
-
 mod postgres;
 
 use std::str::FromStr;
@@ -18,12 +16,11 @@ use geoengine_operators::pro::cache::cache_operator::InitializedCacheOperator;
 use geoengine_operators::pro::meta::quota::QuotaCheck;
 use geoengine_operators::pro::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
-pub use in_memory::ProInMemoryContext;
 
 pub use postgres::ProPostgresContext;
 use rayon::ThreadPool;
 
-use crate::contexts::{ApplicationContext, GeoEngineDb, SessionContext};
+use crate::contexts::{ApplicationContext, GeoEngineDb};
 use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 use crate::machine_learning::ml_model::{MlModel, MlModelDb};
@@ -38,7 +35,6 @@ use super::users::{RoleDb, UserAuth, UserSession};
 use super::util::config::{Cache, QuotaTrackingMode};
 use crate::util::config::get_config_element;
 
-pub use in_memory::ProInMemoryDb;
 pub use postgres::ProPostgresDb;
 
 /// A pro application contexts that extends the default context.

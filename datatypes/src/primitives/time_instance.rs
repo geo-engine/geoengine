@@ -2,14 +2,9 @@ use super::datetime::DateTimeError;
 use super::{DateTime, Duration};
 use crate::primitives::error;
 use crate::util::Result;
-
-use postgres_types::private::BytesMut;
-
-use postgres_types::{FromSql, IsNull, ToSql, Type};
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-
-use snafu::Error;
 use std::ops::AddAssign;
 use std::{
     convert::TryFrom,
@@ -18,8 +13,9 @@ use std::{
     str::FromStr,
 };
 
-#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug, FromSql, ToSql)]
 #[repr(C)]
+#[postgres(transparent)]
 pub struct TimeInstance(i64);
 
 impl TimeInstance {
@@ -111,40 +107,6 @@ impl TryFrom<i64> for TimeInstance {
 impl From<TimeInstance> for i64 {
     fn from(time_instance: TimeInstance) -> Self {
         time_instance.inner()
-    }
-}
-
-impl ToSql for TimeInstance {
-    fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
-    where
-        Self: Sized,
-    {
-        self.as_date_time().to_sql(ty, out)
-    }
-
-    fn accepts(ty: &Type) -> bool
-    where
-        Self: Sized,
-    {
-        <DateTime as ToSql>::accepts(ty)
-    }
-
-    fn to_sql_checked(
-        &self,
-        ty: &Type,
-        out: &mut BytesMut,
-    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
-        self.as_date_time().to_sql_checked(ty, out)
-    }
-}
-
-impl<'a> FromSql<'a> for TimeInstance {
-    fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
-        DateTime::from_sql(ty, raw).map(Into::into)
-    }
-
-    fn accepts(ty: &Type) -> bool {
-        <DateTime as FromSql>::accepts(ty)
     }
 }
 
