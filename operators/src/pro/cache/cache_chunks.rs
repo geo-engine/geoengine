@@ -408,8 +408,8 @@ where
         self
     }
 
-    fn from_stored_element_ref(stored: &Self::StoredCacheElement) -> Self {
-        stored.clone()
+    fn from_stored_element_ref(stored: &Self::StoredCacheElement) -> Result<Self, CacheError> {
+        Ok(stored.clone())
     }
 
     fn result_stream(

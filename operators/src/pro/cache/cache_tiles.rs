@@ -5,6 +5,7 @@ use super::shared_cache::{
     RasterLandingQueryEntry,
 };
 use crate::util::Result;
+use futures::stream::FusedStream;
 use futures::{Future, Stream};
 use geoengine_datatypes::primitives::SpatialPartitioned;
 use geoengine_datatypes::raster::{
@@ -250,34 +251,112 @@ impl_cache_element_subtype!(f64, F64);
 
 type DecompressorFutureType<T> =
     tokio::task::JoinHandle<std::result::Result<RasterTile2D<T>, CacheError>>;
+
 /// Our own tile stream that "owns" the data (more precisely a reference to the data)
+
 #[pin_project(project = CacheTileStreamProjection)]
 pub struct CacheTileStream<T> {
-    data: Arc<Vec<CompressedRasterTile2D<T>>>,
-    query: RasterQueryRectangle,
-    idx: usize,
+    inner: CacheTileStreamInner<T>,
     #[pin]
     state: Option<DecompressorFutureType<T>>,
 }
 
-impl<T> CacheTileStream<T> {
-    pub fn new(data: Arc<Vec<CompressedRasterTile2D<T>>>, query: RasterQueryRectangle) -> Self {
+pub struct CacheTileStreamInner<T> {
+    data: Arc<Vec<CompressedRasterTile2D<T>>>,
+    query: RasterQueryRectangle,
+    idx: usize,
+}
+
+impl<T> CacheTileStreamInner<T>
+where
+    T: Pixel,
+{
+    // TODO: we could use a iter + filter adapter here to return refs however this would require a lot of lifetime annotations
+    fn next_idx(&mut self) -> Option<usize> {
+        let query_st_bounds = self.query.spatial_bounds;
+        let query_time_bounds = self.query.time_interval;
+        for i in self.idx..self.data.len() {
+            let tile_ref = &self.data[i];
+            let tile_bbox = tile_ref.spatial_partition();
+            if tile_bbox.intersects(&query_st_bounds)
+                && tile_ref.time.intersects(&query_time_bounds)
+            {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    fn data_arc(&self) -> Arc<Vec<CompressedRasterTile2D<T>>> {
+        self.data.clone()
+    }
+
+    fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    fn remaining(&self) -> usize {
+        self.len() - self.idx
+    }
+
+    fn terminated(&self) -> bool {
+        self.idx >= self.len()
+    }
+
+    fn new(data: Arc<Vec<CompressedRasterTile2D<T>>>, query: RasterQueryRectangle) -> Self {
         Self {
             data,
             query,
             idx: 0,
+        }
+    }
+}
+
+impl<T> CacheTileStream<T>
+where
+    T: Pixel,
+{
+    pub fn new(data: Arc<Vec<CompressedRasterTile2D<T>>>, query: RasterQueryRectangle) -> Self {
+        Self {
+            inner: CacheTileStreamInner::new(data, query),
             state: None,
         }
     }
 
     pub fn element_count(&self) -> usize {
-        self.data.len()
+        self.inner.len()
+    }
+
+    fn terminated(&self) -> bool {
+        self.state.is_none() && self.inner.terminated()
+    }
+
+    fn check_decompress_future_res(
+        tile_future_res: Result<Result<RasterTile2D<T>, CacheError>, tokio::task::JoinError>,
+    ) -> Result<RasterTile2D<T>, CacheError> {
+        match tile_future_res {
+            Ok(Ok(tile)) => Ok(tile),
+            Ok(Err(err)) => Err(err),
+            Err(source) => Err(CacheError::CouldNotRunDecompressionTask { source }),
+        }
+    }
+
+    fn create_decompression_future(
+        data: Arc<Vec<CompressedRasterTile2D<T>>>,
+        idx: usize,
+    ) -> DecompressorFutureType<T>
+    where
+        T: Pixel,
+        CompressedRasterTile2D<T>: CacheBackendElementExt<Query = RasterQueryRectangle>,
+    {
+        crate::util::spawn_blocking(move || RasterTile2D::<T>::from_stored_element_ref(&data[idx]))
     }
 }
 
 impl<T: Pixel> Stream for CacheTileStream<T>
 where
     RasterTile2D<T>: CacheElement<StoredCacheElement = CompressedRasterTile2D<T>>,
+    CompressedRasterTile2D<T>: CacheBackendElementExt<Query = RasterQueryRectangle>,
 {
     type Item = Result<RasterTile2D<T>, CacheError>;
 
@@ -285,63 +364,46 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        let CacheTileStreamProjection {
-            data,
-            query,
-            idx,
-            mut state,
-        } = self.as_mut().project();
+        if self.terminated() {
+            return std::task::Poll::Ready(None);
+        }
 
-        // if there is a tile that is currently being decoded, try to return it
-        if let Some(state_future) = state.as_mut().as_pin_mut() {
-            // futures ready will return pending if the future is not ready yet
-            let tile_res_res = futures::ready!(state_future.poll(cx));
-            state.set(None);
-            let Ok(tile_res) = tile_res_res else {
-                return std::task::Poll::Ready(Some(
-                    Err(CacheError::CouldNotDecompressElement),
-                ));
-            };
-            return std::task::Poll::Ready(Some(tile_res));
-        };
+        let CacheTileStreamProjection { inner, mut state } = self.as_mut().project();
 
-        // return the next tile that is contained in the query, skip all tiles that are not contained
-        for i in *idx..data.len() {
-            let tile = &data[i];
-            let tile_bbox = tile.spatial_partition();
-
-            if tile_bbox.intersects(&query.spatial_bounds)
-                && tile.time.intersects(&query.time_interval)
-            {
-                *idx = i + 1;
-
-                // create a future that decodes the tile
-                let future_data = data.clone();
-                state.set(Some(crate::util::spawn_blocking(move || {
-                    let data = future_data;
-                    let idx = i;
-                    let element = RasterTile2D::<T>::from_stored_element_ref(&data[idx]);
-                    Ok(element)
-                })));
-
-                // maybe the future is already finished, so we can try to return it immediately
-                let tile_future = state
-                    .as_mut()
-                    .as_pin_mut()
-                    .expect("The future must exist since we just set it");
-                // futures ready will return pending if the future is not ready yet
-                let tile_res_res = futures::ready!(tile_future.poll(cx));
-                state.set(None);
-                let Ok(tile_res) = tile_res_res else {
-                return std::task::Poll::Ready(Some(
-                    Err(CacheError::CouldNotDecompressElement),
-                ));
-            };
-                return std::task::Poll::Ready(Some(tile_res));
+        if state.is_none() {
+            if let Some(next) = inner.next_idx() {
+                let future_data = inner.data_arc();
+                let future = Self::create_decompression_future(future_data, next);
+                state.set(Some(future));
             }
         }
 
+        if let Some(pin_state) = state.as_mut().as_pin_mut() {
+            let res = futures::ready!(pin_state.poll(cx));
+            state.set(None);
+            let tile = Self::check_decompress_future_res(res);
+            return std::task::Poll::Ready(Some(tile));
+        }
+
         std::task::Poll::Ready(None)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if self.terminated() {
+            return (0, Some(0));
+        }
+        // There must be a cache hit to produce this stream. So there must be at least one tile inside the query.
+        (1, Some(self.inner.remaining()))
+    }
+}
+
+impl<T> FusedStream for CacheTileStream<T>
+where
+    T: Pixel,
+    CompressedRasterTile2D<T>: CacheBackendElementExt<Query = RasterQueryRectangle>,
+{
+    fn is_terminated(&self) -> bool {
+        self.terminated()
     }
 }
 
@@ -650,13 +712,12 @@ where
             .expect("Compression can not fail")
     }
 
-    fn from_stored_element_ref(stored: &Self::StoredCacheElement) -> Self {
-        stored
-            .decompress_tile(|tile| {
-                lz4_flex::decompress(tile, stored.grid_array.number_of_elements())
-                    .map_err(|_| CacheError::CouldNotDecompressElement)
-            })
-            .expect("Decompression can not fail")
+    fn from_stored_element_ref(stored: &Self::StoredCacheElement) -> Result<Self, CacheError> {
+        let stored_bytes = stored.grid_array.number_of_elements() * std::mem::size_of::<T>();
+        stored.decompress_tile(|tile| {
+            lz4_flex::decompress(tile, stored_bytes)
+                .map_err(|source| CacheError::CouldNotDecompressElement { source })
+        })
     }
 
     fn result_stream(

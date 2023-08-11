@@ -894,7 +894,7 @@ pub trait CacheElement: Sized {
     type ResultStream: Stream<Item = Result<Self, CacheError>>;
 
     fn into_stored_element(self) -> Self::StoredCacheElement;
-    fn from_stored_element_ref(stored: &Self::StoredCacheElement) -> Self;
+    fn from_stored_element_ref(stored: &Self::StoredCacheElement) -> Result<Self, CacheError>;
 
     fn result_stream(
         stored_data: Arc<Vec<Self::StoredCacheElement>>,
