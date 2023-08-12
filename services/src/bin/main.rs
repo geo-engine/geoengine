@@ -10,6 +10,7 @@ use tracing_subscriber::fmt::FormatFields;
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::registry::LookupSpan;
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
 #[tokio::main]
@@ -21,6 +22,9 @@ async fn main() {
 pub async fn start_server() -> Result<()> {
     reroute_gdal_logging();
     let logging_config: config::Logging = get_config_element()?;
+
+    // get a new tracing subscriber registry to add all log and tracing layers to
+    let registry = tracing_subscriber::Registry::default();
 
     // create a filter for the log message level in console output
     let console_filter = EnvFilter::try_new(&logging_config.log_spec).unwrap();
@@ -36,7 +40,7 @@ pub async fn start_server() -> Result<()> {
         let (file_layer, fw_drop_guard) = file_layer_with_filter(
             &logging_config.filename_prefix,
             logging_config.log_directory.as_deref(),
-            level_filter,
+            file_filter,
         );
         (Some(file_layer), Some(fw_drop_guard))
     } else {
@@ -51,8 +55,6 @@ pub async fn start_server() -> Result<()> {
 
 #[cfg(feature = "pro")]
 pub async fn start_server() -> Result<()> {
-    use tracing_subscriber::EnvFilter;
-
     reroute_gdal_logging();
     let logging_config: config::Logging = get_config_element()?;
 
