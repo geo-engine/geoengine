@@ -40,14 +40,14 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 use url::Url;
 
-static GEO_FILETYPES: OnceLock<HashMap<String, bool>> = OnceLock::new();
+static IS_FILETYPE_RASTER: OnceLock<HashMap<&'static str, bool>> = OnceLock::new();
 
 // TODO: change to `LazyLock' once stable
-fn init_geo_filetypes() -> HashMap<String, bool> {
+fn init_is_filetype_raster() -> HashMap<&'static str, bool> {
     //name:is_raster
     hashmap! {
-        "GeoTIFF".to_string() => true,
-        "GeoJSON".to_string() => false
+        "GeoTIFF" => true,
+        "GeoJSON" => false
     }
 }
 
@@ -62,6 +62,7 @@ pub struct EdrDataProviderDefinition {
     #[serde(default)]
     cache_ttl: CacheTtlSeconds,
     #[serde(default)]
+    /// List of vertical reference systems with a discrete scale
     discrete_vrs: Vec<String>,
 }
 
@@ -69,7 +70,7 @@ pub struct EdrDataProviderDefinition {
 pub struct EdrVectorSpec {
     x: String,
     y: Option<String>,
-    t: String,
+    time: String,
 }
 
 #[typetag::serde]
@@ -106,6 +107,7 @@ pub struct EdrDataProvider {
     vector_spec: Option<EdrVectorSpec>,
     client: Client,
     cache_ttl: CacheTtlSeconds,
+    /// List of vertical reference systems with a discrete scale
     discrete_vrs: Vec<String>,
 }
 
@@ -430,9 +432,9 @@ impl EdrCollectionMetaData {
 
     fn select_output_format(&self) -> Result<String, geoengine_operators::error::Error> {
         for format in &self.output_formats {
-            if GEO_FILETYPES
-                .get_or_init(init_geo_filetypes)
-                .contains_key(format)
+            if IS_FILETYPE_RASTER
+                .get_or_init(init_is_filetype_raster)
+                .contains_key(format.as_str())
             {
                 return Ok(format.to_string());
             }
@@ -443,9 +445,9 @@ impl EdrCollectionMetaData {
     }
 
     fn is_raster_file(&self) -> Result<bool, geoengine_operators::error::Error> {
-        Ok(*GEO_FILETYPES
-            .get_or_init(init_geo_filetypes)
-            .get(&self.select_output_format()?)
+        Ok(*IS_FILETYPE_RASTER
+            .get_or_init(init_is_filetype_raster)
+            .get(&self.select_output_format()?.as_str())
             .expect("can only return values in map"))
     }
 
@@ -640,7 +642,7 @@ impl EdrCollectionMetaData {
             layer_name,
             data_type: Some(VectorDataType::MultiPoint),
             time: OgrSourceDatasetTimeType::Start {
-                start_field: vector_spec.t.clone(),
+                start_field: vector_spec.time.clone(),
                 start_format: OgrSourceTimeFormat::Auto,
                 duration: OgrSourceDurationSpec::Zero,
             },
