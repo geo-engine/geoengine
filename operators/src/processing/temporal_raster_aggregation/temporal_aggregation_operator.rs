@@ -22,7 +22,9 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInstance};
+use geoengine_datatypes::primitives::{
+    RasterQueryRectangle, RasterSpatialQueryRectangle, TimeInstance,
+};
 use geoengine_datatypes::raster::{Pixel, RasterDataType, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use log::debug;
@@ -245,11 +247,11 @@ where
 #[async_trait]
 impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
-    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialQuery = RasterSpatialQueryRectangle>,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
 
     #[allow(clippy::too_many_lines)]
     async fn _query<'a>(
@@ -403,7 +405,7 @@ where
 mod tests {
     use futures::stream::StreamExt;
     use geoengine_datatypes::{
-        primitives::{CacheHint, Measurement, SpatialResolution, TimeInterval},
+        primitives::{CacheHint, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType,
             TileInformation, TilesEqualIgnoringCacheHint,
@@ -460,11 +462,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 40),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 40),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -578,11 +581,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 40),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 40),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -696,11 +700,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 40),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 40),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -814,11 +819,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 40),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 40),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -939,11 +945,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 20),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 20),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -1017,11 +1024,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -1115,11 +1123,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -1213,11 +1222,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -1311,11 +1321,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -1409,11 +1420,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -1507,11 +1519,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -1604,11 +1617,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let query_processor = operator
@@ -1719,11 +1733,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -1817,11 +1832,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -1925,11 +1941,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let query_processor = operator
@@ -2051,11 +2068,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let query_processor = operator
@@ -2166,11 +2184,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -2264,11 +2283,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 30),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg
@@ -2362,11 +2382,12 @@ mod tests {
             (0., 0.).into(),
             [3, 2].into(),
         ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(5, 5),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(5, 5),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let qp = agg

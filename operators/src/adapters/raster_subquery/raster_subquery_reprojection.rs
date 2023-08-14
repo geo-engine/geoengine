@@ -89,17 +89,20 @@ where
         let valid_spatial_bounds = self
             .valid_bounds_out
             .intersection(&tile_info.spatial_partition())
-            .and_then(|vo| vo.intersection(&query_rect.spatial_partition()));
+            .and_then(|vo| vo.intersection(&query_rect.spatial_query().spatial_partition()));
         if let Some(bounds) = valid_spatial_bounds {
             let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
             let projected_bounds = bounds.reproject(&proj);
 
             match projected_bounds {
-                Ok(pb) => Ok(Some(RasterQueryRectangle {
-                    spatial_bounds: pb,
-                    time_interval: TimeInterval::new_instant(start_time)?,
-                    spatial_resolution: self.in_spatial_res,
-                })),
+                Ok(pb) => Ok(Some(
+                    RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                        pb,
+                        self.in_spatial_res,
+                        query_rect.spatial_query().origin_coordinate(), // FIXME: this should be the tiling spec origin OR the source origin.
+                        TimeInterval::new_instant(start_time)?,
+                    ),
+                )),
                 // In some strange cases the reprojection can return an empty box.
                 // We ignore it since it contains no pixels.
                 Err(geoengine_datatypes::error::Error::OutputBboxEmpty { bbox: _ }) => Ok(None),
@@ -436,11 +439,12 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(0, 10),
+        );
 
         let query_ctx = MockQueryContext::test_default();
         let tiling_strat = exe_ctx.tiling_specification;
@@ -458,7 +462,7 @@ mod tests {
             in_srs: projection,
             out_srs: projection,
             fold_fn: fold_by_coordinate_lookup_future,
-            in_spatial_res: query_rect.spatial_resolution,
+            in_spatial_res: query_rect.spatial_query().spatial_resolution(),
             valid_bounds_in: valid_bounds,
             valid_bounds_out: valid_bounds,
             _phantom_data: PhantomData,

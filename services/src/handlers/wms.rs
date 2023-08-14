@@ -348,14 +348,13 @@ async fn wms_map_handler<C: ApplicationContext>(
         let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
         let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: query_bbox,
-            time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
-            spatial_resolution: SpatialResolution::new_unchecked(
-                x_query_resolution,
-                y_query_resolution,
-            ),
-        };
+        // FIXME: we query with a grid that is snapped to the grid origin. We COULD also query with the origin of the query OR the native origin of the workflow.
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            query_bbox,
+            SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution),
+            execution_context.tiling_specification().origin_coordinate,
+            request.time.unwrap_or_else(default_time_from_config).into(),
+        );
 
         let query_ctx = ctx.query_context()?;
 
@@ -602,15 +601,16 @@ mod tests {
 
             let (image_bytes, _) = raster_stream_to_png_bytes(
                 gdal_source.boxed(),
-                RasterQueryRectangle {
-                    spatial_bounds: query_partition,
-                    time_interval: geoengine_datatypes::primitives::TimeInterval::new(
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    query_partition,
+                    SpatialResolution::new_unchecked(1.0, 1.0),
+                    exe_ctx.tiling_specification().origin_coordinate,
+                    geoengine_datatypes::primitives::TimeInterval::new(
                         1_388_534_400_000,
                         1_388_534_400_000 + 1000,
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
-                },
+                ),
                 ctx.query_context().unwrap(),
                 360,
                 180,
@@ -691,12 +691,13 @@ mod tests {
         );
 
         let image_bytes = actix_web::test::read_body(response).await;
+        let image_bytes_slice: &[u8] = &image_bytes;
 
-        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi.png");
+        geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi_2.png");
 
         assert_eq!(
             include_bytes!("../../../test_data/wms/get_map_ndvi.png") as &[u8],
-            image_bytes
+            image_bytes_slice
         );
 
         })

@@ -183,6 +183,7 @@ mod tests {
         primitives::{DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
         util::arrow::arrow_ipc_file_to_record_batches,
     };
+    use geoengine_operators::engine::ExecutionContext;
     use tokio_postgres::NoTls;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -205,13 +206,15 @@ mod tests {
 
             let (workflow, _workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
-            let query_rectangle = RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::one(),
-            };
+            let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+                SpatialResolution::one(),
+                ctx.execution_context()
+                    .unwrap()
+                    .tiling_specification()
+                    .origin_coordinate,
+                TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+            );
 
             let handler = RasterWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(
                 workflow.operator.get_raster().unwrap(),

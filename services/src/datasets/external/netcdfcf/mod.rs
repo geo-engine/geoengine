@@ -1969,18 +1969,18 @@ mod tests {
         );
 
         let loading_info = metadata
-            .loading_info(RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new(
+            .loading_info(RasterQueryRectangle::with_partition_and_resolution(
+                SpatialPartition2D::new(
                     (43.945_312_5, 0.791_015_625_25).into(),
                     (44.033_203_125, 0.703_125_25).into(),
                 )
                 .unwrap(),
-                time_interval: TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+                SpatialResolution::new_unchecked(
                     0.000_343_322_7, // 256 pixel
                     0.000_343_322_7, // 256 pixel
                 ),
-            })
+                TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
+            ))
             .await
             .unwrap();
 
@@ -2096,18 +2096,18 @@ mod tests {
         );
 
         let loading_info = metadata
-            .loading_info(RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new(
+            .loading_info(RasterQueryRectangle::with_partition_and_resolution(
+                SpatialPartition2D::new(
                     (43.945_312_5, 0.791_015_625_25).into(),
                     (44.033_203_125, 0.703_125_25).into(),
                 )
                 .unwrap(),
-                time_interval: TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+                SpatialResolution::new_unchecked(
                     0.000_343_322_7, // 256 pixel
                     0.000_343_322_7, // 256 pixel
                 ),
-            })
+                TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
+            ))
             .await
             .unwrap();
 
@@ -2313,19 +2313,19 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new(
+                PlotQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new(
                         (46.478_278_849, 40.584_655_660_000_1).into(),
                         (87.323_796_021_000_1, 55.434_550_273).into(),
                     )
                     .unwrap(),
-                    time_interval: TimeInterval::new(
+                    TimeInterval::new(
                         DateTime::new_utc(1900, 4, 1, 0, 0, 0),
                         DateTime::new_utc_with_millis(2055, 4, 1, 0, 0, 0, 1),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
-                },
+                    SpatialResolution::new_unchecked(0.1, 0.1),
+                ),
                 &query_context,
             )
             .await

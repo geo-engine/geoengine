@@ -275,18 +275,15 @@ mod tests {
                     ),
                 };
 
-                let query_rectangle = VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new_upper_left_lower_right(
+                let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new_upper_left_lower_right(
                         (-180., 90.).into(),
                         (180., -90.).into(),
                     )
                     .unwrap(),
-                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
-                        2014, 3, 1, 0, 0, 0,
-                    ))
-                    .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                };
+                    TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+                    SpatialResolution::one(),
+                );
 
                 let handler = VectorWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(
                     workflow.operator.get_vector().unwrap(),

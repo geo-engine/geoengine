@@ -109,11 +109,12 @@ async fn read_cache(tile_cache: &SharedCache, op_no: usize) -> ReadMeasurement {
 }
 
 fn query_rect() -> RasterQueryRectangle {
-    RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
-        time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
-        spatial_resolution: SpatialResolution::one(),
-    }
+    RasterQueryRectangle::with_partition_and_resolution_and_origin(
+        SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
+        SpatialResolution::one(),
+        [0., 0.].into(), // TODO: replace with default or remove
+        TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+    )
 }
 
 fn op(idx: usize) -> CanonicOperatorName {

@@ -516,10 +516,14 @@ mod tests {
     use std::{fs::File, io::Read, path::PathBuf, str::FromStr};
 
     use geoengine_datatypes::{
+<<<<<<< HEAD
+        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
+=======
         primitives::{
             CacheTtlSeconds, Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution,
             TimeInterval,
         },
+>>>>>>> 8eaea774bdd7354be56417c8b8e0a54fcd0551bf
         raster::RasterDataType,
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
     };
@@ -930,17 +934,17 @@ mod tests {
         );
 
         let loading_info = meta
-            .loading_info(QueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
+            .loading_info(RasterQueryRectangle::with_partition_and_resolution(
+                SpatialPartition2D::new_unchecked(
                     (473_922.500, 5_634_057.500).into(),
                     (473_924.500, 5_634_055.50).into(),
                 ),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+                SpatialResolution::new_unchecked(
                     (473_924.500 - 473_922.500) / 2.,
                     (5_634_057.500 - 5_634_055.50) / 2.,
                 ),
-            })
+                TimeInterval::default(),
+            ))
             .await
             .unwrap();
 

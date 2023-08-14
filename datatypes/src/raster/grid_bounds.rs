@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::{error, util::Result};
@@ -7,7 +8,8 @@ use super::{
     GridSize, GridSpaceToLinearSpace,
 };
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
+/// A bounding box for a grid where the min and max values are inclusive
 pub struct GridBoundingBox<A>
 where
     A: AsRef<[isize]>,
@@ -326,6 +328,81 @@ where
     }
 }
 
+impl GridContains<GridBoundingBox2D> for GridBoundingBox2D {
+    fn contains(&self, other: &GridBoundingBox2D) -> bool {
+        let [self_y_min, self_x_min] = self.min;
+        let [other_y_min, other_x_min] = other.min;
+
+        let [self_y_max, self_x_max] = self.max;
+        let [other_y_max, other_x_max] = other.max;
+
+        self_y_min <= other_y_min
+            && self_x_min <= other_x_min
+            && self_y_max >= other_y_max
+            && self_x_max >= other_x_max
+    }
+}
+
+pub trait GridBoundingBoxExt {
+    fn extend(&mut self, other: &Self);
+
+    fn extended(&self, other: &Self) -> Self
+    where
+        Self: Sized + Clone,
+    {
+        let mut extended = self.clone();
+        extended.extend(other);
+        extended
+    }
+}
+
+impl GridBoundingBoxExt for GridBoundingBox1D {
+    fn extend(&mut self, other: &Self) {
+        let [self_x_min] = self.min;
+        let [other_x_min] = other.min;
+
+        let [self_x_max] = self.max;
+        let [other_x_max] = other.max;
+
+        self.min = [self_x_min.min(other_x_min)];
+        self.max = [self_x_max.max(other_x_max)];
+    }
+}
+
+impl GridBoundingBoxExt for GridBoundingBox2D {
+    fn extend(&mut self, other: &Self) {
+        let [self_y_min, self_x_min] = self.min;
+        let [other_y_min, other_x_min] = other.min;
+
+        let [self_y_max, self_x_max] = self.max;
+        let [other_y_max, other_x_max] = other.max;
+
+        self.min = [self_y_min.min(other_y_min), self_x_min.min(other_x_min)];
+        self.max = [self_y_max.max(other_y_max), self_x_max.max(other_x_max)];
+    }
+}
+
+impl GridBoundingBoxExt for GridBoundingBox3D {
+    fn extend(&mut self, other: &Self) {
+        let [self_z_min, self_y_min, self_x_min] = self.min;
+        let [other_z_min, other_y_min, other_x_min] = other.min;
+
+        let [self_z_max, self_y_max, self_x_max] = self.max;
+        let [other_z_max, other_y_max, other_x_max] = other.max;
+
+        self.min = [
+            self_z_min.min(other_z_min),
+            self_y_min.min(other_y_min),
+            self_x_min.min(other_x_min),
+        ];
+        self.max = [
+            self_z_max.max(other_z_max),
+            self_y_max.max(other_y_max),
+            self_x_max.max(other_x_max),
+        ];
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -460,5 +537,37 @@ mod tests {
         let l2 = a.linear_space_index_unchecked([2, 2, 2]);
         assert_eq!(l2, 1 * 42 * 42 + 1 * 42 + 1);
         assert_eq!(a.grid_idx_unchecked(l2), [2, 2, 2].into());
+    }
+
+    #[test]
+    fn grid_bounding_box_2d_contains() {
+        let a = GridBoundingBox::new([1, 1], [42, 42]).unwrap();
+        let b = GridBoundingBox::new([2, 2], [41, 41]).unwrap();
+        assert!(a.contains(&b));
+        assert!(!b.contains(&a));
+    }
+
+    #[test]
+    fn extend_1d() {
+        let mut a = GridBoundingBox::new([1], [42]).unwrap();
+        let b = GridBoundingBox::new([2], [69]).unwrap();
+        a.extend(&b);
+        assert_eq!(a, GridBoundingBox::new([1], [69]).unwrap());
+    }
+
+    #[test]
+    fn extend_2d() {
+        let mut a = GridBoundingBox::new([1, 2], [42, 69]).unwrap();
+        let b = GridBoundingBox::new([2, 1], [69, 42]).unwrap();
+        a.extend(&b);
+        assert_eq!(a, GridBoundingBox::new([1, 1], [69, 69]).unwrap());
+    }
+
+    #[test]
+    fn extend_3d() {
+        let mut a = GridBoundingBox::new([1, 3, 2], [42, 69, 666]).unwrap();
+        let b = GridBoundingBox::new([3, 2, 1], [69, 666, 42]).unwrap();
+        a.extend(&b);
+        assert_eq!(a, GridBoundingBox::new([1, 2, 1], [69, 666, 666]).unwrap());
     }
 }

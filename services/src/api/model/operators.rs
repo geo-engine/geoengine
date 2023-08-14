@@ -298,9 +298,7 @@ impl
         geoengine_operators::engine::StaticMetaData<
             geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     >
     for StaticMetaData<
@@ -313,9 +311,7 @@ impl
         value: geoengine_operators::engine::StaticMetaData<
             geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     ) -> Self {
         Self {
@@ -331,9 +327,7 @@ impl
         geoengine_operators::engine::StaticMetaData<
             geoengine_operators::source::OgrSourceDataset,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     > for StaticMetaData<OgrSourceDataset, VectorResultDescriptor, QueryRectangle<BoundingBox2D>>
 {
@@ -341,9 +335,7 @@ impl
         value: geoengine_operators::engine::StaticMetaData<
             geoengine_operators::source::OgrSourceDataset,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     ) -> Self {
         Self {
@@ -383,9 +375,7 @@ impl From<MockMetaData>
     for geoengine_operators::engine::StaticMetaData<
         geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
         geoengine_operators::engine::VectorResultDescriptor,
-        geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::BoundingBox2D,
-        >,
+        geoengine_datatypes::primitives::VectorQueryRectangle,
     >
 {
     fn from(value: MockMetaData) -> Self {
@@ -401,9 +391,7 @@ impl From<OgrMetaData>
     for geoengine_operators::engine::StaticMetaData<
         geoengine_operators::source::OgrSourceDataset,
         geoengine_operators::engine::VectorResultDescriptor,
-        geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::BoundingBox2D,
-        >,
+        geoengine_datatypes::primitives::VectorQueryRectangle,
     >
 {
     fn from(value: OgrMetaData) -> Self {

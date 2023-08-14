@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::DatasetName;
+use crate::api::model::datatypes::{DatasetName, RasterQueryRectangle};
 use crate::api::model::responses::datasets::DatasetIdAndName;
 use crate::api::model::services::AddDataset;
 use crate::contexts::SessionContext;
@@ -8,7 +8,7 @@ use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
 use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::error::ErrorSource;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
+use geoengine_datatypes::primitives::{SpatialPartitioned, TimeInterval};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
@@ -88,7 +88,14 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             .query_processor()
             .context(crate::error::Operator)?;
 
-        let query_rect = self.info.query;
+        let api_query_rect = self.info.query;
+        let query_rect = geoengine_datatypes::primitives::RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            api_query_rect.spatial_bounds.into(),
+            api_query_rect.spatial_resolution.into(),
+            execution_context.tiling_specification().origin_coordinate,
+            api_query_rect.time_interval.into(),
+        );
+
         let query_ctx = self.ctx.query_context()?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
@@ -202,7 +209,7 @@ async fn create_dataset<C: SessionContext>(
     info: RasterDatasetFromWorkflow,
     mut slice_info: Vec<GdalLoadingInfoTemporalSlice>,
     origin_result_descriptor: &RasterResultDescriptor,
-    query_rectangle: RasterQueryRectangle,
+    query_rectangle: geoengine_datatypes::primitives::RasterQueryRectangle,
     ctx: &C,
 ) -> error::Result<DatasetIdAndName> {
     ensure!(!slice_info.is_empty(), error::EmptyDatasetCannotBeImported);
@@ -224,8 +231,8 @@ async fn create_dataset<C: SessionContext>(
         spatial_reference: origin_result_descriptor.spatial_reference,
         measurement: origin_result_descriptor.measurement.clone(),
         time: Some(result_time_interval),
-        bbox: Some(query_rectangle.spatial_bounds),
-        resolution: Some(query_rectangle.spatial_resolution),
+        bbox: Some(query_rectangle.spatial_query().spatial_partition()),
+        resolution: Some(query_rectangle.spatial_query().spatial_resolution()),
     };
     //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular
     let meta_data = if slice_info.len() == 1 {
