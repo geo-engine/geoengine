@@ -4,7 +4,7 @@ use crate::{
 };
 use serde::{de, Deserialize, Deserializer, Serialize};
 
-use super::{GridBoundingBox2D, GridIdx, GridIdx2D};
+use super::{GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D};
 
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
@@ -221,6 +221,17 @@ impl GeoTransform {
         }
 
         Ok(unchecked)
+    }
+
+    pub fn grid_to_spatial_bounds(&self, grid_bounds: &GridBoundingBox2D) -> SpatialPartition2D {
+        let ul = self.grid_idx_to_pixel_upper_left_coordinate_2d(grid_bounds.min_index());
+        let lr = self.grid_idx_to_pixel_upper_left_coordinate_2d(grid_bounds.max_index() + 1);
+
+        SpatialPartition2D::new_unchecked(ul, lr)
+    }
+
+    pub fn origin_coordinate(&self) -> Coordinate2D {
+        self.origin_coordinate
     }
 }
 

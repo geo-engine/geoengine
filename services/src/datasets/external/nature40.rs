@@ -517,8 +517,7 @@ mod tests {
 
     use geoengine_datatypes::{
         primitives::{
-            CacheTtlSeconds, Measurement, QueryRectangle, SpatialPartition2D, SpatialResolution,
-            TimeInterval,
+            CacheTtlSeconds, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
         },
         raster::RasterDataType,
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
@@ -930,17 +929,17 @@ mod tests {
         );
 
         let loading_info = meta
-            .loading_info(QueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
+            .loading_info(RasterQueryRectangle::with_partition_and_resolution(
+                SpatialPartition2D::new_unchecked(
                     (473_922.500, 5_634_057.500).into(),
                     (473_924.500, 5_634_055.50).into(),
                 ),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+                SpatialResolution::new_unchecked(
                     (473_924.500 - 473_922.500) / 2.,
                     (5_634_057.500 - 5_634_055.50) / 2.,
                 ),
-            })
+                TimeInterval::default(),
+            ))
             .await
             .unwrap();
 

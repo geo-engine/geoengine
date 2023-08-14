@@ -19,8 +19,8 @@ use csv::WriterBuilder;
 use futures::StreamExt;
 use geoengine_datatypes::{
     primitives::{
-        BoundingBox2D, QueryRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-        TimeInterval, VectorQueryRectangle,
+        BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        VectorQueryRectangle,
     },
     raster::Pixel,
     util::{test::TestDefault, Identifier},
@@ -104,14 +104,12 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                 },
             }
             .boxed(),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
-                    [-180., -90.].into(),
-                    [180., 90.].into(),
-                ),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
+            query_rectangle: RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
+                SpatialResolution::zero_point_one(),
+                (0., 0.).into(),
+                TimeInterval::default(),
+            ),
         },
         Benchmark::Vector {
             name: "raster_vector_join".to_string(),
@@ -139,14 +137,11 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                 },
             }
             .boxed(),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new_unchecked(
-                    [-180., -90.].into(),
-                    [180., 90.].into(),
-                ),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
+            query_rectangle: VectorQueryRectangle::with_bounds_and_resolution(
+                BoundingBox2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
+                TimeInterval::default(),
+                SpatialResolution::zero_point_one(),
+            ),
         },
     ]
 }

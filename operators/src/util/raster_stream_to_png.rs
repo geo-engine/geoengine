@@ -1,7 +1,9 @@
 use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
     operations::image::{Colorizer, DefaultColors, RgbaColor, ToPng},
-    primitives::{AxisAlignedRectangle, CacheHint, RasterQueryRectangle, TimeInterval},
+    primitives::{
+        AxisAlignedRectangle, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInterval,
+    },
     raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
@@ -34,20 +36,19 @@ where
 
     let tile_stream = processor.query(query_rect, &query_ctx).await?;
 
-    let x_query_resolution = query_rect.spatial_bounds.size_x() / f64::from(width);
-    let y_query_resolution = query_rect.spatial_bounds.size_y() / f64::from(height);
-
     // build png
     let dim = [height as usize, width as usize];
-    let query_geo_transform = GeoTransform::new(
-        query_rect.spatial_bounds.upper_left(),
-        x_query_resolution,
-        -y_query_resolution, // TODO: negative, s.t. geo transform fits...
+    let query_geo_transform = query_rect.spatial_query().geo_transform;
+
+    let output_geo_transform = GeoTransform::new(
+        query_rect.spatial_query().spatial_partition().upper_left(),
+        query_geo_transform.x_pixel_size(),
+        query_geo_transform.y_pixel_size(),
     );
 
     let output_tile = Ok(RasterTile2D::new_without_offset(
         time.unwrap_or_default(),
-        query_geo_transform,
+        output_geo_transform,
         GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
         CacheHint::max_duration(),
     ));
@@ -137,12 +138,12 @@ mod tests {
 
         let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_partition,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_partition,
+                SpatialResolution::zero_point_one(),
+                Coordinate2D::new(0., 0.), // FIXME: check if this is correct here.
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
             ctx,
             600,
             600,

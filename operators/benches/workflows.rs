@@ -4,10 +4,8 @@ use std::time::{Duration, Instant};
 use futures::TryStreamExt;
 use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
 use geoengine_datatypes::primitives::CacheHint;
-use geoengine_datatypes::primitives::{
-    Measurement, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
-};
-use geoengine_datatypes::raster::{Grid2D, RasterDataType};
+use geoengine_datatypes::primitives::{Coordinate2D, Measurement, RasterQueryRectangle};
+use geoengine_datatypes::raster::{Grid2D, RasterDataType, TilingStrategy};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 
 use geoengine_datatypes::util::Identifier;
@@ -58,7 +56,7 @@ pub trait BenchmarkRunner {
 pub struct WorkflowSingleBenchmark<F, O> {
     bench_id: &'static str,
     query_name: &'static str,
-    query_rect: QueryRectangle<SpatialPartition2D>,
+    query_rect: RasterQueryRectangle,
     tiling_spec: TilingSpecification,
     chunk_byte_size: ChunkByteSize,
     num_threads: usize,
@@ -69,7 +67,7 @@ pub struct WorkflowSingleBenchmark<F, O> {
 impl<O, F> WorkflowSingleBenchmark<F, O>
 where
     F: Fn(TilingSpecification, usize) -> MockExecutionContext,
-    O: Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+    O: Fn(TilingSpecification, RasterQueryRectangle) -> Box<dyn RasterOperator>,
 {
     #[inline(never)]
     pub fn run_bench(&self) -> WorkflowBenchmarkResult {
@@ -129,7 +127,7 @@ where
 impl<F, O> BenchmarkRunner for WorkflowSingleBenchmark<F, O>
 where
     F: Fn(TilingSpecification, usize) -> MockExecutionContext,
-    O: Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+    O: Fn(TilingSpecification, RasterQueryRectangle) -> Box<dyn RasterOperator>,
 {
     fn run_all_benchmarks(self, bencher: &mut BenchmarkCollector) {
         bencher.add_benchmark_result(WorkflowSingleBenchmark::run_bench(&self))
@@ -153,8 +151,7 @@ where
     T: IntoIterator<Item = TilingSpecification> + Clone,
     B: IntoIterator<Item = ChunkByteSize> + Clone,
     F: Clone + Fn(TilingSpecification, usize) -> MockExecutionContext,
-    O: Clone
-        + Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+    O: Clone + Fn(TilingSpecification, RasterQueryRectangle) -> Box<dyn RasterOperator>,
 {
     pub fn new(
         bench_id: &'static str,
@@ -234,8 +231,7 @@ where
     T: IntoIterator<Item = TilingSpecification> + Clone,
     B: IntoIterator<Item = ChunkByteSize> + Clone,
     F: Clone + Fn(TilingSpecification, usize) -> MockExecutionContext,
-    O: Clone
-        + Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+    O: Clone + Fn(TilingSpecification, RasterQueryRectangle) -> Box<dyn RasterOperator>,
 {
     fn run_all_benchmarks(self, bencher: &mut BenchmarkCollector) {
         self.into_benchmark_iterator()
@@ -271,12 +267,15 @@ where
 }
 
 fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-    };
-    let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
+    let tiling_origin = Coordinate2D::new(0., 0.);
+
+    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+        SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        SpatialResolution::new(0.01, 0.01).unwrap(),
+        tiling_origin,
+        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+    );
+    let tiling_spec = TilingSpecification::new(tiling_origin, [512, 512].into());
 
     let qrects = vec![("World in 36000x18000 pixels", qrect)];
     let tiling_specs = vec![tiling_spec];
@@ -285,10 +284,19 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
-        let query_resolution = query_rect.spatial_resolution;
-        let query_time = query_rect.time_interval;
-        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
-        let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
+        // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
+        assert_eq!(
+            query_rect.spatial_query().geo_transform.origin_coordinate(),
+            tiling_spec.origin_coordinate,
+            "The query origin coordinate must match the tiling strategy's origin for now."
+        );
+
+        let tileing_strategy = TilingStrategy::new(
+            tiling_spec.tile_size_in_pixels,
+            query_rect.spatial_query().geo_transform,
+        );
+        let tile_iter = tileing_strategy
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
 
         let mock_data = tile_iter
             .enumerate()
@@ -299,7 +307,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(
-                    query_time,
+                    query_rect.time_interval,
                     tile_info,
                     data.into(),
                     CacheHint::default(),
@@ -338,30 +346,42 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
 }
 
 fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCollector) {
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
-    };
+    let tiling_origin = Coordinate2D::new(0., 0.);
+
+    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+        SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        SpatialResolution::new(0.005, 0.005).unwrap(),
+        tiling_origin,
+        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+    );
 
     let qrects = vec![("World in 72000x36000 pixels", qrect)];
     let tiling_specs = vec![
-        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
-        TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
-        TilingSpecification::new((0., 0.).into(), [18000, 18000].into()),
+        TilingSpecification::new(tiling_origin, [512, 512].into()),
+        TilingSpecification::new(tiling_origin, [1024, 1024].into()),
+        TilingSpecification::new(tiling_origin, [2048, 2048].into()),
+        TilingSpecification::new(tiling_origin, [4096, 4096].into()),
+        TilingSpecification::new(tiling_origin, [9000, 9000].into()),
+        TilingSpecification::new(tiling_origin, [18000, 18000].into()),
     ];
 
     fn operator_builder(
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
-        let query_resolution = query_rect.spatial_resolution;
-        let query_time = query_rect.time_interval;
-        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
-        let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
+        // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
+        assert_eq!(
+            query_rect.spatial_query().geo_transform.origin_coordinate(),
+            tiling_spec.origin_coordinate,
+            "The query origin coordinate must match the tiling strategy's origin for now."
+        );
+
+        let tileing_strategy = TilingStrategy::new(
+            tiling_spec.tile_size_in_pixels,
+            query_rect.spatial_query().geo_transform,
+        );
+        let tile_iter = tileing_strategy
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
 
         let mock_data = tile_iter
             .enumerate()
@@ -372,7 +392,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(
-                    query_time,
+                    query_rect.time_interval,
                     tile_info,
                     data.into(),
                     CacheHint::default(),
@@ -424,30 +444,42 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
 }
 
 fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut BenchmarkCollector) {
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-    };
+    let tiling_origin = Coordinate2D::new(0., 0.);
+
+    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+        SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        SpatialResolution::new(0.01, 0.01).unwrap(),
+        tiling_origin,
+        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+    );
 
     let qrects = vec![("World in 36000x18000 pixels", qrect)];
     let tiling_specs = vec![
-        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
-        TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
-        TilingSpecification::new((0., 0.).into(), [18000, 18000].into()),
+        TilingSpecification::new(tiling_origin, [512, 512].into()),
+        TilingSpecification::new(tiling_origin, [1024, 1024].into()),
+        TilingSpecification::new(tiling_origin, [2048, 2048].into()),
+        TilingSpecification::new(tiling_origin, [4096, 4096].into()),
+        TilingSpecification::new(tiling_origin, [9000, 9000].into()),
+        TilingSpecification::new(tiling_origin, [18000, 18000].into()),
     ];
 
     fn operator_builder(
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
-        let query_resolution = query_rect.spatial_resolution;
-        let query_time = query_rect.time_interval;
-        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
-        let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
+        // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
+        assert_eq!(
+            query_rect.spatial_query().geo_transform.origin_coordinate(),
+            tiling_spec.origin_coordinate,
+            "The query origin coordinate must match the tiling strategy's origin for now."
+        );
+
+        let tileing_strategy = TilingStrategy::new(
+            tiling_spec.tile_size_in_pixels,
+            query_rect.spatial_query().geo_transform,
+        );
+        let tile_iter = tileing_strategy
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
         let mock_data = tile_iter
             .enumerate()
             .map(|(id, tile_info)| {
@@ -457,7 +489,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(
-                    query_time,
+                    query_rect.time_interval,
                     tile_info,
                     data.into(),
                     CacheHint::default(),
@@ -505,15 +537,18 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
 fn bench_mock_source_operator_with_4326_to_3857_reprojection(
     bench_collector: &mut BenchmarkCollector,
 ) {
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new(
+    let tiling_origin = Coordinate2D::new(0., 0.);
+
+    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+        SpatialPartition2D::new(
             (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
             (20_037_508.342_789_244, -20_048_966.104_014_594).into(),
         )
         .unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
-    };
+        SpatialResolution::new(1050., 2100.).unwrap(),
+        tiling_origin,
+        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+    );
     let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
 
     let qrects = vec![("World in 36000x18000 pixels", qrect)];
@@ -523,10 +558,20 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
-        let query_resolution = query_rect.spatial_resolution;
-        let query_time = query_rect.time_interval;
-        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
-        let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
+        // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
+        assert_eq!(
+            query_rect.spatial_query().geo_transform.origin_coordinate(),
+            tiling_spec.origin_coordinate,
+            "The query origin coordinate must match the tiling strategy's origin for now."
+        );
+
+        let tileing_strategy = TilingStrategy::new(
+            tiling_spec.tile_size_in_pixels,
+            query_rect.spatial_query().geo_transform,
+        );
+
+        let tile_iter = tileing_strategy
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
         let mock_data = tile_iter
             .enumerate()
             .map(|(id, tile_info)| {
@@ -536,7 +581,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(
-                    query_time,
+                    query_rect.time_interval,
                     tile_info,
                     data.into(),
                     CacheHint::default(),
@@ -581,40 +626,40 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
 }
 
 fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector) {
+    let tiling_origin = Coordinate2D::new(0., 0.);
+
     let qrects = vec![
         (
             "World in 36000x18000 pixels",
-            RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-            },
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+                SpatialResolution::new(0.01, 0.01).unwrap(),
+                tiling_origin,
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
         ),
         (
             "World in 72000x36000 pixels",
-            RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
-            },
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+                SpatialResolution::new(0.005, 0.005).unwrap(),
+                tiling_origin,
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
         ),
     ];
 
     let tiling_specs = vec![
-        TilingSpecification::new((0., 0.).into(), [32, 32].into()),
-        TilingSpecification::new((0., 0.).into(), [64, 64].into()),
-        TilingSpecification::new((0., 0.).into(), [128, 128].into()),
-        TilingSpecification::new((0., 0.).into(), [256, 256].into()),
-        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
+        TilingSpecification::new(tiling_origin, [32, 32].into()),
+        TilingSpecification::new(tiling_origin, [64, 64].into()),
+        TilingSpecification::new(tiling_origin, [128, 128].into()),
+        TilingSpecification::new(tiling_origin, [256, 256].into()),
+        TilingSpecification::new(tiling_origin, [512, 512].into()),
         // TilingSpecification::new((0., 0.).into(), [600, 600].into()),
         // TilingSpecification::new((0., 0.).into(), [900, 900].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        TilingSpecification::new(tiling_origin, [1024, 1024].into()),
+        TilingSpecification::new(tiling_origin, [2048, 2048].into()),
+        TilingSpecification::new(tiling_origin, [4096, 4096].into()),
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
@@ -645,27 +690,29 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
 }
 
 fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut BenchmarkCollector) {
+    let tiling_origin = Coordinate2D::new(0., 0.);
+
     let qrects = vec![(
         "World in 36000x18000 pixels",
-        RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                .unwrap(),
-            time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-            spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        },
+        RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+            SpatialResolution::new(0.01, 0.01).unwrap(),
+            tiling_origin,
+            TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        ),
     )];
 
     let tiling_specs = vec![
         // TilingSpecification::new((0., 0.).into(), [32, 32].into()),
-        TilingSpecification::new((0., 0.).into(), [64, 64].into()),
-        TilingSpecification::new((0., 0.).into(), [128, 128].into()),
-        TilingSpecification::new((0., 0.).into(), [256, 256].into()),
-        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
+        TilingSpecification::new(tiling_origin, [64, 64].into()),
+        TilingSpecification::new(tiling_origin, [128, 128].into()),
+        TilingSpecification::new(tiling_origin, [256, 256].into()),
+        TilingSpecification::new(tiling_origin, [512, 512].into()),
         // TilingSpecification::new((0., 0.).into(), [600, 600].into()),
         // TilingSpecification::new((0., 0.).into(), [900, 900].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        TilingSpecification::new(tiling_origin, [1024, 1024].into()),
+        TilingSpecification::new(tiling_origin, [2048, 2048].into()),
+        TilingSpecification::new(tiling_origin, [4096, 4096].into()),
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
@@ -706,27 +753,29 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
 }
 
 fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut BenchmarkCollector) {
+    let tiling_origin = Coordinate2D::new(0., 0.);
+
     let qrects = vec![(
         "World in 36000x18000 pixels",
-        RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                .unwrap(),
-            time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-            spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        },
+        RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+            SpatialResolution::new(0.01, 0.01).unwrap(),
+            tiling_origin,
+            TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        ),
     )];
 
     let tiling_specs = vec![
         // TilingSpecification::new((0., 0.).into(), [32, 32].into()),
         // TilingSpecification::new((0., 0.).into(), [64, 64].into()),
         // TilingSpecification::new((0., 0.).into(), [128, 128].into()),
-        TilingSpecification::new((0., 0.).into(), [256, 256].into()),
-        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
+        TilingSpecification::new(tiling_origin, [256, 256].into()),
+        TilingSpecification::new(tiling_origin, [512, 512].into()),
         // TilingSpecification::new((0., 0.).into(), [600, 600].into()),
         // TilingSpecification::new((0., 0.).into(), [900, 900].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        TilingSpecification::new(tiling_origin, [1024, 1024].into()),
+        TilingSpecification::new(tiling_origin, [2048, 2048].into()),
+        TilingSpecification::new(tiling_origin, [4096, 4096].into()),
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
@@ -766,17 +815,20 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
 fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
     bench_collector: &mut BenchmarkCollector,
 ) {
+    let tiling_origin = Coordinate2D::new(0., 0.);
+
     let qrects = vec![(
         "World in EPSG:3857 ~ 40000 x 20000 px",
-        RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new(
+        RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new(
                 (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
                 (20_037_508.342_789_244, -20_048_966.104_014_594).into(),
             )
             .unwrap(),
-            time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-            spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
-        },
+            SpatialResolution::new(1050., 2100.).unwrap(),
+            tiling_origin,
+            TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        ),
     )];
 
     let tiling_specs = vec![
@@ -784,12 +836,12 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
         // TilingSpecification::new((0., 0.).into(), [64, 64].into()),
         // TilingSpecification::new((0., 0.).into(), [128, 128].into()),
         // TilingSpecification::new((0., 0.).into(), [256, 256].into()),
-        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
+        TilingSpecification::new(tiling_origin, [512, 512].into()),
         // TilingSpecification::new((0., 0.).into(), [600, 600].into()),
         // TilingSpecification::new((0., 0.).into(), [900, 900].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        TilingSpecification::new(tiling_origin, [1024, 1024].into()),
+        TilingSpecification::new(tiling_origin, [2048, 2048].into()),
+        TilingSpecification::new(tiling_origin, [4096, 4096].into()),
         // TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
     ];
 
