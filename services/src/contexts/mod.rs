@@ -2,11 +2,9 @@ use crate::datasets::upload::Volume;
 use crate::error::Result;
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionProvider};
 use crate::layers::storage::{LayerDb, LayerProviderDb};
-use crate::machine_learning::ml_model::{MlModel, MlModelDb};
 use crate::tasks::{TaskContext, TaskManager};
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
-use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use rayon::ThreadPool;
 use std::str::FromStr;
@@ -23,10 +21,10 @@ use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, Layer
 
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
-    ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
-    InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
-    QueryAbortTrigger, QueryContext, QueryContextExtensions, RasterResultDescriptor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    ChunkByteSize, CreateSpan, ExecutionContext, ExecutionContextExtensions,
+    InitializedPlotOperator, InitializedVectorOperator, MetaData, MetaDataProvider,
+    QueryAbortRegistration, QueryAbortTrigger, QueryContext, QueryContextExtensions,
+    RasterResultDescriptor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -89,7 +87,6 @@ pub trait GeoEngineDb:
     + DatasetLayerCollectionProvider
     + ProjectDb
     + WorkflowRegistry
-    + MlModelDb
 {
 }
 
@@ -160,6 +157,7 @@ where
     db: D,
     thread_pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
+    extensions: ExecutionContextExtensions,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -175,6 +173,21 @@ where
             db,
             thread_pool,
             tiling_specification,
+            extensions: Default::default(),
+        }
+    }
+
+    pub fn new_with_extensions(
+        db: D,
+        thread_pool: Arc<ThreadPool>,
+        tiling_specification: TilingSpecification,
+        extensions: ExecutionContextExtensions,
+    ) -> Self {
+        Self {
+            db,
+            thread_pool,
+            tiling_specification,
+            extensions,
         }
     }
 }
@@ -189,8 +202,7 @@ where
             VectorQueryRectangle,
         > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + LayerProviderDb
-        + MlModelDb,
+        + LayerProviderDb,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
@@ -227,51 +239,6 @@ where
         op
     }
 
-    /// Loads a machine learning model with the specified `model_id` from the database.
-    ///
-    /// # Arguments
-    ///
-    /// * `model_id` - The ID of the machine learning model to load.
-    ///
-    /// # Returns
-    ///
-    /// Returns a `Result` containing the loaded machine learning model content as a `String`.
-    /// If the model ID is not found in the database, an `UnknownModelId` error is returned.
-    ///
-    async fn load_ml_model(
-        &self,
-        model_id: MlModelId,
-    ) -> geoengine_operators::util::Result<String> {
-        let db = &self.db;
-
-        let ml_model_from_db = db.load_ml_model(model_id).await.map_err(|_| {
-            geoengine_operators::error::Error::UnknownModelId {
-                id: model_id.to_string(),
-            }
-        })?;
-
-        Ok(ml_model_from_db.model_content)
-    }
-
-    /// This method is meant to write a ml model to disk.
-    /// The provided path for the model has to exist.
-    async fn store_ml_model_in_db(
-        &mut self,
-        model_id: MlModelId,
-        model_content: String,
-    ) -> geoengine_operators::util::Result<()> {
-        let model = MlModel {
-            model_id,
-            model_content,
-        };
-
-        // TODO: add routine or error, if a given id would overwrite an existing model
-        self.db
-            .store_ml_model(model)
-            .await
-            .map_err(|_| geoengine_operators::error::Error::CouldNotStoreMlModelInDb)
-    }
-
     async fn resolve_named_data(
         &self,
         data: &NamedData,
@@ -300,6 +267,10 @@ where
             )?;
 
         Ok(dataset_id.into())
+    }
+
+    fn extensions(&self) -> &ExecutionContextExtensions {
+        &self.extensions
     }
 }
 

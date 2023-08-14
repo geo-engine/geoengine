@@ -161,3 +161,10 @@ FROM user_roles AS r
 INNER JOIN permissions AS p ON (
     r.role_id = p.role_id AND p.layer_id IS NOT NULL
 );
+
+
+CREATE TABLE
+ml_models (
+    ml_model_id UUID PRIMARY KEY,
+    ml_model_content TEXT NOT NULL
+);

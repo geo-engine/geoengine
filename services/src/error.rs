@@ -446,9 +446,12 @@ pub enum Error {
     NotImplemented {
         message: String,
     },
+
+    // TODO: refactor error
+    #[cfg(feature = "pro")]
     #[snafu(context(false))]
     MachineLearningError {
-        source: crate::machine_learning::ml_error::MachineLearningError,
+        source: crate::pro::machine_learning::ml_error::MachineLearningError,
     },
 
     #[snafu(display("NotNan error: {}", source))]

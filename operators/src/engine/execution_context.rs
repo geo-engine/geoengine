@@ -11,8 +11,8 @@ use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
+use core::any::TypeId;
 use geoengine_datatypes::dataset::{DataId, NamedData};
-use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
@@ -56,15 +56,35 @@ pub trait ExecutionContext: Send
         path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedPlotOperator>;
 
-    async fn load_ml_model(&self, model_id: MlModelId) -> Result<String>;
-
-    async fn store_ml_model_in_db(
-        &mut self,
-        model_id: MlModelId,
-        ml_model_str: String,
-    ) -> Result<()>;
-
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId>;
+
+    /// get the `ExecutionContextExtensions` that contain additional information
+    fn extensions(&self) -> &ExecutionContextExtensions;
+}
+
+/// This type allows adding additional information to the `QueryContext`.
+/// It acts like a type map, allowing one to store one value per type.
+#[derive(Default)]
+pub struct ExecutionContextExtensions {
+    map: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+}
+
+impl ExecutionContextExtensions {
+    pub fn insert<T: 'static + Send + Sync>(&mut self, val: T) -> Option<T> {
+        self.map
+            .insert(TypeId::of::<T>(), Box::new(val))
+            .and_then(downcast_owned)
+    }
+
+    pub fn get<T: 'static + Send + Sync>(&self) -> Option<&T> {
+        self.map
+            .get(&TypeId::of::<T>())
+            .and_then(|boxed: &Box<dyn Any + Send + Sync>| boxed.downcast_ref())
+    }
+}
+
+fn downcast_owned<T: 'static + Send + Sync>(boxed: Box<dyn Any + Send + Sync>) -> Option<T> {
+    boxed.downcast().ok().map(|boxed| *boxed)
 }
 
 #[async_trait]
@@ -100,7 +120,7 @@ pub struct MockExecutionContext {
     pub meta_data: HashMap<DataId, Box<dyn Any + Send + Sync>>,
     pub named_data: HashMap<NamedData, DataId>,
     pub tiling_specification: TilingSpecification,
-    pub ml_models: HashMap<MlModelId, String>,
+    pub extensions: ExecutionContextExtensions,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -110,7 +130,7 @@ impl TestDefault for MockExecutionContext {
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
-            ml_models: HashMap::default(),
+            extensions: Default::default(),
         }
     }
 }
@@ -122,7 +142,7 @@ impl MockExecutionContext {
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
             tiling_specification,
-            ml_models: HashMap::default(),
+            extensions: Default::default(),
         }
     }
 
@@ -135,7 +155,7 @@ impl MockExecutionContext {
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
             tiling_specification,
-            ml_models: HashMap::default(),
+            extensions: Default::default(),
         }
     }
 
@@ -206,31 +226,15 @@ impl ExecutionContext for MockExecutionContext {
         op
     }
 
-    async fn load_ml_model(&self, model_id: MlModelId) -> Result<String> {
-        let res = self
-            .ml_models
-            .get(&model_id)
-            .ok_or(Error::MachineLearningModelNotFound)?
-            .clone();
-
-        Ok(res)
-    }
-
-    async fn store_ml_model_in_db(
-        &mut self,
-        model_id: MlModelId,
-        ml_model_str: String,
-    ) -> Result<()> {
-        self.ml_models.insert(model_id, ml_model_str);
-
-        Ok(())
-    }
-
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId> {
         self.named_data
             .get(data)
             .cloned()
             .ok_or_else(|| Error::UnknownDatasetName { name: data.clone() })
+    }
+
+    fn extensions(&self) -> &ExecutionContextExtensions {
+        &self.extensions
     }
 }
 

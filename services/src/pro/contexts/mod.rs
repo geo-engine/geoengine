@@ -4,12 +4,12 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
-use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
-    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, MetaData,
-    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor, WorkflowOperatorPath,
+    CreateSpan, ExecutionContext, ExecutionContextExtensions, InitializedPlotOperator,
+    InitializedVectorOperator, MetaData, MetaDataProvider, RasterResultDescriptor,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::pro::cache::cache_operator::InitializedCacheOperator;
@@ -23,7 +23,7 @@ use rayon::ThreadPool;
 use crate::contexts::{ApplicationContext, GeoEngineDb};
 use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
-use crate::machine_learning::ml_model::{MlModel, MlModelDb};
+use crate::pro::machine_learning::ml_model::MlModelDb;
 
 use crate::layers::storage::LayerProviderDb;
 use crate::pro::users::{OidcRequestDb, UserDb};
@@ -51,6 +51,7 @@ where
     db: D,
     thread_pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
+    extensions: ExecutionContextExtensions,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -66,6 +67,21 @@ where
             db,
             thread_pool,
             tiling_specification,
+            extensions: ExecutionContextExtensions::default(),
+        }
+    }
+
+    pub fn new_with_extensions(
+        db: D,
+        thread_pool: Arc<ThreadPool>,
+        tiling_specification: TilingSpecification,
+        extensions: ExecutionContextExtensions,
+    ) -> Self {
+        Self {
+            db,
+            thread_pool,
+            tiling_specification,
+            extensions,
         }
     }
 }
@@ -143,41 +159,6 @@ where
         op
     }
 
-    /// This method is meant to read a ml model from disk, specified by the config key `machinelearning.model_defs_path`.
-    async fn load_ml_model(
-        &self,
-        model_id: MlModelId,
-    ) -> geoengine_operators::util::Result<String> {
-        let db = &self.db;
-
-        let ml_model_from_db = db.load_ml_model(model_id).await.map_err(|_| {
-            geoengine_operators::error::Error::UnknownModelId {
-                id: model_id.to_string(),
-            }
-        })?;
-
-        Ok(ml_model_from_db.model_content)
-    }
-
-    /// This method is meant to write a ml model to disk.
-    /// The provided path for the model has to exist.
-    async fn store_ml_model_in_db(
-        &mut self,
-        model_id: MlModelId,
-        model_content: String,
-    ) -> geoengine_operators::util::Result<()> {
-        let model = MlModel {
-            model_id,
-            model_content,
-        };
-
-        // TODO: add routine or error, if a given modelpath would overwrite an existing model
-        self.db
-            .store_ml_model(model)
-            .await
-            .map_err(|_| geoengine_operators::error::Error::CouldNotStoreMlModelInDb)
-    }
-
     async fn resolve_named_data(
         &self,
         data: &geoengine_datatypes::dataset::NamedData,
@@ -206,6 +187,10 @@ where
             )?;
 
         Ok(dataset_id.into())
+    }
+
+    fn extensions(&self) -> &ExecutionContextExtensions {
+        &self.extensions
     }
 }
 

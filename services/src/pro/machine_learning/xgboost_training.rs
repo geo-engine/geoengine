@@ -9,8 +9,8 @@ use utoipa::ToSchema;
 use xgboost_rs::{Booster, DMatrix};
 
 use crate::error::Result;
-use crate::machine_learning::ml_error as XgModuleError;
-use crate::machine_learning::MachineLearningFeature;
+use crate::pro::machine_learning::ml_error as XgModuleError;
+use crate::pro::machine_learning::MachineLearningFeature;
 use ordered_float::NotNan;
 
 use super::TrainableModel;

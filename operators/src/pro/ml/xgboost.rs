@@ -35,6 +35,7 @@ use RasterDataType::F32 as RasterOut;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use super::xg_error::XGBoostModuleError;
+use super::MlModelAccess;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -72,7 +73,12 @@ impl RasterOperator for XgboostOperator {
         // reconstruct model path from the given uuid, then load the actual model
         let model_path = self.params.model_id;
 
-        let model = context.load_ml_model(model_path).await?;
+        let model_access = context
+            .extensions()
+            .get::<MlModelAccess>()
+            .expect("`MlModelDb` extension should be set during `ProContext` creation");
+
+        let model = model_access.load_ml_model_by_id(model_path).await?;
 
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
 
@@ -352,7 +358,10 @@ mod tests {
         MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
         RasterOperator, RasterResultDescriptor, SourceOperator, WorkflowOperatorPath,
     };
+    use crate::error::Error;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use crate::pro::ml::{LoadMlModel, MlModelAccess};
+    use async_trait::async_trait;
     use geoengine_datatypes::ml_model::MlModelId;
 
     use futures::StreamExt;
@@ -378,6 +387,20 @@ mod tests {
 
     use super::{XgboostOperator, XgboostParams};
 
+    struct MockModelAccess {
+        models: HashMap<MlModelId, String>,
+    }
+
+    #[async_trait]
+    impl LoadMlModel for MockModelAccess {
+        async fn load_ml_model_by_id(&self, model_id: MlModelId) -> Result<String> {
+            self.models
+                .get(&model_id)
+                .cloned()
+                .ok_or(Error::MachineLearningModelNotFound)
+        }
+    }
+
     /// Initializes a machine learning model by reading its contents from a file specified by the given UUID-based `PathBuf`.
     /// The contents of the model file are expected to be in JSON format.
     pub fn mock_ml_model_persistance(
@@ -394,7 +417,11 @@ mod tests {
 
         let model = std::fs::read_to_string(full_model_path)?;
 
-        exe_ctx.ml_models.insert(model_id, model);
+        let mock_model_access: MlModelAccess = Box::new(MockModelAccess {
+            models: [(model_id, model)].into_iter().collect(),
+        });
+
+        exe_ctx.extensions.insert(mock_model_access);
 
         Ok(())
     }

@@ -403,9 +403,3 @@ CREATE TABLE layer_providers (
 );
 
 -- TODO: relationship between uploads and datasets?
-
-CREATE TABLE
-ml_models (
-    ml_model_id uuid PRIMARY KEY,
-    ml_model_content text NOT NULL
-);

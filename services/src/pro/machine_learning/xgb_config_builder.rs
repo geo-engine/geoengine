@@ -564,7 +564,7 @@ impl LearningTaskParameters {
         let mut v = Vec::new();
 
         let n = self.num_class.ok_or_else(|| {
-            crate::machine_learning::ml_error::MachineLearningError::UndefinedNumberOfClasses
+            crate::pro::machine_learning::ml_error::MachineLearningError::UndefinedNumberOfClasses
         })?;
 
         match self.objective {
@@ -959,7 +959,7 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use crate::machine_learning::xgb_config_builder::{
+    use crate::pro::machine_learning::xgb_config_builder::{
         BoosterType, Objective, ProcessType, TreeMethod,
     };
 

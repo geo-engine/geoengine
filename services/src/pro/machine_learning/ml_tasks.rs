@@ -1,12 +1,12 @@
 use crate::contexts::SessionContext;
 use crate::error::Result;
 
-use crate::machine_learning::data_preparation::{
+use crate::pro::machine_learning::data_preparation::{
     accumulate_raster_data, get_operators_from_workflows, get_query_processors,
 };
-use crate::machine_learning::ml_model::{MlModel, MlModelDb};
+use crate::pro::machine_learning::ml_model::{MlModel, MlModelDb};
 
-use crate::machine_learning::{
+use crate::pro::machine_learning::{
     Aggregatable, MachineLearningAggregator, MachineLearningFeature, ModelType,
     ReservoirSamplingAggregator, SimpleAggregator, TrainableModel,
 };
@@ -54,7 +54,10 @@ pub struct MachineLearningModelFromWorkflowTask<C: SessionContext> {
     pub model_id: MlModelId,
 }
 
-impl<C: SessionContext> MachineLearningModelFromWorkflowTask<C> {
+impl<C: SessionContext> MachineLearningModelFromWorkflowTask<C>
+where
+    C::GeoEngineDB: MlModelDb,
+{
     async fn process<A: Aggregatable<Data = f32>>(
         &self,
     ) -> Result<MachineLearningModelFromWorkflowResult> {
@@ -177,7 +180,10 @@ impl<C: SessionContext> MachineLearningModelFromWorkflowTask<C> {
 }
 
 #[async_trait::async_trait]
-impl<C: SessionContext> Task<C::TaskContext> for MachineLearningModelFromWorkflowTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for MachineLearningModelFromWorkflowTask<C>
+where
+    C::GeoEngineDB: MlModelDb,
+{
     async fn run(
         &self,
         _ctx: C::TaskContext,
@@ -206,7 +212,9 @@ impl<C: SessionContext> Task<C::TaskContext> for MachineLearningModelFromWorkflo
 
     async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
         let model_defs_path = get_config_element::<crate::util::config::MachineLearning>()
-            .boxed_context(crate::machine_learning::ml_error::error::CouldNotGetMlModelConfigPath)
+            .boxed_context(
+                crate::pro::machine_learning::ml_error::error::CouldNotGetMlModelConfigPath,
+            )
             .map_err(ErrorSource::boxed)?
             .model_defs_path;
 
@@ -233,7 +241,10 @@ impl<C: SessionContext> Task<C::TaskContext> for MachineLearningModelFromWorkflo
 pub async fn schedule_ml_model_training_task<C: SessionContext>(
     ctx: Arc<C>,
     ml_train_request: MLTrainRequest,
-) -> Result<TaskId> {
+) -> Result<TaskId>
+where
+    C::GeoEngineDB: MlModelDb,
+{
     // create a new ModelId. The model will be stored with this id
     // and can be retrieved by this id
     let model_id = MlModelId::new();

@@ -16,7 +16,7 @@ impl MlModel {}
 
 /// Handling of ml models provided by geo engine
 #[async_trait]
-pub trait MlModelDb {
+pub trait MlModelDb: Send + Sync {
     async fn load_ml_model(&self, model_id: MlModelId) -> Result<MlModel>;
 
     async fn store_ml_model(&self, model: MlModel) -> Result<()>;

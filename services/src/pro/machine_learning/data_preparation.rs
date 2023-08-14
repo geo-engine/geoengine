@@ -16,7 +16,7 @@ use geoengine_operators::{
     util::spawn_blocking_with_thread_pool,
 };
 
-use crate::machine_learning::ml_error::MachineLearningError;
+use crate::pro::machine_learning::ml_error::MachineLearningError;
 
 use super::{Aggregatable, MachineLearningFeature};
 

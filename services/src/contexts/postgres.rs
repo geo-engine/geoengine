@@ -11,7 +11,6 @@ use crate::layers::add_from_directory::{
 };
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 
-use crate::machine_learning::ml_model::{MlModel, MlModelDb};
 use crate::projects::{ProjectId, STRectangle};
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
 use crate::util::config::get_config_element;
@@ -22,7 +21,6 @@ use bb8_postgres::{
     tokio_postgres::{error::SqlState, tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
-use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
@@ -494,83 +492,6 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-}
-
-#[async_trait]
-impl<Tls> MlModelDb for PostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    /// Load a machine learning model from the database by its ID.
-    ///
-    /// # Arguments
-    ///
-    /// * `model_id` - A MlModelId that identifies the desired model.
-    ///
-    /// # Returns
-    ///
-    /// * `MlModel` - The loaded machine learning model.
-    /// * `Error` - If the model cannot be found or loaded.
-    async fn load_ml_model(&self, model_id: MlModelId) -> Result<MlModel> {
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare("SELECT ml_model_id, ml_model_content FROM ml_models WHERE ml_model_id = $1")
-            .await?;
-
-        let row = conn.query_opt(&stmt, &[&model_id]).await?;
-
-        // Handle the result of the query
-        match row {
-            Some(row) => Ok(MlModel {
-                model_id: row.get(0),
-                model_content: row.get(1),
-            }),
-            None => Err(
-                error::Error::MachineLearningError { source:
-                    crate::machine_learning::ml_error::MachineLearningError::UnknownModelIdInPostgres {
-                     model_id,
-                    }
-                },
-            ),
-        }
-    }
-
-    /// Store a machine learning model in the database.
-    ///
-    /// # Arguments
-    ///
-    /// * `model` - The MlModel to be stored.
-    ///
-    /// # Returns
-    ///
-    /// * `Result<()>` - Ok if the model was successfully stored, otherwise an error.
-    async fn store_ml_model(&self, model: MlModel) -> Result<()> {
-        let mut conn = self.conn_pool.get().await?;
-
-        let tx = conn.build_transaction().start().await?;
-
-        let stmt = tx
-            .prepare(
-                "
-                INSERT INTO ml_models (
-                    ml_model_id,
-                    ml_model_content
-                )
-                VALUES ($1, $2);",
-            )
-            .await?;
-
-        tx.execute(&stmt, &[&model.model_id, &model.model_content])
-            .await?;
-
-        tx.commit().await?;
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]

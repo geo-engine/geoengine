@@ -34,9 +34,6 @@ use crate::util::config::get_config_element;
 use snafu::{ResultExt, Snafu};
 use zip::{write::FileOptions, ZipWriter};
 
-#[cfg(feature = "xgboost")]
-use super::model_training::ml_model_from_workflow_handler;
-
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ApplicationContext,
@@ -74,11 +71,6 @@ where
     .service(
         web::resource("datasetFromWorkflow/{id}")
             .route(web::post().to(dataset_from_workflow_handler::<C>)),
-    );
-
-    #[cfg(feature = "xgboost")]
-    cfg.service(
-        web::resource("/ml/train").route(web::post().to(ml_model_from_workflow_handler::<C>)),
     );
 }
 
