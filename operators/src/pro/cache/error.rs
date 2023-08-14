@@ -19,4 +19,13 @@ pub enum CacheError {
     QueryIdAlreadyInLandingZone,
     CacheEntryIdAlreadyInCache,
     CouldNotFilterResults,
+    #[snafu(display("Compressed element could not be decompressed"))]
+    CouldNotDecompressElement {
+        source: lz4_flex::block::DecompressError,
+    },
+    BlockingElementConversion,
+    #[snafu(display("Could not run decompression task"))]
+    CouldNotRunDecompressionTask {
+        source: tokio::task::JoinError,
+    },
 }
