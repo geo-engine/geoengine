@@ -390,6 +390,12 @@ pub enum Error {
     RgbOperator {
         source: crate::processing::RgbOperatorError,
     },
+
+    #[snafu(context(false))]
+    #[snafu(display("Cache can't produce the promissed result error: {source}"))]
+    CacheCantProduceResult {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

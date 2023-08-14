@@ -50,17 +50,20 @@ async fn write_cache(tile_cache: &SharedCache, op_name: CanonicOperatorName) -> 
 
     let start = std::time::Instant::now();
 
-    let query_id = tile_cache
-        .insert_query::<u8>(&op_name, &query_rect())
-        .await
-        .unwrap();
+    let query_id = <SharedCache as AsyncCache<RasterTile2D<u8>>>::insert_query(
+        tile_cache,
+        &op_name,
+        &query_rect(),
+    )
+    .await
+    .unwrap();
 
     let insert_query_s = start.elapsed().as_millis();
 
     let start = std::time::Instant::now();
 
     tile_cache
-        .insert_query_element::<u8>(&op_name, &query_id, tile)
+        .insert_query_element(&op_name, &query_id, tile)
         .await
         .unwrap();
 
@@ -70,10 +73,11 @@ async fn write_cache(tile_cache: &SharedCache, op_name: CanonicOperatorName) -> 
 
     #[allow(clippy::unit_arg)]
     black_box(
-        tile_cache
-            .finish_query::<u8>(&op_name, &query_id)
-            .await
-            .unwrap(),
+        <SharedCache as AsyncCache<RasterTile2D<u8>>>::finish_query(
+            tile_cache, &op_name, &query_id,
+        )
+        .await
+        .unwrap(),
     );
 
     let finish_query_s = start.elapsed().as_millis();
@@ -98,7 +102,9 @@ async fn read_cache(tile_cache: &SharedCache, op_no: usize) -> ReadMeasurement {
 
     let start = std::time::Instant::now();
 
-    let res = black_box(tile_cache.query_cache::<u8>(&op, &query).await);
+    let res = black_box(
+        <SharedCache as AsyncCache<RasterTile2D<u8>>>::query_cache(tile_cache, &op, &query).await,
+    );
     res.unwrap();
 
     let read_query_s = start.elapsed().as_millis();
