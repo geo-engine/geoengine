@@ -826,6 +826,8 @@ impl FromStr for EdrCollectionId {
     type Err = Error;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        // Collection ids use ampersands as separators because some collection names
+        // contain slashes.
         let split = s.split('!').collect::<Vec<_>>();
 
         Ok(match *split.as_slice() {
@@ -905,10 +907,19 @@ impl LayerCollectionProvider for EdrDataProvider {
                 let collection_meta = self.load_collection_by_name(&collection).await?;
 
                 if collection_meta.is_raster_file()? {
+                    // The collection is of type raster. A layer can only contain one parameter
+                    // of a raster dataset at a time, so let the user choose one.
                     self.get_raster_parameter_collection(collection_id, collection_meta, &options)
                 } else if collection_meta.extent.vertical.is_some() {
+                    // The collection is of type vector and data is provided for multiple heights.
+                    // The user needs to be able to select the height he wants to see. It is not
+                    // needed to select a parameter, because for vector datasets all parameters
+                    // can be loaded simultaneously.
                     self.get_vector_height_collection(collection_id, collection_meta, &options)
                 } else {
+                    // The collection is of type vector and there is only data for a single height.
+                    // No height or parameter needs to be selected by the user. Therefore the name
+                    // of the collection already identifies a layer sufficiently.
                     Err(Error::InvalidLayerCollectionId)
                 }
             }
@@ -919,8 +930,16 @@ impl LayerCollectionProvider for EdrDataProvider {
                 let collection_meta = self.load_collection_by_name(&collection).await?;
 
                 if !collection_meta.is_raster_file()? || collection_meta.extent.vertical.is_none() {
+                    // When the collection is of type raster, the parameter-name is set by the
+                    // parameter field. The height must not be selected when the collection has
+                    // no height information.
+                    // When the collection is of type vector, the height is already set by the
+                    // parameter field. For vectors no parameter-name must be selected.
                     return Err(Error::InvalidLayerCollectionId);
                 }
+                // If the program gets here, it is a raster collection and it contains multiple
+                // heights. The parameter-name was already chosen by the paramter field, but a
+                // height must still be selected.
                 self.get_raster_height_collection(
                     collection_id,
                     collection_meta,
