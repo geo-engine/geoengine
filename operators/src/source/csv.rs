@@ -8,7 +8,9 @@ use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::primitives::{
+    SpatialBounded, VectorQueryRectangle, VectorSpatialQueryRectangle,
+};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
 
@@ -398,7 +400,7 @@ struct CsvSourceProcessor {
 #[async_trait]
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
@@ -406,7 +408,12 @@ impl QueryProcessor for CsvSourceProcessor {
         _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: properly handle chunk_size
-        Ok(CsvSourceStream::new(self.params.clone(), query.spatial_bounds, 10)?.boxed())
+        Ok(CsvSourceStream::new(
+            self.params.clone(),
+            query.spatial_query().spatial_bounds(),
+            10,
+        )?
+        .boxed())
     }
 }
 
@@ -565,14 +572,11 @@ x,y
 
         let p = CsvSourceProcessor { params };
 
-        let query = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked(
-                Coordinate2D::new(0., 0.),
-                Coordinate2D::new(3., 3.),
-            ),
-            time_interval: TimeInterval::new_unchecked(0, 1),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
+        let query = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new_unchecked(Coordinate2D::new(0., 0.), Coordinate2D::new(3., 3.)),
+            TimeInterval::new_unchecked(0, 1),
+            SpatialResolution::zero_point_one(),
+        );
         let ctx = MockQueryContext::new((10 * 8 * 2).into());
 
         let r: Vec<Result<MultiPointCollection>> =

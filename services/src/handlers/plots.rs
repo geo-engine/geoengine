@@ -11,9 +11,9 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, Responder};
 use base64::Engine;
-use geoengine_datatypes::operations::reproject::reproject_query;
+use geoengine_datatypes::operations::reproject::reproject_spatial_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
-use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{BoundingBox2D, PlotQueryRectangle, SpatialResolution};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
     QueryContext, ResultDescriptor, TypedPlotQueryProcessor, WorkflowOperatorPath,
@@ -130,18 +130,23 @@ async fn get_plot_handler<C: ApplicationContext>(
     let request_spatial_ref: SpatialReference =
         params.crs.ok_or(error::Error::MissingSpatialReference)?;
 
-    let query_rect = VectorQueryRectangle {
-        spatial_bounds: params.bbox,
-        time_interval: params.time.into(),
-        spatial_resolution: params.spatial_resolution,
-    };
+    let query_rect = PlotQueryRectangle::with_bounds_and_resolution(
+        params.bbox,
+        params.time.into(),
+        params.spatial_resolution,
+    );
 
     let query_rect = if request_spatial_ref == workflow_spatial_ref {
         Some(query_rect)
     } else {
-        reproject_query(query_rect, workflow_spatial_ref, request_spatial_ref)
-            .map_err(From::from)
-            .context(error::Operator)?
+        let repr_spatial_query = reproject_spatial_query(
+            query_rect.spatial_query(),
+            workflow_spatial_ref,
+            request_spatial_ref,
+        )
+        .map_err(From::from)
+        .context(error::Operator)?;
+        repr_spatial_query.map(|r| PlotQueryRectangle::new(r, query_rect.time_interval))
     };
 
     let Some(query_rect) = query_rect else {

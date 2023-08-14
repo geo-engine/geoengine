@@ -1,12 +1,10 @@
 use crate::util::Result;
 use futures::{ready, Stream};
 use geoengine_datatypes::{
-    primitives::{
-        CacheExpiration, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInterval,
-    },
+    primitives::{CacheExpiration, CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
-        Pixel, RasterTile2D, TilingSpecification,
+        Pixel, RasterTile2D, TilingSpecification, TilingStrategy,
     },
 };
 use pin_project::pin_project;
@@ -198,20 +196,36 @@ where
         }
     }
 
+    /// Creates a new `SparseTilesFillAdapter` that fills the gaps of the input stream with empty tiles.
+    /// The input stream must be sorted by `GridIdx` and `TimeInterval`.
+    /// The adaper will fill the gaps within the `query_rect_to_answer` with empty tiles.
+    ///
+    /// # Panics
+    /// If the `query_rect_to_answer` has a different `origin_coordinate` than the `tiling_spec`.
+    ///
     pub fn new_like_subquery(
         stream: S,
         query_rect_to_answer: RasterQueryRectangle,
         tiling_spec: TilingSpecification,
         cache_expiration: FillerTileCacheExpirationStrategy,
     ) -> Self {
-        debug_assert!(query_rect_to_answer.spatial_resolution.y > 0.);
-
-        let tiling_strat = tiling_spec.strategy(
-            query_rect_to_answer.spatial_resolution.x,
-            -query_rect_to_answer.spatial_resolution.y,
+        assert_eq!(
+            query_rect_to_answer
+                .spatial_query()
+                .geo_transform
+                .origin_coordinate,
+            tiling_spec.origin_coordinate,
+            "we currently only support tiling specifications with the same origin coordinate as the query rectangle"
         );
 
-        let grid_bounds = tiling_strat.tile_grid_box(query_rect_to_answer.spatial_partition());
+        // FIXME: we should not need to create a new tiling strategy here
+        let tiling_strat = TilingStrategy::new(
+            tiling_spec.tile_size_in_pixels,
+            query_rect_to_answer.spatial_query().geo_transform,
+        );
+
+        let grid_bounds = tiling_strat
+            .raster_spatial_query_to_tiling_grid_box(&query_rect_to_answer.spatial_query());
         Self::new(
             stream,
             grid_bounds,

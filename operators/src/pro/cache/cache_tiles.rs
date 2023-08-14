@@ -5,7 +5,7 @@ use super::shared_cache::{
 };
 use crate::util::Result;
 use futures::Stream;
-use geoengine_datatypes::primitives::SpatialPartitioned;
+use geoengine_datatypes::raster::{GridBoundingBoxExt, GridIntersection};
 use geoengine_datatypes::{
     primitives::RasterQueryRectangle,
     raster::{Pixel, RasterTile2D},
@@ -217,7 +217,17 @@ where
     }
 
     fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError> {
-        query.spatial_bounds.extend(&self.spatial_partition());
+        let stored_spatial_query_mut = query.spatial_query_mut();
+
+        debug_assert_eq!(
+            stored_spatial_query_mut.geo_transform,
+            self.global_geo_transform
+        );
+
+        stored_spatial_query_mut
+            .grid_bounds
+            .extend(&self.tile_information().global_pixel_bounds());
+
         query.time_interval = query
             .time_interval
             .union(&self.time)
@@ -308,9 +318,9 @@ impl<T: Pixel> Stream for CacheTileStream<T> {
         // return the next tile that is contained in the query, skip all tiles that are not contained
         for i in *idx..data.len() {
             let tile = &data[i];
-            let tile_bbox = tile.spatial_partition();
+            let tile_bbox = tile.tile_information().global_pixel_bounds();
 
-            if tile_bbox.intersects(&query.spatial_bounds)
+            if tile_bbox.intersects(&query.spatial_query().grid_bounds)
                 && tile.time.intersects(&query.time_interval)
             {
                 *idx = i + 1;

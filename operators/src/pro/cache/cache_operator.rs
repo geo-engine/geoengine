@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
 use futures::{ready, Stream};
 use geoengine_datatypes::collections::FeatureCollection;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, Geometry, QueryRectangle};
+use geoengine_datatypes::primitives::{Geometry, QueryRectangle};
 use geoengine_datatypes::raster::RasterTile2D;
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::{pin_project, pinned_drop};
@@ -137,7 +137,7 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
 struct CacheQueryProcessor<P, E, Q>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialBounds = Q>,
+    P: QueryProcessor<Output = E, SpatialQuery = Q>,
 {
     processor: P,
     cache_key: CanonicOperatorName,
@@ -146,7 +146,7 @@ where
 impl<P, E, Q> CacheQueryProcessor<P, E, Q>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialBounds = Q> + Sized,
+    P: QueryProcessor<Output = E, SpatialQuery = Q> + Sized,
 {
     pub fn new(processor: P, cache_key: CanonicOperatorName) -> Self {
         CacheQueryProcessor {
@@ -159,7 +159,7 @@ where
 #[async_trait]
 impl<P, S, E, Q> QueryProcessor for CacheQueryProcessor<P, E, Q>
 where
-    P: QueryProcessor<Output = E, SpatialBounds = Q> + Sized,
+    P: QueryProcessor<Output = E, SpatialQuery = Q> + Sized,
     E: CacheElement<CacheElementSubType = S, Query = QueryRectangle<Q>>
         + ResultStreamWrapper
         + Send
@@ -167,16 +167,16 @@ where
         + Clone
         + 'static,
     S: CacheElementSubType<CacheElementType = E> + Send + Sync + 'static,
-    Q: AxisAlignedRectangle + Send + Sync + 'static,
+    Q: Send + Sync + 'static + Copy,
     E::ResultStream: Stream<Item = Result<E>> + Send + Sync + 'static,
     SharedCache: AsyncCache<E>,
 {
     type Output = E;
-    type SpatialBounds = Q;
+    type SpatialQuery = Q;
 
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialBounds>,
+        query: QueryRectangle<Self::SpatialQuery>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let shared_cache = ctx
@@ -393,7 +393,7 @@ where
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilesEqualIgnoringCacheHint,
         util::test::TestDefault,
     };
@@ -438,14 +438,12 @@ mod tests {
 
         let stream = processor
             .query(
-                QueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        [-180., -90.].into(),
-                        [180., 90.].into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
+                    SpatialResolution::zero_point_one(),
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    TimeInterval::default(),
+                ),
                 &query_ctx,
             )
             .await
@@ -459,14 +457,12 @@ mod tests {
 
         let stream_from_cache = processor
             .query(
-                QueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        [-180., -90.].into(),
-                        [180., 90.].into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
+                    SpatialResolution::zero_point_one(),
+                    exe_ctx.tiling_specification.origin_coordinate,
+                    TimeInterval::default(),
+                ),
                 &query_ctx,
             )
             .await

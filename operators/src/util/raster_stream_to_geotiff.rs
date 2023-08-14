@@ -13,13 +13,13 @@ use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
 use gdal::{Dataset, DriverManager, Metadata};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, DateTimeParseFormat, QueryRectangle, RasterQueryRectangle,
-    SpatialPartition2D, TimeInterval,
+    AxisAlignedRectangle, DateTimeParseFormat, RasterQueryRectangle, SpatialPartition2D,
+    SpatialPartitioned, TimeInterval,
 };
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
 use geoengine_datatypes::raster::{
-    ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridIdx2D, GridSize,
-    MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D, TilingSpecification,
+    ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridBounds, GridIdx, GridIdx2D,
+    GridSize, MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D, TilingSpecification,
     TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -108,7 +108,7 @@ where
 
 fn create_multiband_dataset_and_writer<T>(
     tiles: &Vec<RasterTile2D<T>>,
-    query_rect: QueryRectangle<SpatialPartition2D>,
+    query_rect: RasterQueryRectangle,
     tiling_specification: TilingSpecification,
     gdal_tiff_options: GdalGeoTiffOptions,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -128,16 +128,18 @@ where
         geo_transform: initial_tile_info.global_geo_transform,
     };
     let num_tiles_per_timestep = strat
-        .tile_grid_box(query_rect.spatial_bounds)
+        .tile_grid_box(query_rect.spatial_query().spatial_partition())
         .number_of_elements();
     let num_timesteps = tiles.len() / num_tiles_per_timestep;
 
-    let x_pixel_size = query_rect.spatial_resolution.x;
-    let y_pixel_size = query_rect.spatial_resolution.y;
-    let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as usize;
-    let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as usize;
+    let spatial_query = query_rect.spatial_query();
+
+    let x_pixel_size = spatial_query.spatial_resolution().x;
+    let y_pixel_size = spatial_query.spatial_resolution().y;
+    let width = spatial_query.grid_bounds.axis_size_x();
+    let height = spatial_query.grid_bounds.axis_size_y();
     let output_geo_transform = GeoTransform::new(
-        query_rect.spatial_bounds.upper_left(),
+        spatial_query.spatial_partition().upper_left(),
         x_pixel_size,
         -y_pixel_size,
     );
@@ -145,8 +147,8 @@ where
     let global_geo_transform = tiling_specification
         .strategy(x_pixel_size, -y_pixel_size)
         .geo_transform;
-    let window_start =
-        global_geo_transform.coordinate_to_grid_idx_2d(query_rect.spatial_bounds.upper_left());
+    let window_start = global_geo_transform
+        .coordinate_to_grid_idx_2d(spatial_query.spatial_partition().upper_left());
     let window_end = window_start + GridIdx2D::from([height as isize, width as isize]);
 
     let uncompressed_byte_size = width * height * std::mem::size_of::<T>();
@@ -202,7 +204,7 @@ where
     let writer = GdalDatasetWriter::<T> {
         gdal_tiff_options,
         gdal_tiff_metadata,
-        _output_bounds: query_rect.spatial_bounds,
+        _output_bounds: query_rect.spatial_query().spatial_partition(),
         output_geo_transform,
         use_big_tiff,
         _type: Default::default(),
@@ -215,7 +217,7 @@ where
 
 async fn consume_stream_into_vec<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    query_rect: geoengine_datatypes::primitives::QueryRectangle<SpatialPartition2D>,
+    query_rect: geoengine_datatypes::primitives::RasterQueryRectangle,
     query_ctx: C,
     tile_limit: Option<usize>,
 ) -> Result<Vec<RasterTile2D<T>>>
@@ -503,27 +505,27 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         let file_path = file_path.join("raster.tiff");
         let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
 
-        let x_pixel_size = query_rect.spatial_resolution.x;
-        let y_pixel_size = query_rect.spatial_resolution.y;
-        let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
-        let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as u32;
+        let width = query_rect.spatial_query().grid_bounds.axis_size_x();
+        let height = query_rect.spatial_query().grid_bounds.axis_size_y();
+
+        let query_spatial_partition = query_rect.spatial_query().spatial_partition();
 
         let output_geo_transform = GeoTransform::new(
-            query_rect.spatial_bounds.upper_left(),
-            x_pixel_size,
-            -y_pixel_size,
+            query_spatial_partition.upper_left(),
+            query_rect.spatial_query().geo_transform.x_pixel_size(),
+            query_rect.spatial_query().geo_transform.y_pixel_size(),
         );
 
         let intermediate_dataset_parameters = GdalDatasetParameters {
             file_path: intermediate_file_path,
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
-                origin_coordinate: query_rect.spatial_bounds.upper_left(),
-                x_pixel_size,
-                y_pixel_size: -y_pixel_size,
+                origin_coordinate: query_spatial_partition.upper_left(),
+                x_pixel_size: query_rect.spatial_query().geo_transform.x_pixel_size(),
+                y_pixel_size: query_rect.spatial_query().geo_transform.y_pixel_size(),
             },
-            width: width as usize,
-            height: height as usize,
+            width,
+            height,
             file_not_found_handling: FileNotFoundHandling::Error,
             no_data_value: None, // `None` will let the GdalSource detect the correct no-data value.
             properties_mapping: None, // TODO: add properties
@@ -550,8 +552,8 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             intermediate_dataset: None,
             create_meta: IntermediateDatasetMetadata {
                 raster_band_index: rasterband_index,
-                width,
-                height,
+                width: width as u32,
+                height: height as u32,
                 use_big_tiff,
                 path_with_placeholder,
                 gdal_config_options,
@@ -560,7 +562,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             dataset_writer: GdalDatasetWriter {
                 gdal_tiff_options,
                 gdal_tiff_metadata,
-                _output_bounds: query_rect.spatial_bounds,
+                _output_bounds: query_spatial_partition,
                 output_geo_transform,
                 use_big_tiff,
                 _type: Default::default(),
@@ -650,20 +652,15 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: Option<Vec<(String, String)>>,
     ) -> Self {
-        let x_pixel_size = query_rect.spatial_resolution.x;
-        let y_pixel_size = query_rect.spatial_resolution.y;
+        // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
+        assert_eq!(
+            query_rect.spatial_query().geo_transform.origin_coordinate(),
+            tiling_specification.origin_coordinate,
+            "The query origin coordinate must match the tiling strategy's origin for now."
+        );
 
-        let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
-        let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as u32;
-
-        let global_geo_transform = tiling_specification
-            .strategy(x_pixel_size, -y_pixel_size)
-            .geo_transform;
-
-        let window_start =
-            global_geo_transform.coordinate_to_grid_idx_2d(query_rect.spatial_bounds.upper_left());
-
-        let window_end = window_start + GridIdx2D::from([height as isize, width as isize]);
+        let window_start = query_rect.spatial_query().grid_bounds.min_index();
+        let window_end = query_rect.spatial_query().grid_bounds.max_index() + 1; // +1 since grid bounds is inclusiv.
 
         Self::new(
             file_path,
@@ -1073,15 +1070,15 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_bbox,
+                SpatialResolution::new_unchecked(
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
-            },
+                Coordinate2D::default(), // this is the default tiling strategy origin
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1129,15 +1126,15 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_bbox,
+                SpatialResolution::new_unchecked(
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
-            },
+                Coordinate2D::default(), // this is the default tiling strategy origin
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: None,
@@ -1181,15 +1178,15 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_bbox,
+                SpatialResolution::new_unchecked(
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
-            },
+                Coordinate2D::default(), // this is the default tiling strategy origin
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1237,15 +1234,15 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_bbox,
+                SpatialResolution::new_unchecked(
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
-            },
+                Coordinate2D::default(), // this is the default tiling strategy origin
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1296,15 +1293,15 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_bbox,
+                SpatialResolution::new_unchecked(
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
-            },
+                Coordinate2D::default(), // this is the default tiling strategy origin
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1355,18 +1352,15 @@ mod tests {
 
         let mut bytes = raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(
-                    1_388_534_400_000,
-                    1_388_534_400_000 + 7_776_000_000,
-                )
-                .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_bbox,
+                SpatialResolution::new_unchecked(
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
-            },
+                Coordinate2D::default(), // this is the default tiling strategy origin
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 7_776_000_000).unwrap(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1431,18 +1425,15 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(
-                    1_388_534_400_000,
-                    1_388_534_400_000 + 7_776_000_000,
-                )
-                .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_bbox,
+                SpatialResolution::new_unchecked(
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
-            },
+                Coordinate2D::default(), // this is the default tiling strategy origin
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 7_776_000_000).unwrap(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1480,15 +1471,15 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_bbox,
+                SpatialResolution::new_unchecked(
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
-            },
+                Coordinate2D::default(), // this is the default tiling strategy origin
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1528,15 +1519,15 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_bbox,
+                SpatialResolution::new_unchecked(
                     0.228_716_645_489_199_48,
                     0.226_407_384_987_887_26,
                 ),
-            },
+                Coordinate2D::default(),
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1609,11 +1600,12 @@ mod tests {
             tiling_specification,
         }
         .boxed();
-        let query_rectangle = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
-            spatial_resolution: GeoTransform::test_default().spatial_resolution(),
-        };
+        let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
+            GeoTransform::test_default().spatial_resolution(),
+            GeoTransform::test_default().origin_coordinate(),
+            TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
+        );
 
         let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
         let expected_paths = file_suffixes
@@ -1712,8 +1704,10 @@ mod tests {
     #[tokio::test]
     async fn multi_band_geotriff() {
         let ctx = MockQueryContext::test_default();
+
+        let tiling_origin_coordinate = Coordinate2D::default();
         let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [512, 512].into());
+            TilingSpecification::new(tiling_origin_coordinate, [512, 512].into());
 
         let metadata = create_ndvi_meta_data();
 
@@ -1727,12 +1721,13 @@ mod tests {
 
         let (mut bytes, _) = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                query_bbox,
                 // 1.1.2014 - 1.4.2014
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_396_306_800_000).unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
-            },
+                SpatialResolution::new_unchecked(0.1, 0.1),
+                tiling_origin_coordinate,
+                TimeInterval::new(1_388_534_400_000, 1_396_306_800_000).unwrap(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: None,

@@ -531,11 +531,14 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         .get_raster()
         .boxed_context(error::WorkflowMustBeOfTypeRaster)?;
 
-    let query_rectangle = RasterQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
-        time_interval: query.time_interval.into(),
-        spatial_resolution: query.spatial_resolution,
-    };
+    let execution_context = ctx.execution_context()?;
+
+    let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+        query.spatial_bounds,
+        query.spatial_resolution,
+        execution_context.tiling_specification().origin_coordinate,
+        query.time_interval.into(),
+    );
 
     // this is the only result type for now
     debug_assert!(matches!(
@@ -546,7 +549,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
     let stream_handler = RasterWebsocketStreamHandler::new::<C::SessionContext>(
         operator,
         query_rectangle,
-        ctx.execution_context()?,
+        execution_context,
         ctx.query_context()?,
     )
     .await?;
@@ -612,11 +615,11 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         .get_vector()
         .boxed_context(error::WorkflowMustBeOfTypeVector)?;
 
-    let query_rectangle = VectorQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
-        time_interval: query.time_interval.into(),
-        spatial_resolution: query.spatial_resolution,
-    };
+    let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        query.spatial_bounds,
+        query.time_interval.into(),
+        query.spatial_resolution,
+    );
 
     // this is the only result type for now
     debug_assert!(matches!(
@@ -1356,7 +1359,7 @@ mod tests {
         with_temp_context_from_spec(
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
-            |app_ctx, _| async move {
+            move |app_ctx, _| async move {
                 let ctx = app_ctx.default_session_context().await.unwrap();
 
                 let session_id = app_ctx.default_session_id().await;
@@ -1451,15 +1454,12 @@ mod tests {
                     .unwrap();
 
                 let query_ctx = ctx.query_context().unwrap();
-                let query_rect = RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new_unchecked(
-                        1_388_534_400_000,
-                        1_388_534_400_000 + 1000,
-                    ),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                };
+                let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
+                    SpatialResolution::zero_point_one(),
+                    exe_ctx_tiling_spec.origin_coordinate,
+                    TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
+                );
 
                 let processor = o.query_processor().unwrap().get_u8().unwrap();
 

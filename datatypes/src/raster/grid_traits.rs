@@ -82,6 +82,10 @@ where
 pub trait GridIntersection<Rhs = Self, Out = Self> {
     // Returns true if Self intesects Rhs
     fn intersection(&self, other: &Rhs) -> Option<Out>;
+
+    fn intersects(&self, other: &Rhs) -> bool {
+        self.intersection(other).is_some()
+    }
 }
 
 /// Provides the methods needed to map an n-dimensional `GridIdx` to linear space.

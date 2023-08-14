@@ -8,10 +8,10 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::CacheExpiration;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
+use geoengine_datatypes::primitives::{CacheExpiration, RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
+    TilingStrategy,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -104,6 +104,15 @@ where
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<crate::util::Result<RasterTile2D<Self::RasterType>>>>
     {
+        // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
+        assert_eq!(
+            query.spatial_query().geo_transform.origin_coordinate(),
+            self.tiling_specification.origin_coordinate,
+            "The query origin coordinate must match the tiling strategy's origin for now."
+        );
+
+        let query_spatial_partition = query.spatial_query().spatial_partition();
+
         let inner_stream = stream::iter(
             self.data
                 .iter()
@@ -111,31 +120,20 @@ where
                     t.time.intersects(&query.time_interval)
                         && t.tile_information()
                             .spatial_partition()
-                            .intersects(&query.spatial_bounds)
+                            .intersects(&query_spatial_partition) // TODO: use tile pixel bounds.
                 })
                 .cloned()
                 .map(Result::Ok),
         );
 
-        // TODO: evaluate if there are GeoTransforms with positive y-axis
-        // The "Pixel-space" starts at the top-left corner of a `GeoTransform`.
-        // Therefore, the pixel size on the x-axis is always increasing
-        let spatial_resolution = query.spatial_resolution;
-
-        let pixel_size_x = spatial_resolution.x;
-        debug_assert!(pixel_size_x.is_sign_positive());
-        // and the pixel size on  the y-axis is always decreasing
-        let pixel_size_y = spatial_resolution.y * -1.0;
-        debug_assert!(pixel_size_y.is_sign_negative());
-
-        let tiling_strategy = self
-            .tiling_specification
-            .strategy(pixel_size_x, pixel_size_y);
-
+        let tiling_strategy = TilingStrategy::new(
+            self.tiling_specification.tile_size_in_pixels,
+            query.spatial_query().geo_transform,
+        );
         // use SparseTilesFillAdapter to fill all the gaps
         Ok(SparseTilesFillAdapter::new(
             inner_stream,
-            tiling_strategy.tile_grid_box(query.spatial_partition()),
+            tiling_strategy.tile_grid_box(query_spatial_partition),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
@@ -477,11 +475,12 @@ mod tests {
 
         // QUERY 1
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(1, 3),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            execution_context.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(1, 3),
+        );
 
         let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
 
@@ -499,11 +498,12 @@ mod tests {
 
         // QUERY 2
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(2, 3),
-            spatial_resolution: SpatialResolution::one(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            SpatialResolution::one(),
+            execution_context.tiling_specification.origin_coordinate,
+            TimeInterval::new_unchecked(2, 3),
+        );
 
         let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
 

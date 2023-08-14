@@ -8,7 +8,7 @@ use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     Blit, EmptyGrid, EmptyGrid2D, FromIndexFnParallel, GeoTransform, GridIdx, GridIdx2D,
-    GridIndexAccess, GridOrEmpty, GridSize,
+    GridIndexAccess, GridOrEmpty, GridSize, TilingStrategy,
 };
 use geoengine_datatypes::{
     primitives::{
@@ -111,11 +111,15 @@ where
             spatial_bounds.lower_right() + margin_pixels,
         )?;
 
-        Ok(Some(RasterQueryRectangle {
-            spatial_bounds: enlarged_spatial_bounds,
-            time_interval: TimeInterval::new_instant(start_time)?,
-            spatial_resolution: query_rect.spatial_resolution,
-        }))
+        Ok(Some(
+            // TODO: use pixel bounds instead of spatial bounds
+            RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                enlarged_spatial_bounds,
+                query_rect.spatial_query().spatial_resolution(),
+                query_rect.spatial_query().origin_coordinate(),
+                TimeInterval::new_instant(start_time)?,
+            ),
+        ))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {
@@ -244,17 +248,24 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
 ) -> NeighborhoodAggregateAccu<P, A> {
     // create an accumulator as a single tile that fits all the input tiles + some margin for the kernel size
 
-    let tiling = tiling_specification.strategy(
-        query_rect.spatial_resolution.x,
-        -query_rect.spatial_resolution.y,
+    // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
+    assert_eq!(
+        query_rect.spatial_query().geo_transform.origin_coordinate(),
+        tiling_specification.origin_coordinate,
+        "The query origin coordinate must match the tiling strategy's origin for now."
     );
 
-    let origin_coordinate = query_rect.spatial_bounds.upper_left();
+    let tiling = TilingStrategy::new(
+        tiling_specification.tile_size_in_pixels,
+        query_rect.spatial_query().geo_transform,
+    );
+
+    let origin_coordinate = query_rect.spatial_query().spatial_partition().upper_left();
 
     let geo_transform = GeoTransform::new(
         origin_coordinate,
-        query_rect.spatial_resolution.x,
-        -query_rect.spatial_resolution.y,
+        query_rect.spatial_query().geo_transform.x_pixel_size(),
+        query_rect.spatial_query().geo_transform.y_pixel_size(),
     );
 
     let shape = [
@@ -337,7 +348,9 @@ mod tests {
         },
     };
     use geoengine_datatypes::{
-        primitives::SpatialResolution, raster::TilingStrategy, util::test::TestDefault,
+        primitives::SpatialResolution,
+        raster::{GridBoundingBox2D, TilingStrategy},
+        util::test::TestDefault,
     };
 
     #[test]
@@ -352,17 +365,18 @@ mod tests {
             -spatial_resolution.y,
         );
 
-        let spatial_partition = SpatialPartition2D::new((0., 1.).into(), (1., 0.).into()).unwrap();
+        let grid_bounds = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
         let tile_info = tiling_strategy
-            .tile_information_iterator(spatial_partition)
+            .tile_information_iterator_from_grid_bounds(grid_bounds)
             .next()
             .unwrap();
 
-        let qrect = RasterQueryRectangle {
-            spatial_bounds: tile_info.spatial_partition(),
-            time_interval: TimeInstance::from_millis(0).unwrap().into(),
+        let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            tile_info.spatial_partition(),
             spatial_resolution,
-        };
+            execution_context.tiling_specification.origin_coordinate,
+            TimeInstance::from_millis(0).unwrap().into(),
+        );
 
         let aggregator = NeighborhoodAggregateTileNeighborhood::<u8, StandardDeviation>::new(
             NeighborhoodParams::Rectangle { dimensions: [5, 5] }
@@ -381,7 +395,7 @@ mod tests {
             SpatialPartition2D::new((0., 512.).into(), (512., 0.).into()).unwrap()
         );
         assert_eq!(
-            tile_query_rectangle.spatial_bounds,
+            tile_query_rectangle.spatial_query().spatial_partition(),
             SpatialPartition2D::new((-2., 514.).into(), (514., -2.).into()).unwrap()
         );
 

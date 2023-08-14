@@ -14,7 +14,7 @@ use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
         partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle,
-        SpatialPartition2D, SpatialResolution,
+        RasterSpatialQueryRectangle, SpatialResolution,
     },
     raster::{
         FromIndexFn, GridIndexAccess, GridOrEmpty, GridShapeAccess, RasterDataType, RasterTile2D,
@@ -283,7 +283,7 @@ impl RgbQueryProcessor {
 #[async_trait]
 impl QueryProcessor for RgbQueryProcessor {
     type Output = RasterTile2D<u32>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
@@ -478,7 +478,7 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let o = Rgb {
             params: RgbParams {
@@ -499,7 +499,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
         .await
         .unwrap();
 
@@ -508,14 +508,12 @@ mod tests {
         let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
+                RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                    SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
+                    SpatialResolution::one(),
+                    ectx.tiling_specification.origin_coordinate,
+                    Default::default(),
+                ),
                 &ctx,
             )
             .await

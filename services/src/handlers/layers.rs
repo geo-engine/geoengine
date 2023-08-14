@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::api::model::datatypes::{DataProviderId, LayerId};
+use crate::api::model::datatypes::{DataProviderId, LayerId, RasterQueryRectangle};
 use crate::contexts::ApplicationContext;
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::{Error, Result};
@@ -20,7 +20,6 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
-use geoengine_datatypes::primitives::QueryRectangle;
 use geoengine_operators::engine::WorkflowOperatorPath;
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;
@@ -606,25 +605,28 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let result_descriptor = raster_operator.result_descriptor();
 
-    let qr = QueryRectangle {
-        spatial_bounds: result_descriptor.bbox.ok_or(
-            Error::LayerResultDescriptorMissingFields {
+    let qr = RasterQueryRectangle {
+        spatial_bounds: result_descriptor
+            .bbox
+            .ok_or(Error::LayerResultDescriptorMissingFields {
                 field: "bbox".to_string(),
                 cause: "is None".to_string(),
-            },
-        )?,
+            })?
+            .into(),
         time_interval: result_descriptor
             .time
             .ok_or(Error::LayerResultDescriptorMissingFields {
                 field: "time".to_string(),
                 cause: "is None".to_string(),
-            })?,
-        spatial_resolution: result_descriptor.resolution.ok_or(
-            Error::LayerResultDescriptorMissingFields {
+            })?
+            .into(),
+        spatial_resolution: result_descriptor
+            .resolution
+            .ok_or(Error::LayerResultDescriptorMissingFields {
                 field: "spatial_resolution".to_string(),
                 cause: "is None".to_string(),
-            },
-        )?,
+            })?
+            .into(),
     };
 
     let from_workflow = RasterDatasetFromWorkflow {
@@ -1387,14 +1389,15 @@ mod tests {
                 tile_size_in_pixels: GridShape::new([2, 2]),
             };
 
-            let query_rectangle = RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
-                time_interval: TimeInterval::new_unchecked(
+            let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+                SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
+                GeoTransform::test_default().spatial_resolution(),
+                GeoTransform::test_default().origin_coordinate,
+                TimeInterval::new_unchecked(
                     1_671_868_800_000 + i64::from(time_shift_millis),
                     1_672_041_600_000 + i64::from(time_shift_millis),
                 ),
-                spatial_resolution: GeoTransform::test_default().spatial_resolution(),
-            };
+            );
 
             MockRasterWorkflowLayerDescription {
                 workflow,

@@ -12,7 +12,7 @@ use geoengine_datatypes::{
     collections::FeatureCollection,
     identifier,
     primitives::{CacheHint, Geometry, RasterQueryRectangle, VectorQueryRectangle},
-    raster::{Pixel, RasterTile2D},
+    raster::{GridContains, Pixel, RasterTile2D},
     util::{arrow::ArrowTyped, test::TestDefault, ByteSize, Identifier},
 };
 use log::debug;
@@ -834,18 +834,27 @@ pub trait CacheQueryMatch<RHS = Self> {
 
 impl CacheQueryMatch for RasterQueryRectangle {
     fn is_match(&self, query: &RasterQueryRectangle) -> bool {
-        self.spatial_bounds.contains(&query.spatial_bounds)
+        let cache_spatial_query = self.spatial_query();
+        let query_spatial_query = query.spatial_query();
+
+        cache_spatial_query.geo_transform == query_spatial_query.geo_transform // TODO: once there are dataset spesific origins we might need more logic here
+            && cache_spatial_query
+                .grid_bounds
+                .contains(&query_spatial_query.grid_bounds)
             && self.time_interval.contains(&query.time_interval)
-            && self.spatial_resolution == query.spatial_resolution
     }
 }
 
 impl CacheQueryMatch for VectorQueryRectangle {
-    // TODO: check if that is what we need
     fn is_match(&self, query: &VectorQueryRectangle) -> bool {
-        self.spatial_bounds.contains_bbox(&query.spatial_bounds)
+        let cache_spatial_query = self.spatial_query();
+        let query_spatial_query = query.spatial_query();
+
+        cache_spatial_query
+            .spatial_bounds
+            .contains_bbox(&query_spatial_query.spatial_bounds)
+            && cache_spatial_query.spatial_resolution == query_spatial_query.spatial_resolution
             && self.time_interval.contains(&query.time_interval)
-            && self.spatial_resolution == query.spatial_resolution
     }
 }
 
@@ -868,9 +877,7 @@ impl CacheQueryEntry<RasterQueryRectangle, CachedTiles> {
     /// Return true if the query can be answered in full by this cache entry
     /// For this, the bbox and time has to be fully contained, and the spatial resolution has to match
     pub fn matches(&self, query: &RasterQueryRectangle) -> bool {
-        self.query.spatial_bounds.contains(&query.spatial_bounds)
-            && self.query.time_interval.contains(&query.time_interval)
-            && self.query.spatial_resolution == query.spatial_resolution
+        self.query.is_match(query)
     }
 
     /// Produces a tile stream from the cache
@@ -1040,15 +1047,12 @@ mod tests {
     }
 
     fn query_rect() -> RasterQueryRectangle {
-        RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (-180., 90.).into(),
-                (180., -90.).into(),
-            ),
-            time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
-                .unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-        }
+        RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
+            SpatialResolution::one(),
+            (0., 0.).into(),
+            TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+        )
     }
 
     fn op(idx: usize) -> CanonicOperatorName {

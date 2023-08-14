@@ -1,32 +1,30 @@
-use crate::adapters::FeatureCollectionStreamExt;
-use crate::processing::raster_vector_join::create_feature_aggregator;
-use futures::stream::{once as once_stream, BoxStream};
-use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, CacheHint, FeatureDataType, Geometry, RasterQueryRectangle, VectorQueryRectangle,
-};
-use geoengine_datatypes::util::arrow::ArrowTyped;
-use std::marker::PhantomData;
-use std::sync::Arc;
-
-use geoengine_datatypes::raster::{DynamicRasterDataType, GridIndexAccess, RasterTile2D};
-use geoengine_datatypes::{
-    collections::FeatureCollectionModifications, primitives::TimeInterval, raster::Pixel,
-};
-
+use super::aggregator::TypedAggregator;
 use super::util::{CoveredPixels, PixelCoverCreator};
+use super::FeatureAggregationMethod;
+use crate::adapters::FeatureCollectionStreamExt;
 use crate::engine::{
     QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
     VectorQueryProcessor,
 };
+use crate::processing::raster_vector_join::create_feature_aggregator;
 use crate::util::Result;
 use crate::{adapters::RasterStreamExt, error::Error};
 use async_trait::async_trait;
+use futures::stream::{once as once_stream, BoxStream};
+use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
-
-use super::aggregator::TypedAggregator;
-use super::FeatureAggregationMethod;
+use geoengine_datatypes::primitives::{
+    CacheHint, FeatureDataType, Geometry, RasterQueryRectangle, VectorQueryRectangle,
+    VectorSpatialQueryRectangle,
+};
+use geoengine_datatypes::raster::{DynamicRasterDataType, GridIndexAccess, RasterTile2D};
+use geoengine_datatypes::util::arrow::ArrowTyped;
+use geoengine_datatypes::{
+    collections::FeatureCollectionModifications, primitives::TimeInterval, raster::Pixel,
+};
+use std::marker::PhantomData;
+use std::sync::Arc;
 
 pub struct RasterVectorJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
@@ -107,7 +105,7 @@ where
 
         let bbox = collection
             .bbox()
-            .and_then(|bbox| bbox.intersection(&query.spatial_bounds));
+            .and_then(|bbox| bbox.intersection(&query.spatial_query.spatial_bounds));
 
         let time = collection
             .time_bounds()
@@ -127,12 +125,14 @@ where
             );
         };
 
-        let query = VectorQueryRectangle {
+        let vector_query = VectorQueryRectangle::with_bounds_and_resolution(
             spatial_bounds,
             time_interval,
-            spatial_resolution: query.spatial_resolution,
-        }
-        .into();
+            query.spatial_query.spatial_resolution,
+        );
+
+        let query =
+            RasterQueryRectangle::with_vector_query_and_grid_origin(vector_query, (0., 0.).into()); // TODO: once we have a data specific origin, use it here
 
         call_on_generic_raster_processor!(raster_processor, raster_processor => {
             Self::process_typed_collection_chunk(
@@ -317,7 +317,7 @@ where
     FeatureCollection<G>: GeometryCollection + PixelCoverCreator<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
 
     async fn _query<'a>(
         &'a self,
@@ -428,12 +428,11 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: time_instant,
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                },
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_instant,
+                    SpatialResolution::new(0.1, 0.1).unwrap(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await
@@ -518,16 +517,15 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2014, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                },
+                    SpatialResolution::new(0.1, 0.1).unwrap(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await
@@ -618,15 +616,11 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
-                        2014, 1, 1, 0, 0, 0,
-                    ))
-                    .unwrap(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                },
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap(),
+                    SpatialResolution::new(0.1, 0.1).unwrap(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await
@@ -722,16 +716,15 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2014, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                },
+                    SpatialResolution::new(0.1, 0.1).unwrap(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await
@@ -895,12 +888,11 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new_unchecked(0, 20),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                },
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
+                    TimeInterval::new_unchecked(0, 20),
+                    SpatialResolution::new(1., 1.).unwrap(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await
@@ -1086,12 +1078,11 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new_unchecked(0, 20),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                },
+                VectorQueryRectangle::with_bounds_and_resolution(
+                    BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
+                    TimeInterval::new_unchecked(0, 20),
+                    SpatialResolution::new(1., 1.).unwrap(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
             .await

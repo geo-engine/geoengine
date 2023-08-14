@@ -373,11 +373,12 @@ macro_rules! impl_cache_result_check {
         {
             fn cache_element_hit(&self, query_rect: &VectorQueryRectangle) -> bool {
                 let Some(bbox) = self.bbox() else {return false;};
-
                 let Some(time_bounds) = self.time_bounds() else {return false;};
 
-                (bbox == query_rect.spatial_bounds
-                    || bbox.intersects_bbox(&query_rect.spatial_bounds))
+                let query_spatial_query = query_rect.spatial_query();
+
+                (bbox == query_spatial_query.spatial_bounds
+                    || bbox.intersects_bbox(&query_spatial_query.spatial_bounds))
                     && (time_bounds == query_rect.time_interval
                         || time_bounds.intersects(&query_rect.time_interval))
             }
@@ -386,9 +387,11 @@ macro_rules! impl_cache_result_check {
                 &self,
                 query_rect: &VectorQueryRectangle,
             ) -> Result<Self, CacheError> {
+                let query_spatial_query = query_rect.spatial_query();
+
                 let geoms_filter_bools = self.geometries().map(|g| {
                     g.bbox()
-                        .map(|bbox| bbox.intersects_bbox(&query_rect.spatial_bounds))
+                        .map(|bbox| bbox.intersects_bbox(&query_spatial_query.spatial_bounds))
                         .unwrap_or(false)
                 });
 
