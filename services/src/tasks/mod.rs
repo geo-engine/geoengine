@@ -130,6 +130,8 @@ impl<'a> ToSchema<'a> for TaskStatus {
                                 .schema_type(SchemaType::String)
                                 .enum_values::<[&str; 1], &str>(Some(["running"])),
                         )
+                        .property("taskType", Object::with_type(SchemaType::String))
+                        .property("description", Object::with_type(SchemaType::String))
                         .property("info", Object::new())
                         .property("pctComplete", Object::with_type(SchemaType::String))
                         .property(
@@ -146,6 +148,8 @@ impl<'a> ToSchema<'a> for TaskStatus {
                                 .schema_type(SchemaType::String)
                                 .enum_values::<[&str; 1], &str>(Some(["completed"])),
                         )
+                        .property("taskType", Object::with_type(SchemaType::String))
+                        .property("description", Object::with_type(SchemaType::String))
                         .property("info", Object::new())
                         .property("timeTotal", Object::with_type(SchemaType::String))
                         .property("timeStarted", Object::with_type(SchemaType::String)),
