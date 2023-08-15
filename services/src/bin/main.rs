@@ -165,7 +165,6 @@ where
     flexi_logger::DeferredNow::force_utc();
 
     let (file_writer, fw_handle) = FileLogWriter::builder(file_spec)
-        // TODO: the mode should be Async but somehow that never writes anything to the file
         .write_mode(WriteMode::Async)
         .append()
         .rotate(
