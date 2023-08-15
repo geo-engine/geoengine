@@ -5,6 +5,6 @@ pub mod responses;
 pub mod services;
 
 pub use db_types::{
-    ColorizerTypeDbType, Coordinate2DArray1, Coordinate2DArray2, HashMapTextTextDbType,
+    ColorizerTypeDbType, HashMapTextTextDbType, PolygonOwned, PolygonRef,
     TextGdalSourceTimePlaceholderKeyValue,
 };

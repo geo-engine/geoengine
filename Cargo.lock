@@ -2334,6 +2334,7 @@ dependencies = [
  "chrono",
  "config",
  "erased-serde",
+ "fallible-iterator",
  "flexi_logger",
  "float-cmp",
  "futures",

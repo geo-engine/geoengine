@@ -354,27 +354,15 @@ CREATE TYPE "OgrSourceErrorSpec" AS ENUM (
     'Abort'
 );
 
-CREATE DOMAIN "Coordinate2DArray1" AS "Coordinate2D" [];
-CREATE DOMAIN "Coordinate2DArray2" AS "Coordinate2DArray1" [];
-
-CREATE TYPE "MultiPoint" AS (
-    coordinates "Coordinate2D" []
-);
-
-CREATE TYPE "MultiLineString" AS (
-    coordinates "Coordinate2DArray1" []
-);
-
-CREATE TYPE "MultiPolygon" AS (
-    polygons "Coordinate2DArray2" []
-);
+-- closed path is a polygon without stored bbox
+CREATE DOMAIN "Polygon" AS path [];
 
 CREATE TYPE "TypedGeometry" AS (
     -- oneOf
     "data" boolean, -- void
-    multi_point "MultiPoint",
-    multi_line_string "MultiLineString",
-    multi_polygon "MultiPolygon"
+    multi_point point [],
+    multi_line_string path [],
+    multi_polygon "Polygon" []
 );
 
 CREATE TYPE "OgrSourceDataset" AS (

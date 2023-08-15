@@ -512,9 +512,7 @@ mod tests {
     };
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
-    use crate::api::model::{
-        ColorizerTypeDbType, Coordinate2DArray1, Coordinate2DArray2, HashMapTextTextDbType,
-    };
+    use crate::api::model::{ColorizerTypeDbType, HashMapTextTextDbType};
     use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
@@ -2502,7 +2500,7 @@ mod tests {
         ) where
             T: PartialEq + postgres_types::FromSqlOwned + postgres_types::ToSql + Sync,
         {
-            const UNQUOTED: [&str; 2] = ["double precision", "int"];
+            const UNQUOTED: [&str; 3] = ["double precision", "int", "point[]"];
 
             // don't quote built-in types
             let quote = if UNQUOTED.contains(&sql_type) || sql_type.contains('[') {
@@ -3145,7 +3143,7 @@ mod tests {
 
             test_type(
                 &pool,
-                "MultiPoint",
+                "point[]",
                 [MultiPoint {
                     coordinates: vec![
                         Coordinate2D::new(0.0f64, 0.5).into(),
@@ -3155,35 +3153,35 @@ mod tests {
             )
             .await;
 
-            test_type(
-                &pool,
-                "Coordinate2DArray1",
-                [Coordinate2DArray1(vec![
-                    Coordinate2D::new(0.0f64, 0.5).into(),
-                    Coordinate2D::new(2., 1.0).into(),
-                ])],
-            )
-            .await;
+            // test_type(
+            //     &pool,
+            //     "Coordinate2DArray1",
+            //     [Coordinate2DArray1(vec![
+            //         Coordinate2D::new(0.0f64, 0.5).into(),
+            //         Coordinate2D::new(2., 1.0).into(),
+            //     ])],
+            // )
+            // .await;
+
+            // test_type(
+            //     &pool,
+            //     "Coordinate2DArray2",
+            //     [Coordinate2DArray2(vec![
+            //         Coordinate2DArray1(vec![
+            //             Coordinate2D::new(0.0f64, 0.5).into(),
+            //             Coordinate2D::new(2., 1.0).into(),
+            //         ]),
+            //         Coordinate2DArray1(vec![
+            //             Coordinate2D::new(0.0f64, 0.5).into(),
+            //             Coordinate2D::new(2., 1.0).into(),
+            //         ]),
+            //     ])],
+            // )
+            // .await;
 
             test_type(
                 &pool,
-                "Coordinate2DArray2",
-                [Coordinate2DArray2(vec![
-                    Coordinate2DArray1(vec![
-                        Coordinate2D::new(0.0f64, 0.5).into(),
-                        Coordinate2D::new(2., 1.0).into(),
-                    ]),
-                    Coordinate2DArray1(vec![
-                        Coordinate2D::new(0.0f64, 0.5).into(),
-                        Coordinate2D::new(2., 1.0).into(),
-                    ]),
-                ])],
-            )
-            .await;
-
-            test_type(
-                &pool,
-                "MultiLineString",
+                "path[]",
                 [MultiLineString {
                     coordinates: vec![
                         vec![
@@ -3201,7 +3199,7 @@ mod tests {
 
             test_type(
                 &pool,
-                "MultiPolygon",
+                "\"Polygon\"[]",
                 [MultiPolygon {
                     polygons: vec![
                         vec![

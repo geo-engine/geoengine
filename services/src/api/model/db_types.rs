@@ -24,6 +24,7 @@ use crate::{
         PolygonSymbology, RasterSymbology, Symbology,
     },
 };
+use fallible_iterator::FallibleIterator;
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
@@ -957,153 +958,121 @@ impl TryFrom<OgrSourceColumnSpecDbType> for OgrSourceColumnSpec {
     }
 }
 
-// TODO: derive `FromSql` when it works with domains that encapuslate arrays
-#[derive(Debug, PartialEq, ToSql)]
-pub struct Coordinate2DArray1(pub Vec<Coordinate2D>);
+#[derive(Debug)]
+pub struct PolygonRef<'p> {
+    pub rings: &'p [Vec<Coordinate2D>],
+}
 
-impl<'a> postgres_types::FromSql<'a> for Coordinate2DArray1 {
-    fn from_sql(
-        type_: &postgres_types::Type,
-        buf: &'a [u8],
-    ) -> std::result::Result<
-        Coordinate2DArray1,
-        std::boxed::Box<dyn std::error::Error + std::marker::Sync + std::marker::Send>,
-    > {
-        // unpack domain type if necessary
-        let type_ = match *type_.kind() {
-            postgres_types::Kind::Domain(ref type_) => type_,
-            _ => type_,
+#[derive(Debug)]
+pub struct PolygonOwned {
+    pub rings: Vec<Vec<Coordinate2D>>,
+}
+
+impl ToSql for PolygonRef<'_> {
+    fn to_sql(
+        &self,
+        ty: &postgres_types::Type,
+        w: &mut bytes::BytesMut,
+    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        let postgres_types::Kind::Domain(domain_type) = ty.kind() else {
+            panic!("expected domain type");
         };
 
-        <Vec<Coordinate2D> as postgres_types::FromSql>::from_sql(type_, buf).map(Coordinate2DArray1)
-    }
-    fn accepts(type_: &postgres_types::Type) -> bool {
-        if <Vec<Coordinate2D> as postgres_types::FromSql>::accepts(type_) {
-            return true;
-        }
-        if type_.name() != "Coordinate2DArray1" {
-            return false;
-        }
-        match *type_.kind() {
-            ::postgres_types::Kind::Domain(ref type_) => {
-                <Vec<Coordinate2D> as ::postgres_types::ToSql>::accepts(type_)
-            }
-            _ => false,
-        }
-    }
-}
-
-// TODO: derive `FromSql` when it works with domains that encapuslate arrays
-#[derive(Debug, PartialEq, ToSql)]
-pub struct Coordinate2DArray2(pub Vec<Coordinate2DArray1>);
-
-impl<'a> postgres_types::FromSql<'a> for Coordinate2DArray2 {
-    fn from_sql(
-        type_: &postgres_types::Type,
-        buf: &'a [u8],
-    ) -> std::result::Result<
-        Coordinate2DArray2,
-        std::boxed::Box<dyn std::error::Error + std::marker::Sync + std::marker::Send>,
-    > {
-        // unpack domain type if necessary
-        let type_ = match *type_.kind() {
-            postgres_types::Kind::Domain(ref type_) => type_,
-            _ => type_,
+        let postgres_types::Kind::Array(member_type) = domain_type.kind() else {
+             panic!("expected array type");
         };
 
-        <Vec<Coordinate2DArray1> as postgres_types::FromSql>::from_sql(type_, buf)
-            .map(Coordinate2DArray2)
+        let dimension = postgres_protocol::types::ArrayDimension {
+            len: self.rings.len() as i32,
+            lower_bound: 1, // arrays are one-indexed
+        };
+
+        postgres_protocol::types::array_to_sql(
+            Some(dimension),
+            member_type.oid(),
+            self.rings.iter(),
+            |coordinates, w| {
+                postgres_protocol::types::path_to_sql(
+                    true,
+                    coordinates.iter().map(|p| (p.x, p.y)),
+                    w,
+                )?;
+
+                Ok(postgres_protocol::IsNull::No)
+            },
+            w,
+        )?;
+
+        Ok(postgres_types::IsNull::No)
     }
-    fn accepts(type_: &postgres_types::Type) -> bool {
-        if <Vec<Coordinate2DArray1> as postgres_types::FromSql>::accepts(type_) {
-            return true;
-        }
-        if type_.name() != "Coordinate2DArray2" {
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        if ty.name() != "Polygon" {
             return false;
         }
-        match *type_.kind() {
-            ::postgres_types::Kind::Domain(ref type_) => {
-                <Vec<Coordinate2DArray1> as ::postgres_types::ToSql>::accepts(type_)
-            }
-            _ => false,
+
+        let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
+            return false;
+        };
+
+        let postgres_types::Kind::Array(inner_type) = inner_type.kind() else {
+            return false;
+        };
+
+        matches!(inner_type, &postgres_types::Type::PATH)
+    }
+
+    postgres_types::to_sql_checked!();
+}
+
+impl<'a> FromSql<'a> for PolygonOwned {
+    fn from_sql(
+        _ty: &postgres_types::Type,
+        raw: &'a [u8],
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        let array = postgres_protocol::types::array_from_sql(raw)?;
+        if array.dimensions().count()? > 1 {
+            return Err("array contains too many dimensions".into());
         }
+
+        let rings = array
+            .values()
+            .map(|raw| {
+                let Some(raw) = raw else {
+                    return Err("array contains NULL values".into());
+                };
+                let path = postgres_protocol::types::path_from_sql(raw)?;
+
+                let coordinates = path
+                    .points()
+                    .map(|point| {
+                        Ok(Coordinate2D {
+                            x: point.x(),
+                            y: point.y(),
+                        })
+                    })
+                    .collect()?;
+                Ok(coordinates)
+            })
+            .collect()?;
+
+        Ok(Self { rings })
     }
-}
 
-#[derive(Debug, ToSql, FromSql)]
-#[postgres(name = "MultiLineString")]
-pub struct MultiLineStringDbType {
-    coordinates: Vec<Coordinate2DArray1>,
-}
-
-impl From<&MultiLineString> for MultiLineStringDbType {
-    fn from(other: &MultiLineString) -> Self {
-        Self {
-            coordinates: other
-                .coordinates
-                .iter()
-                .map(|coordinates| Coordinate2DArray1(coordinates.clone()))
-                .collect(),
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        if ty.name() != "Polygon" {
+            return false;
         }
-    }
-}
 
-impl TryFrom<MultiLineStringDbType> for MultiLineString {
-    type Error = Error;
+        let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
+            return false;
+        };
 
-    fn try_from(other: MultiLineStringDbType) -> Result<Self, Self::Error> {
-        Ok(Self {
-            coordinates: other
-                .coordinates
-                .into_iter()
-                .map(|coordinates| coordinates.0)
-                .collect(),
-        })
-    }
-}
+        let postgres_types::Kind::Array(inner_type) = inner_type.kind() else {
+            return false;
+        };
 
-#[derive(Debug, ToSql, FromSql)]
-#[postgres(name = "MultiPolygon")]
-pub struct MultiPolygonDbType {
-    polygons: Vec<Coordinate2DArray2>,
-}
-
-impl From<&MultiPolygon> for MultiPolygonDbType {
-    fn from(other: &MultiPolygon) -> Self {
-        Self {
-            polygons: other
-                .polygons
-                .iter()
-                .map(|polygon| {
-                    Coordinate2DArray2(
-                        polygon
-                            .iter()
-                            .map(|coordinates| Coordinate2DArray1(coordinates.clone()))
-                            .collect(),
-                    )
-                })
-                .collect(),
-        }
-    }
-}
-
-impl TryFrom<MultiPolygonDbType> for MultiPolygon {
-    type Error = Error;
-
-    fn try_from(other: MultiPolygonDbType) -> Result<Self, Self::Error> {
-        Ok(Self {
-            polygons: other
-                .polygons
-                .into_iter()
-                .map(|coordinates| {
-                    coordinates
-                        .0
-                        .into_iter()
-                        .map(|coordinates| coordinates.0)
-                        .collect()
-                })
-                .collect(),
-        })
+        matches!(inner_type, &postgres_types::Type::PATH)
     }
 }
 
@@ -1622,8 +1591,6 @@ delegate_from_to_sql!(GdalMetaDataRegular, GdalMetaDataRegularDbType);
 delegate_from_to_sql!(Measurement, MeasurementDbType);
 delegate_from_to_sql!(MetaDataDefinition, MetaDataDefinitionDbType);
 delegate_from_to_sql!(MockMetaData, MockMetaDataDbType);
-delegate_from_to_sql!(MultiLineString, MultiLineStringDbType);
-delegate_from_to_sql!(MultiPolygon, MultiPolygonDbType);
 delegate_from_to_sql!(NumberParam, NumberParamDbType);
 delegate_from_to_sql!(OgrMetaData, OgrMetaDataDbType);
 delegate_from_to_sql!(OgrSourceColumnSpec, OgrSourceColumnSpecDbType);
