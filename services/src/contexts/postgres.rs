@@ -3153,32 +3153,6 @@ mod tests {
             )
             .await;
 
-            // test_type(
-            //     &pool,
-            //     "Coordinate2DArray1",
-            //     [Coordinate2DArray1(vec![
-            //         Coordinate2D::new(0.0f64, 0.5).into(),
-            //         Coordinate2D::new(2., 1.0).into(),
-            //     ])],
-            // )
-            // .await;
-
-            // test_type(
-            //     &pool,
-            //     "Coordinate2DArray2",
-            //     [Coordinate2DArray2(vec![
-            //         Coordinate2DArray1(vec![
-            //             Coordinate2D::new(0.0f64, 0.5).into(),
-            //             Coordinate2D::new(2., 1.0).into(),
-            //         ]),
-            //         Coordinate2DArray1(vec![
-            //             Coordinate2D::new(0.0f64, 0.5).into(),
-            //             Coordinate2D::new(2., 1.0).into(),
-            //         ]),
-            //     ])],
-            // )
-            // .await;
-
             test_type(
                 &pool,
                 "path[]",
