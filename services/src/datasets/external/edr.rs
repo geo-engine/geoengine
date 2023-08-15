@@ -474,10 +474,8 @@ impl EdrCollectionMetaData {
         } else {
             format!("&z={height}%2F{height}")
         };
-        let download_url = format!(
-            "/vsicurl_streaming/{}collections/{}/cube?bbox={},{},{},{}{}&datetime={}%2F{}&f={}",
-            base_url,
-            self.id,
+        let layer_name = format!(
+            "cube?bbox={},{},{},{}{}&datetime={}%2F{}&f={}",
             spatial_extent.bbox[0][0],
             spatial_extent.bbox[0][1],
             spatial_extent.bbox[0][2],
@@ -487,19 +485,10 @@ impl EdrCollectionMetaData {
             temporal_extent.interval[0][1],
             self.select_output_format()?
         );
-        let mut layer_name = format!(
-            "cube?bbox={},{},{},{}{}&datetime={}%2F{}",
-            spatial_extent.bbox[0][0],
-            spatial_extent.bbox[0][1],
-            spatial_extent.bbox[0][2],
-            spatial_extent.bbox[0][3],
-            z,
-            temporal_extent.interval[0][0],
-            temporal_extent.interval[0][1]
+        let download_url = format!(
+            "/vsicurl_streaming/{}collections/{}/{}",
+            base_url, self.id, layer_name,
         );
-        if let Some(last_dot_pos) = layer_name.rfind('.') {
-            layer_name = layer_name[0..last_dot_pos].to_string();
-        }
         Ok((download_url, layer_name))
     }
 
