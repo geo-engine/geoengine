@@ -354,7 +354,9 @@ CREATE TYPE "OgrSourceErrorSpec" AS ENUM (
     'Abort'
 );
 
--- closed path is a polygon without stored bbox
+-- We store `Polygon`s as an array of rings that are closed postgres `path`s.
+-- We do not use an array of `polygon`s as it is the same as storing a path 
+-- plus a stored bbox that we don't want to compute and store (overhead).
 CREATE DOMAIN "Polygon" AS path [];
 
 CREATE TYPE "TypedGeometry" AS (
