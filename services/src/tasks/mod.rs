@@ -67,6 +67,8 @@ pub trait Task<C: TaskContext>: Send + Sync {
         None
     }
 
+    fn task_description(&self) -> String;
+
     /// Return subtasks of this tasks.
     ///
     /// For instance, they will get aborted when this tasks gets aborted.
@@ -95,6 +97,8 @@ pub enum TaskStatus {
     Running(Arc<RunningTaskStatusInfo>),
     #[serde(rename_all = "camelCase")]
     Completed {
+        task_type: &'static str,
+        description: Option<String>,
         info: Arc<dyn TaskStatusInfo>,
         time_total: String,
         time_started: DateTime,
@@ -126,6 +130,8 @@ impl<'a> ToSchema<'a> for TaskStatus {
                                 .schema_type(SchemaType::String)
                                 .enum_values::<[&str; 1], &str>(Some(["running"])),
                         )
+                        .property("taskType", Object::with_type(SchemaType::String))
+                        .property("description", Object::with_type(SchemaType::String))
                         .property("info", Object::new())
                         .property("pctComplete", Object::with_type(SchemaType::String))
                         .property(
@@ -142,6 +148,8 @@ impl<'a> ToSchema<'a> for TaskStatus {
                                 .schema_type(SchemaType::String)
                                 .enum_values::<[&str; 1], &str>(Some(["completed"])),
                         )
+                        .property("taskType", Object::with_type(SchemaType::String))
+                        .property("description", Object::with_type(SchemaType::String))
                         .property("info", Object::new())
                         .property("timeTotal", Object::with_type(SchemaType::String))
                         .property("timeStarted", Object::with_type(SchemaType::String)),
@@ -205,6 +213,8 @@ impl TaskStatus {
     #[must_use]
     pub fn completed(&self, info: Arc<dyn TaskStatusInfo>) -> Self {
         Self::Completed {
+            task_type: self.task_type(),
+            description: self.description(),
             info,
             time_total: self.time_total(),
             time_started: self
@@ -271,11 +281,29 @@ impl TaskStatus {
             _ => None,
         }
     }
+
+    fn task_type(&self) -> &'static str {
+        match self {
+            TaskStatus::Completed { task_type, .. } => task_type,
+            TaskStatus::Running(info) => info.task_type,
+            _ => "",
+        }
+    }
+
+    fn description(&self) -> Option<String> {
+        match self {
+            TaskStatus::Completed { description, .. } => description.clone(),
+            TaskStatus::Running(info) => info.description.clone(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunningTaskStatusInfo {
+    task_type: &'static str,
+    description: Option<String>,
     #[serde(serialize_with = "serialize_as_pct")]
     pct_complete: f64,
     time_started: DateTime,
@@ -284,9 +312,16 @@ pub struct RunningTaskStatusInfo {
 }
 
 impl RunningTaskStatusInfo {
-    pub fn new(pct_complete: f64, info: Box<dyn TaskStatusInfo>) -> Arc<Self> {
+    pub fn new(
+        task_type: &'static str,
+        description: Option<String>,
+        pct_complete: f64,
+        info: Box<dyn TaskStatusInfo>,
+    ) -> Arc<Self> {
         let time_estimate = TimeEstimation::new();
         Arc::new(RunningTaskStatusInfo {
+            task_type,
+            description,
             pct_complete: pct_complete.clamp(0., 1.),
             time_started: time_estimate.time_started(),
             estimated_time_remaining: time_estimate,
@@ -301,6 +336,8 @@ impl RunningTaskStatusInfo {
         time_estimate.update_now(pct_complete);
 
         Arc::new(RunningTaskStatusInfo {
+            task_type: self.task_type,
+            description: self.description.clone(),
             pct_complete,
             time_started: self.time_started,
             estimated_time_remaining: time_estimate,

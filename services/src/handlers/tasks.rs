@@ -44,10 +44,12 @@ impl TaskResponse {
         (status = 200, description = "Status of the task (running)", body = TaskStatus,
             example = json!({
                 "status": "running",
-                "pctComplete": 0,
+                "taskType": "dummy-task",
+                "description": "Demo",
+                "pctComplete": "0.00%",
                 "timeStarted": "2023-02-16T15:25:45.390Z",
                 "estimatedTimeRemaining": "? (± ?)",
-                "info": (),
+                "info": null,
             })
         )
     ),
@@ -85,7 +87,9 @@ async fn status_handler<C: ApplicationContext>(
                 {
                     "taskId": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
                     "status": "completed",
-                    "info": "completed",
+                    "taskType": "dummy-task",
+                    "description": "Demo",
+                    "info": null,
                     "timeTotal": "00:00:30",
                     "timeStarted": "2023-02-16T15:25:45.390Z"
                 }
@@ -236,6 +240,10 @@ mod tests {
         fn task_unique_id(&self) -> Option<String> {
             self.unique_id.clone()
         }
+
+        fn task_description(&self) -> String {
+            "No operation".to_string()
+        }
     }
 
     struct TaskTree<T: TaskManager<C>, C: TaskContext + 'static> {
@@ -243,6 +251,7 @@ mod tests {
         subtask_ids: Arc<Mutex<Vec<TaskId>>>,
         task_manager: Arc<T>,
         complete_rx: Arc<Mutex<oneshot::Receiver<()>>>,
+        task_description: String,
     }
 
     impl<T: TaskManager<C>, C: TaskContext + 'static> TaskTree<T, C> {
@@ -250,6 +259,11 @@ mod tests {
             subtasks: Vec<Box<dyn Task<C>>>,
             task_manager: Arc<T>,
         ) -> (Self, oneshot::Sender<()>) {
+            let task_description = subtasks
+                .iter()
+                .map(|subtask| subtask.task_description())
+                .collect::<Vec<_>>()
+                .join(", ");
             let (complete_tx, complete_rx) = oneshot::channel();
 
             let this = Self {
@@ -257,6 +271,7 @@ mod tests {
                 subtask_ids: Arc::new(Mutex::new(vec![])),
                 task_manager,
                 complete_rx: Arc::new(Mutex::new(complete_rx)),
+                task_description,
             };
 
             (this, complete_tx)
@@ -295,6 +310,10 @@ mod tests {
             None
         }
 
+        fn task_description(&self) -> String {
+            self.task_description.clone()
+        }
+
         async fn subtasks(&self) -> Vec<TaskId> {
             self.subtask_ids.lock().await.clone()
         }
@@ -329,6 +348,10 @@ mod tests {
 
         fn task_unique_id(&self) -> Option<String> {
             None
+        }
+
+        fn task_description(&self) -> String {
+            "Failing task with failing cleanup".to_string()
         }
     }
 

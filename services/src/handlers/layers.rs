@@ -639,6 +639,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
         get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
+        format!("layer {item}"),
         layer.workflow,
         ctx,
         from_workflow,
