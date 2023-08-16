@@ -19,7 +19,7 @@ use geoengine_datatypes::primitives::{
     TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
-use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterOperator, RasterResultDescriptor, StaticMetaData,
     TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
@@ -135,7 +135,8 @@ impl EdrDataProvider {
             .send()
             .await?
             .json()
-            .await?)
+            .await
+            .map_err(|_| Error::EdrInvalidMetadataFormat)?)
     }
 
     async fn load_collection_by_dataid(
@@ -179,7 +180,8 @@ impl EdrDataProvider {
             .send()
             .await?
             .json()
-            .await?;
+            .await
+            .map_err(|_| Error::EdrInvalidMetadataFormat)?;
 
         let items = collections
             .collections
@@ -674,9 +676,7 @@ impl EdrCollectionMetaData {
 
         Ok(RasterResultDescriptor {
             data_type: RasterDataType::U8,
-            spatial_reference: SpatialReferenceOption::SpatialReference(
-                SpatialReference::epsg_4326(),
-            ),
+            spatial_reference: SpatialReference::epsg_4326().into(),
             measurement: Measurement::Unitless,
             time: Some(self.get_time_interval()?),
             bbox: Some(bbox),
@@ -1154,7 +1154,6 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum EdrProviderError {
-    MissingVerticalExtent,
     MissingSpatialExtent,
     MissingTemporalExtent,
     NoSupportedOutputFormat,
@@ -1163,89 +1162,508 @@ pub enum EdrProviderError {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::BufReader};
-
     use crate::api::model::datatypes::ExternalDataId;
-    use futures_util::StreamExt;
-    use geoengine_datatypes::{
-        primitives::SpatialResolution,
-        test_data,
-        util::{gdal::hide_gdal_errors, test::TestDefault},
-    };
-    use geoengine_operators::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, WorkflowOperatorPath,
-    };
+    use geoengine_datatypes::util::AsAny;
+    use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
+    use httptest::{matchers::request, responders::status_code, Expectation, Server};
+    use std::path::PathBuf;
 
     use super::*;
 
-    #[tokio::test]
-    async fn query_data() -> Result<()> {
-        hide_gdal_errors();
+    const DEMO_PROVIDER_ID: DataProviderId =
+        DataProviderId::from_u128(0xdc2d_dc34_b0d9_4ee0_bf3e_414f_01a8_05ad);
 
-        let layer_id = "collections!GFS_between-depth!liquid-volumetric-soil-moisture-non-frozen";
-        let provider_id = "dc2ddc34-b0d9-4ee0-bf3e-414f01a805ad";
+    fn test_data_path(file_name: &str) -> PathBuf {
+        crate::test_data!(String::from("edr/") + file_name).into()
+    }
 
-        let mut exe: MockExecutionContext = MockExecutionContext::test_default();
-
-        let def: Box<dyn DataProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open(test_data!("provider_defs/open_weather.json"))?,
-        ))?;
-
-        let provider = def.initialize().await.unwrap();
-
-        let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
-            provider
-                .meta_data(
-                    &DataId::External(ExternalDataId {
-                        provider_id: DataProviderId::from_str(provider_id)?,
-                        layer_id: LayerId(layer_id.to_owned()),
-                    })
-                    .into(),
-                )
-                .await?;
-
-        exe.add_meta_data(
-            DataId::External(ExternalDataId {
-                provider_id: DataProviderId::from_str(provider_id)?,
-                layer_id: LayerId(layer_id.to_owned()),
-            })
-            .into(),
-            geoengine_datatypes::dataset::NamedData::with_system_provider(
-                provider_id.to_string(),
-                layer_id.to_string(),
-            ),
-            meta,
-        );
-
-        let op = GdalSource {
-            params: GdalSourceParameters {
-                data: geoengine_datatypes::dataset::NamedData::with_system_provider(
-                    provider_id.to_string(),
-                    layer_id.to_owned(),
-                ),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe)
+    async fn create_provider(server: &Server) -> Box<dyn DataProvider> {
+        Box::new(EdrDataProviderDefinition {
+            name: "EDR".to_string(),
+            id: DEMO_PROVIDER_ID,
+            base_url: Url::parse(server.url_str("").strip_suffix('/').unwrap()).unwrap(),
+            vector_spec: Some(EdrVectorSpec {
+                x: "geometry".to_string(),
+                y: None,
+                time: "time".to_string(),
+            }),
+            cache_ttl: Default::default(),
+            discrete_vrs: vec!["ibl#between-depth".to_string()],
+        })
+        .initialize()
         .await
-        .unwrap();
+        .unwrap()
+    }
 
-        let processor = op.query_processor()?.get_u8().unwrap();
+    async fn setup_url(server: &mut Server, url: &str, content_type: &str, file_name: &str) {
+        let path = test_data_path(file_name);
+        let body = tokio::fs::read(path).await.unwrap();
 
-        let spatial_bounds = SpatialPartition2D::new((0., 90.).into(), (180., 0.).into()).unwrap();
+        let responder = status_code(200)
+            .append_header("content-type", content_type.to_owned())
+            .append_header("content-length", body.len())
+            .body(body);
 
-        let spatial_resolution = SpatialResolution::new_unchecked(1., 1.);
-        let query = RasterQueryRectangle {
-            spatial_bounds,
-            time_interval: TimeInterval::new_unchecked(1_687_867_200_000, 1_688_806_800_000),
-            spatial_resolution,
-        };
+        server.expect(
+            Expectation::matching(request::method_path("GET", url.to_string()))
+                .times(1)
+                .respond_with(responder),
+        );
+    }
 
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+    async fn load_layer_collection(collection: &LayerCollectionId) -> LayerCollection {
+        let mut server = Server::run();
+        setup_url(
+            &mut server,
+            "/collections",
+            "application/json",
+            "edr_collections.json",
+        )
+        .await;
 
-        let tile_stream = processor.query(query, &ctx).await?;
-        assert_eq!(tile_stream.count().await, 2);
+        let provider = create_provider(&server).await;
 
-        Ok(())
+        let datasets = provider
+            .load_layer_collection(
+                collection,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                },
+            )
+            .await
+            .unwrap();
+        server.verify_and_clear();
+
+        datasets
+    }
+
+    #[tokio::test]
+    async fn it_loads_root_collection() {
+        let root_collection_id = LayerCollectionId("collections".to_string());
+        let datasets = load_layer_collection(&root_collection_id).await;
+
+        assert_eq!(
+            datasets,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: DEMO_PROVIDER_ID,
+                    collection_id: root_collection_id
+                },
+                name: "EDR".to_owned(),
+                description: "Environmental Data Retrieval".to_owned(),
+                items: vec![
+                    // Note: The dataset GFS_single-level gets filtered out because there is no extent set.
+                    // This means that it contains no data.
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "collections!GFS_single-level_50".to_string()
+                            )
+                        },
+                        name: "GFS - Single Level (50)".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "collections!GFS_single-level_50".to_string()
+                            )
+                        },
+                        name: "GFS - Single Level (50)".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "collections!GFS_between-depth".to_string()
+                            )
+                        },
+                        name: "GFS - Layer between two depths below land surface".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "collections!GFS_between-depth".to_string()
+                            )
+                        },
+                        name: "GFS - Layer between two depths below land surface".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            layer_id: LayerId("collections!PointsInGermany".to_string())
+                        },
+                        name: "PointsInGermany".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "collections!PointsInFrance".to_string()
+                            )
+                        },
+                        name: "PointsInFrance".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![]
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn it_loads_raster_parameter_collection() {
+        let collection_id = LayerCollectionId("collections!GFS_isobaric".to_string());
+        let datasets = load_layer_collection(&collection_id).await;
+
+        assert_eq!(
+            datasets,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: DEMO_PROVIDER_ID,
+                    collection_id
+                },
+                name: "GFS_isobaric".to_owned(),
+                description: "Parameters of GFS_isobaric".to_owned(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: DEMO_PROVIDER_ID,
+                        collection_id: LayerCollectionId(
+                            "collections!GFS_isobaric!temperature".to_string()
+                        )
+                    },
+                    name: "temperature".to_string(),
+                    description: String::new(),
+                    properties: vec![],
+                })],
+                entry_label: None,
+                properties: vec![]
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn it_loads_vector_height_collection() {
+        let collection_id = LayerCollectionId("collections!PointsInFrance".to_string());
+        let datasets = load_layer_collection(&collection_id).await;
+
+        assert_eq!(
+            datasets,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: DEMO_PROVIDER_ID,
+                    collection_id
+                },
+                name: "PointsInFrance".to_owned(),
+                description: "Height selection of PointsInFrance".to_owned(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            layer_id: LayerId("collections!PointsInFrance!0\\10cm".to_string())
+                        },
+                        name: "0\\10cm".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            layer_id: LayerId("collections!PointsInFrance!10\\40cm".to_string())
+                        },
+                        name: "10\\40cm".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    })
+                ],
+                entry_label: None,
+                properties: vec![]
+            }
+        );
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "InvalidLayerCollectionId")]
+    async fn vector_without_height_collection_invalid() {
+        let collection_id = LayerCollectionId("collections!PointsInGermany".to_string());
+        load_layer_collection(&collection_id).await;
+    }
+
+    #[tokio::test]
+    async fn it_loads_raster_height_collection() {
+        let collection_id = LayerCollectionId("collections!GFS_isobaric!temperature".to_string());
+        let datasets = load_layer_collection(&collection_id).await;
+
+        assert_eq!(
+            datasets,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: DEMO_PROVIDER_ID,
+                    collection_id
+                },
+                name: "GFS_isobaric".to_owned(),
+                description: "Height selection of GFS_isobaric".to_owned(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            layer_id: LayerId(
+                                "collections!GFS_isobaric!temperature!0.01".to_string()
+                            )
+                        },
+                        name: "0.01".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            layer_id: LayerId(
+                                "collections!GFS_isobaric!temperature!1000".to_string()
+                            )
+                        },
+                        name: "1000".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    })
+                ],
+                entry_label: None,
+                properties: vec![]
+            }
+        );
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "InvalidLayerCollectionId")]
+    async fn vector_with_parameter_collection_invalid() {
+        let collection_id = LayerCollectionId("collections!PointsInGermany!ID".to_string());
+        load_layer_collection(&collection_id).await;
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "InvalidLayerCollectionId")]
+    async fn raster_with_parameter_without_height_collection_invalid() {
+        let collection_id =
+            LayerCollectionId("collections!GFS_single-level!temperature_max-wind".to_string());
+        load_layer_collection(&collection_id).await;
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "InvalidLayerCollectionId")]
+    async fn collection_with_parameter_and_height_invalid() {
+        let collection_id =
+            LayerCollectionId("collections!GFS_isobaric!temperature!1000".to_string());
+        load_layer_collection(&collection_id).await;
+    }
+
+    async fn load_metadata<L, R, Q>(
+        server: &mut Server,
+        collection_name: &'static str,
+    ) -> Box<dyn MetaData<L, R, Q>>
+    where
+        R: ResultDescriptor,
+        dyn DataProvider: MetaDataProvider<L, R, Q>,
+    {
+        setup_url(
+            server,
+            &format!("/collections/{collection_name}"),
+            "application/json",
+            &format!("edr_{collection_name}.json"),
+        )
+        .await;
+
+        let provider = create_provider(server).await;
+
+        let meta: Box<dyn MetaData<L, R, Q>> = provider
+            .meta_data(
+                &DataId::External(ExternalDataId {
+                    provider_id: DEMO_PROVIDER_ID,
+                    layer_id: LayerId(format!("collections!{collection_name}")),
+                })
+                .into(),
+            )
+            .await
+            .unwrap();
+        server.verify_and_clear();
+        meta
+    }
+
+    #[tokio::test]
+    async fn generate_ogr_metadata() {
+        let mut server = Server::run();
+        let meta = load_metadata::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+            &mut server,
+            "PointsInGermany",
+        )
+        .await;
+        let meta = meta
+            .as_any()
+            .downcast_ref::<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>()
+            .unwrap();
+
+        assert_eq!(
+            meta,
+            &StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: format!("/vsicurl_streaming/{}", server.url_str("/collections/PointsInGermany/cube?bbox=-180,-90,180,90&datetime=2023-01-01T12:42:29Z%2F2023-02-01T12:42:29Z&f=GeoJSON")).into(),
+                    layer_name: "cube?bbox=-180,-90,180,90&datetime=2023-01-01T12:42:29Z%2F2023-02-01T12:42:29Z&f=GeoJSON".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::Start {
+                        start_field: "time".to_string(),
+                        start_format: OgrSourceTimeFormat::Auto,
+                        duration: OgrSourceDurationSpec::Zero,
+                    },
+                    default_geometry: None,
+                    columns: Some(OgrSourceColumnSpec {
+                        format_specifics: None,
+                        x: "geometry".to_string(),
+                        y: None,
+                        int: vec!["ID".to_string()],
+                        float: vec![],
+                        text: vec![],
+                        bool: vec![],
+                        datetime: vec![],
+                        rename: None,
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    sql_query: None,
+                    attribute_query: None,
+                    cache_ttl: Default::default(),
+                },
+                result_descriptor: VectorResultDescriptor {
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    data_type: VectorDataType::MultiPoint,
+                    columns: hashmap! {
+                        "ID".to_string() => VectorColumnInfo {
+                            data_type: FeatureDataType::Int,
+                            measurement: Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "ID".to_string(),
+                                unit: None,
+                            }),
+                        }
+                    },
+                    time: Some(TimeInterval::new_unchecked(
+                        1_672_576_949_000,
+                        1_675_255_349_000,
+                    )),
+                    bbox: Some(BoundingBox2D::new_unchecked(
+                        (-180., -90.).into(),
+                        (180., 90.).into()
+                    )),
+                },
+                phantom: Default::default(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn generate_gdal_metadata() {
+        let mut server = Server::run();
+        setup_url(
+            &mut server,
+            "/collections/GFS_isobaric/cube",
+            "image/tiff",
+            "edr_raster.tif",
+        )
+        .await;
+        let meta = load_metadata::<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>(
+            &mut server,
+            "GFS_isobaric",
+        )
+        .await;
+        let meta = meta.as_any().downcast_ref::<GdalMetaDataList>().unwrap();
+
+        assert_eq!(
+            meta,
+            &GdalMetaDataList {
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    time: Some(TimeInterval::new_unchecked(
+                        1_692_144_000_000,
+                        1_692_500_400_000
+                    )),
+                    bbox: Some(SpatialPartition2D::new_unchecked(
+                        (0., 90.).into(),
+                        (359.500_000_000_000_06, -90.).into()
+                    )),
+                    resolution: None,
+                },
+                params: vec![
+                    GdalLoadingInfoTemporalSlice {
+                        time: TimeInterval::new_unchecked(
+                            1_692_144_000_000, 1_692_154_800_000
+                        ),
+                        params: Some(GdalDatasetParameters {
+                            file_path: format!("/vsicurl_streaming/{}", server.url_str("/collections/GFS_isobaric/cube?bbox=0,-90,359.50000000000006,90&z=1000%2F1000&datetime=2023-08-16T00:00:00Z%2F2023-08-16T00:00:00Z&f=GeoTIFF&parameter-name=temperature")).into(),
+                            rasterband_channel: 1,
+                            geo_transform: GdalDatasetGeoTransform {
+                                origin_coordinate: (0., -90.).into(),
+                                x_pixel_size: 0.499_305_555_555_556,
+                                y_pixel_size: 0.498_614_958_448_753,
+                            },
+                            width: 720,
+                            height: 361,
+                            file_not_found_handling: FileNotFoundHandling::NoData,
+                            no_data_value: None,
+                            properties_mapping: None,
+                            gdal_open_options: None,
+                            gdal_config_options: Some(vec![(
+                                "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
+                                "YES".to_string(),
+                            )]),
+                            allow_alphaband_as_mask: false,
+                            retry: None,
+                        }),
+                        cache_ttl: Default::default(),
+                    },
+                    GdalLoadingInfoTemporalSlice {
+                        time: TimeInterval::new_unchecked(
+                            1_692_154_800_000, 1_692_500_400_000
+                        ),
+                        params: Some(GdalDatasetParameters {
+                            file_path: format!("/vsicurl_streaming/{}", server.url_str("/collections/GFS_isobaric/cube?bbox=0,-90,359.50000000000006,90&z=1000%2F1000&datetime=2023-08-16T03:00:00Z%2F2023-08-16T03:00:00Z&f=GeoTIFF&parameter-name=temperature")).into(),
+                            rasterband_channel: 1,
+                            geo_transform: GdalDatasetGeoTransform {
+                                origin_coordinate: (0., -90.).into(),
+                                x_pixel_size: 0.499_305_555_555_556,
+                                y_pixel_size: 0.498_614_958_448_753,
+                            },
+                            width: 720,
+                            height: 361,
+                            file_not_found_handling: FileNotFoundHandling::NoData,
+                            no_data_value: None,
+                            properties_mapping: None,
+                            gdal_open_options: None,
+                            gdal_config_options: Some(vec![(
+                                "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
+                                "YES".to_string(),
+                            )]),
+                            allow_alphaband_as_mask: false,
+                            retry: None,
+                        }),
+                        cache_ttl: Default::default(),
+                    }
+                ]
+            }
+        );
     }
 }
