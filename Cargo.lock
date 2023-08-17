@@ -2187,15 +2187,15 @@ dependencies = [
  "geo-types",
  "geographiclib-rs",
  "num-traits",
- "robust",
+ "robust 0.2.3",
  "rstar 0.8.4",
 ]
 
 [[package]]
 name = "geo"
-version = "0.25.1"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5d07d2288645058f3c78bc64eadd615335791cd5adb632e9865840afbc13dad"
+checksum = "1645cf1d7fea7dac1a66f7357f3df2677ada708b8d9db8e9b043878930095a96"
 dependencies = [
  "earcutr",
  "float_next_after",
@@ -2203,8 +2203,8 @@ dependencies = [
  "geographiclib-rs",
  "log",
  "num-traits",
- "robust",
- "rstar 0.10.0",
+ "robust 1.1.0",
+ "rstar 0.11.0",
 ]
 
 [[package]]
@@ -2225,7 +2225,7 @@ checksum = "9705398c5c7b26132e74513f4ee7c1d7dafd786004991b375c172be2be0eecaa"
 dependencies = [
  "approx",
  "num-traits",
- "rstar 0.10.0",
+ "rstar 0.11.0",
  "rstar 0.8.4",
  "serde",
 ]
@@ -2241,7 +2241,7 @@ dependencies = [
  "criterion",
  "float-cmp",
  "gdal",
- "geo 0.25.1",
+ "geo 0.26.0",
  "geo-types",
  "geojson",
  "image",
@@ -2276,7 +2276,7 @@ dependencies = [
  "futures",
  "gdal",
  "gdal-sys",
- "geo 0.25.1",
+ "geo 0.26.0",
  "geo-rand",
  "geoengine-datatypes",
  "httptest",
@@ -2342,7 +2342,7 @@ dependencies = [
  "futures-util",
  "gdal",
  "gdal-sys",
- "geo 0.25.1",
+ "geo 0.26.0",
  "geoengine-datatypes",
  "geoengine-operators",
  "geojson",
@@ -4572,6 +4572,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5864e7ef1a6b7bcf1d6ca3f655e65e724ed3b52546a0d0a663c991522f552ea"
 
 [[package]]
+name = "robust"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbf4a6aa5f6d6888f39e980649f3ad6b666acdce1d78e95b8a2cb076e687ae30"
+
+[[package]]
 name = "ron"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4618,9 +4624,9 @@ dependencies = [
 
 [[package]]
 name = "rstar"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f39465655a1e3d8ae79c6d9e007f4953bfc5d55297602df9dc38f9ae9f1359a"
+checksum = "73111312eb7a2287d229f06c00ff35b51ddee180f017ab6dec1f69d62ac098d6"
 dependencies = [
  "heapless 0.7.16",
  "num-traits",
