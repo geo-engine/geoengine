@@ -65,7 +65,7 @@ serde_urlencoded = "0.7"
 serde_with = "3.0"
 snafu = "0.7"
 stream-cancel = "0.8"
-strum = { version = "0.24", features = ["derive"] }
+strum = { version = "0.25", features = ["derive"] }
 time = "0.3"
 tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
 tokio-postgres = { version = "0.7" }
