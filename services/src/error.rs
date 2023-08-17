@@ -1,9 +1,7 @@
 use crate::api::model::datatypes::{
     DataProviderId, DatasetId, LayerId, SpatialReference, SpatialReferenceOption, TimeInstance,
 };
-#[cfg(feature = "nfdi")]
 use crate::datasets::external::aruna::error::ArunaProviderError;
-#[cfg(feature = "ebv")]
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 use crate::handlers::ErrorResponse;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
@@ -50,13 +48,10 @@ pub enum Error {
         source: url::ParseError,
     },
 
-    #[cfg(feature = "xml")]
-    QuickXml {
-        source: quick_xml::Error,
-    },
     Proj {
         source: proj::ProjError,
     },
+
     #[snafu(context(false))]
     Trace {
         source: opentelemetry::trace::TraceError,
@@ -256,25 +251,12 @@ pub enum Error {
     },
     InvalidDataId,
 
-    #[cfg(feature = "nature40")]
     Nature40UnknownRasterDbname,
-    #[cfg(feature = "nature40")]
     Nature40WcsDatasetMissingLabelInMetadata,
 
     Logger {
         source: flexi_logger::FlexiLoggerError,
     },
-
-    #[cfg(feature = "odm")]
-    Odm {
-        reason: String,
-    },
-    #[cfg(feature = "odm")]
-    OdmInvalidResponse {
-        reason: String,
-    },
-    #[cfg(feature = "odm")]
-    OdmMissingContentTypeHeader,
 
     UnknownSrsString {
         srs_string: String,
@@ -329,13 +311,11 @@ pub enum Error {
         type_names: WorkflowId,
     },
 
-    #[cfg(feature = "nfdi")]
     #[snafu(context(false))]
     ArunaProvider {
         source: ArunaProviderError,
     },
 
-    #[cfg(feature = "ebv")]
     #[snafu(context(false))]
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
@@ -525,13 +505,6 @@ impl From<actix_multipart::MultipartError> for Error {
 impl From<url::ParseError> for Error {
     fn from(source: url::ParseError) -> Self {
         Self::Url { source }
-    }
-}
-
-#[cfg(feature = "xml")]
-impl From<quick_xml::Error> for Error {
-    fn from(source: quick_xml::Error) -> Self {
-        Self::QuickXml { source }
     }
 }
 

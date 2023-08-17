@@ -74,7 +74,7 @@ where
             openapi.clone(),
         );
 
-        #[cfg(feature = "ebv")]
+        // EBV endpoint
         {
             api = api.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
 
