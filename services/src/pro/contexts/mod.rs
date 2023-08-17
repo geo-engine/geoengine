@@ -1,3 +1,4 @@
+pub mod error;
 mod postgres;
 
 use std::str::FromStr;

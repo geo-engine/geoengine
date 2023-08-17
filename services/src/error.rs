@@ -1,6 +1,8 @@
 use crate::api::model::datatypes::{
     DataProviderId, DatasetId, LayerId, SpatialReference, SpatialReferenceOption, TimeInstance,
 };
+use crate::contexts::error::{SessionContextError, SimpleApplicationContextError};
+use crate::contexts::ApplicationContextError;
 #[cfg(feature = "nfdi")]
 use crate::datasets::external::aruna::error::ArunaProviderError;
 #[cfg(feature = "ebv")]
@@ -445,6 +447,22 @@ pub enum Error {
     },
 
     UnexpectedInvalidDbTypeConversion,
+
+    // TODO: these errors should be used in the error type of the handlers
+    ApplicationContext {
+        source: ApplicationContextError,
+    },
+    SimpleApplicationContext {
+        source: SimpleApplicationContextError,
+    },
+    SessionContext {
+        source: SessionContextError,
+    },
+
+    #[cfg(feature = "pro")]
+    ProApplicationContext {
+        source: crate::pro::contexts::error::ProApplicationContextError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -550,5 +568,31 @@ impl From<proj::ProjError> for Error {
 impl From<tokio::task::JoinError> for Error {
     fn from(source: tokio::task::JoinError) -> Self {
         Error::TokioJoin { source }
+    }
+}
+
+// TODO: these should be used in the error types of the handlers
+impl From<ApplicationContextError> for Error {
+    fn from(source: ApplicationContextError) -> Self {
+        Error::ApplicationContext { source }
+    }
+}
+
+impl From<SimpleApplicationContextError> for Error {
+    fn from(source: SimpleApplicationContextError) -> Self {
+        Error::SimpleApplicationContext { source }
+    }
+}
+
+impl From<SessionContextError> for Error {
+    fn from(source: SessionContextError) -> Self {
+        Error::SessionContext { source }
+    }
+}
+
+#[cfg(feature = "pro")]
+impl From<crate::pro::contexts::error::ProApplicationContextError> for Error {
+    fn from(source: crate::pro::contexts::error::ProApplicationContextError) -> Self {
+        Error::ProApplicationContext { source }
     }
 }
