@@ -1,10 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
-
-SET ROLE 'geoengine'; -- noqa: PRS
-
-CREATE SCHEMA IF NOT EXISTS abcd;
-SET SEARCH_PATH TO abcd, public;
-
 CREATE TABLE abcd_datasets (
     surrogate_key integer NOT NULL,
     dataset_id text NOT NULL,

@@ -80,9 +80,14 @@ sudo -u postgres psql -d geoengine -c "drop schema public cascade; create schema
 For running the NFDI / GFBio / GBIF data providers during development, you need to integrate the test data like this:
 
 ```bash
-sudo -u postgres psql --dbname=geoengine --file=test_data/gfbio/test_data.sql
+sudo -u postgres psql --dbname=geoengine -c \
+  "DROP SCHEMA IF EXISTS abcd CASCADE; DROP SCHEMA IF EXISTS gbif CASCADE;"
 
-sudo -u postgres psql --dbname=geoengine --file=test_data/gbif/test_data.sql
+cat test_data/gfbio/init_test_data.sql test_data/gfbio/test_data.sql | \
+  sudo -u postgres psql --dbname=geoengine --single-transaction --file -
+
+cat test_data/gbif/init_test_data.sql test_data/gbif/test_data.sql | \
+  sudo -u postgres psql --dbname=geoengine --single-transaction --file -
 ```
 
 ### Benchmarks
