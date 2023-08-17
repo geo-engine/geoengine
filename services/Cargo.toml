@@ -45,8 +45,8 @@ mime = "0.3"
 oauth2 = "4.2.3"
 openidconnect = "3.1"
 # `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-jaeger`
-opentelemetry = { version = "0.19", default-features = false, features = ["trace"] }
-opentelemetry-jaeger = "0.18"
+opentelemetry = { version = "0.20", default-features = false, features = ["trace"] }
+opentelemetry-jaeger = "0.19"
 ordered-float = { version = "3.0", features = ["serde"] }
 num-traits = "0.2"
 paste = "1.0"
@@ -73,7 +73,7 @@ tokio-util = { version = "0.7", features = ["codec"] }
 tonic = { version = "0.9", features = ["tls", "tls-roots"] }                                   # must be compatible with `aruna-rust-api`
 tracing = "0.1"
 tracing-actix-web = "0.7"
-tracing-opentelemetry = "0.19"
+tracing-opentelemetry = "0.20"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi", "tracing-log"] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
