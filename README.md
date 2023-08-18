@@ -75,17 +75,30 @@ During development, you can use the following command to clean the database and 
 sudo -u postgres psql -d geoengine -c "drop schema public cascade; create schema public authorization geoengine; create extension postgis;" && cargo run --features pro
 ```
 
-##### NFDI / GFBio / GBIF
+##### NFDI / GFBio
 
-For running the NFDI / GFBio / GBIF data providers during development, you need to integrate the test data like this:
+For running the NFDI/GFBio ABCD data providers (`GfbioAbcdDataProviderDefinition` and `GfbioCollectionsDataProviderDefinition`) during development, you need to integrate the test data like this:
 
 ```bash
+# delete existing data
 sudo -u postgres psql --dbname=geoengine -c \
-  "DROP SCHEMA IF EXISTS abcd CASCADE; DROP SCHEMA IF EXISTS gbif CASCADE;"
+  "DROP SCHEMA IF EXISTS abcd CASCADE;"
 
+# insert data
 cat test_data/gfbio/init_test_data.sql test_data/gfbio/test_data.sql | \
   sudo -u postgres psql --dbname=geoengine --single-transaction --file -
+```
 
+##### GBIF
+
+For running the GBIF data provider (`GbifDataProviderDefinition`) during development, you need to integrate the test data like this:
+
+```bash
+# delete existing data
+sudo -u postgres psql --dbname=geoengine -c \
+  "DROP SCHEMA IF EXISTS gbif CASCADE;"
+
+# insert data
 cat test_data/gbif/init_test_data.sql test_data/gbif/test_data.sql | \
   sudo -u postgres psql --dbname=geoengine --single-transaction --file -
 ```
