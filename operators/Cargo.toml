@@ -1,11 +1,7 @@
 [package]
 name = "geoengine-operators"
 version = "0.7.0"
-authors = [
-    "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
-    "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
-    "Michael Mattig <mattig@mathematik.uni-marburg.de>",
-]
+authors = ["Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>", "Johannes Drönner <droenner@mathematik.uni-marburg.de>", "Michael Mattig <mattig@mathematik.uni-marburg.de>"]
 edition = "2021"
 
 [features]
@@ -14,7 +10,7 @@ pro = ["geoengine-datatypes/pro"]
 xgboost = ["dep:xgboost-rs", "pro"]
 
 [dependencies]
-arrow = { version = "43.0" } # TODO: activate SIMD when stable
+arrow = { version = "45.0" }                                                                     # TODO: activate SIMD when stable
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
@@ -23,12 +19,12 @@ float-cmp = "0.9"
 futures = "0.3"
 gdal = "0.15"
 gdal-sys = "0.9"
-geo = "0.25"
+geo = "0.26"
 geoengine-datatypes = { path = "../datatypes" }
-itertools = "0.10"
+itertools = "0.11"
 libloading = "0.8"
 log = "0.4"
-lru = "0.10"
+lru = "0.11"
 num-traits = "0.2"
 num = "0.4"
 ouroboros = "0.17"
@@ -37,11 +33,7 @@ pest = "2.1"
 pest_derive = "2.1"
 pin-project = "1.0"
 postgres-protocol = "0.6.3"
-postgres-types = { version = "0.2", features = [
-    "derive",
-    "with-chrono-0_4",
-    "with-uuid-1",
-] }
+postgres-types = { version = "0.2", features = ["derive", "with-chrono-0_4", "with-uuid-1"] }
 proc-macro2 = "1.0"
 quote = "1.0"
 rayon = "1.5"
@@ -51,15 +43,9 @@ serde_json = "1.0"
 snafu = "0.7"
 stream-cancel = "0.8"
 tempfile = "3.1"
-tokio = { version = "1.15", features = [
-    "macros",
-    "signal",
-    "sync",
-    "rt-multi-thread",
-    "time",
-] }
+tokio = { version = "1.15", features = ["macros", "signal", "sync", "rt-multi-thread", "time"] }
 tracing = "0.1"
-tracing-opentelemetry = "0.19"
+tracing-opentelemetry = "0.20"
 typetag = "0.2"
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
 xgboost-rs = { version = "0.1", optional = true }

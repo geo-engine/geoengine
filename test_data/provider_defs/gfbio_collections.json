@@ -8,8 +8,8 @@
     "password": "geoengine",
     "host": "localhost",
     "port": 5432,
-    "database": "abcd",
-    "schema": "public"
+    "database": "geoengine",
+    "schema": "abcd"
   },
   "pangaeaUrl": "https://doi.pangaea.de",
   "cacheTtl": 0
