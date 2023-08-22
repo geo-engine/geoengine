@@ -3,7 +3,7 @@ use snafu::Snafu;
 #[cfg(feature = "xgboost")]
 use xgboost_rs::XGBError;
 
-use geoengine_datatypes::{error::ErrorSource, ml_model::MlModelId};
+use geoengine_datatypes::{error::ErrorSource, pro::MlModelId};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]

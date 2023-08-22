@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use geoengine_datatypes::ml_model::MlModelId;
+use geoengine_datatypes::pro::MlModelId;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 

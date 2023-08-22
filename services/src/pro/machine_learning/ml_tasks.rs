@@ -16,8 +16,8 @@ use crate::tasks::{Task, TaskId, TaskStatusInfo};
 use crate::util::config::get_config_element;
 use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
-use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::pro::MlModelId;
 use geoengine_datatypes::util::Identifier;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -234,6 +234,10 @@ where
 
     fn task_unique_id(&self) -> Option<String> {
         Some(TaskId::new().to_string())
+    }
+
+    fn task_description(&self) -> String {
+        format!("Training ML model with id: {}", self.model_id)
     }
 }
 

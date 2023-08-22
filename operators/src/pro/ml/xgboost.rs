@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use geoengine_datatypes::ml_model::MlModelId;
 use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle, SpatialPartition2D,
     SpatialResolution,
 };
+use geoengine_datatypes::pro::MlModelId;
 use geoengine_datatypes::raster::{
     BaseTile, Grid2D, GridOrEmpty, GridShape, GridShapeAccess, GridSize, RasterDataType,
     RasterTile2D,
@@ -362,7 +362,7 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::pro::ml::{LoadMlModel, MlModelAccess};
     use async_trait::async_trait;
-    use geoengine_datatypes::ml_model::MlModelId;
+    use geoengine_datatypes::pro::MlModelId;
 
     use futures::StreamExt;
     use geoengine_datatypes::primitives::CacheHint;

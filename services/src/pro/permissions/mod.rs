@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use geoengine_datatypes::ml_model::MlModelId;
+use geoengine_datatypes::pro::MlModelId;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 

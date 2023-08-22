@@ -26,7 +26,7 @@ use bb8_postgres::{
     tokio_postgres::{tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
-use geoengine_datatypes::ml_model::MlModelId;
+use geoengine_datatypes::pro::MlModelId;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
@@ -652,13 +652,13 @@ mod tests {
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::ml_model::MlModelId;
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
         RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
         TimeStep, VectorQueryRectangle,
     };
+    use geoengine_datatypes::pro::MlModelId;
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::Identifier;

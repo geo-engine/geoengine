@@ -1,5 +1,5 @@
 use crate::util::Result;
-use geoengine_datatypes::ml_model::MlModelId;
+use geoengine_datatypes::pro::MlModelId;
 
 pub mod xg_error;
 pub mod xgboost;
