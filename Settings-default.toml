@@ -47,7 +47,11 @@ path = "upload"
 
 [logging]
 # Minimum log level. Can be one of error, warn, info, debug, trace
-# or a more detailed spec. See https://docs.rs/flexi_logger/0.17.1/flexi_logger/struct.LogSpecification.html.
+# Console and file logging uses the tokio tracing crate.
+# The spec defined here is parsed using the tracing_subscriber::EnvFilter. This allows to use complex filter expressions.
+# For example `info,geoengine_services=debug` will log all info messages and all debug messages from the "geoengine_services" crate.
+# To get all info messages, all debug messages from crates prefixed with "geoengine", and all trace messages from "geoengine_operators" use: `info,geoengine=debug,geoengine_operators=trace`.
+# See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/ for more information.
 log_spec = "info"
 
 # Whether the logs should be also written to files.

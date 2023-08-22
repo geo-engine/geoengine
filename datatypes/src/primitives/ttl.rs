@@ -1,8 +1,8 @@
+use super::DateTime;
 use chrono::Utc;
+use postgres_types::{FromSql, ToSql};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize};
-
-use super::DateTime;
 
 const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
 
@@ -62,6 +62,35 @@ impl<'de> Deserialize<'de> for CacheTtlSeconds {
             serde_json::Value::Null => Ok(Self(0)),
             _ => Err(D::Error::custom("Invalid value for CacheTtl")),
         }
+    }
+}
+
+impl ToSql for CacheTtlSeconds {
+    fn to_sql(
+        &self,
+        ty: &postgres_types::Type,
+        w: &mut bytes::BytesMut,
+    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        <i32 as ToSql>::to_sql(&(self.0 as i32), ty, w)
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        <i32 as ToSql>::accepts(ty)
+    }
+
+    postgres_types::to_sql_checked!();
+}
+
+impl<'a> FromSql<'a> for CacheTtlSeconds {
+    fn from_sql(
+        ty: &postgres_types::Type,
+        raw: &'a [u8],
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        Ok(Self(<i32 as FromSql>::from_sql(ty, raw)? as u32))
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        <i32 as FromSql>::accepts(ty)
     }
 }
 

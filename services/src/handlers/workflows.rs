@@ -454,11 +454,13 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
 ) -> Result<web::Json<TaskResponse>> {
     let ctx = Arc::new(app_ctx.session_context(session));
 
-    let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
+    let id = id.into_inner();
+    let workflow = ctx.db().load_workflow(&id).await?;
     let compression_num_threads =
         get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
+        format!("workflow {id}"),
         workflow,
         ctx,
         info.into_inner(),

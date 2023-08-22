@@ -306,6 +306,7 @@ impl From<PointSymbology> for Symbology {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[serde(rename_all = "camelCase")]
 pub struct LineSymbology {
     pub stroke: StrokeParam,
 
@@ -765,7 +766,7 @@ mod tests {
     }
 
     #[test]
-    fn serialize_symbology() {
+    fn serialize_point_symbology() {
         let symbology = Symbology::Point(PointSymbology {
             radius: NumberParam::Static { value: 1 },
             fill_color: ColorParam::Derived(DerivedColor {
@@ -796,6 +797,44 @@ mod tests {
                         "type": "rgba"
                     }
                 },
+                "stroke": {
+                    "width": {
+                        "type": "static",
+                        "value": 1
+                    },
+                    "color": {
+                        "type": "static",
+                        "color": [
+                            0,
+                            0,
+                            0,
+                            255
+                        ]
+                    }
+                },
+                "text": null
+            }),
+        );
+    }
+
+    #[test]
+    fn serialize_linestring_symbology() {
+        let symbology = Symbology::Line(LineSymbology {
+            stroke: StrokeParam {
+                width: NumberParam::Static { value: 1 },
+                color: ColorParam::Static {
+                    color: RgbaColor::black(),
+                },
+            },
+            text: None,
+            auto_simplified: true,
+        });
+
+        assert_eq!(
+            serde_json::to_value(symbology).unwrap(),
+            json!({
+                "type": "line",
+                "autoSimplified": true,
                 "stroke": {
                     "width": {
                         "type": "static",

@@ -1,11 +1,48 @@
 use assert_cmd::prelude::*;
-
 use geoengine_services::test_data;
 use serial_test::serial;
 use std::{
     io::BufRead,
     process::{Command, Stdio},
 };
+
+struct DroppingServer {
+    process: std::process::Child,
+}
+
+impl Drop for DroppingServer {
+    fn drop(&mut self) {
+        self.process.kill().unwrap();
+    }
+}
+
+impl DroppingServer {
+    fn new(schema_name: &str) -> Self {
+        let process = Command::cargo_bin("main")
+            .unwrap()
+            .env("GEOENGINE_WEB__BACKEND", "postgres")
+            .env("GEOENGINE_POSTGRES__SCHEMA", schema_name)
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        Self { process }
+    }
+
+    fn stderr_lines(&mut self) -> impl Iterator<Item = String> {
+        let mut reader =
+            std::io::BufReader::new(self.process.stderr.take().expect("failed to read stderr"));
+
+        std::iter::from_fn(move || {
+            let mut buf = String::new();
+            reader
+                .read_line(&mut buf)
+                .ok()
+                .filter(|_| !buf.is_empty())
+                .map(|_| buf)
+        })
+    }
+}
 
 #[serial]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -15,29 +52,16 @@ async fn it_starts_without_warnings_and_accepts_connections() {
     const SCHEMA_NAME: &str = "it_starts_without_warnings_and_accepts_connections";
 
     async fn run_server_and_check_warnings() {
-        let mut server = Command::cargo_bin("main")
-            .unwrap()
-            .env("GEOENGINE_WEB__BACKEND", "postgres")
-            .env("GEOENGINE_POSTGRES__SCHEMA", SCHEMA_NAME)
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-
-        let stderr = server.stderr.take().expect("failed to read stderr");
-
-        let mut reader = std::io::BufReader::new(stderr);
+        let mut server = DroppingServer::new(SCHEMA_NAME);
 
         // read log output and check for warnings
         let mut startup_succesful = false;
-        for _ in 0..99 {
-            let mut buf = String::new();
-            reader.read_line(&mut buf).unwrap();
+        for line in server.stderr_lines().take(100) {
+            // eprintln!("Line: {line}");
 
-            // println!("{buf}");
+            assert!(!line.contains("WARN"), "Warning in log output: {line}");
 
-            assert!(!buf.contains("WARN"));
-
-            if buf.contains("Tokio runtime found") {
+            if line.contains("Tokio runtime found") {
                 startup_succesful = true;
                 break;
             }
@@ -47,8 +71,6 @@ async fn it_starts_without_warnings_and_accepts_connections() {
         reqwest::get("http://127.0.0.1:3030/info")
             .await
             .expect("failed to connect to server");
-
-        server.kill().unwrap();
 
         assert!(startup_succesful);
     }
@@ -104,5 +126,7 @@ async fn it_starts_without_warnings_and_accepts_connections() {
         .await
         .unwrap();
 
-    assert!(result.is_ok());
+    if let Err(error) = result {
+        std::panic::resume_unwind(error);
+    }
 }

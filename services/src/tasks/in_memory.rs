@@ -105,11 +105,14 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManagerBackend {
             }
         }
 
+        let task_type = task.task_type();
+        let description = Some(task.task_description());
+
         let mut task_handle = TaskHandle {
             task: Arc::new(task),
             handle: None,
             status: Arc::new(RwLock::new(TaskStatus::Running(
-                RunningTaskStatusInfo::new(0., ().boxed()),
+                RunningTaskStatusInfo::new(task_type, description, 0., ().boxed()),
             ))),
             unique_key: task_unique_key,
         };
@@ -295,7 +298,12 @@ fn run_task(
 
                 *task_handle.status.write().await = TaskStatus::failed(
                     Arc::clone(&err),
-                    TaskCleanUpStatus::Running(RunningTaskStatusInfo::new(0., ().boxed())),
+                    TaskCleanUpStatus::Running(RunningTaskStatusInfo::new(
+                        "",
+                        None,
+                        0.,
+                        ().boxed(),
+                    )),
                 );
 
                 if let Err(clean_up_err) =
@@ -341,7 +349,7 @@ fn remove_unique_key(
 async fn set_status_to_aborting(task_status: &Db<TaskStatus>) {
     let mut task_status_lock = task_status.write().await;
     *task_status_lock = TaskStatus::aborted(TaskCleanUpStatus::Running(
-        RunningTaskStatusInfo::new(0., ().boxed()),
+        RunningTaskStatusInfo::new("", None, 0., ().boxed()),
     ));
 }
 
