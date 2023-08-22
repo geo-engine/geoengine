@@ -416,12 +416,6 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_get_status_with_admin_session() {
-        crate::util::config::set_config(
-            "session.admin_session_token",
-            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
-        )
-        .unwrap();
-
         with_temp_context(|app_ctx, _| async move {
             let ctx = app_ctx.default_session_context().await.unwrap();
             let session_id = app_ctx.default_session_id().await;
