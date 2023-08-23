@@ -64,6 +64,7 @@ use utoipa::{Modify, OpenApi};
 
 use super::handlers::permissions::{PermissionRequest, Resource};
 use super::handlers::users::AddRole;
+use super::machine_learning::MLTrainRequest;
 use super::permissions::{Permission, ResourceId, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 
@@ -133,7 +134,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::upload::list_upload_file_layers_handler,
         handlers::upload::upload_handler,
         pro::handlers::permissions::add_permission_handler,
-        pro::handlers::permissions::remove_permission_handler
+        pro::handlers::permissions::remove_permission_handler,
+        pro::handlers::model_training::ml_model_from_workflow_handler,
     ),
     components(
         responses(
@@ -356,6 +358,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             ResourceId,
             Permission,
             AddRole,
+
+            MLTrainRequest,            
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
