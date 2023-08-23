@@ -22,7 +22,7 @@ impl CacheTtlSeconds {
         Self(MAX_CACHE_TTL_SECONDS)
     }
 
-    pub fn seconds(&self) -> u32 {
+    pub fn seconds(self) -> u32 {
         self.0
     }
 }

@@ -626,7 +626,6 @@ pub enum OgrSourceDatasetTimeType {
         start_format: OgrSourceTimeFormat,
         duration: OgrSourceDurationSpec,
     },
-    #[serde(rename = "start+end")]
     #[serde(rename_all = "camelCase")]
     StartEnd {
         start_field: String,
@@ -634,7 +633,6 @@ pub enum OgrSourceDatasetTimeType {
         end_field: String,
         end_format: OgrSourceTimeFormat,
     },
-    #[serde(rename = "start+duration")]
     #[serde(rename_all = "camelCase")]
     StartDuration {
         start_field: String,

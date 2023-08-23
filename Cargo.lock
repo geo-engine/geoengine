@@ -5905,9 +5905,8 @@ checksum = "e8db7427f936968176eaa7cdf81b7f98b980b18495ec28f1b5791ac3bfe3eea9"
 
 [[package]]
 name = "utoipa"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "520434cac5c98120177d5cc15be032703f6dca7d5ef82e725c798113b375000a"
+version = "3.4.4"
+source = "git+https://github.com/1lutz/utoipa.git#d5a379287247215ab432b3d351d08d52a8345bf5"
 dependencies = [
  "indexmap 2.0.0",
  "serde",
@@ -5917,9 +5916,8 @@ dependencies = [
 
 [[package]]
 name = "utoipa-gen"
-version = "3.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e22e88a487b6e0374533871b79b1f5ded05671bd0936bd547eb42f82fb9060d"
+version = "3.4.5"
+source = "git+https://github.com/1lutz/utoipa.git#d5a379287247215ab432b3d351d08d52a8345bf5"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -5931,9 +5929,8 @@ dependencies = [
 
 [[package]]
 name = "utoipa-swagger-ui"
-version = "3.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4602d7100d3cfd8a086f30494e68532402ab662fa366c9d201d677e33cee138d"
+version = "3.1.5"
+source = "git+https://github.com/1lutz/utoipa.git#d5a379287247215ab432b3d351d08d52a8345bf5"
 dependencies = [
  "actix-web",
  "mime_guess",
