@@ -517,7 +517,7 @@ where
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
-            .prepare("SELECT ml_model_id, ml_model_content FROM ml_models WHERE ml_model_id = $1")
+            .prepare("SELECT id, content FROM ml_models WHERE id = $1")
             .await?;
 
         let row = conn.query_opt(&stmt, &[&model_id]).await?;
@@ -525,8 +525,8 @@ where
         // Handle the result of the query
         match row {
             Some(row) => Ok(MlModel {
-                model_id: row.get(0),
-                model_content: row.get(1),
+                id: row.get(0),
+                content: row.get(1),
             }),
             None => Err(
                 error::Error::MachineLearningError { source:
@@ -556,15 +556,14 @@ where
             .prepare(
                 "
                 INSERT INTO ml_models (
-                    ml_model_id,
-                    ml_model_content
+                    id,
+                    content
                 )
                 VALUES ($1, $2);",
             )
             .await?;
 
-        tx.execute(&stmt, &[&model.model_id, &model.model_content])
-            .await?;
+        tx.execute(&stmt, &[&model.id, &model.content]).await?;
 
         tx.commit().await?;
 
@@ -586,7 +585,7 @@ where
     ) -> Result<String, geoengine_operators::error::Error> {
         self.load_ml_model(model_id)
             .await
-            .map(|model| model.model_content)
+            .map(|model| model.content)
             .map_err(|_| geoengine_operators::error::Error::MachineLearningModelNotFound)
     }
 }
@@ -3665,10 +3664,10 @@ let ctx = app_ctx.session_context(session);
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_persists_ml_models() {
         with_pro_temp_context(|app_ctx, _| async move {
-            let model_id = MlModelId::from_str("3db69b02-6d7a-4112-a355-e3745be18a80").unwrap();
+            let id = MlModelId::from_str("3db69b02-6d7a-4112-a355-e3745be18a80").unwrap();
             let input = MlModel {
-                model_id,
-                model_content: "model content".to_owned(),
+                id,
+                content: "model content".to_owned(),
             };
 
             let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -3677,7 +3676,7 @@ let ctx = app_ctx.session_context(session);
 
             db.store_ml_model(input.clone()).await.unwrap();
 
-            let model = db.load_ml_model(model_id).await.unwrap();
+            let model = db.load_ml_model(id).await.unwrap();
 
             assert_eq!(model, input);
         })

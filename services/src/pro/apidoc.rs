@@ -359,7 +359,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             Permission,
             AddRole,
 
-            MLTrainRequest,            
+            MLTrainRequest,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

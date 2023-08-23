@@ -8,11 +8,9 @@ use crate::error::Result;
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MlModel {
-    pub model_id: MlModelId,
-    pub model_content: String,
+    pub id: MlModelId,
+    pub content: String,
 }
-
-impl MlModel {}
 
 /// Handling of ml models provided by geo engine
 #[async_trait]

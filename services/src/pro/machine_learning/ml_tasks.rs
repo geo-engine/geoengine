@@ -165,8 +165,8 @@ where
         )?;
 
         let ml_model = MlModel {
-            model_id: self.model_id,
-            model_content: content_of_trained_model.to_string(),
+            id: self.model_id,
+            content: content_of_trained_model.to_string(),
         };
 
         let db = self.ctx.db();

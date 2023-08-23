@@ -163,8 +163,7 @@ INNER JOIN permissions AS p ON (
 );
 
 
-CREATE TABLE
-ml_models (
-    ml_model_id UUID PRIMARY KEY,
-    ml_model_content TEXT NOT NULL
+CREATE TABLE ml_models (
+    id UUID PRIMARY KEY,
+    content TEXT NOT NULL
 );
