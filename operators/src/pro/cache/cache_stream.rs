@@ -10,20 +10,20 @@ type DecompressorFutureType<X> = tokio::task::JoinHandle<std::result::Result<X, 
 
 /// Our own tile stream that "owns" the data (more precisely a reference to the data)
 
-#[pin_project(project = CacheTileStreamProjection)]
-pub struct CacheTileStream<I, O, Q> {
-    inner: CacheTileStreamInner<I, Q>,
+#[pin_project(project = CacheStreamProjection)]
+pub struct CacheStream<I, O, Q> {
+    inner: CacheStreamInner<I, Q>,
     #[pin]
     state: Option<DecompressorFutureType<O>>,
 }
 
-pub struct CacheTileStreamInner<I, Q> {
+pub struct CacheStreamInner<I, Q> {
     data: Arc<Vec<I>>,
     query: Q,
     idx: usize,
 }
 
-impl<I, Q> CacheTileStreamInner<I, Q>
+impl<I, Q> CacheStreamInner<I, Q>
 where
     I: CacheBackendElementExt<Query = Q>,
 {
@@ -64,14 +64,14 @@ where
     }
 }
 
-impl<I, O, Q> CacheTileStream<I, O, Q>
+impl<I, O, Q> CacheStream<I, O, Q>
 where
     O: CacheElement<Query = Q, StoredCacheElement = I> + 'static,
     I: CacheBackendElementExt<Query = Q> + 'static,
 {
     pub fn new(data: Arc<Vec<I>>, query: Q) -> Self {
         Self {
-            inner: CacheTileStreamInner::new(data, query),
+            inner: CacheStreamInner::new(data, query),
             state: None,
         }
     }
@@ -99,7 +99,7 @@ where
     }
 }
 
-impl<I, O, Q> Stream for CacheTileStream<I, O, Q>
+impl<I, O, Q> Stream for CacheStream<I, O, Q>
 where
     O: CacheElement<StoredCacheElement = I, Query = Q> + 'static,
     I: CacheBackendElementExt<Query = Q> + 'static,
@@ -114,7 +114,7 @@ where
             return std::task::Poll::Ready(None);
         }
 
-        let CacheTileStreamProjection { inner, mut state } = self.as_mut().project();
+        let CacheStreamProjection { inner, mut state } = self.as_mut().project();
 
         if state.is_none() {
             if let Some(next) = inner.next_idx() {
@@ -143,7 +143,7 @@ where
     }
 }
 
-impl<I, O, Q> FusedStream for CacheTileStream<I, O, Q>
+impl<I, O, Q> FusedStream for CacheStream<I, O, Q>
 where
     O: CacheElement<Query = Q, StoredCacheElement = I> + 'static,
     I: CacheBackendElementExt<Query = Q> + 'static,

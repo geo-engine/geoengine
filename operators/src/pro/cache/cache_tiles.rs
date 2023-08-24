@@ -1,4 +1,4 @@
-use super::cache_stream::CacheTileStream;
+use super::cache_stream::CacheStream;
 use super::error::CacheError;
 use super::shared_cache::{
     CacheBackendElement, CacheBackendElementExt, CacheElement, CacheElementsContainer,
@@ -510,7 +510,7 @@ where
     type StoredCacheElement = CompressedRasterTile2D<T>;
     type Query = RasterQueryRectangle;
     type ResultStream =
-        CacheTileStream<CompressedRasterTile2D<T>, RasterTile2D<T>, RasterQueryRectangle>;
+        CacheStream<CompressedRasterTile2D<T>, RasterTile2D<T>, RasterQueryRectangle>;
 
     fn into_stored_element(self) -> Self::StoredCacheElement {
         CompressedRasterTile2D::compress_tile(self)
@@ -524,7 +524,7 @@ where
         stored_data: Arc<Vec<Self::StoredCacheElement>>,
         query: Self::Query,
     ) -> Self::ResultStream {
-        CacheTileStream::new(stored_data, query)
+        CacheStream::new(stored_data, query)
     }
 }
 

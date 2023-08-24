@@ -1,4 +1,4 @@
-use super::cache_stream::CacheTileStream;
+use super::cache_stream::CacheStream;
 use super::error::CacheError;
 use super::shared_cache::{
     CacheBackendElement, CacheBackendElementExt, CacheElement, CacheElementsContainer,
@@ -331,7 +331,7 @@ where
     type StoredCacheElement = CompressedFeatureCollection<G>;
     type Query = VectorQueryRectangle;
     type ResultStream =
-        CacheTileStream<CompressedFeatureCollection<G>, FeatureCollection<G>, VectorQueryRectangle>;
+        CacheStream<CompressedFeatureCollection<G>, FeatureCollection<G>, VectorQueryRectangle>;
 
     fn into_stored_element(self) -> Self::StoredCacheElement {
         CompressedFeatureCollection::<G>::from_collection(self)
@@ -346,7 +346,7 @@ where
         stored_data: Arc<Vec<Self::StoredCacheElement>>,
         query: Self::Query,
     ) -> Self::ResultStream {
-        CacheTileStream::new(stored_data, query)
+        CacheStream::new(stored_data, query)
     }
 }
 
