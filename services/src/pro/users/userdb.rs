@@ -1,6 +1,6 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
-use crate::pro::permissions::RoleId;
+use crate::pro::permissions::{RoleDescription, RoleId};
 use crate::pro::users::oidc::ExternalUserClaims;
 use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
@@ -163,4 +163,7 @@ pub trait RoleDb {
 
     /// Remove an existing role
     async fn revoke_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()>;
+
+    /// Get role descriptions for user
+    async fn get_role_descriptions(&self, user_id: &UserId) -> Result<Vec<RoleDescription>>;
 }
