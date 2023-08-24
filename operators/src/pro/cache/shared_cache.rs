@@ -1,5 +1,5 @@
 use super::{
-    cache_chunks::{CacheElementHitCheck, CachedFeatures, LandingZoneQueryFeatures},
+    cache_chunks::{CachedFeatures, CompressedFeatureCollection, LandingZoneQueryFeatures},
     cache_tiles::{CachedTiles, CompressedRasterTile2D, LandingZoneQueryTiles},
     error::CacheError,
     util::CacheSize,
@@ -9,7 +9,6 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::Stream;
 use geoengine_datatypes::{
-    collections::FeatureCollection,
     identifier,
     primitives::{CacheHint, Geometry, RasterQueryRectangle, VectorQueryRectangle},
     raster::Pixel,
@@ -563,20 +562,19 @@ where
     }
 }
 
-impl<T> Cache<FeatureCollection<T>> for CacheBackend
+impl<T> Cache<CompressedFeatureCollection<T>> for CacheBackend
 where
     T: Geometry + ArrowTyped,
-    FeatureCollection<T>: CacheElementHitCheck
-        + CacheBackendElementExt<
-            Query = VectorQueryRectangle,
-            LandingZoneContainer = LandingZoneQueryFeatures,
-            CacheContainer = CachedFeatures,
-        >,
+    CompressedFeatureCollection<T>: CacheBackendElementExt<
+        Query = VectorQueryRectangle,
+        LandingZoneContainer = LandingZoneQueryFeatures,
+        CacheContainer = CachedFeatures,
+    >,
 {
     fn operator_cache_view_mut(
         &mut self,
         key: &CanonicOperatorName,
-    ) -> Option<OperatorCacheEntryView<FeatureCollection<T>>> {
+    ) -> Option<OperatorCacheEntryView<CompressedFeatureCollection<T>>> {
         self.vector_caches
             .get_mut(key)
             .map(|op| OperatorCacheEntryView {
@@ -604,7 +602,7 @@ impl CacheView<VectorCacheQueryEntry, VectorLandingQueryEntry> for CacheBackend 
     }
 }
 
-pub trait CacheBackendElement: ByteSize + Send + ByteSize
+pub trait CacheBackendElement: ByteSize + Send + ByteSize + Sync
 where
     Self: Sized,
 {
@@ -615,6 +613,8 @@ where
     fn cache_hint(&self) -> CacheHint;
 
     fn typed_canonical_operator_name(key: CanonicOperatorName) -> TypedCanonicOperatorName;
+
+    fn cache_element_hit(&self, query: &Self::Query) -> bool;
 }
 
 pub trait CacheBackendElementExt: CacheBackendElement {
@@ -888,7 +888,7 @@ impl From<VectorLandingQueryEntry> for VectorCacheQueryEntry {
     }
 }
 
-pub trait CacheElement: Sized {
+pub trait CacheElement: Sized + Send + Sync {
     type StoredCacheElement: CacheBackendElementExt<Query = Self::Query>;
     type Query: CacheQueryMatch;
     type ResultStream: Stream<Item = Result<Self, CacheError>>;

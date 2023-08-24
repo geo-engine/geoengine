@@ -1,3 +1,4 @@
+use super::cache_stream::CacheTileStream;
 use super::error::CacheError;
 use super::shared_cache::{
     CacheBackendElement, CacheBackendElementExt, CacheElement, CacheElementsContainer,
@@ -5,8 +6,6 @@ use super::shared_cache::{
     RasterLandingQueryEntry,
 };
 use crate::util::Result;
-use futures::stream::FusedStream;
-use futures::{Future, Stream};
 use geoengine_datatypes::primitives::SpatialPartitioned;
 use geoengine_datatypes::raster::{
     BaseTile, EmptyGrid, Grid, GridOrEmpty, GridShape2D, GridSize, GridSpaceToLinearSpace,
@@ -17,9 +16,8 @@ use geoengine_datatypes::{
     raster::{Pixel, RasterTile2D},
     util::ByteSize,
 };
-use pin_project::pin_project;
 use std::marker::PhantomData;
-use std::{pin::Pin, sync::Arc};
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum CachedTiles {
@@ -197,6 +195,11 @@ where
             .map_err(|_| CacheError::ElementAndQueryDoNotIntersect)?;
         Ok(())
     }
+
+    fn cache_element_hit(&self, query: &Self::Query) -> bool {
+        self.spatial_partition().intersects(&query.spatial_bounds)
+            && self.time.intersects(&query.time_interval)
+    }
 }
 
 macro_rules! impl_cache_element_subtype {
@@ -248,165 +251,6 @@ impl_cache_element_subtype!(i64, I64);
 impl_cache_element_subtype!(u64, U64);
 impl_cache_element_subtype!(f32, F32);
 impl_cache_element_subtype!(f64, F64);
-
-type DecompressorFutureType<T> =
-    tokio::task::JoinHandle<std::result::Result<RasterTile2D<T>, CacheError>>;
-
-/// Our own tile stream that "owns" the data (more precisely a reference to the data)
-
-#[pin_project(project = CacheTileStreamProjection)]
-pub struct CacheTileStream<T> {
-    inner: CacheTileStreamInner<T>,
-    #[pin]
-    state: Option<DecompressorFutureType<T>>,
-}
-
-pub struct CacheTileStreamInner<T> {
-    data: Arc<Vec<CompressedRasterTile2D<T>>>,
-    query: RasterQueryRectangle,
-    idx: usize,
-}
-
-impl<T> CacheTileStreamInner<T>
-where
-    T: Pixel,
-{
-    // TODO: we could use a iter + filter adapter here to return refs however this would require a lot of lifetime annotations
-    fn next_idx(&mut self) -> Option<usize> {
-        let query_st_bounds = self.query.spatial_bounds;
-        let query_time_bounds = self.query.time_interval;
-        for i in self.idx..self.data.len() {
-            let tile_ref = &self.data[i];
-            let tile_bbox = tile_ref.spatial_partition();
-            if tile_bbox.intersects(&query_st_bounds)
-                && tile_ref.time.intersects(&query_time_bounds)
-            {
-                self.idx = i + 1;
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    fn data_arc(&self) -> Arc<Vec<CompressedRasterTile2D<T>>> {
-        self.data.clone()
-    }
-
-    fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    fn remaining(&self) -> usize {
-        self.len() - self.idx
-    }
-
-    fn terminated(&self) -> bool {
-        self.idx >= self.len()
-    }
-
-    fn new(data: Arc<Vec<CompressedRasterTile2D<T>>>, query: RasterQueryRectangle) -> Self {
-        Self {
-            data,
-            query,
-            idx: 0,
-        }
-    }
-}
-
-impl<T> CacheTileStream<T>
-where
-    T: Pixel,
-{
-    pub fn new(data: Arc<Vec<CompressedRasterTile2D<T>>>, query: RasterQueryRectangle) -> Self {
-        Self {
-            inner: CacheTileStreamInner::new(data, query),
-            state: None,
-        }
-    }
-
-    pub fn element_count(&self) -> usize {
-        self.inner.len()
-    }
-
-    fn terminated(&self) -> bool {
-        self.state.is_none() && self.inner.terminated()
-    }
-
-    fn check_decompress_future_res(
-        tile_future_res: Result<Result<RasterTile2D<T>, CacheError>, tokio::task::JoinError>,
-    ) -> Result<RasterTile2D<T>, CacheError> {
-        match tile_future_res {
-            Ok(Ok(tile)) => Ok(tile),
-            Ok(Err(err)) => Err(err),
-            Err(source) => Err(CacheError::CouldNotRunDecompressionTask { source }),
-        }
-    }
-
-    fn create_decompression_future(
-        data: Arc<Vec<CompressedRasterTile2D<T>>>,
-        idx: usize,
-    ) -> DecompressorFutureType<T>
-    where
-        T: Pixel,
-        CompressedRasterTile2D<T>: CacheBackendElementExt<Query = RasterQueryRectangle>,
-    {
-        crate::util::spawn_blocking(move || RasterTile2D::<T>::from_stored_element_ref(&data[idx]))
-    }
-}
-
-impl<T: Pixel> Stream for CacheTileStream<T>
-where
-    RasterTile2D<T>: CacheElement<StoredCacheElement = CompressedRasterTile2D<T>>,
-    CompressedRasterTile2D<T>: CacheBackendElementExt<Query = RasterQueryRectangle>,
-{
-    type Item = Result<RasterTile2D<T>, CacheError>;
-
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        if self.terminated() {
-            return std::task::Poll::Ready(None);
-        }
-
-        let CacheTileStreamProjection { inner, mut state } = self.as_mut().project();
-
-        if state.is_none() {
-            if let Some(next) = inner.next_idx() {
-                let future_data = inner.data_arc();
-                let future = Self::create_decompression_future(future_data, next);
-                state.set(Some(future));
-            }
-        }
-
-        if let Some(pin_state) = state.as_mut().as_pin_mut() {
-            let res = futures::ready!(pin_state.poll(cx));
-            state.set(None);
-            let tile = Self::check_decompress_future_res(res);
-            return std::task::Poll::Ready(Some(tile));
-        }
-
-        std::task::Poll::Ready(None)
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        if self.terminated() {
-            return (0, Some(0));
-        }
-        // There must be a cache hit to produce this stream. So there must be at least one tile inside the query.
-        (1, Some(self.inner.remaining()))
-    }
-}
-
-impl<T> FusedStream for CacheTileStream<T>
-where
-    T: Pixel,
-    CompressedRasterTile2D<T>: CacheBackendElementExt<Query = RasterQueryRectangle>,
-{
-    fn is_terminated(&self) -> bool {
-        self.terminated()
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct CompressedMaskedGrid<D, T, C> {
@@ -665,7 +509,8 @@ where
 {
     type StoredCacheElement = CompressedRasterTile2D<T>;
     type Query = RasterQueryRectangle;
-    type ResultStream = CacheTileStream<T>;
+    type ResultStream =
+        CacheTileStream<CompressedRasterTile2D<T>, RasterTile2D<T>, RasterQueryRectangle>;
 
     fn into_stored_element(self) -> Self::StoredCacheElement {
         CompressedRasterTile2D::compress_tile(self)
