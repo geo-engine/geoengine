@@ -6,11 +6,6 @@ edition = "2021"
 build = "build.rs"
 
 [features]
-nature40 = ["xml"]
-xml = ["quick-xml"]
-odm = ["pro"]
-nfdi = ["aruna-rust-api", "pro"]
-ebv = []
 # This compiles Geo Engine Pro
 pro = ["geoengine-operators/pro", "geoengine-datatypes/pro"]
 xgboost = ["pro", "geoengine-operators/xgboost"]
@@ -25,7 +20,7 @@ actix-rt = "2.8"
 actix-web = "4.3"
 actix-web-actors = "4.2"
 actix-web-httpauth = "0.8"
-aruna-rust-api = { version = "1.0.0-rc.6", optional = true }
+aruna-rust-api = { version = "1.0.0-rc.6" }
 async-trait = "0.1"
 base64 = "0.21"
 bb8-postgres = { version = "0.8", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"] }
@@ -40,7 +35,7 @@ futures = "0.3"
 futures-util = "0.3"
 gdal = "0.15.0"
 gdal-sys = "0.9"
-geo = "0.25"
+geo = "0.26"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
 geojson = { version = "0.24", features = ["geo-types"] }
@@ -50,8 +45,8 @@ mime = "0.3"
 oauth2 = "4.2.3"
 openidconnect = "3.1"
 # `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-jaeger`
-opentelemetry = { version = "0.19", default-features = false, features = ["trace"] }
-opentelemetry-jaeger = "0.18"
+opentelemetry = { version = "0.20", default-features = false, features = ["trace"] }
+opentelemetry-jaeger = "0.19"
 ordered-float = { version = "3.0", features = ["serde"] }
 num-traits = "0.2"
 paste = "1.0"
@@ -60,7 +55,6 @@ postgres-protocol = "0.6"
 proj = "0.22"
 proj-sys = "0.19"
 pwhash = "1.0"
-quick-xml = { version = "0.28", optional = true }
 rand = "0.8"
 rayon = "1.5"
 regex = "1.5"
@@ -71,7 +65,7 @@ serde_urlencoded = "0.7"
 serde_with = "3.0"
 snafu = "0.7"
 stream-cancel = "0.8"
-strum = { version = "0.24", features = ["derive"] }
+strum = { version = "0.25", features = ["derive"] }
 time = "0.3"
 tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
 tokio-postgres = { version = "0.7" }
@@ -79,7 +73,7 @@ tokio-util = { version = "0.7", features = ["codec"] }
 tonic = { version = "0.9", features = ["tls", "tls-roots"] }                                   # must be compatible with `aruna-rust-api`
 tracing = "0.1"
 tracing-actix-web = "0.7"
-tracing-opentelemetry = "0.19"
+tracing-opentelemetry = "0.20"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi", "tracing-log"] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
