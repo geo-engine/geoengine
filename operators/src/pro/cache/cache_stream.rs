@@ -152,3 +152,111 @@ where
         self.terminated()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, sync::Arc};
+
+    use geoengine_datatypes::{
+        collections::MultiPointCollection,
+        primitives::{
+            BoundingBox2D, CacheHint, FeatureData, MultiPoint, RasterQueryRectangle,
+            SpatialPartition2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
+        },
+        raster::{GeoTransform, Grid2D, GridIdx2D, RasterTile2D},
+    };
+
+    use crate::pro::cache::{
+        cache_chunks::CompressedFeatureCollection,
+        cache_stream::CacheStreamInner,
+        cache_tiles::{CompressedRasterTile2D, CompressedRasterTileExt},
+    };
+
+    fn create_test_raster_data() -> Vec<CompressedRasterTile2D<u8>> {
+        let mut data = Vec::new();
+        for i in 0..10 {
+            let tile = RasterTile2D::<u8>::new(
+                TimeInterval::new_unchecked(0, 10),
+                GridIdx2D::new([i, i].into()),
+                GeoTransform::new([0., 0.].into(), 0.5, -0.5),
+                geoengine_datatypes::raster::GridOrEmpty::from(
+                    Grid2D::new([2, 2].into(), vec![i as u8; 4]).unwrap(),
+                ),
+                CacheHint::default(),
+            );
+            let compressed_tile = CompressedRasterTile2D::compress_tile(tile);
+            data.push(compressed_tile);
+        }
+        data
+    }
+
+    fn create_test_vecor_data() -> Vec<CompressedFeatureCollection<MultiPoint>> {
+        let mut data = Vec::new();
+
+        for x in 0..9 {
+            let mut points = Vec::new();
+            let mut strngs = Vec::new();
+            for i in x..x + 2 {
+                let p = MultiPoint::new(vec![(i as f64, i as f64).into()].into()).unwrap();
+                points.push(p);
+                strngs.push(format!("test {}", i));
+            }
+
+            let collection = MultiPointCollection::from_data(
+                points,
+                vec![TimeInterval::default(); 2],
+                HashMap::<String, FeatureData>::from([(
+                    "strings".to_owned(),
+                    FeatureData::Text(strngs),
+                )]),
+                CacheHint::default(),
+            )
+            .unwrap();
+
+            let compressed_collection =
+                CompressedFeatureCollection::from_collection(collection).unwrap();
+            data.push(compressed_collection);
+        }
+        data
+    }
+
+    #[test]
+    fn test_cache_stream_inner_raster() {
+        let data = Arc::new(create_test_raster_data());
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((2., -2.).into(), (8., -8.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 10),
+            spatial_resolution: SpatialResolution::zero_point_five(),
+        };
+
+        let mut res = Vec::new();
+        let mut inner = CacheStreamInner::new(data, query);
+
+        // next_idx should return the idx of tiles that hit the query
+        while let Some(n) = inner.next_idx() {
+            res.push(n);
+        }
+        assert_eq!(res.len(), 6);
+        assert!(res.iter().all(|&n| n >= 2 && n <= 8));
+    }
+
+    #[test]
+    fn test_cache_stream_inner_vector() {
+        let data = Arc::new(create_test_vecor_data());
+        let query = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new_unchecked((2.1, 2.1).into(), (7.9, 7.9).into()),
+            time_interval: TimeInterval::new_unchecked(0, 10),
+            spatial_resolution: SpatialResolution::zero_point_five(),
+        };
+
+        let mut res = Vec::new();
+        let mut inner = CacheStreamInner::new(data, query);
+
+        // next_idx should return the idx of tiles that hit the query
+        while let Some(n) = inner.next_idx() {
+            res.push(n);
+        }
+        assert_eq!(res.len(), 6);
+        assert!(res.iter().all(|&n| n >= 2 && n <= 8));
+    }
+}

@@ -177,14 +177,14 @@ where
 
     fn cache_element_hit(&self, query: &Self::Query) -> bool {
         let temporal_hit = if let Some(time_bounds) = self.time_interval {
-            time_bounds == query.time_interval || time_bounds.contains(&query.time_interval)
+            time_bounds == query.time_interval || time_bounds.intersects(&query.time_interval)
         } else {
             false // TODO: should we return true here?
         };
 
         let spatial_hit = if let Some(spatial_bounds) = self.spatial_bounds {
             spatial_bounds == query.spatial_bounds
-                || spatial_bounds.contains_bbox(&query.spatial_bounds)
+                || spatial_bounds.intersects_bbox(&query.spatial_bounds)
         } else {
             !G::IS_GEOMETRY // return true if the geometry is not spatial
         };
@@ -483,5 +483,175 @@ impl ChunkCompression for Lz4FlexCompression {
             .map_err(|source| CacheError::CouldNotDecompressElement { source })?;
         let array = Self::bytes_to_array(&bytes)?;
         Ok(array)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::pro::cache::{
+        cache_chunks::{CachedFeatures, LandingZoneQueryFeatures},
+        shared_cache::{
+            CacheBackendElement, CacheBackendElementExt, CacheQueryMatch, VectorCacheQueryEntry,
+            VectorLandingQueryEntry,
+        },
+    };
+
+    use super::CompressedFeatureCollection;
+    use geoengine_datatypes::{
+        collections::MultiPointCollection,
+        primitives::{
+            BoundingBox2D, CacheHint, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+            VectorQueryRectangle,
+        },
+    };
+    use std::{collections::HashMap, sync::Arc};
+
+    fn create_test_collection() -> Vec<CompressedFeatureCollection<MultiPoint>> {
+        let mut data = Vec::new();
+
+        for x in 0..9 {
+            let mut points = Vec::new();
+            let mut strngs = Vec::new();
+            for i in x..x + 2 {
+                let p = MultiPoint::new(vec![(i as f64, i as f64).into()].into()).unwrap();
+                points.push(p);
+                strngs.push(format!("test {}", i));
+            }
+
+            let collection = MultiPointCollection::from_data(
+                points,
+                vec![TimeInterval::default(); 2],
+                HashMap::<String, FeatureData>::from([(
+                    "strings".to_owned(),
+                    FeatureData::Text(strngs),
+                )]),
+                CacheHint::default(),
+            )
+            .unwrap();
+
+            let compressed_collection =
+                CompressedFeatureCollection::from_collection(collection).unwrap();
+            data.push(compressed_collection);
+        }
+        data
+    }
+
+    #[test]
+    fn create_empty_landing_zone() {
+        let landing_zone = CompressedFeatureCollection::<MultiPoint>::create_empty_landing_zone();
+        assert!(landing_zone.is_empty());
+        if let LandingZoneQueryFeatures::MultiPoint(v) = landing_zone {
+            assert!(v.is_empty());
+        } else {
+            panic!("wrong type");
+        }
+    }
+
+    #[test]
+    fn move_element_to_landing_zone() {
+        let mut landing_zone =
+            CompressedFeatureCollection::<MultiPoint>::create_empty_landing_zone();
+        let col = create_test_collection();
+        for c in col {
+            c.move_element_into_landing_zone(&mut landing_zone).unwrap();
+        }
+        if let LandingZoneQueryFeatures::MultiPoint(v) = landing_zone {
+            assert_eq!(v.len(), 9);
+        } else {
+            panic!("wrong type");
+        }
+    }
+
+    #[test]
+    fn landing_zone_to_cache_entry() {
+        let cols = create_test_collection();
+        let query = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+        let mut lq = VectorLandingQueryEntry::create_empty::<CompressedFeatureCollection<MultiPoint>>(
+            query.clone(),
+        );
+        for c in cols {
+            c.move_element_into_landing_zone(lq.elements_mut()).unwrap();
+        }
+        let mut cache_entry =
+            CompressedFeatureCollection::<MultiPoint>::landing_zone_to_cache_entry(lq);
+        assert_eq!(cache_entry.query(), &query);
+        assert_eq!(cache_entry.elements_mut().is_expired(), true);
+    }
+
+    #[test]
+    fn cache_element_hit() {
+        let cols = create_test_collection();
+
+        // elemtes are all fully contained
+        let query = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new_unchecked((0., 0.).into(), (12., 12.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        for c in &cols {
+            assert_eq!(c.cache_element_hit(&query), true);
+        }
+
+        // first element is not contained
+        let query = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert_eq!(cols[0].cache_element_hit(&query), false);
+        for c in &cols[1..] {
+            assert_eq!(c.cache_element_hit(&query), true);
+        }
+
+        // all elements are not contained
+        let query = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new_unchecked((13., 13.).into(), (26., 26.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        for col in &cols {
+            assert_eq!(col.cache_element_hit(&query), false);
+        }
+    }
+
+    #[test]
+    fn cache_entry_matches() {
+        let cols = create_test_collection();
+
+        let cache_entry_bounds = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new_unchecked((1., 1.).into(), (11., 11.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let cache_query_entry = VectorCacheQueryEntry {
+            query: cache_entry_bounds.clone(),
+            elements: CachedFeatures::MultiPoint(Arc::new(cols)),
+        };
+
+        // query is equal
+        let query = cache_entry_bounds.clone();
+        assert!(cache_query_entry.query().is_match(&query));
+
+        // query is fully contained
+        let query2 = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert!(cache_query_entry.query().is_match(&query2));
+
+        // query is exceeds cached bounds
+        let query3 = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new_unchecked((0., 0.).into(), (8., 8.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert!(!cache_query_entry.query().is_match(&query3));
     }
 }

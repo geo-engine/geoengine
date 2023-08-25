@@ -171,6 +171,15 @@ where
     }
 }
 
+impl From<RasterLandingQueryEntry> for RasterCacheQueryEntry {
+    fn from(value: RasterLandingQueryEntry) -> Self {
+        Self {
+            query: value.query,
+            elements: value.elements.into(),
+        }
+    }
+}
+
 impl<T> CacheBackendElement for CompressedRasterTile2D<T>
 where
     T: Pixel,
@@ -583,5 +592,160 @@ impl TileCompression for Lz4FlexCompression {
         let decompressed_data_as_t_slice =
             Self::cast_u8_slice_to_data_slice(decompressed_data.as_slice());
         Ok(decompressed_data_as_t_slice.to_vec())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use geoengine_datatypes::{
+        primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution},
+        raster::GeoTransform,
+        util::test::TestDefault,
+    };
+
+    use crate::pro::cache::{
+        cache_tiles::CachedTiles,
+        shared_cache::{
+            CacheBackendElement, CacheBackendElementExt, CacheQueryMatch, RasterCacheQueryEntry,
+            RasterLandingQueryEntry,
+        },
+    };
+
+    use super::{
+        CompressedGridOrEmpty, CompressedMaskedGrid, CompressedRasterTile2D, LandingZoneQueryTiles,
+    };
+
+    fn create_test_tile() -> CompressedRasterTile2D<u8> {
+        CompressedRasterTile2D {
+            grid_array: CompressedGridOrEmpty::Compressed(CompressedMaskedGrid::<_, u8, _> {
+                shape: [2, 2].into(),
+                type_marker: Default::default(),
+                data: vec![16; 4],
+                mask: vec![1; 4],
+                compression_marker: Default::default(),
+            }),
+            time: Default::default(),
+            cache_hint: Default::default(),
+            global_geo_transform: GeoTransform::test_default(),
+            properties: Default::default(),
+            tile_position: [0, 0].into(),
+        }
+    }
+
+    #[test]
+    fn create_empty_landing_zone() {
+        let landing_zone = super::CompressedRasterTile2D::<u8>::create_empty_landing_zone();
+        assert!(landing_zone.is_empty());
+        if let super::LandingZoneQueryTiles::U8(v) = landing_zone {
+            assert!(v.is_empty());
+        } else {
+            panic!("wrong type");
+        }
+    }
+
+    #[test]
+    fn move_element_to_landing_zone() {
+        let mut landing_zone = CompressedRasterTile2D::<u8>::create_empty_landing_zone();
+        let tile = create_test_tile();
+        tile.move_element_into_landing_zone(&mut landing_zone)
+            .unwrap();
+        if let LandingZoneQueryTiles::U8(v) = landing_zone {
+            assert_eq!(v.len(), 1);
+        } else {
+            panic!("wrong type");
+        }
+    }
+
+    #[test]
+    fn landing_zone_to_cache_entry() {
+        let tile = create_test_tile();
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+        let mut lq =
+            RasterLandingQueryEntry::create_empty::<CompressedRasterTile2D<u8>>(query.clone());
+        tile.move_element_into_landing_zone(&mut lq.elements_mut())
+            .unwrap();
+        let mut cache_entry = CompressedRasterTile2D::<u8>::landing_zone_to_cache_entry(lq);
+        assert_eq!(cache_entry.query(), &query);
+        assert_eq!(cache_entry.elements_mut().is_expired(), true);
+    }
+
+    #[test]
+    fn cache_element_hit() {
+        let tile = create_test_tile();
+
+        // tile is fully contained
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert_eq!(tile.cache_element_hit(&query), true);
+
+        // tile is partially contained
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (0.5, -0.5).into(),
+                (1.5, -1.5).into(),
+            ),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert_eq!(tile.cache_element_hit(&query), true);
+
+        // tile is not contained
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (10., -10.).into(),
+                (11., -11.).into(),
+            ),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert_eq!(tile.cache_element_hit(&query), false);
+    }
+
+    #[test]
+    fn cache_entry_matches() {
+        let cache_entry_bounds = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let cache_query_entry = RasterCacheQueryEntry {
+            query: cache_entry_bounds.clone(),
+            elements: CachedTiles::U8(Arc::new(Vec::new())),
+        };
+
+        // query is equal
+        let query = cache_entry_bounds.clone();
+        assert!(cache_query_entry.query().is_match(&query));
+
+        // query is fully contained
+        let query2 = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (0.1, -0.1).into(),
+                (0.9, -0.9).into(),
+            ),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert!(cache_query_entry.query().is_match(&query2));
+
+        // query is exceeds cached bounds
+        let query3 = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (-0.1, 0.1).into(),
+                (1.1, -1.1).into(),
+            ),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert!(!cache_query_entry.query().is_match(&query3));
     }
 }

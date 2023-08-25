@@ -779,8 +779,8 @@ impl ByteSize for CacheEntryId {}
 /// Holds all the elements for a given query and is able to answer queries that are fully contained
 #[derive(Debug, Hash)]
 pub struct CacheQueryEntry<Query, Elements> {
-    query: Query,
-    elements: Elements,
+    pub query: Query,
+    pub elements: Elements,
 }
 type RasterOperatorCacheEntry = OperatorCacheEntry<RasterCacheQueryEntry, RasterLandingQueryEntry>;
 pub type RasterCacheQueryEntry = CacheQueryEntry<RasterQueryRectangle, CachedTiles>;
@@ -858,25 +858,6 @@ pub trait CacheElementsContainerInfos<Query> {
 
 pub trait CacheElementsContainer<Query, E>: CacheElementsContainerInfos<Query> {
     fn results_arc(&self) -> Option<Arc<Vec<E>>>;
-}
-
-impl CacheQueryEntry<RasterQueryRectangle, CachedTiles> {
-    /// Return true if the query can be answered in full by this cache entry
-    /// For this, the bbox and time has to be fully contained, and the spatial resolution has to match
-    pub fn matches(&self, query: &RasterQueryRectangle) -> bool {
-        self.query.spatial_bounds.contains(&query.spatial_bounds)
-            && self.query.time_interval.contains(&query.time_interval)
-            && self.query.spatial_resolution == query.spatial_resolution
-    }
-}
-
-impl From<RasterLandingQueryEntry> for RasterCacheQueryEntry {
-    fn from(value: RasterLandingQueryEntry) -> Self {
-        Self {
-            query: value.query,
-            elements: value.elements.into(),
-        }
-    }
 }
 
 impl From<VectorLandingQueryEntry> for VectorCacheQueryEntry {
