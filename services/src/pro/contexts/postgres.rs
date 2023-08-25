@@ -3011,6 +3011,7 @@ let ctx = app_ctx.session_context(session);
         .await;
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_handles_user_roles() {
         with_pro_temp_context(|app_ctx, _| async move {
@@ -3090,7 +3091,7 @@ let ctx = app_ctx.session_context(session);
             //user can query their role descriptions (now an additional foo role)
             let expected_foo_role_description = RoleDescription {
                 role: Role {
-                    id: role_id.clone(),
+                    id: role_id,
                     name: "foo".to_string(),
                 },
                 individual: false,

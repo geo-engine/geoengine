@@ -1957,7 +1957,7 @@ mod tests {
             };
             let expected_foo_role_description = RoleDescription {
                 role: Role {
-                    id: role_id.clone(),
+                    id: role_id,
                     name: "foo".to_string(),
                 },
                 individual: false,
