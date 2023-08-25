@@ -1,3 +1,4 @@
+use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 use crate::api::model::datatypes::DatasetName;
 use crate::contexts::{ApplicationContext, PostgresContext, QueryContextImpl, SessionId};
 use crate::contexts::{GeoEngineDb, SessionContext};
@@ -9,13 +10,13 @@ use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::add_datasets_from_directory;
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
+    add_pro_providers_from_directory,
 };
 use crate::pro::permissions::Role;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::{OidcRequestDb, UserAuth, UserSession};
 use crate::pro::util::config::{Cache, Oidc, Quota};
-
 use crate::tasks::SimpleTaskManagerContext;
 use crate::util::config::get_config_element;
 use async_trait::async_trait;
@@ -38,8 +39,6 @@ use rayon::ThreadPool;
 use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
 use std::sync::Arc;
-
-use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 
 // TODO: do not report postgres error details to user
 
@@ -210,12 +209,9 @@ where
 
             add_datasets_from_directory(&mut db, dataset_defs_path).await;
 
-            add_providers_from_directory(
-                &mut db,
-                provider_defs_path.clone(),
-                &[provider_defs_path.join("pro")],
-            )
-            .await;
+            add_providers_from_directory(&mut db, provider_defs_path.clone()).await;
+
+            add_pro_providers_from_directory(&mut db, provider_defs_path.join("pro")).await;
         }
 
         Ok(app_ctx)
@@ -1298,7 +1294,7 @@ let ctx = app_ctx.session_context(session);
                 data: [("myData".to_owned(), meta_data)].into_iter().collect(),
             };
 
-            db.add_layer_provider(Box::new(provider)).await.unwrap();
+            db.add_layer_provider(provider.into()).await.unwrap();
 
             let providers = db
                 .list_layer_providers(LayerProviderListingOptions {

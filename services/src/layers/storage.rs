@@ -1,4 +1,4 @@
-use super::external::{DataProvider, DataProviderDefinition};
+use super::external::{DataProvider, TypedDataProviderDefinition};
 use super::layer::{AddLayer, AddLayerCollection};
 use super::listing::LayerCollectionId;
 use crate::api::model::datatypes::{DataProviderId, LayerId};
@@ -107,7 +107,7 @@ pub struct LayerProviderListingOptions {
 pub trait LayerProviderDb: Send + Sync + 'static {
     async fn add_layer_provider(
         &self,
-        provider: Box<dyn DataProviderDefinition>,
+        provider: TypedDataProviderDefinition,
     ) -> Result<DataProviderId>;
 
     async fn list_layer_providers(

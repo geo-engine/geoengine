@@ -59,7 +59,7 @@ type Result<T, E = ArunaProviderError> = std::result::Result<T, E>;
 
 const URL_REPLACEMENT: &str = "%URL%";
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ArunaDataProviderDefinition {
     id: DataProviderId,
@@ -72,7 +72,6 @@ pub struct ArunaDataProviderDefinition {
     cache_ttl: CacheTtlSeconds,
 }
 
-#[typetag::serde]
 #[async_trait::async_trait]
 impl DataProviderDefinition for ArunaDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {

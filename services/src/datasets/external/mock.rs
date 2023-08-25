@@ -21,7 +21,7 @@ use geoengine_operators::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MockExternalLayerProviderDefinition {
     pub id: DataProviderId,
@@ -29,7 +29,7 @@ pub struct MockExternalLayerProviderDefinition {
     pub data: HashMap<String, MetaDataDefinition>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MockCollection {
     pub id: LayerCollectionId,
@@ -39,7 +39,7 @@ pub struct MockCollection {
     pub layers: Vec<MockLayer>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MockLayer {
     pub id: LayerId,
@@ -52,7 +52,6 @@ pub struct MockLayer {
     pub metadata: HashMap<String, String>,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for MockExternalLayerProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {

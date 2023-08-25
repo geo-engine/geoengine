@@ -39,7 +39,7 @@ use crate::workflows::workflow::Workflow;
 pub const GBIF_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x1c01_dbb9_e3ab_f9a2_06f5_228b_a4b6_bf7a);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GbifDataProviderDefinition {
     name: String,
@@ -48,7 +48,6 @@ pub struct GbifDataProviderDefinition {
     cache_ttl: CacheTtlSeconds,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for GbifDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {

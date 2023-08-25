@@ -140,7 +140,7 @@ where
 
             add_datasets_from_directory(&mut db, dataset_defs_path).await;
 
-            add_providers_from_directory(&mut db, provider_defs_path, &[]).await;
+            add_providers_from_directory(&mut db, provider_defs_path).await;
         }
 
         Ok(app_ctx)
@@ -1059,7 +1059,7 @@ mod tests {
                 data: [("myData".to_owned(), meta_data)].into_iter().collect(),
             };
 
-            db.add_layer_provider(Box::new(provider)).await.unwrap();
+            db.add_layer_provider(provider.into()).await.unwrap();
 
             let providers = db
                 .list_layer_providers(LayerProviderListingOptions {

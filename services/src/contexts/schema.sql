@@ -638,7 +638,7 @@ CREATE TABLE layer_providers (
     id uuid PRIMARY KEY,
     type_name text NOT NULL,
     name text NOT NULL,
-    definition json NOT NULL
+    definition json NOT NULL -- TODO: change
 );
 
 -- TODO: relationship between uploads and datasets?
