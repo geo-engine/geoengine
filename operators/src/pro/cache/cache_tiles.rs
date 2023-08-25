@@ -666,13 +666,12 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let mut lq =
-            RasterLandingQueryEntry::create_empty::<CompressedRasterTile2D<u8>>(query.clone());
-        tile.move_element_into_landing_zone(&mut lq.elements_mut())
+        let mut lq = RasterLandingQueryEntry::create_empty::<CompressedRasterTile2D<u8>>(query);
+        tile.move_element_into_landing_zone(lq.elements_mut())
             .unwrap();
         let mut cache_entry = CompressedRasterTile2D::<u8>::landing_zone_to_cache_entry(lq);
         assert_eq!(cache_entry.query(), &query);
-        assert_eq!(cache_entry.elements_mut().is_expired(), true);
+        assert!(cache_entry.elements_mut().is_expired());
     }
 
     #[test]
@@ -685,7 +684,7 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
         };
-        assert_eq!(tile.cache_element_hit(&query), true);
+        assert!(tile.cache_element_hit(&query));
 
         // tile is partially contained
         let query = RasterQueryRectangle {
@@ -696,7 +695,7 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
         };
-        assert_eq!(tile.cache_element_hit(&query), true);
+        assert!(tile.cache_element_hit(&query));
 
         // tile is not contained
         let query = RasterQueryRectangle {
@@ -707,7 +706,7 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
         };
-        assert_eq!(tile.cache_element_hit(&query), false);
+        assert!(tile.cache_element_hit(&query));
     }
 
     #[test]
@@ -718,12 +717,12 @@ mod tests {
             spatial_resolution: SpatialResolution::one(),
         };
         let cache_query_entry = RasterCacheQueryEntry {
-            query: cache_entry_bounds.clone(),
+            query: cache_entry_bounds,
             elements: CachedTiles::U8(Arc::new(Vec::new())),
         };
 
         // query is equal
-        let query = cache_entry_bounds.clone();
+        let query = cache_entry_bounds;
         assert!(cache_query_entry.query().is_match(&query));
 
         // query is fully contained

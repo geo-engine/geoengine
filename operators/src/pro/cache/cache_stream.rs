@@ -177,7 +177,7 @@ mod tests {
         for i in 0..10 {
             let tile = RasterTile2D::<u8>::new(
                 TimeInterval::new_unchecked(0, 10),
-                GridIdx2D::new([i, i].into()),
+                GridIdx2D::new([i, i]),
                 GeoTransform::new([0., 0.].into(), 0.5, -0.5),
                 geoengine_datatypes::raster::GridOrEmpty::from(
                     Grid2D::new([2, 2].into(), vec![i as u8; 4]).unwrap(),
@@ -197,9 +197,9 @@ mod tests {
             let mut points = Vec::new();
             let mut strngs = Vec::new();
             for i in x..x + 2 {
-                let p = MultiPoint::new(vec![(i as f64, i as f64).into()].into()).unwrap();
+                let p = MultiPoint::new(vec![(f64::from(i), f64::from(i)).into()]).unwrap();
                 points.push(p);
-                strngs.push(format!("test {}", i));
+                strngs.push(format!("test {i}"));
             }
 
             let collection = MultiPointCollection::from_data(
@@ -237,7 +237,7 @@ mod tests {
             res.push(n);
         }
         assert_eq!(res.len(), 6);
-        assert!(res.iter().all(|&n| n >= 2 && n <= 8));
+        assert!(res.iter().all(|&n| (2..=8).contains(&n)));
     }
 
     #[test]
@@ -257,6 +257,6 @@ mod tests {
             res.push(n);
         }
         assert_eq!(res.len(), 6);
-        assert!(res.iter().all(|&n| n >= 2 && n <= 8));
+        assert!(res.iter().all(|&n| (2..=8).contains(&n)));
     }
 }

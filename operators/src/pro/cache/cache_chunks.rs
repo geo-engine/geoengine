@@ -513,9 +513,9 @@ mod tests {
             let mut points = Vec::new();
             let mut strngs = Vec::new();
             for i in x..x + 2 {
-                let p = MultiPoint::new(vec![(i as f64, i as f64).into()].into()).unwrap();
+                let p = MultiPoint::new(vec![(f64::from(i), f64::from(i)).into()]).unwrap();
                 points.push(p);
-                strngs.push(format!("test {}", i));
+                strngs.push(format!("test {i}"));
             }
 
             let collection = MultiPointCollection::from_data(
@@ -570,16 +570,15 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let mut lq = VectorLandingQueryEntry::create_empty::<CompressedFeatureCollection<MultiPoint>>(
-            query.clone(),
-        );
+        let mut lq =
+            VectorLandingQueryEntry::create_empty::<CompressedFeatureCollection<MultiPoint>>(query);
         for c in cols {
             c.move_element_into_landing_zone(lq.elements_mut()).unwrap();
         }
         let mut cache_entry =
             CompressedFeatureCollection::<MultiPoint>::landing_zone_to_cache_entry(lq);
         assert_eq!(cache_entry.query(), &query);
-        assert_eq!(cache_entry.elements_mut().is_expired(), true);
+        assert!(cache_entry.elements_mut().is_expired());
     }
 
     #[test]
@@ -594,7 +593,7 @@ mod tests {
         };
 
         for c in &cols {
-            assert_eq!(c.cache_element_hit(&query), true);
+            assert!(c.cache_element_hit(&query));
         }
 
         // first element is not contained
@@ -603,9 +602,9 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
         };
-        assert_eq!(cols[0].cache_element_hit(&query), false);
+        assert!(!cols[0].cache_element_hit(&query));
         for c in &cols[1..] {
-            assert_eq!(c.cache_element_hit(&query), true);
+            assert!(c.cache_element_hit(&query));
         }
 
         // all elements are not contained
@@ -615,7 +614,7 @@ mod tests {
             spatial_resolution: SpatialResolution::one(),
         };
         for col in &cols {
-            assert_eq!(col.cache_element_hit(&query), false);
+            assert!(!col.cache_element_hit(&query));
         }
     }
 
@@ -630,12 +629,12 @@ mod tests {
         };
 
         let cache_query_entry = VectorCacheQueryEntry {
-            query: cache_entry_bounds.clone(),
+            query: cache_entry_bounds,
             elements: CachedFeatures::MultiPoint(Arc::new(cols)),
         };
 
         // query is equal
-        let query = cache_entry_bounds.clone();
+        let query = cache_entry_bounds;
         assert!(cache_query_entry.query().is_match(&query));
 
         // query is fully contained
