@@ -706,7 +706,7 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
         };
-        assert!(tile.cache_element_hit(&query));
+        assert!(!tile.cache_element_hit(&query));
     }
 
     #[test]
