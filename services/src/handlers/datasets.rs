@@ -1481,11 +1481,6 @@ mod tests {
                 [4.292_873_969, 51.927_222_22].into(),
             ]
         );
-
-        // Ok(())
-        //     },
-        // )
-        // .await
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
