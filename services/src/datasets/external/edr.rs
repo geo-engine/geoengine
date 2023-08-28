@@ -126,8 +126,7 @@ impl EdrDataProvider {
         &self,
         collection_name: &str,
     ) -> Result<EdrCollectionMetaData> {
-        Ok(self
-            .client
+        self.client
             .get(
                 self.base_url
                     .join(&format!("collections/{collection_name}?f=json"))?,
@@ -136,7 +135,7 @@ impl EdrDataProvider {
             .await?
             .json()
             .await
-            .map_err(|_| Error::EdrInvalidMetadataFormat)?)
+            .map_err(|_| Error::EdrInvalidMetadataFormat)
     }
 
     async fn load_collection_by_dataid(
@@ -1163,9 +1162,9 @@ pub enum EdrProviderError {
 #[cfg(test)]
 mod tests {
     use crate::api::model::datatypes::ExternalDataId;
-    use geoengine_datatypes::util::AsAny;
+    use geoengine_datatypes::{primitives::SpatialResolution, util::gdal::hide_gdal_errors};
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
-    use httptest::{matchers::request, responders::status_code, Expectation, Server};
+    use httptest::{matchers::*, responders::status_code, Expectation, Server};
     use std::path::PathBuf;
 
     use super::*;
@@ -1195,7 +1194,13 @@ mod tests {
         .unwrap()
     }
 
-    async fn setup_url(server: &mut Server, url: &str, content_type: &str, file_name: &str) {
+    async fn setup_url(
+        server: &mut Server,
+        url: &str,
+        content_type: &str,
+        file_name: &str,
+        times: usize,
+    ) {
         let path = test_data_path(file_name);
         let body = tokio::fs::read(path).await.unwrap();
 
@@ -1206,20 +1211,34 @@ mod tests {
 
         server.expect(
             Expectation::matching(request::method_path("GET", url.to_string()))
-                .times(1)
+                .times(times)
                 .respond_with(responder),
         );
     }
 
     async fn load_layer_collection(collection: &LayerCollectionId) -> LayerCollection {
         let mut server = Server::run();
-        setup_url(
-            &mut server,
-            "/collections",
-            "application/json",
-            "edr_collections.json",
-        )
-        .await;
+
+        if collection.0 == "collections" {
+            setup_url(
+                &mut server,
+                "/collections",
+                "application/json",
+                "edr_collections.json",
+                1,
+            )
+            .await;
+        } else {
+            let collection_name = collection.0.split('!').nth(1).unwrap();
+            setup_url(
+                &mut server,
+                &format!("/collections/{collection_name}"),
+                "application/json",
+                &format!("edr_{collection_name}.json"),
+                1,
+            )
+            .await;
+        }
 
         let provider = create_provider(&server).await;
 
@@ -1253,16 +1272,16 @@ mod tests {
                 name: "EDR".to_owned(),
                 description: "Environmental Data Retrieval".to_owned(),
                 items: vec![
-                    // Note: The dataset GFS_single-level gets filtered out because there is no extent set.
+                    // Note: The dataset GFS_single-level_50 gets filtered out because there is no extent set.
                     // This means that it contains no data.
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
                             provider_id: DEMO_PROVIDER_ID,
                             collection_id: LayerCollectionId(
-                                "collections!GFS_single-level_50".to_string()
+                                "collections!GFS_single-level".to_string()
                             )
                         },
-                        name: "GFS - Single Level (50)".to_string(),
+                        name: "GFS - Single Level".to_string(),
                         description: String::new(),
                         properties: vec![],
                     }),
@@ -1270,21 +1289,10 @@ mod tests {
                         id: ProviderLayerCollectionId {
                             provider_id: DEMO_PROVIDER_ID,
                             collection_id: LayerCollectionId(
-                                "collections!GFS_single-level_50".to_string()
+                                "collections!GFS_isobaric".to_string()
                             )
                         },
-                        name: "GFS - Single Level (50)".to_string(),
-                        description: String::new(),
-                        properties: vec![],
-                    }),
-                    CollectionItem::Collection(LayerCollectionListing {
-                        id: ProviderLayerCollectionId {
-                            provider_id: DEMO_PROVIDER_ID,
-                            collection_id: LayerCollectionId(
-                                "collections!GFS_between-depth".to_string()
-                            )
-                        },
-                        name: "GFS - Layer between two depths below land surface".to_string(),
+                        name: "GFS - Isobaric level".to_string(),
                         description: String::new(),
                         properties: vec![],
                     }),
@@ -1473,17 +1481,19 @@ mod tests {
 
     async fn load_metadata<L, R, Q>(
         server: &mut Server,
-        collection_name: &'static str,
+        collection: &'static str,
     ) -> Box<dyn MetaData<L, R, Q>>
     where
         R: ResultDescriptor,
         dyn DataProvider: MetaDataProvider<L, R, Q>,
     {
+        let collection_name = collection.split('!').next().unwrap();
         setup_url(
             server,
             &format!("/collections/{collection_name}"),
             "application/json",
             &format!("edr_{collection_name}.json"),
+            1,
         )
         .await;
 
@@ -1493,7 +1503,7 @@ mod tests {
             .meta_data(
                 &DataId::External(ExternalDataId {
                     provider_id: DEMO_PROVIDER_ID,
-                    layer_id: LayerId(format!("collections!{collection_name}")),
+                    layer_id: LayerId(format!("collections!{collection}")),
                 })
                 .into(),
             )
@@ -1511,158 +1521,197 @@ mod tests {
             "PointsInGermany",
         )
         .await;
-        let meta = meta
-            .as_any()
-            .downcast_ref::<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>()
+        let loading_info = meta
+            .loading_info(VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new_unchecked(
+                    (-180., -90.).into(),
+                    (180., 90.).into(),
+                ),
+                time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::zero_point_one(),
+            })
+            .await
             .unwrap();
-
         assert_eq!(
-            meta,
-            &StaticMetaData {
-                loading_info: OgrSourceDataset {
-                    file_name: format!("/vsicurl_streaming/{}", server.url_str("/collections/PointsInGermany/cube?bbox=-180,-90,180,90&datetime=2023-01-01T12:42:29Z%2F2023-02-01T12:42:29Z&f=GeoJSON")).into(),
-                    layer_name: "cube?bbox=-180,-90,180,90&datetime=2023-01-01T12:42:29Z%2F2023-02-01T12:42:29Z&f=GeoJSON".to_string(),
-                    data_type: Some(VectorDataType::MultiPoint),
-                    time: OgrSourceDatasetTimeType::Start {
-                        start_field: "time".to_string(),
-                        start_format: OgrSourceTimeFormat::Auto,
-                        duration: OgrSourceDurationSpec::Zero,
-                    },
-                    default_geometry: None,
-                    columns: Some(OgrSourceColumnSpec {
-                        format_specifics: None,
-                        x: "geometry".to_string(),
-                        y: None,
-                        int: vec!["ID".to_string()],
-                        float: vec![],
-                        text: vec![],
-                        bool: vec![],
-                        datetime: vec![],
-                        rename: None,
-                    }),
-                    force_ogr_time_filter: false,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Abort,
-                    sql_query: None,
-                    attribute_query: None,
-                    cache_ttl: Default::default(),
+            loading_info,
+            OgrSourceDataset {
+                file_name: format!("/vsicurl_streaming/{}", server.url_str("/collections/PointsInGermany/cube?bbox=-180,-90,180,90&datetime=2023-01-01T12:42:29Z%2F2023-02-01T12:42:29Z&f=GeoJSON")).into(),
+                layer_name: "cube?bbox=-180,-90,180,90&datetime=2023-01-01T12:42:29Z%2F2023-02-01T12:42:29Z&f=GeoJSON".to_string(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "time".to_string(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
                 },
-                result_descriptor: VectorResultDescriptor {
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    data_type: VectorDataType::MultiPoint,
-                    columns: hashmap! {
-                        "ID".to_string() => VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Continuous(ContinuousMeasurement {
-                                measurement: "ID".to_string(),
-                                unit: None,
-                            }),
-                        }
-                    },
-                    time: Some(TimeInterval::new_unchecked(
-                        1_672_576_949_000,
-                        1_675_255_349_000,
-                    )),
-                    bbox: Some(BoundingBox2D::new_unchecked(
-                        (-180., -90.).into(),
-                        (180., 90.).into()
-                    )),
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
+                    x: "geometry".to_string(),
+                    y: None,
+                    int: vec!["ID".to_string()],
+                    float: vec![],
+                    text: vec![],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Abort,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: Default::default(),
+            }
+        );
+
+        let result_descriptor = meta.result_descriptor().await.unwrap();
+        assert_eq!(
+            result_descriptor,
+            VectorResultDescriptor {
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                data_type: VectorDataType::MultiPoint,
+                columns: hashmap! {
+                    "ID".to_string() => VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "ID".to_string(),
+                            unit: None,
+                        }),
+                    }
                 },
-                phantom: Default::default(),
+                time: Some(TimeInterval::new_unchecked(
+                    1_672_576_949_000,
+                    1_675_255_349_000,
+                )),
+                bbox: Some(BoundingBox2D::new_unchecked(
+                    (-180., -90.).into(),
+                    (180., 90.).into()
+                )),
             }
         );
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn generate_gdal_metadata() {
+        hide_gdal_errors(); //hide GTIFF_HONOUR_NEGATIVE_SCALEY warning
+
         let mut server = Server::run();
         setup_url(
             &mut server,
             "/collections/GFS_isobaric/cube",
             "image/tiff",
             "edr_raster.tif",
+            4,
         )
         .await;
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("HEAD", "/collections/GFS_isobaric/cube"),
+                request::query(url_decoded(contains((
+                    "parameter-name",
+                    "temperature.aux.xml"
+                ))))
+            ])
+            .times(1)
+            .respond_with(status_code(404)),
+        );
         let meta = load_metadata::<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>(
             &mut server,
-            "GFS_isobaric",
+            "GFS_isobaric!temperature!1000",
         )
         .await;
-        let meta = meta.as_any().downcast_ref::<GdalMetaDataList>().unwrap();
 
+        let loading_info_parts = meta
+            .loading_info(RasterQueryRectangle {
+                spatial_bounds: SpatialPartition2D::new_unchecked(
+                    (0., 90.).into(),
+                    (360., -90.).into(),
+                ),
+                time_interval: TimeInterval::new_unchecked(1_692_144_000_000, 1_692_500_400_000),
+                spatial_resolution: SpatialResolution::new_unchecked(1., 1.),
+            })
+            .await
+            .unwrap()
+            .info
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
         assert_eq!(
-            meta,
-            &GdalMetaDataList {
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                    time: Some(TimeInterval::new_unchecked(
-                        1_692_144_000_000,
-                        1_692_500_400_000
-                    )),
-                    bbox: Some(SpatialPartition2D::new_unchecked(
-                        (0., 90.).into(),
-                        (359.500_000_000_000_06, -90.).into()
-                    )),
-                    resolution: None,
+            loading_info_parts,
+            vec![
+                GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_unchecked(
+                        1_692_144_000_000, 1_692_154_800_000
+                    ),
+                    params: Some(GdalDatasetParameters {
+                        file_path: format!("/vsicurl_streaming/{}", server.url_str("/collections/GFS_isobaric/cube?bbox=0,-90,359.50000000000006,90&z=1000%2F1000&datetime=2023-08-16T00:00:00Z%2F2023-08-16T00:00:00Z&f=GeoTIFF&parameter-name=temperature")).into(),
+                        rasterband_channel: 1,
+                        geo_transform: GdalDatasetGeoTransform {
+                            origin_coordinate: (0., -90.).into(),
+                            x_pixel_size: 0.499_305_555_555_555_6,
+                            y_pixel_size: -0.498_614_958_448_753_5,
+                        },
+                        width: 720,
+                        height: 361,
+                        file_not_found_handling: FileNotFoundHandling::NoData,
+                        no_data_value: None,
+                        properties_mapping: None,
+                        gdal_open_options: None,
+                        gdal_config_options: Some(vec![(
+                            "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
+                            "YES".to_string(),
+                        )]),
+                        allow_alphaband_as_mask: false,
+                        retry: None,
+                    }),
+                    cache_ttl: Default::default(),
                 },
-                params: vec![
-                    GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new_unchecked(
-                            1_692_144_000_000, 1_692_154_800_000
-                        ),
-                        params: Some(GdalDatasetParameters {
-                            file_path: format!("/vsicurl_streaming/{}", server.url_str("/collections/GFS_isobaric/cube?bbox=0,-90,359.50000000000006,90&z=1000%2F1000&datetime=2023-08-16T00:00:00Z%2F2023-08-16T00:00:00Z&f=GeoTIFF&parameter-name=temperature")).into(),
-                            rasterband_channel: 1,
-                            geo_transform: GdalDatasetGeoTransform {
-                                origin_coordinate: (0., -90.).into(),
-                                x_pixel_size: 0.499_305_555_555_556,
-                                y_pixel_size: 0.498_614_958_448_753,
-                            },
-                            width: 720,
-                            height: 361,
-                            file_not_found_handling: FileNotFoundHandling::NoData,
-                            no_data_value: None,
-                            properties_mapping: None,
-                            gdal_open_options: None,
-                            gdal_config_options: Some(vec![(
-                                "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
-                                "YES".to_string(),
-                            )]),
-                            allow_alphaband_as_mask: false,
-                            retry: None,
-                        }),
-                        cache_ttl: Default::default(),
-                    },
-                    GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new_unchecked(
-                            1_692_154_800_000, 1_692_500_400_000
-                        ),
-                        params: Some(GdalDatasetParameters {
-                            file_path: format!("/vsicurl_streaming/{}", server.url_str("/collections/GFS_isobaric/cube?bbox=0,-90,359.50000000000006,90&z=1000%2F1000&datetime=2023-08-16T03:00:00Z%2F2023-08-16T03:00:00Z&f=GeoTIFF&parameter-name=temperature")).into(),
-                            rasterband_channel: 1,
-                            geo_transform: GdalDatasetGeoTransform {
-                                origin_coordinate: (0., -90.).into(),
-                                x_pixel_size: 0.499_305_555_555_556,
-                                y_pixel_size: 0.498_614_958_448_753,
-                            },
-                            width: 720,
-                            height: 361,
-                            file_not_found_handling: FileNotFoundHandling::NoData,
-                            no_data_value: None,
-                            properties_mapping: None,
-                            gdal_open_options: None,
-                            gdal_config_options: Some(vec![(
-                                "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
-                                "YES".to_string(),
-                            )]),
-                            allow_alphaband_as_mask: false,
-                            retry: None,
-                        }),
-                        cache_ttl: Default::default(),
-                    }
-                ]
+                GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_unchecked(
+                        1_692_154_800_000, 1_692_500_400_000
+                    ),
+                    params: Some(GdalDatasetParameters {
+                        file_path: format!("/vsicurl_streaming/{}", server.url_str("/collections/GFS_isobaric/cube?bbox=0,-90,359.50000000000006,90&z=1000%2F1000&datetime=2023-08-16T03:00:00Z%2F2023-08-16T03:00:00Z&f=GeoTIFF&parameter-name=temperature")).into(),
+                        rasterband_channel: 1,
+                        geo_transform: GdalDatasetGeoTransform {
+                            origin_coordinate: (0., -90.).into(),
+                            x_pixel_size: 0.499_305_555_555_555_6,
+                            y_pixel_size: -0.498_614_958_448_753_5,
+                        },
+                        width: 720,
+                        height: 361,
+                        file_not_found_handling: FileNotFoundHandling::NoData,
+                        no_data_value: None,
+                        properties_mapping: None,
+                        gdal_open_options: None,
+                        gdal_config_options: Some(vec![(
+                            "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
+                            "YES".to_string(),
+                        )]),
+                        allow_alphaband_as_mask: false,
+                        retry: None,
+                    }),
+                    cache_ttl: Default::default(),
+                }
+            ]
+        );
+
+        let result_descriptor = meta.result_descriptor().await.unwrap();
+        assert_eq!(
+            result_descriptor,
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+                time: Some(TimeInterval::new_unchecked(
+                    1_692_144_000_000,
+                    1_692_500_400_000
+                )),
+                bbox: Some(SpatialPartition2D::new_unchecked(
+                    (0., 90.).into(),
+                    (359.500_000_000_000_06, -90.).into()
+                )),
+                resolution: None,
             }
         );
     }
