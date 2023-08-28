@@ -524,7 +524,7 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
-    use crate::pro::permissions::{Permission, PermissionDb};
+    use crate::pro::permissions::{Permission, PermissionDb, RoleDescription, RoleId};
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
     };
@@ -3011,6 +3011,7 @@ let ctx = app_ctx.session_context(session);
         .await;
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_handles_user_roles() {
         with_pro_temp_context(|app_ctx, _| async move {
@@ -3041,6 +3042,38 @@ let ctx = app_ctx.session_context(session);
 
             assert!(!user_session.roles.contains(&role_id));
 
+            //user can query their role descriptions (user role and registered user)
+            assert_eq!(user_session.roles.len(), 2);
+
+            let expected_user_role_description = RoleDescription {
+                role: Role {
+                    id: RoleId::from(user_id),
+                    name: "foo@example.com".to_string(),
+                },
+                individual: true,
+            };
+            let expected_registered_role_description = RoleDescription {
+                role: Role {
+                    id: Role::registered_user_role_id(),
+                    name: "user".to_string(),
+                },
+                individual: false,
+            };
+
+            let user_role_descriptions = app_ctx
+                .session_context(user_session.clone())
+                .db()
+                .get_role_descriptions(&user_id)
+                .await
+                .unwrap();
+            assert_eq!(
+                vec![
+                    expected_user_role_description.clone(),
+                    expected_registered_role_description.clone(),
+                ],
+                user_role_descriptions
+            );
+
             // we assign the role to the user
             admin_db.assign_role(&role_id, &user_id).await.unwrap();
 
@@ -3055,6 +3088,30 @@ let ctx = app_ctx.session_context(session);
             // should be present now
             assert!(user_session.roles.contains(&role_id));
 
+            //user can query their role descriptions (now an additional foo role)
+            let expected_foo_role_description = RoleDescription {
+                role: Role {
+                    id: role_id,
+                    name: "foo".to_string(),
+                },
+                individual: false,
+            };
+
+            let user_role_descriptions = app_ctx
+                .session_context(user_session.clone())
+                .db()
+                .get_role_descriptions(&user_id)
+                .await
+                .unwrap();
+            assert_eq!(
+                vec![
+                    expected_foo_role_description,
+                    expected_user_role_description.clone(),
+                    expected_registered_role_description.clone(),
+                ],
+                user_role_descriptions
+            );
+
             // we revoke it
             admin_db.revoke_role(&role_id, &user_id).await.unwrap();
 
@@ -3068,6 +3125,21 @@ let ctx = app_ctx.session_context(session);
 
             // the role is gone now
             assert!(!user_session.roles.contains(&role_id));
+
+            //user can query their role descriptions (user role and registered user)
+            let user_role_descriptions = app_ctx
+                .session_context(user_session.clone())
+                .db()
+                .get_role_descriptions(&user_id)
+                .await
+                .unwrap();
+            assert_eq!(
+                vec![
+                    expected_user_role_description.clone(),
+                    expected_registered_role_description.clone(),
+                ],
+                user_role_descriptions
+            );
 
             // assign it again and then delete the whole role, should not be present at user
 
@@ -3084,6 +3156,21 @@ let ctx = app_ctx.session_context(session);
                 .unwrap();
 
             assert!(!user_session.roles.contains(&role_id));
+
+            //user can query their role descriptions (user role and registered user)
+            let user_role_descriptions = app_ctx
+                .session_context(user_session.clone())
+                .db()
+                .get_role_descriptions(&user_id)
+                .await
+                .unwrap();
+            assert_eq!(
+                vec![
+                    expected_user_role_description,
+                    expected_registered_role_description.clone(),
+                ],
+                user_role_descriptions
+            );
         })
         .await;
     }
