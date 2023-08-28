@@ -1,0 +1,6 @@
+CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
+
+SET ROLE 'geoengine'; -- noqa: PRS
+
+CREATE SCHEMA IF NOT EXISTS abcd;
+SET SEARCH_PATH TO abcd, public;

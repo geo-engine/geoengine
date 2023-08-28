@@ -1,11 +1,13 @@
 use super::error::CacheError;
-use super::shared_cache::CacheElementSubType;
 use super::shared_cache::{
-    CacheElement, CacheElementsContainer, CacheElementsContainerInfos, LandingZoneElementsContainer,
+    CacheBackendElement, CacheBackendElementExt, CacheElement, CacheElementsContainer,
+    CacheElementsContainerInfos, LandingZoneElementsContainer, VectorCacheQueryEntry,
+    VectorLandingQueryEntry,
 };
 use crate::util::Result;
 use futures::stream::FusedStream;
 use futures::Stream;
+
 use geoengine_datatypes::{
     collections::{
         DataCollection, FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
@@ -18,6 +20,7 @@ use geoengine_datatypes::{
     util::{arrow::ArrowTyped, ByteSize},
 };
 use pin_project::pin_project;
+
 use std::{pin::Pin, sync::Arc};
 
 #[derive(Debug)]
@@ -48,23 +51,6 @@ impl CachedFeatures {
             CachedFeatures::MultiPoint(v) => v.iter().any(|c| c.cache_hint.is_expired()),
             CachedFeatures::MultiLineString(v) => v.iter().any(|c| c.cache_hint.is_expired()),
             CachedFeatures::MultiPolygon(v) => v.iter().any(|c| c.cache_hint.is_expired()),
-        }
-    }
-
-    pub fn chunk_stream(&self, query: &VectorQueryRectangle) -> TypedCacheChunkStream {
-        match self {
-            CachedFeatures::NoGeometry(v) => {
-                TypedCacheChunkStream::NoGeometry(CacheChunkStream::new(Arc::clone(v), *query))
-            }
-            CachedFeatures::MultiPoint(v) => {
-                TypedCacheChunkStream::MultiPoint(CacheChunkStream::new(Arc::clone(v), *query))
-            }
-            CachedFeatures::MultiLineString(v) => {
-                TypedCacheChunkStream::MultiLineString(CacheChunkStream::new(Arc::clone(v), *query))
-            }
-            CachedFeatures::MultiPolygon(v) => {
-                TypedCacheChunkStream::MultiPolygon(CacheChunkStream::new(Arc::clone(v), *query))
-            }
         }
     }
 }
@@ -149,43 +135,38 @@ impl CacheElementsContainerInfos<VectorQueryRectangle> for CachedFeatures {
 
 impl<G> CacheElementsContainer<VectorQueryRectangle, FeatureCollection<G>> for CachedFeatures
 where
-    G: CacheElementSubType<CacheElementType = FeatureCollection<G>> + Geometry + ArrowTyped,
-    FeatureCollection<G>: CacheElementHitCheck,
+    G: Geometry + ArrowTyped,
+    FeatureCollection<G>: CacheBackendElementExt<CacheContainer = Self> + CacheElementHitCheck,
 {
-    type ResultStream = CacheChunkStream<G>;
-
-    fn result_stream(&self, query: &VectorQueryRectangle) -> Option<CacheChunkStream<G>> {
-        G::result_stream(self, query)
+    fn results_arc(&self) -> Option<Arc<Vec<FeatureCollection<G>>>> {
+        FeatureCollection::<G>::results_arc(self)
     }
 }
 
 impl<G> LandingZoneElementsContainer<FeatureCollection<G>> for LandingZoneQueryFeatures
 where
-    G: CacheElementSubType<CacheElementType = FeatureCollection<G>> + Geometry + ArrowTyped,
-    FeatureCollection<G>: CacheElementHitCheck,
+    G: Geometry + ArrowTyped,
+    FeatureCollection<G>:
+        CacheBackendElementExt<LandingZoneContainer = Self> + CacheElementHitCheck,
 {
     fn insert_element(
         &mut self,
         element: FeatureCollection<G>,
     ) -> Result<(), super::error::CacheError> {
-        G::insert_element_into_landing_zone(self, element)
+        FeatureCollection::<G>::move_element_into_landing_zone(element, self)
     }
 
     fn create_empty() -> Self {
-        G::create_empty_landing_zone()
+        FeatureCollection::<G>::create_empty_landing_zone()
     }
 }
 
-impl<G> CacheElement for FeatureCollection<G>
+impl<G> CacheBackendElement for FeatureCollection<G>
 where
-    G: Geometry + ArrowTyped + CacheElementSubType<CacheElementType = Self> + ArrowTyped + Sized,
+    G: Geometry + ArrowTyped + ArrowTyped + Sized,
     FeatureCollection<G>: CacheElementHitCheck,
 {
     type Query = VectorQueryRectangle;
-    type LandingZoneContainer = LandingZoneQueryFeatures;
-    type CacheContainer = CachedFeatures;
-    type ResultStream = CacheChunkStream<G>;
-    type CacheElementSubType = G;
 
     fn cache_hint(&self) -> geoengine_datatypes::primitives::CacheHint {
         self.cache_hint
@@ -209,16 +190,17 @@ where
 
 macro_rules! impl_cache_element_subtype {
     ($g:ty, $variant:ident) => {
-        impl CacheElementSubType for $g {
-            type CacheElementType = FeatureCollection<$g>;
+        impl CacheBackendElementExt for FeatureCollection<$g> {
+            type LandingZoneContainer = LandingZoneQueryFeatures;
+            type CacheContainer = CachedFeatures;
 
-            fn insert_element_into_landing_zone(
+            fn move_element_into_landing_zone(
+                self,
                 landing_zone: &mut LandingZoneQueryFeatures,
-                element: Self::CacheElementType,
             ) -> Result<(), super::error::CacheError> {
                 match landing_zone {
                     LandingZoneQueryFeatures::$variant(v) => {
-                        v.push(element);
+                        v.push(self);
                         Ok(())
                     }
                     _ => Err(super::error::CacheError::InvalidTypeForInsertion),
@@ -229,17 +211,18 @@ macro_rules! impl_cache_element_subtype {
                 LandingZoneQueryFeatures::$variant(Vec::new())
             }
 
-            fn result_stream(
-                cache_elements_container: &CachedFeatures,
-                query: &VectorQueryRectangle,
-            ) -> Option<CacheChunkStream<$g>> {
-                if let TypedCacheChunkStream::$variant(v) =
-                    cache_elements_container.chunk_stream(query)
-                {
-                    Some(v)
+            fn results_arc(cache_elements_container: &CachedFeatures) -> Option<Arc<Vec<Self>>> {
+                if let CachedFeatures::$variant(v) = cache_elements_container {
+                    Some(v.clone())
                 } else {
                     None
                 }
+            }
+
+            fn landing_zone_to_cache_entry(
+                landing_zone_entry: VectorLandingQueryEntry,
+            ) -> VectorCacheQueryEntry {
+                landing_zone_entry.into()
             }
         }
     };
@@ -280,7 +263,7 @@ where
     FeatureCollection<G>: CacheElementHitCheck,
     G: ArrowTyped,
 {
-    type Item = Result<FeatureCollection<G>>;
+    type Item = Result<FeatureCollection<G>, CacheError>;
 
     fn poll_next(
         mut self: Pin<&mut Self>,
@@ -323,13 +306,6 @@ where
     fn is_terminated(&self) -> bool {
         self.idx >= self.data.len()
     }
-}
-
-pub enum TypedCacheChunkStream {
-    NoGeometry(CacheChunkStream<NoGeometry>),
-    MultiPoint(CacheChunkStream<MultiPoint>),
-    MultiLineString(CacheChunkStream<MultiLineString>),
-    MultiPolygon(CacheChunkStream<MultiPolygon>),
 }
 
 pub trait CacheElementHitCheck {
@@ -412,3 +388,34 @@ macro_rules! impl_cache_result_check {
 impl_cache_result_check!(MultiPoint);
 impl_cache_result_check!(MultiLineString);
 impl_cache_result_check!(MultiPolygon);
+
+impl<G> CacheElement for FeatureCollection<G>
+where
+    G: Geometry + ArrowTyped,
+    FeatureCollection<G>: ByteSize
+        + CacheElementHitCheck
+        + CacheBackendElementExt<
+            Query = VectorQueryRectangle,
+            LandingZoneContainer = LandingZoneQueryFeatures,
+            CacheContainer = CachedFeatures,
+        >,
+{
+    type StoredCacheElement = FeatureCollection<G>;
+    type Query = VectorQueryRectangle;
+    type ResultStream = CacheChunkStream<G>;
+
+    fn into_stored_element(self) -> Self::StoredCacheElement {
+        self
+    }
+
+    fn from_stored_element_ref(stored: &Self::StoredCacheElement) -> Result<Self, CacheError> {
+        Ok(stored.clone())
+    }
+
+    fn result_stream(
+        stored_data: Arc<Vec<Self::StoredCacheElement>>,
+        query: Self::Query,
+    ) -> Self::ResultStream {
+        CacheChunkStream::new(stored_data, query)
+    }
+}

@@ -112,10 +112,4 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(
     for path in more_paths {
         add_from_dir(db, path).await;
     }
-
-    #[cfg(feature = "nfdi")]
-    add_from_dir(db, &base_path.join("nfdi")).await;
-
-    #[cfg(feature = "ebv")]
-    add_from_dir(db, &base_path.join("ebv")).await;
 }

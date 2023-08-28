@@ -1,11 +1,10 @@
-use std::collections::HashMap;
-use std::str::FromStr;
-
+use super::listing::Provenance;
 use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId};
 use crate::api::model::responses::datasets::DatasetIdAndName;
 use crate::api::model::services::AddDataset;
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::ProvenanceOutput;
+use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
 use crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID;
 use crate::datasets::storage::{
@@ -21,35 +20,28 @@ use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
-
-use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::projects::Symbology;
 use crate::util::operators::source_operator_from_dataset;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
-
 use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, TypedResultDescriptor,
     VectorResultDescriptor,
 };
-
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
-
 use postgres_types::{FromSql, ToSql};
+use std::collections::HashMap;
+use std::str::FromStr;
 use uuid::Uuid;
-
-use super::listing::Provenance;
 
 impl<Tls> DatasetDb for PostgresDb<Tls>
 where
@@ -260,11 +252,16 @@ where
             }
         })?;
 
-        let meta_data: StaticMetaData<
-            OgrSourceDataset,
-            VectorResultDescriptor,
-            VectorQueryRectangle,
-        > = serde_json::from_value(row.get(0))?;
+        let meta_data: MetaDataDefinition = row.get("meta_data");
+
+        let MetaDataDefinition::OgrMetaData(meta_data) = meta_data else {
+            return Err(geoengine_operators::error::Error::MetaData {
+                source: Box::new(geoengine_operators::error::Error::InvalidType {
+                    expected: "OgrMetaData".to_string(),
+                    found: meta_data.type_name().to_string(),
+                }),
+            });
+        };
 
         Ok(Box::new(meta_data))
     }
@@ -315,7 +312,7 @@ where
             }
         })?;
 
-        let meta_data: MetaDataDefinition = serde_json::from_value(row.get(0))?;
+        let meta_data: MetaDataDefinition = row.get(0);
 
         Ok(match meta_data {
             MetaDataDefinition::GdalMetaDataRegular(m) => Box::new(m),
@@ -335,11 +332,11 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    fn to_json(&self) -> Result<DatasetMetaDataJson>;
+    fn to_typed_metadata(&self) -> Result<DatasetMetaData>;
 }
 
-pub struct DatasetMetaDataJson {
-    meta_data: serde_json::Value,
+pub struct DatasetMetaData<'m> {
+    meta_data: &'m MetaDataDefinition,
     result_descriptor: crate::api::model::operators::TypedResultDescriptor,
 }
 
@@ -360,30 +357,30 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    fn to_json(&self) -> Result<DatasetMetaDataJson> {
+    fn to_typed_metadata(&self) -> Result<DatasetMetaData> {
         match self {
-            MetaDataDefinition::MockMetaData(d) => Ok(DatasetMetaDataJson {
-                meta_data: serde_json::to_value(self)?,
+            MetaDataDefinition::MockMetaData(d) => Ok(DatasetMetaData {
+                meta_data: self,
                 result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
-            MetaDataDefinition::OgrMetaData(d) => Ok(DatasetMetaDataJson {
-                meta_data: serde_json::to_value(self)?,
+            MetaDataDefinition::OgrMetaData(d) => Ok(DatasetMetaData {
+                meta_data: self,
                 result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
-            MetaDataDefinition::GdalMetaDataRegular(d) => Ok(DatasetMetaDataJson {
-                meta_data: serde_json::to_value(self)?,
+            MetaDataDefinition::GdalMetaDataRegular(d) => Ok(DatasetMetaData {
+                meta_data: self,
                 result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
-            MetaDataDefinition::GdalStatic(d) => Ok(DatasetMetaDataJson {
-                meta_data: serde_json::to_value(self)?,
+            MetaDataDefinition::GdalStatic(d) => Ok(DatasetMetaData {
+                meta_data: self,
                 result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
-            MetaDataDefinition::GdalMetadataNetCdfCf(d) => Ok(DatasetMetaDataJson {
-                meta_data: serde_json::to_value(self)?,
+            MetaDataDefinition::GdalMetadataNetCdfCf(d) => Ok(DatasetMetaData {
+                meta_data: self,
                 result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
-            MetaDataDefinition::GdalMetaDataList(d) => Ok(DatasetMetaDataJson {
-                meta_data: serde_json::to_value(self)?,
+            MetaDataDefinition::GdalMetaDataList(d) => Ok(DatasetMetaData {
+                meta_data: self,
                 result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
             }),
         }
@@ -411,7 +408,7 @@ where
 
         Self::check_namespace(&name)?;
 
-        let meta_data_json = meta_data.to_json()?;
+        let typed_meta_data = meta_data.to_typed_metadata()?;
 
         let conn = self.conn_pool.get().await?;
 
@@ -443,8 +440,8 @@ where
                 &dataset.display_name,
                 &dataset.description,
                 &dataset.source_operator,
-                &meta_data_json.result_descriptor,
-                &meta_data_json.meta_data,
+                &typed_meta_data.result_descriptor,
+                typed_meta_data.meta_data,
                 &dataset.symbology,
                 &dataset.provenance,
             ],

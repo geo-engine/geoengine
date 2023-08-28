@@ -1,6 +1,6 @@
 use super::{
     cache_chunks::{CacheElementHitCheck, CachedFeatures, LandingZoneQueryFeatures},
-    cache_tiles::{CachedTiles, LandingZoneQueryTiles, TypedCacheTileStream},
+    cache_tiles::{CachedTiles, CompressedRasterTile2D, LandingZoneQueryTiles},
     error::CacheError,
     util::CacheSize,
 };
@@ -12,12 +12,12 @@ use geoengine_datatypes::{
     collections::FeatureCollection,
     identifier,
     primitives::{CacheHint, Geometry, RasterQueryRectangle, VectorQueryRectangle},
-    raster::{Pixel, RasterTile2D},
+    raster::Pixel,
     util::{arrow::ArrowTyped, test::TestDefault, ByteSize, Identifier},
 };
-use log::debug;
+use log::{debug, log_enabled};
 use lru::LruCache;
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, hash::Hash, sync::Arc};
 use tokio::sync::RwLock;
 
 /// The tile cache caches all tiles of a query and is able to answer queries that are fully contained in the cache.
@@ -135,7 +135,7 @@ pub trait CacheView<C, L>: CacheEvictUntilFit {
 }
 
 #[allow(clippy::type_complexity)]
-pub struct OperatorCacheEntryView<'a, C: CacheElement> {
+pub struct OperatorCacheEntryView<'a, C: CacheBackendElementExt> {
     operator_cache: &'a mut OperatorCacheEntry<
         CacheQueryEntry<C::Query, C::CacheContainer>,
         CacheQueryEntry<C::Query, C::LandingZoneContainer>,
@@ -147,7 +147,7 @@ pub struct OperatorCacheEntryView<'a, C: CacheElement> {
 
 impl<'a, C> OperatorCacheEntryView<'a, C>
 where
-    C: CacheElement + ByteSize,
+    C: CacheBackendElementExt + ByteSize,
     C::Query: Clone + CacheQueryMatch,
     CacheQueryEntry<C::Query, C::LandingZoneContainer>: ByteSize,
     CacheQueryEntry<C::Query, C::CacheContainer>: ByteSize,
@@ -383,17 +383,13 @@ struct CacheQueryResult<'a, Query, CE> {
     expired_cache_entry_ids: Vec<CacheEntryId>,
 }
 
-pub trait Cache<C: CacheElement>:
+pub trait Cache<C: CacheBackendElementExt>:
     CacheView<
     CacheQueryEntry<C::Query, C::CacheContainer>,
     CacheQueryEntry<C::Query, C::LandingZoneContainer>,
 >
 where
     C::Query: Clone + CacheQueryMatch,
-    CacheQueryEntry<C::Query, C::LandingZoneContainer>: ByteSize,
-    CacheQueryEntry<C::Query, C::CacheContainer>: ByteSize,
-    CacheQueryEntry<C::Query, C::CacheContainer>:
-        From<CacheQueryEntry<C::Query, C::LandingZoneContainer>>,
 {
     /// This method returns a mutable reference to the cache entry of an operator.
     /// If there is no cache entry for the operator, this method returns None.
@@ -413,7 +409,7 @@ where
         &mut self,
         key: &CanonicOperatorName,
         query: &C::Query,
-    ) -> Result<Option<C::ResultStream>, CacheError> {
+    ) -> Result<Option<Arc<Vec<C>>>, CacheError> {
         let mut cache = self
             .operator_cache_view_mut(key)
             .ok_or(CacheError::OperatorCacheEntryNotFound)?;
@@ -424,11 +420,11 @@ where
         } = cache.find_matching_cache_entry_and_collect_expired_entries(query);
 
         let res = if let Some((cache_entry_id, cache_entry)) = cache_hit {
-            let stream = cache_entry.elements.result_stream(query);
+            let potential_result_elements = cache_entry.elements.results_arc();
 
             // promote the cache entry in the LRU
             cache.lru.promote(&cache_entry_id);
-            Some(stream)
+            Some(potential_result_elements)
         } else {
             None
         };
@@ -527,9 +523,9 @@ where
             .remove_query_from_landing_zone(query_id)
             .ok_or(CacheError::QueryNotFoundInLandingZone)?;
         let cache_entry: CacheQueryEntry<
-            <C as CacheElement>::Query,
-            <C as CacheElement>::CacheContainer,
-        > = landing_zone_entry.into();
+            <C as CacheBackendElement>::Query,
+            <C as CacheBackendElementExt>::CacheContainer,
+        > = C::landing_zone_to_cache_entry(landing_zone_entry);
         // when moving an element from the landing zone to the cache, we allow the cache size to overflow.
         // This is done because the total cache size is the cache size + the landing zone size.
         let cache_entry_id = operator_cache.insert_cache_entry_allow_overflow(cache_entry, key)?;
@@ -543,14 +539,19 @@ where
     }
 }
 
-impl<T> Cache<RasterTile2D<T>> for CacheBackend
+impl<T> Cache<CompressedRasterTile2D<T>> for CacheBackend
 where
-    T: Pixel + CacheElementSubType<CacheElementType = RasterTile2D<T>>,
+    T: Pixel,
+    CompressedRasterTile2D<T>: CacheBackendElementExt<
+        Query = RasterQueryRectangle,
+        LandingZoneContainer = LandingZoneQueryTiles,
+        CacheContainer = CachedTiles,
+    >,
 {
     fn operator_cache_view_mut(
         &mut self,
         key: &CanonicOperatorName,
-    ) -> Option<OperatorCacheEntryView<RasterTile2D<T>>> {
+    ) -> Option<OperatorCacheEntryView<CompressedRasterTile2D<T>>> {
         self.raster_caches
             .get_mut(key)
             .map(|op| OperatorCacheEntryView {
@@ -564,8 +565,13 @@ where
 
 impl<T> Cache<FeatureCollection<T>> for CacheBackend
 where
-    T: Geometry + CacheElementSubType<CacheElementType = FeatureCollection<T>> + ArrowTyped,
-    FeatureCollection<T>: CacheElementHitCheck,
+    T: Geometry + ArrowTyped,
+    FeatureCollection<T>: CacheElementHitCheck
+        + CacheBackendElementExt<
+            Query = VectorQueryRectangle,
+            LandingZoneContainer = LandingZoneQueryFeatures,
+            CacheContainer = CachedFeatures,
+        >,
 {
     fn operator_cache_view_mut(
         &mut self,
@@ -598,23 +604,11 @@ impl CacheView<VectorCacheQueryEntry, VectorLandingQueryEntry> for CacheBackend 
     }
 }
 
-pub trait CacheElement: ByteSize + Send + ByteSize
+pub trait CacheBackendElement: ByteSize + Send + ByteSize
 where
     Self: Sized,
 {
     type Query: CacheQueryMatch + Clone + Send + Sync;
-    type LandingZoneContainer: LandingZoneElementsContainer<Self>;
-    type CacheContainer: CacheElementsContainer<Self::Query, Self, ResultStream = Self::ResultStream>
-        + From<Self::LandingZoneContainer>;
-    type ResultStream;
-    type CacheElementSubType: CacheElementSubType<CacheElementType = Self>;
-
-    fn move_into_landing_zone(
-        self,
-        landing_zone: &mut Self::LandingZoneContainer,
-    ) -> Result<(), CacheError> {
-        landing_zone.insert_element(self)
-    }
 
     fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError>;
 
@@ -623,20 +617,24 @@ where
     fn typed_canonical_operator_name(key: CanonicOperatorName) -> TypedCanonicOperatorName;
 }
 
-pub trait CacheElementSubType {
-    type CacheElementType: CacheElement;
+pub trait CacheBackendElementExt: CacheBackendElement {
+    type LandingZoneContainer: LandingZoneElementsContainer<Self> + ByteSize;
+    type CacheContainer: CacheElementsContainer<Self::Query, Self>
+        + ByteSize
+        + From<Self::LandingZoneContainer>;
 
-    fn insert_element_into_landing_zone(
-        landing_zone: &mut <Self::CacheElementType as CacheElement>::LandingZoneContainer,
-        element: Self::CacheElementType,
+    fn move_element_into_landing_zone(
+        self,
+        landing_zone: &mut Self::LandingZoneContainer,
     ) -> Result<(), super::error::CacheError>;
 
-    fn create_empty_landing_zone() -> <Self::CacheElementType as CacheElement>::LandingZoneContainer;
+    fn create_empty_landing_zone() -> Self::LandingZoneContainer;
 
-    fn result_stream(
-        cache_elements_container: &<Self::CacheElementType as CacheElement>::CacheContainer,
-        query: &<Self::CacheElementType as CacheElement>::Query,
-    ) -> Option<<Self::CacheElementType as CacheElement>::ResultStream>;
+    fn results_arc(cache_elements_container: &Self::CacheContainer) -> Option<Arc<Vec<Self>>>;
+
+    fn landing_zone_to_cache_entry(
+        landing_zone_entry: CacheQueryEntry<Self::Query, Self::LandingZoneContainer>,
+    ) -> CacheQueryEntry<Self::Query, Self::CacheContainer>;
 }
 
 #[derive(Debug)]
@@ -785,12 +783,12 @@ pub struct CacheQueryEntry<Query, Elements> {
     elements: Elements,
 }
 type RasterOperatorCacheEntry = OperatorCacheEntry<RasterCacheQueryEntry, RasterLandingQueryEntry>;
-type RasterCacheQueryEntry = CacheQueryEntry<RasterQueryRectangle, CachedTiles>;
-type RasterLandingQueryEntry = CacheQueryEntry<RasterQueryRectangle, LandingZoneQueryTiles>;
+pub type RasterCacheQueryEntry = CacheQueryEntry<RasterQueryRectangle, CachedTiles>;
+pub type RasterLandingQueryEntry = CacheQueryEntry<RasterQueryRectangle, LandingZoneQueryTiles>;
 
 type VectorOperatorCacheEntry = OperatorCacheEntry<VectorCacheQueryEntry, VectorLandingQueryEntry>;
-type VectorCacheQueryEntry = CacheQueryEntry<VectorQueryRectangle, CachedFeatures>;
-type VectorLandingQueryEntry = CacheQueryEntry<VectorQueryRectangle, LandingZoneQueryFeatures>;
+pub type VectorCacheQueryEntry = CacheQueryEntry<VectorQueryRectangle, CachedFeatures>;
+pub type VectorLandingQueryEntry = CacheQueryEntry<VectorQueryRectangle, LandingZoneQueryFeatures>;
 
 impl<Query, Elements> CacheQueryEntry<Query, Elements> {
     pub fn create_empty<E>(query: Query) -> Self
@@ -859,9 +857,7 @@ pub trait CacheElementsContainerInfos<Query> {
 }
 
 pub trait CacheElementsContainer<Query, E>: CacheElementsContainerInfos<Query> {
-    type ResultStream: Stream<Item = Result<E>>;
-
-    fn result_stream(&self, query: &Query) -> Option<Self::ResultStream>;
+    fn results_arc(&self) -> Option<Arc<Vec<E>>>;
 }
 
 impl CacheQueryEntry<RasterQueryRectangle, CachedTiles> {
@@ -871,11 +867,6 @@ impl CacheQueryEntry<RasterQueryRectangle, CachedTiles> {
         self.query.spatial_bounds.contains(&query.spatial_bounds)
             && self.query.time_interval.contains(&query.time_interval)
             && self.query.spatial_resolution == query.spatial_resolution
-    }
-
-    /// Produces a tile stream from the cache
-    pub fn tile_stream(&self, query: &RasterQueryRectangle) -> TypedCacheTileStream {
-        self.elements.tile_stream(query)
     }
 }
 
@@ -897,34 +888,44 @@ impl From<VectorLandingQueryEntry> for VectorCacheQueryEntry {
     }
 }
 
+pub trait CacheElement: Sized {
+    type StoredCacheElement: CacheBackendElementExt<Query = Self::Query>;
+    type Query: CacheQueryMatch;
+    type ResultStream: Stream<Item = Result<Self, CacheError>>;
+
+    fn into_stored_element(self) -> Self::StoredCacheElement;
+    fn from_stored_element_ref(stored: &Self::StoredCacheElement) -> Result<Self, CacheError>;
+
+    fn result_stream(
+        stored_data: Arc<Vec<Self::StoredCacheElement>>,
+        query: Self::Query,
+    ) -> Self::ResultStream;
+}
+
 #[async_trait]
 pub trait AsyncCache<C: CacheElement> {
-    async fn query_cache<S: CacheElementSubType<CacheElementType = C>>(
+    async fn query_cache(
         &self,
         key: &CanonicOperatorName,
         query: &C::Query,
     ) -> Result<Option<C::ResultStream>, CacheError>;
 
-    async fn insert_query<S: CacheElementSubType<CacheElementType = C>>(
+    async fn insert_query(
         &self,
         key: &CanonicOperatorName,
         query: &C::Query,
     ) -> Result<QueryId, CacheError>;
 
-    async fn insert_query_element<S: CacheElementSubType<CacheElementType = C>>(
+    async fn insert_query_element(
         &self,
         key: &CanonicOperatorName,
         query_id: &QueryId,
-        landing_zone_element: S::CacheElementType,
+        landing_zone_element: C,
     ) -> Result<(), CacheError>;
 
-    async fn abort_query<S: CacheElementSubType<CacheElementType = C>>(
-        &self,
-        key: &CanonicOperatorName,
-        query_id: &QueryId,
-    );
+    async fn abort_query(&self, key: &CanonicOperatorName, query_id: &QueryId);
 
-    async fn finish_query<S: CacheElementSubType<CacheElementType = C>>(
+    async fn finish_query(
         &self,
         key: &CanonicOperatorName,
         query_id: &QueryId,
@@ -934,27 +935,24 @@ pub trait AsyncCache<C: CacheElement> {
 #[async_trait]
 impl<C> AsyncCache<C> for SharedCache
 where
-    C: CacheElement + ByteSize + Send + 'static,
-    C::Query: Send + Sync,
-    CacheBackend: Cache<C>,
-    CacheQueryEntry<C::Query, C::LandingZoneContainer>: ByteSize,
-    CacheQueryEntry<C::Query, C::CacheContainer>: ByteSize,
-    CacheQueryEntry<C::Query, C::CacheContainer>:
-        From<CacheQueryEntry<C::Query, C::LandingZoneContainer>>,
+    C: CacheElement + Send + Sync + 'static + ByteSize,
+    CacheBackend: Cache<C::StoredCacheElement>,
+    C::Query: Clone + CacheQueryMatch + Send + Sync,
 {
     /// Query the cache and on hit create a stream of cache elements
-    async fn query_cache<S: CacheElementSubType<CacheElementType = C>>(
+    async fn query_cache(
         &self,
         key: &CanonicOperatorName,
         query: &C::Query,
     ) -> Result<Option<C::ResultStream>, CacheError> {
         let mut backend = self.backend.write().await;
-        backend.query_and_promote(key, query)
+        let res_data = backend.query_and_promote(key, query)?;
+        Ok(res_data.map(|res_data| C::result_stream(res_data, query.clone())))
     }
 
     /// When inserting a new query, we first register the query and then insert the elements as they are produced
     /// This is to avoid confusing different queries on the same operator and query rectangle
-    async fn insert_query<S: CacheElementSubType<CacheElementType = C>>(
+    async fn insert_query(
         &self,
         key: &CanonicOperatorName,
         query: &C::Query,
@@ -966,28 +964,48 @@ where
     /// Insert a cachable element for a given query. The query has to be inserted first.
     /// The element is inserted into the landing zone and only moved to the cache when the query is finished.
     /// If the landing zone is full or the element size would cause the landing zone size to overflow, the caching of the query is aborted.
-    async fn insert_query_element<S: CacheElementSubType<CacheElementType = C>>(
+    async fn insert_query_element(
         &self,
         key: &CanonicOperatorName,
         query_id: &QueryId,
         landing_zone_element: C,
     ) -> Result<(), CacheError> {
+        const LOG_LEVEL_THRESHOLD: log::Level = log::Level::Trace;
+        let element_size = if log_enabled!(LOG_LEVEL_THRESHOLD) {
+            landing_zone_element.byte_size()
+        } else {
+            0
+        };
+
+        let storeable_element =
+            crate::util::spawn_blocking(|| landing_zone_element.into_stored_element())
+                .await
+                .map_err(|_| CacheError::BlockingElementConversion)?;
+
+        if log_enabled!(LOG_LEVEL_THRESHOLD) {
+            let storeable_element_size = storeable_element.byte_size();
+            tracing::trace!(
+                "Inserting element into landing zone for query {:?} on operator {}. Element size: {} bytes, storable element size: {} bytes, ratio: {}",
+                query_id,
+                key,
+                element_size,
+                storeable_element_size,
+                storeable_element_size as f64 / element_size as f64
+            );
+        }
+
         let mut backend = self.backend.write().await;
-        backend.insert_query_element_into_landing_zone(key, query_id, landing_zone_element)
+        backend.insert_query_element_into_landing_zone(key, query_id, storeable_element)
     }
 
     /// Abort the query and remove already inserted elements from the caches landing zone
-    async fn abort_query<S: CacheElementSubType<CacheElementType = C>>(
-        &self,
-        key: &CanonicOperatorName,
-        query_id: &QueryId,
-    ) {
+    async fn abort_query(&self, key: &CanonicOperatorName, query_id: &QueryId) {
         let mut backend = self.backend.write().await;
         backend.discard_query_from_landing_zone(key, query_id);
     }
 
     /// Finish the query and make the inserted elements available in the cache
-    async fn finish_query<S: CacheElementSubType<CacheElementType = C>>(
+    async fn finish_query(
         &self,
         key: &CanonicOperatorName,
         query_id: &QueryId,
@@ -999,31 +1017,55 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use geoengine_datatypes::{
         primitives::{CacheHint, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{Grid, RasterProperties},
+        raster::{Grid, RasterProperties, RasterTile2D},
     };
     use serde_json::json;
+    use std::sync::Arc;
+
+    use crate::pro::cache::cache_tiles::{CompressedGridOrEmpty, CompressedMaskedGrid};
 
     use super::*;
 
-    async fn process_query(tile_cache: &mut SharedCache, op_name: CanonicOperatorName) {
-        let query_id = tile_cache
-            .insert_query::<u8>(&op_name, &query_rect())
+    async fn process_query_async(tile_cache: &mut SharedCache, op_name: CanonicOperatorName) {
+        let query_id = <SharedCache as AsyncCache<RasterTile2D<u8>>>::insert_query(
+            tile_cache,
+            &op_name,
+            &query_rect(),
+        )
+        .await
+        .unwrap();
+
+        tile_cache
+            .insert_query_element(&op_name, &query_id, create_tile())
             .await
             .unwrap();
 
-        tile_cache
-            .insert_query_element::<u8>(&op_name, &query_id, create_tile())
-            .await
+        <SharedCache as AsyncCache<RasterTile2D<u8>>>::finish_query(
+            tile_cache, &op_name, &query_id,
+        )
+        .await
+        .unwrap();
+    }
+
+    fn process_query(tile_cache: &mut CacheBackend, op_name: &CanonicOperatorName) {
+        let query_id =
+            <CacheBackend as Cache<CompressedRasterTile2D<u8>>>::insert_query_into_landing_zone(
+                tile_cache,
+                op_name,
+                &query_rect(),
+            )
             .unwrap();
 
         tile_cache
-            .finish_query::<u8>(&op_name, &query_id)
-            .await
+            .insert_query_element_into_landing_zone(op_name, &query_id, create_compressed_tile())
             .unwrap();
+
+        <CacheBackend as Cache<CompressedRasterTile2D<u8>>>::move_query_from_landing_zone_to_cache(
+            tile_cache, op_name, &query_id,
+        )
+        .unwrap();
     }
 
     fn create_tile() -> RasterTile2D<u8> {
@@ -1034,6 +1076,21 @@ mod tests {
             grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
+            properties: RasterProperties::default(),
+            cache_hint: CacheHint::max_duration(),
+        }
+    }
+
+    fn create_compressed_tile() -> CompressedRasterTile2D<u8> {
+        CompressedRasterTile2D::<u8> {
+            time: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+            tile_position: [-1, 0].into(),
+            global_geo_transform: TestDefault::test_default(),
+            grid_array: CompressedGridOrEmpty::Compressed(CompressedMaskedGrid::new(
+                [3, 2].into(),
+                vec![1, 2, 3, 4, 5, 6],
+                vec![1; 6],
+            )),
             properties: RasterProperties::default(),
             cache_hint: CacheHint::max_duration(),
         }
@@ -1065,7 +1122,7 @@ mod tests {
         // Create cache entry and landing zone entry to geht the size of both
         let landing_zone_entry = RasterLandingQueryEntry {
             query: query_rect(),
-            elements: LandingZoneQueryTiles::U8(vec![create_tile()]),
+            elements: LandingZoneQueryTiles::U8(vec![create_compressed_tile()]),
         };
         let query_id = QueryId::new();
         let size_of_landing_zone_entry = landing_zone_entry.byte_size() + query_id.byte_size();
@@ -1078,61 +1135,75 @@ mod tests {
         let m_size = size_of_cache_entry.max(size_of_landing_zone_entry);
 
         // set limits s.t. three tiles fit
-        let mut tile_cache = SharedCache {
-            backend: RwLock::new(CacheBackend {
-                raster_caches: Default::default(),
-                vector_caches: Default::default(),
-                lru: LruCache::unbounded(),
-                cache_size: CacheSize::new(m_size * 3),
-                landing_zone_size: CacheSize::new(m_size * 3),
-            }),
+
+        let mut cache_backend = CacheBackend {
+            raster_caches: Default::default(),
+            vector_caches: Default::default(),
+            lru: LruCache::unbounded(),
+            cache_size: CacheSize::new(m_size * 3),
+            landing_zone_size: CacheSize::new(m_size * 3),
         };
 
         // process three different queries
-        process_query(&mut tile_cache, op(1)).await;
-        process_query(&mut tile_cache, op(2)).await;
-        process_query(&mut tile_cache, op(3)).await;
+        process_query(&mut cache_backend, &op(1));
+        process_query(&mut cache_backend, &op(2));
+        process_query(&mut cache_backend, &op(3));
 
         // query the first one s.t. it is the most recently used
-        tile_cache
-            .query_cache::<u8>(&op(1), &query_rect())
-            .await
-            .unwrap();
+        <CacheBackend as Cache<CompressedRasterTile2D<u8>>>::query_and_promote(
+            &mut cache_backend,
+            &op(1),
+            &query_rect(),
+        )
+        .unwrap();
+
         // process a fourth query
-        process_query(&mut tile_cache, op(4)).await;
+        process_query(&mut cache_backend, &op(4));
 
         // assure the seconds query is evicted because it is the least recently used
-        assert!(tile_cache
-            .query_cache::<u8>(&op(2), &query_rect())
-            .await
+        assert!(
+            <CacheBackend as Cache<CompressedRasterTile2D<u8>>>::query_and_promote(
+                &mut cache_backend,
+                &op(2),
+                &query_rect()
+            )
             .unwrap()
-            .is_none());
+            .is_none()
+        );
 
         // assure that the other queries are still in the cache
         for i in [1, 3, 4] {
-            assert!(tile_cache
-                .query_cache::<u8>(&op(i), &query_rect())
-                .await
+            assert!(
+                <CacheBackend as Cache<CompressedRasterTile2D<u8>>>::query_and_promote(
+                    &mut cache_backend,
+                    &op(i),
+                    &query_rect()
+                )
                 .unwrap()
-                .is_some());
+                .is_some()
+            );
         }
 
         assert_eq!(
-            tile_cache.backend.read().await.cache_size.byte_size_used(),
+            cache_backend.cache_size.byte_size_used(),
             3 * size_of_cache_entry
         );
     }
 
     #[test]
     fn cache_byte_size() {
-        assert_eq!(create_tile().byte_size(), 284);
+        assert_eq!(create_compressed_tile().byte_size(), 268);
         assert_eq!(
-            CachedTiles::U8(Arc::new(vec![create_tile()])).byte_size(),
-            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 284
+            CachedTiles::U8(Arc::new(vec![create_compressed_tile()])).byte_size(),
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 268
         );
         assert_eq!(
-            CachedTiles::U8(Arc::new(vec![create_tile(), create_tile()])).byte_size(),
-            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 2 * 284
+            CachedTiles::U8(Arc::new(vec![
+                create_compressed_tile(),
+                create_compressed_tile()
+            ]))
+            .byte_size(),
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 2 * 268
         );
     }
 
@@ -1148,14 +1219,17 @@ mod tests {
             }),
         };
 
-        process_query(&mut tile_cache, op(1)).await;
+        process_query_async(&mut tile_cache, op(1)).await;
 
         // access works because no ttl is set
-        tile_cache
-            .query_cache::<u8>(&op(1), &query_rect())
-            .await
-            .unwrap()
-            .unwrap();
+        <SharedCache as AsyncCache<RasterTile2D<u8>>>::query_cache(
+            &tile_cache,
+            &op(1),
+            &query_rect(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
 
         // manually expire entry
         {
@@ -1177,11 +1251,14 @@ mod tests {
         }
 
         // access fails because ttl is expired
-        assert!(tile_cache
-            .query_cache::<u8>(&op(1), &query_rect())
-            .await
-            .unwrap()
-            .is_none());
+        assert!(<SharedCache as AsyncCache<RasterTile2D<u8>>>::query_cache(
+            &tile_cache,
+            &op(1),
+            &query_rect()
+        )
+        .await
+        .unwrap()
+        .is_none());
     }
 
     #[tokio::test]

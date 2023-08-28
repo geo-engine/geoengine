@@ -4,7 +4,7 @@ use crate::error;
 use crate::error::Result;
 use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
-use crate::pro::permissions::RoleId;
+use crate::pro::permissions::{RoleDescription, RoleId};
 use crate::pro::users::RoleDb;
 use crate::pro::users::UserAuth;
 use crate::pro::users::UserDb;
@@ -57,6 +57,10 @@ where
             web::resource("/users/{user}/roles/{role}")
                 .route(web::post().to(assign_role_handler::<C>))
                 .route(web::delete().to(revoke_role_handler::<C>)),
+        )
+        .service(
+            web::resource("/user/roles/descriptions")
+                .route(web::get().to(get_role_descriptions::<C>)),
         );
 }
 
@@ -661,6 +665,54 @@ where
     Ok(actix_web::HttpResponse::Ok().finish())
 }
 
+/// Query roles for the current user.
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/user/roles/descriptions",
+    responses(
+        (status = 200,
+        description = "The description for roles of the current user",
+        body = Vec<RoleDescription>,
+        example = json!([{
+                        "role": {
+                            "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+                            "name": "foo@example.com"
+                        },
+                        "individual": true
+                    },
+                    {
+                        "role": {
+                            "id": "fa5be363-bc0d-4bfa-85c7-ebb5cd9a8783",
+                            "name": "Example role"
+                        },
+                        "individual": false
+                    }
+                ])
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn get_role_descriptions<C: ProApplicationContext>(
+    app_ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<web::Json<Vec<RoleDescription>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let user = session.user.id;
+
+    let res = app_ctx
+        .session_context(session)
+        .db()
+        .get_role_descriptions(&user)
+        .await?;
+
+    Ok(web::Json(res))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -690,6 +742,7 @@ mod tests {
     use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 
+    use crate::pro::permissions::Role;
     use geoengine_datatypes::util::test::TestDefault;
     use httptest::matchers::request;
     use httptest::responders::status_code;
@@ -1867,6 +1920,75 @@ mod tests {
             let res = send_pro_test_request(req, app_ctx).await;
 
             assert_eq!(res.status(), 200);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_gets_role_descriptions() {
+        with_pro_temp_context(|app_ctx, _| async move {
+            let admin_session = admin_login(&app_ctx).await;
+            let admin_db = app_ctx.session_context(admin_session.clone()).db();
+            let role_id = admin_db.add_role("foo").await.unwrap();
+
+            let user_id = app_ctx
+                .register_user(UserRegistration {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                })
+                .await
+                .unwrap();
+            admin_db.assign_role(&role_id, &user_id).await.unwrap();
+
+            let expected_user_role_description = RoleDescription {
+                role: Role {
+                    id: RoleId::from(user_id),
+                    name: "foo@example.com".to_string(),
+                },
+                individual: true,
+            };
+            let expected_registered_role_description = RoleDescription {
+                role: Role {
+                    id: Role::registered_user_role_id(),
+                    name: "user".to_string(),
+                },
+                individual: false,
+            };
+            let expected_foo_role_description = RoleDescription {
+                role: Role {
+                    id: role_id,
+                    name: "foo".to_string(),
+                },
+                individual: false,
+            };
+
+            let user_session = app_ctx
+                .login(UserCredentials {
+                    email: "foo@example.com".to_string(),
+                    password: "secret123".to_string(),
+                })
+                .await
+                .unwrap();
+
+            let req = actix_web::test::TestRequest::get()
+                .uri("/user/roles/descriptions")
+                .append_header((
+                    header::AUTHORIZATION,
+                    Bearer::new(user_session.id.to_string()),
+                ));
+            let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+            assert_eq!(res.status(), 200);
+            let role_descriptions: Vec<RoleDescription> = test::read_body_json(res).await;
+            assert_eq!(
+                vec![
+                    expected_foo_role_description,
+                    expected_user_role_description,
+                    expected_registered_role_description,
+                ],
+                role_descriptions
+            );
         })
         .await;
     }

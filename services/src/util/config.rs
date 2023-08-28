@@ -379,7 +379,6 @@ impl ConfigElement for MachineLearning {
     const KEY: &'static str = "machinelearning";
 }
 
-#[cfg(feature = "nfdi")]
 #[derive(Debug, Deserialize)]
 pub struct GFBio {
     #[serde(deserialize_with = "crate::util::parsing::deserialize_base_url")]
@@ -387,7 +386,6 @@ pub struct GFBio {
     pub group_abcd_units: bool,
 }
 
-#[cfg(feature = "nfdi")]
 impl ConfigElement for GFBio {
     const KEY: &'static str = "gfbio";
 }

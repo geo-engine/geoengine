@@ -257,8 +257,247 @@ CREATE TYPE "ResultDescriptor" AS (
     plot "PlotResultDescriptor"
 );
 
--- seperate table for projects used in foreign key constraints
+CREATE TYPE "MockDatasetDataSourceLoadingInfo" AS (
+    points "Coordinate2D" []
+);
 
+CREATE TYPE "DateTimeParseFormat" AS (
+    fmt text,
+    has_tz boolean,
+    has_time boolean
+);
+
+CREATE TYPE "OgrSourceTimeFormatCustom" AS (
+    custom_format "DateTimeParseFormat"
+);
+
+CREATE TYPE "UnixTimeStampType" AS ENUM (
+    'EpochSeconds',
+    'EpochMilliseconds'
+);
+
+CREATE TYPE "OgrSourceTimeFormatUnixTimeStamp" AS (
+    timestamp_type "UnixTimeStampType",
+    fmt "DateTimeParseFormat"
+);
+
+CREATE TYPE "OgrSourceTimeFormat" AS (
+    -- oneOf
+    -- Auto
+    custom "OgrSourceTimeFormatCustom",
+    unix_time_stamp "OgrSourceTimeFormatUnixTimeStamp"
+);
+
+CREATE TYPE "OgrSourceDurationSpec" AS (
+    -- oneOf
+    infinite boolean, -- void
+    zero boolean, -- void
+    "value" "TimeStep"
+);
+
+CREATE TYPE "OgrSourceDatasetTimeTypeStart" AS (
+    start_field text,
+    start_format "OgrSourceTimeFormat",
+    duration "OgrSourceDurationSpec"
+);
+
+CREATE TYPE "OgrSourceDatasetTimeTypeStartEnd" AS (
+    start_field text,
+    start_format "OgrSourceTimeFormat",
+    end_field text,
+    end_format "OgrSourceTimeFormat"
+);
+
+CREATE TYPE "OgrSourceDatasetTimeTypeStartDuration" AS (
+    start_field text,
+    start_format "OgrSourceTimeFormat",
+    duration_field text
+);
+
+CREATE TYPE "OgrSourceDatasetTimeType" AS (
+    -- oneOf
+    -- None
+    "start" "OgrSourceDatasetTimeTypeStart",
+    start_end "OgrSourceDatasetTimeTypeStartEnd",
+    start_duration "OgrSourceDatasetTimeTypeStartDuration"
+);
+
+CREATE TYPE "CsvHeader" AS ENUM (
+    'Yes',
+    'No',
+    'Auto'
+);
+
+CREATE TYPE "FormatSpecificsCsv" AS (
+    header "CsvHeader"
+);
+
+CREATE TYPE "FormatSpecifics" AS (
+    -- oneOf
+    csv "FormatSpecificsCsv"
+);
+
+CREATE TYPE "OgrSourceColumnSpec" AS (
+    format_specifics "FormatSpecifics",
+    x text,
+    y text,
+    "int" text [],
+    "float" text [],
+    "text" text [],
+    bool text [],
+    "datetime" text [],
+    rename "TextTextKeyValue" []
+);
+
+CREATE TYPE "OgrSourceErrorSpec" AS ENUM (
+    'Ignore',
+    'Abort'
+);
+
+-- We store `Polygon`s as an array of rings that are closed postgres `path`s.
+-- We do not use an array of `polygon`s as it is the same as storing a path 
+-- plus a stored bbox that we don't want to compute and store (overhead).
+CREATE DOMAIN "Polygon" AS path [];
+
+CREATE TYPE "TypedGeometry" AS (
+    -- oneOf
+    "data" boolean, -- void
+    multi_point point [],
+    multi_line_string path [],
+    multi_polygon "Polygon" []
+);
+
+CREATE TYPE "OgrSourceDataset" AS (
+    file_name text,
+    layer_name text,
+    data_type "VectorDataType",
+    "time" "OgrSourceDatasetTimeType",
+    default_geometry "TypedGeometry",
+    columns "OgrSourceColumnSpec",
+    force_ogr_time_filter boolean,
+    force_ogr_spatial_filter boolean,
+    on_error "OgrSourceErrorSpec",
+    sql_query text,
+    attribute_query text,
+    cache_ttl int
+);
+
+CREATE TYPE "MockMetaData" AS (
+    loading_info "MockDatasetDataSourceLoadingInfo",
+    result_descriptor "VectorResultDescriptor"
+);
+
+CREATE TYPE "OgrMetaData" AS (
+    loading_info "OgrSourceDataset",
+    result_descriptor "VectorResultDescriptor"
+);
+
+CREATE TYPE "GdalDatasetGeoTransform" AS (
+    origin_coordinate "Coordinate2D",
+    x_pixel_size double precision,
+    y_pixel_size double precision
+);
+
+CREATE TYPE "FileNotFoundHandling" AS ENUM (
+    'NoData',
+    'Error'
+);
+
+CREATE TYPE "RasterPropertiesKey" AS (
+    domain text,
+    key text
+);
+
+CREATE TYPE "RasterPropertiesEntryType" AS ENUM (
+    'Number',
+    'String'
+);
+
+CREATE TYPE "GdalMetadataMapping" AS (
+    source_key "RasterPropertiesKey",
+    target_key "RasterPropertiesKey",
+    target_type "RasterPropertiesEntryType"
+);
+
+CREATE DOMAIN "StringPair" AS text [2];
+
+CREATE TYPE "GdalDatasetParameters" AS (
+    file_path text,
+    rasterband_channel bigint,
+    geo_transform "GdalDatasetGeoTransform",
+    width bigint,
+    height bigint,
+    file_not_found_handling "FileNotFoundHandling",
+    no_data_value double precision,
+    properties_mapping "GdalMetadataMapping" [],
+    gdal_open_options text [],
+    gdal_config_options "StringPair" [],
+    allow_alphaband_as_mask boolean
+);
+
+CREATE TYPE "TimeReference" AS ENUM (
+    'Start',
+    'End'
+);
+
+CREATE TYPE "GdalSourceTimePlaceholder" AS (
+    "format" "DateTimeParseFormat",
+    reference "TimeReference"
+);
+
+CREATE TYPE "TextGdalSourceTimePlaceholderKeyValue" AS (
+    "key" text,
+    "value" "GdalSourceTimePlaceholder"
+);
+
+CREATE TYPE "GdalMetaDataRegular" AS (
+    result_descriptor "RasterResultDescriptor",
+    params "GdalDatasetParameters",
+    time_placeholders "TextGdalSourceTimePlaceholderKeyValue" [],
+    data_time "TimeInterval",
+    step "TimeStep",
+    cache_ttl int
+);
+
+CREATE TYPE "GdalMetaDataStatic" AS (
+    time "TimeInterval",
+    params "GdalDatasetParameters",
+    result_descriptor "RasterResultDescriptor",
+    cache_ttl int
+);
+
+CREATE TYPE "GdalMetadataNetCdfCf" AS (
+    result_descriptor "RasterResultDescriptor",
+    params "GdalDatasetParameters",
+    "start" bigint,
+    "end" bigint,
+    step "TimeStep",
+    band_offset bigint,
+    cache_ttl int
+);
+
+CREATE TYPE "GdalLoadingInfoTemporalSlice" AS (
+    time "TimeInterval",
+    params "GdalDatasetParameters",
+    cache_ttl int
+);
+
+CREATE TYPE "GdalMetaDataList" AS (
+    result_descriptor "RasterResultDescriptor",
+    params "GdalLoadingInfoTemporalSlice" []
+);
+
+CREATE TYPE "MetaDataDefinition" AS (
+    -- oneOf
+    mock_meta_data "MockMetaData",
+    ogr_meta_data "OgrMetaData",
+    gdal_meta_data_regular "GdalMetaDataRegular",
+    gdal_static "GdalMetaDataStatic",
+    gdal_metadata_net_cdf_cf "GdalMetadataNetCdfCf",
+    gdal_meta_data_list "GdalMetaDataList"
+);
+
+-- seperate table for projects used in foreign key constraints
 CREATE TABLE projects (id uuid PRIMARY KEY);
 
 CREATE TABLE sessions (
@@ -337,7 +576,7 @@ CREATE TABLE datasets (
     tags text [],
     source_operator text NOT NULL,
     result_descriptor "ResultDescriptor" NOT NULL,
-    meta_data json NOT NULL,
+    meta_data "MetaDataDefinition" NOT NULL,
     symbology "Symbology",
     provenance "Provenance" []
 );
@@ -375,7 +614,7 @@ CREATE TABLE layers (
     id uuid PRIMARY KEY,
     name text NOT NULL,
     description text NOT NULL,
-    workflow json NOT NULL,
+    workflow_id uuid REFERENCES workflows (id) NOT NULL,
     symbology "Symbology",
     properties "PropertyType" [] NOT NULL,
     metadata "TextTextKeyValue" [] NOT NULL
