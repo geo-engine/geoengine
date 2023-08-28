@@ -11,7 +11,6 @@ pub use sentinel_s2_l2a_cogs::{
     SentinelS2L2aCogsDataProvider, SentinelS2L2aCogsMetaData, StacApiRetries, Zone,
 };
 
-// TODO: FromSql/ToSql
 #[derive(PartialEq, Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type")] // TODO: rename_all = "camelCase"
 #[allow(clippy::enum_variant_names)] // TODO: think about better names

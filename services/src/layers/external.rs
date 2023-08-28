@@ -76,7 +76,6 @@ pub trait DataProvider: LayerCollectionProvider
     async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput>;
 }
 
-// TODO: FromSql/ToSql
 #[derive(PartialEq, Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type")] // TODO: rename_all = "camelCase"
 #[allow(clippy::enum_variant_names)] // TODO: think about better names
