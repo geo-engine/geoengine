@@ -512,16 +512,29 @@ mod tests {
     };
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
-    use crate::api::model::{ColorizerTypeDbType, HashMapTextTextDbType};
-    use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
+    use crate::api::model::{
+        ColorizerTypeDbType, HashMapTextMetaDataDefinitionDbType, HashMapTextTextDbType,
+    };
+    use crate::datasets::external::aruna::ArunaDataProviderDefinition;
+    use crate::datasets::external::gbif::GbifDataProviderDefinition;
+    use crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition;
+    use crate::datasets::external::gfbio_collections::GfbioCollectionsDataProviderDefinition;
+    use crate::datasets::external::mock::{
+        MockCollection, MockExternalLayerProviderDefinition, MockLayer,
+    };
+    use crate::datasets::external::netcdfcf::{
+        EbvPortalDataProviderDefinition, NetCdfCfDataProviderDefinition,
+    };
+    use crate::datasets::external::pangaea::PangaeaDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
     use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
+    use crate::layers::external::TypedDataProviderDefinition;
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
-        LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
+        LayerCollectionListing, LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
     };
     use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
     use crate::layers::storage::{
@@ -534,6 +547,7 @@ mod tests {
         ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
         RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
     };
+    use crate::util::postgres::{assert_sql_type, DatabaseConnectionConfig};
     use crate::util::tests::register_ndvi_workflow_helper;
     use crate::util::tests::with_temp_context;
     use crate::workflows::registry::WorkflowRegistry;
@@ -541,6 +555,7 @@ mod tests {
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
+    use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureDataType, RasterQueryRectangle, SpatialResolution,
@@ -553,7 +568,9 @@ mod tests {
         RasterResultDescriptor, StaticMetaData, TypedOperator, TypedResultDescriptor,
         VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
-    use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
+    use geoengine_operators::mock::{
+        MockDatasetDataSource, MockDatasetDataSourceParams, MockPointSource, MockPointSourceParams,
+    };
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{
         CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -1043,19 +1060,18 @@ mod tests {
 
             let provider = MockExternalLayerProviderDefinition {
                 id: provider_id,
-                root_collection: MockCollection {
-                    id: LayerCollectionId("b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_owned()),
-                    name: "Mock Collection A".to_owned(),
+                root_collection_id: LayerCollectionId(
+                    "b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_owned(),
+                ),
+                root_collection_name: "Mock Collection A".to_owned(),
+                root_collection_description: "Some description".to_owned(),
+                root_collection_collections: vec![MockCollection {
+                    id: LayerCollectionId("21466897-37a1-4666-913a-50b5244699ad".to_owned()),
+                    name: "Mock Collection B".to_owned(),
                     description: "Some description".to_owned(),
-                    collections: vec![MockCollection {
-                        id: LayerCollectionId("21466897-37a1-4666-913a-50b5244699ad".to_owned()),
-                        name: "Mock Collection B".to_owned(),
-                        description: "Some description".to_owned(),
-                        collections: vec![],
-                        layers: vec![],
-                    }],
                     layers: vec![],
-                },
+                }],
+                root_collection_layers: vec![],
                 data: [("myData".to_owned(), meta_data)].into_iter().collect(),
             };
 
@@ -2493,46 +2509,19 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn test_postgres_type_serialization() {
-        pub async fn test_type<T>(
-            conn: &PooledConnection<'_, PostgresConnectionManager<tokio_postgres::NoTls>>,
-            sql_type: &str,
-            checks: impl IntoIterator<Item = T>,
-        ) where
-            T: PartialEq + postgres_types::FromSqlOwned + postgres_types::ToSql + Sync,
-        {
-            const UNQUOTED: [&str; 3] = ["double precision", "int", "point[]"];
-
-            // don't quote built-in types
-            let quote = if UNQUOTED.contains(&sql_type) || sql_type.contains('[') {
-                ""
-            } else {
-                "\""
-            };
-
-            for value in checks {
-                let stmt = conn
-                    .prepare(&format!("SELECT $1::{quote}{sql_type}{quote}"))
-                    .await
-                    .unwrap();
-                let result: T = conn.query_one(&stmt, &[&value]).await.unwrap().get(0);
-
-                assert_eq!(value, result);
-            }
-        }
-
         with_temp_context(|app_ctx, _| async move {
             let pool = app_ctx.pool.get().await.unwrap();
 
-            test_type(&pool, "RgbaColor", [RgbaColor([0, 1, 2, 3])]).await;
+            assert_sql_type(&pool, "RgbaColor", [RgbaColor([0, 1, 2, 3])]).await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "double precision",
                 [NotNanF64::from(NotNan::<f64>::new(1.0).unwrap())],
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "Breakpoint",
                 [Breakpoint {
@@ -2542,7 +2531,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "DefaultColors",
                 [
@@ -2557,7 +2546,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "ColorizerType",
                 [
@@ -2569,7 +2558,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "Colorizer",
                 [
@@ -2627,7 +2616,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "ColorParam",
                 [
@@ -2642,7 +2631,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "NumberParam",
                 [
@@ -2656,7 +2645,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "StrokeParam",
                 [StrokeParam {
@@ -2668,7 +2657,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "TextSymbology",
                 [TextSymbology {
@@ -2686,7 +2675,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "Symbology",
                 [
@@ -2783,7 +2772,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "RasterDataType",
                 [
@@ -2801,7 +2790,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "Measurement",
                 [
@@ -2818,7 +2807,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "Coordinate2D",
                 [crate::api::model::datatypes::Coordinate2D::from(
@@ -2827,7 +2816,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "SpatialPartition2D",
                 [crate::api::model::datatypes::SpatialPartition2D {
@@ -2837,7 +2826,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "BoundingBox2D",
                 [crate::api::model::datatypes::BoundingBox2D {
@@ -2847,14 +2836,14 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "SpatialResolution",
                 [crate::api::model::datatypes::SpatialResolution { x: 1.2, y: 2.3 }],
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "VectorDataType",
                 [
@@ -2866,7 +2855,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "FeatureDataType",
                 [
@@ -2880,7 +2869,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "TimeInterval",
                 [crate::api::model::datatypes::TimeInterval::from(
@@ -2889,7 +2878,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "SpatialReference",
                 [
@@ -2901,7 +2890,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "PlotResultDescriptor",
                 [PlotResultDescriptor {
@@ -2912,7 +2901,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "VectorResultDescriptor",
                 [crate::api::model::operators::VectorResultDescriptor {
@@ -2943,7 +2932,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "RasterResultDescriptor",
                 [crate::api::model::operators::RasterResultDescriptor {
@@ -2963,7 +2952,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "ResultDescriptor",
                 [
@@ -3019,7 +3008,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "\"TextTextKeyValue\"[]",
                 [HashMapTextTextDbType::from(
@@ -3031,7 +3020,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "MockDatasetDataSourceLoadingInfo",
                 [
@@ -3045,7 +3034,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "OgrSourceTimeFormat",
                 [
@@ -3065,7 +3054,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "OgrSourceDurationSpec",
                 [
@@ -3082,7 +3071,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "OgrSourceDatasetTimeType",
                 [
@@ -3107,7 +3096,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "FormatSpecifics",
                 [crate::api::model::operators::FormatSpecifics::Csv {
@@ -3116,7 +3105,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "OgrSourceColumnSpec",
                 [crate::api::model::operators::OgrSourceColumnSpec {
@@ -3141,7 +3130,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "point[]",
                 [MultiPoint {
@@ -3153,7 +3142,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "path[]",
                 [MultiLineString {
@@ -3171,7 +3160,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "\"Polygon\"[]",
                 [MultiPolygon {
@@ -3209,7 +3198,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "TypedGeometry",
                 [
@@ -3268,9 +3257,9 @@ mod tests {
             )
             .await;
 
-            test_type(&pool, "int", [CacheTtlSeconds::new(100)]).await;
+            assert_sql_type(&pool, "int", [CacheTtlSeconds::new(100)]).await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "OgrSourceDataset",
                 [crate::api::model::operators::OgrSourceDataset {
@@ -3321,7 +3310,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "MockMetaData",
                 [crate::api::model::operators::MockMetaData {
@@ -3359,7 +3348,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "OgrMetaData",
                 [crate::api::model::operators::OgrMetaData {
@@ -3436,7 +3425,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "GdalDatasetGeoTransform",
                 [crate::api::model::operators::GdalDatasetGeoTransform {
@@ -3447,7 +3436,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "FileNotFoundHandling",
                 [
@@ -3457,7 +3446,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "GdalMetadataMapping",
                 [crate::api::model::operators::GdalMetadataMapping {
@@ -3474,14 +3463,14 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "StringPair",
                 [StringPair::from(("foo".to_string(), "bar".to_string()))],
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "GdalDatasetParameters",
                 [crate::api::model::operators::GdalDatasetParameters {
@@ -3522,7 +3511,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "TextGdalSourceTimePlaceholderKeyValue",
                 [crate::api::model::TextGdalSourceTimePlaceholderKeyValue {
@@ -3535,7 +3524,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "GdalMetaDataRegular",
                 [crate::api::model::operators::GdalMetaDataRegular {
@@ -3613,7 +3602,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "GdalMetaDataStatic",
                 [crate::api::model::operators::GdalMetaDataStatic {
@@ -3677,7 +3666,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "GdalMetadataNetCdfCf",
                 [crate::api::model::operators::GdalMetadataNetCdfCf {
@@ -3748,7 +3737,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "GdalMetaDataList",
                 [crate::api::model::operators::GdalMetaDataList {
@@ -3814,7 +3803,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "MetaDataDefinition",
                 [
@@ -4184,7 +4173,554 @@ mod tests {
                 ],
             )
             .await;
+
+            test_data_provider_definition_types(&pool).await;
+
         })
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn test_data_provider_definition_types(
+        pool: &PooledConnection<'_, PostgresConnectionManager<tokio_postgres::NoTls>>,
+    ) {
+        assert_sql_type(
+            pool,
+            "ArunaDataProviderDefinition",
+            [ArunaDataProviderDefinition {
+                id: DataProviderId::from_str("86a7f7ce-1bab-4ce9-a32b-172c0f958ee0").unwrap(),
+                name: "NFDI".to_string(),
+                api_url: "http://test".to_string(),
+                project_id: "project".to_string(),
+                api_token: "api_token".to_string(),
+                filter_label: "filter".to_string(),
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "GbifDataProviderDefinition",
+            [GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                db_config: DatabaseConnectionConfig {
+                    host: "testhost".to_string(),
+                    port: 1234,
+                    database: "testdb".to_string(),
+                    schema: "testschema".to_string(),
+                    user: "testuser".to_string(),
+                    password: "testpass".to_string(),
+                },
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "GfbioAbcdDataProviderDefinition",
+            [GfbioAbcdDataProviderDefinition {
+                name: "GFbio".to_string(),
+                db_config: DatabaseConnectionConfig {
+                    host: "testhost".to_string(),
+                    port: 1234,
+                    database: "testdb".to_string(),
+                    schema: "testschema".to_string(),
+                    user: "testuser".to_string(),
+                    password: "testpass".to_string(),
+                },
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "GfbioCollectionsDataProviderDefinition",
+            [GfbioCollectionsDataProviderDefinition {
+                name: "GFbio".to_string(),
+                collection_api_url: "http://testhost".try_into().unwrap(),
+                collection_api_auth_token: "token".to_string(),
+                abcd_db_config: DatabaseConnectionConfig {
+                    host: "testhost".to_string(),
+                    port: 1234,
+                    database: "testdb".to_string(),
+                    schema: "testschema".to_string(),
+                    user: "testuser".to_string(),
+                    password: "testpass".to_string(),
+                },
+                pangaea_url: "http://panaea".try_into().unwrap(),
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "LayerId",
+            [LayerId("389a84ef-add4-4f22-9389-1e4a89396f65".to_string())],
+        )
+        .await;
+
+        assert_sql_type(pool, "\"PropertyType\"[]", [Vec::<Property>::new()]).await;
+
+        assert_sql_type(
+            pool,
+            "MockLayer",
+            [MockLayer {
+                id: LayerId("389a84ef-add4-4f22-9389-1e4a89396f65".to_string()),
+                name: "Empty Collection".to_string(),
+                description: "bar".to_string(),
+                workflow: Workflow {
+                    operator: TypedOperator::Vector(
+                        MockDatasetDataSource {
+                            params: MockDatasetDataSourceParams {
+                                data: NamedData::with_system_provider(
+                                    "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
+                                    "myMock",
+                                ),
+                            },
+                        }
+                        .boxed(),
+                    ),
+                },
+                symbology: Some(Symbology::Point(PointSymbology {
+                    fill_color: ColorParam::Static {
+                        color: RgbaColor([0, 10, 20, 30]).into(),
+                    },
+                    stroke: StrokeParam {
+                        width: NumberParam::Static { value: 42 },
+                        color: ColorParam::Static {
+                            color: RgbaColor([0, 10, 20, 30]).into(),
+                        },
+                    },
+                    radius: NumberParam::Static { value: 42 },
+                    text: Some(TextSymbology {
+                        attribute: "attribute".to_string(),
+                        fill_color: ColorParam::Static {
+                            color: RgbaColor([0, 10, 20, 30]).into(),
+                        },
+                        stroke: StrokeParam {
+                            width: NumberParam::Static { value: 42 },
+                            color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                        },
+                    }),
+                })),
+                provenance: Some(Provenance {
+                    citation: "citation".to_owned(),
+                    license: "license".to_owned(),
+                    uri: "uri".to_owned(),
+                }),
+                properties: vec![],
+                metadata: [("foo".to_string(), "bar".to_string())].into(),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "MockCollection",
+            [MockCollection {
+                id: LayerCollectionId("c1351ca5-0353-41ad-9f15-784ea207d0ef".to_string()),
+                name: "Empty Collection".to_string(),
+                description: "foo".to_string(),
+                layers: vec![],
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "\"TextMetaDataDefinitionKeyValue\"[]",
+            [HashMapTextMetaDataDefinitionDbType::from(&HashMap::<
+                String,
+                crate::datasets::storage::MetaDataDefinition,
+            >::from(
+                [
+                (
+                    "foo".to_string(),
+                    crate::datasets::storage::MetaDataDefinition::MockMetaData(
+                        crate::api::model::operators::MockMetaData {
+                            loading_info:
+                                crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
+                                    points: vec![
+                                        Coordinate2D::new(0.0f64, 0.5).into(),
+                                        Coordinate2D::new(2., 1.0).into(),
+                                    ],
+                                },
+                            result_descriptor: VectorResultDescriptor {
+                                data_type: VectorDataType::MultiPoint,
+                                spatial_reference: SpatialReferenceOption::SpatialReference(
+                                    SpatialReference::epsg_4326(),
+                                ),
+                                columns: [(
+                                    "foo".to_string(),
+                                    VectorColumnInfo {
+                                        data_type: FeatureDataType::Int,
+                                        measurement: Measurement::Unitless.into(),
+                                    },
+                                )]
+                                .into(),
+                                time: Some(TimeInterval::default()),
+                                bbox: Some(
+                                    BoundingBox2D::new(
+                                        Coordinate2D::new(0.0f64, 0.5),
+                                        Coordinate2D::new(2., 1.0),
+                                    )
+                                    .unwrap(),
+                                ),
+                            }
+                            .into(),
+                            phantom: PhantomData,
+                        }
+                        .into(),
+                    ),
+                ),
+            ]
+            ))],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "MockExternalLayerProviderDefinition",
+            [MockExternalLayerProviderDefinition {
+                id: DataProviderId::from_str("d0535f1d-27b6-4982-b2f8-b1070f1bf6ee").unwrap(),
+                root_collection_id: LayerCollectionId(
+                    "b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_string(),
+                ),
+                root_collection_name: "Mock Collection A".to_string(),
+                root_collection_description: "desc".to_string(),
+                root_collection_collections: vec![MockCollection {
+                    id: LayerCollectionId("c1351ca5-0353-41ad-9f15-784ea207d0ef".to_string()),
+                    name: "Empty Collection".to_string(),
+                    description: "foo".to_string(),
+                    layers: vec![],
+                }],
+                root_collection_layers: vec![MockLayer {
+                    id: LayerId("389a84ef-add4-4f22-9389-1e4a89396f65".to_string()),
+                    name: "Empty Collection".to_string(),
+                    description: "bar".to_string(),
+                    workflow: Workflow {
+                        operator: TypedOperator::Vector(
+                            MockDatasetDataSource {
+                                params: MockDatasetDataSourceParams {
+                                    data: NamedData::with_system_provider(
+                                        "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
+                                        "myMock",
+                                    ),
+                                },
+                            }
+                            .boxed(),
+                        ),
+                    },
+                    symbology: Some(Symbology::Point(PointSymbology {
+                        fill_color: ColorParam::Static {
+                            color: RgbaColor([0, 10, 20, 30]).into(),
+                        },
+                        stroke: StrokeParam {
+                            width: NumberParam::Static { value: 42 },
+                            color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                        },
+                        radius: NumberParam::Static { value: 42 },
+                        text: Some(TextSymbology {
+                            attribute: "attribute".to_string(),
+                            fill_color: ColorParam::Static {
+                                color: RgbaColor([0, 10, 20, 30]).into(),
+                            },
+                            stroke: StrokeParam {
+                                width: NumberParam::Static { value: 42 },
+                                color: ColorParam::Static {
+                                    color: RgbaColor([0, 10, 20, 30]).into(),
+                                },
+                            },
+                        }),
+                    })),
+                    provenance: Some(Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }),
+                    properties: vec![],
+                    metadata: [("foo".to_string(), "bar".to_string())].into(),
+                }],
+                data: [(
+                    "foo".to_string(),
+                    crate::datasets::storage::MetaDataDefinition::MockMetaData(
+                        crate::api::model::operators::MockMetaData {
+                            loading_info:
+                                crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
+                                    points: vec![
+                                        Coordinate2D::new(0.0f64, 0.5).into(),
+                                        Coordinate2D::new(2., 1.0).into(),
+                                    ],
+                                },
+                            result_descriptor: VectorResultDescriptor {
+                                data_type: VectorDataType::MultiPoint,
+                                spatial_reference: SpatialReferenceOption::SpatialReference(
+                                    SpatialReference::epsg_4326(),
+                                ),
+                                columns: [(
+                                    "foo".to_string(),
+                                    VectorColumnInfo {
+                                        data_type: FeatureDataType::Int,
+                                        measurement: Measurement::Unitless.into(),
+                                    },
+                                )]
+                                .into(),
+                                time: Some(TimeInterval::default()),
+                                bbox: Some(
+                                    BoundingBox2D::new(
+                                        Coordinate2D::new(0.0f64, 0.5),
+                                        Coordinate2D::new(2., 1.0),
+                                    )
+                                    .unwrap(),
+                                ),
+                            }
+                            .into(),
+                            phantom: PhantomData,
+                        }
+                        .into(),
+                    ),
+                )]
+                .into(),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "EbvPortalDataProviderDefinition",
+            [EbvPortalDataProviderDefinition {
+                name: "ebv".to_string(),
+                path: "a_path".into(),
+                base_url: "http://base".try_into().unwrap(),
+                overviews: "another_path".into(),
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "NetCdfCfDataProviderDefinition",
+            [NetCdfCfDataProviderDefinition {
+                name: "netcdfcf".to_string(),
+                path: "a_path".into(),
+                overviews: "another_path".into(),
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "PangaeaDataProviderDefinition",
+            [PangaeaDataProviderDefinition {
+                name: "pangaea".to_string(),
+                base_url: "http://base".try_into().unwrap(),
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "DataProviderDefinition",
+            [
+                TypedDataProviderDefinition::ArunaDataProviderDefinition(
+                    ArunaDataProviderDefinition {
+                        id: DataProviderId::from_str("86a7f7ce-1bab-4ce9-a32b-172c0f958ee0")
+                            .unwrap(),
+                        name: "NFDI".to_string(),
+                        api_url: "http://test".to_string(),
+                        project_id: "project".to_string(),
+                        api_token: "api_token".to_string(),
+                        filter_label: "filter".to_string(),
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::GbifDataProviderDefinition(
+                    GbifDataProviderDefinition {
+                        name: "GBIF".to_string(),
+                        db_config: DatabaseConnectionConfig {
+                            host: "testhost".to_string(),
+                            port: 1234,
+                            database: "testdb".to_string(),
+                            schema: "testschema".to_string(),
+                            user: "testuser".to_string(),
+                            password: "testpass".to_string(),
+                        },
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
+                    GfbioAbcdDataProviderDefinition {
+                        name: "GFbio".to_string(),
+                        db_config: DatabaseConnectionConfig {
+                            host: "testhost".to_string(),
+                            port: 1234,
+                            database: "testdb".to_string(),
+                            schema: "testschema".to_string(),
+                            user: "testuser".to_string(),
+                            password: "testpass".to_string(),
+                        },
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
+                    GfbioCollectionsDataProviderDefinition {
+                        name: "GFbio".to_string(),
+                        collection_api_url: "http://testhost".try_into().unwrap(),
+                        collection_api_auth_token: "token".to_string(),
+                        abcd_db_config: DatabaseConnectionConfig {
+                            host: "testhost".to_string(),
+                            port: 1234,
+                            database: "testdb".to_string(),
+                            schema: "testschema".to_string(),
+                            user: "testuser".to_string(),
+                            password: "testpass".to_string(),
+                        },
+                        pangaea_url: "http://panaea".try_into().unwrap(),
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::MockExternalLayerProviderDefinition(
+                    MockExternalLayerProviderDefinition {
+                        id: DataProviderId::from_str("d0535f1d-27b6-4982-b2f8-b1070f1bf6ee").unwrap(),
+                        root_collection_id: LayerCollectionId(
+                            "b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_string(),
+                        ),
+                        root_collection_name: "Mock Collection A".to_string(),
+                        root_collection_description: "desc".to_string(),
+                        root_collection_collections: vec![MockCollection {
+                            id: LayerCollectionId("c1351ca5-0353-41ad-9f15-784ea207d0ef".to_string()),
+                            name: "Empty Collection".to_string(),
+                            description: "foo".to_string(),
+                            layers: vec![],
+                        }],
+                        root_collection_layers: vec![MockLayer {
+                            id: LayerId("389a84ef-add4-4f22-9389-1e4a89396f65".to_string()),
+                            name: "Empty Collection".to_string(),
+                            description: "bar".to_string(),
+                            workflow: Workflow {
+                                operator: TypedOperator::Vector(
+                                    MockDatasetDataSource {
+                                        params: MockDatasetDataSourceParams {
+                                            data: NamedData::with_system_provider(
+                                                "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
+                                                "myMock",
+                                            ),
+                                        },
+                                    }
+                                    .boxed(),
+                                ),
+                            },
+                            symbology: Some(Symbology::Point(PointSymbology {
+                                fill_color: ColorParam::Static {
+                                    color: RgbaColor([0, 10, 20, 30]).into(),
+                                },
+                                stroke: StrokeParam {
+                                    width: NumberParam::Static { value: 42 },
+                                    color: ColorParam::Static {
+                                        color: RgbaColor([0, 10, 20, 30]).into(),
+                                    },
+                                },
+                                radius: NumberParam::Static { value: 42 },
+                                text: Some(TextSymbology {
+                                    attribute: "attribute".to_string(),
+                                    fill_color: ColorParam::Static {
+                                        color: RgbaColor([0, 10, 20, 30]).into(),
+                                    },
+                                    stroke: StrokeParam {
+                                        width: NumberParam::Static { value: 42 },
+                                        color: ColorParam::Static {
+                                            color: RgbaColor([0, 10, 20, 30]).into(),
+                                        },
+                                    },
+                                }),
+                            })),
+                            provenance: Some(Provenance {
+                                citation: "citation".to_owned(),
+                                license: "license".to_owned(),
+                                uri: "uri".to_owned(),
+                            }),
+                            properties: vec![],
+                            metadata: [("foo".to_string(), "bar".to_string())].into(),
+                        }],
+                        data: [(
+                            "foo".to_string(),
+                            crate::datasets::storage::MetaDataDefinition::MockMetaData(
+                                crate::api::model::operators::MockMetaData {
+                                    loading_info:
+                                        crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
+                                            points: vec![
+                                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                                Coordinate2D::new(2., 1.0).into(),
+                                            ],
+                                        },
+                                    result_descriptor: VectorResultDescriptor {
+                                        data_type: VectorDataType::MultiPoint,
+                                        spatial_reference: SpatialReferenceOption::SpatialReference(
+                                            SpatialReference::epsg_4326(),
+                                        ),
+                                        columns: [(
+                                            "foo".to_string(),
+                                            VectorColumnInfo {
+                                                data_type: FeatureDataType::Int,
+                                                measurement: Measurement::Unitless.into(),
+                                            },
+                                        )]
+                                        .into(),
+                                        time: Some(TimeInterval::default()),
+                                        bbox: Some(
+                                            BoundingBox2D::new(
+                                                Coordinate2D::new(0.0f64, 0.5),
+                                                Coordinate2D::new(2., 1.0),
+                                            )
+                                            .unwrap(),
+                                        ),
+                                    }
+                                    .into(),
+                                    phantom: PhantomData,
+                                }
+                                .into(),
+                            ),
+                        )]
+                        .into(),
+                    },
+                ),
+                TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
+                    EbvPortalDataProviderDefinition {
+                        name: "ebv".to_string(),
+                        path: "a_path".into(),
+                        base_url: "http://base".try_into().unwrap(),
+                        overviews: "another_path".into(),
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
+                    NetCdfCfDataProviderDefinition {
+                        name: "netcdfcf".to_string(),
+                        path: "a_path".into(),
+                        overviews: "another_path".into(),
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::PangaeaDataProviderDefinition(
+                    PangaeaDataProviderDefinition {
+                        name: "pangaea".to_string(),
+                        base_url: "http://base".try_into().unwrap(),
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+            ],
+        )
         .await;
     }
 }

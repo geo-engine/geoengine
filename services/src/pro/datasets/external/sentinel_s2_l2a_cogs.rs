@@ -35,6 +35,7 @@ use geoengine_operators::source::{
 };
 use geoengine_operators::util::retry::retry;
 use log::debug;
+use postgres_types::{FromSql, ToSql};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
@@ -45,28 +46,28 @@ use std::path::PathBuf;
 
 static STAC_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct SentinelS2L2ACogsProviderDefinition {
-    name: String,
-    id: DataProviderId,
-    api_url: String,
-    bands: Vec<Band>,
-    zones: Vec<Zone>,
+    pub name: String,
+    pub id: DataProviderId,
+    pub api_url: String,
+    pub bands: Vec<Band>,
+    pub zones: Vec<Zone>,
     #[serde(default)]
-    stac_api_retries: StacApiRetries,
+    pub stac_api_retries: StacApiRetries,
     #[serde(default)]
-    gdal_retries: GdalRetries,
+    pub gdal_retries: GdalRetries,
     #[serde(default)]
-    cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StacApiRetries {
-    number_of_retries: usize,
-    initial_delay_ms: u64,
-    exponential_backoff_factor: f64,
+    pub number_of_retries: usize,
+    pub initial_delay_ms: u64,
+    pub exponential_backoff_factor: f64,
 }
 
 impl Default for StacApiRetries {
@@ -84,7 +85,7 @@ impl Default for StacApiRetries {
 #[serde(rename_all = "camelCase")]
 pub struct GdalRetries {
     /// retry at most `number_of_retries` times with exponential backoff
-    number_of_retries: usize,
+    pub number_of_retries: usize,
 }
 
 impl Default for GdalRetries {
@@ -122,7 +123,7 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct Band {
     pub name: String,
@@ -130,7 +131,7 @@ pub struct Band {
     pub data_type: RasterDataType,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, FromSql, ToSql)]
 pub struct Zone {
     pub name: String,
     pub epsg: u32,

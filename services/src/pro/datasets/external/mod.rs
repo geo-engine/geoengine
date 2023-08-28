@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 pub use sentinel_s2_l2a_cogs::{
-    SentinelDataset, SentinelS2L2ACogsProviderDefinition, SentinelS2L2aCogsDataProvider,
-    SentinelS2L2aCogsMetaData,
+    Band, GdalRetries, SentinelDataset, SentinelS2L2ACogsProviderDefinition,
+    SentinelS2L2aCogsDataProvider, SentinelS2L2aCogsMetaData, StacApiRetries, Zone,
 };
 
 // TODO: FromSql/ToSql

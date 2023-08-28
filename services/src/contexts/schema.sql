@@ -634,11 +634,123 @@ CREATE TABLE collection_children (
     PRIMARY KEY (parent, child)
 );
 
+CREATE TYPE "ArunaDataProviderDefinition" AS (
+    id uuid,
+    "name" text,
+    api_url text,
+    project_id text,
+    api_token text,
+    filter_label text,
+    cache_ttl int
+);
+
+CREATE TYPE "DatabaseConnectionConfig" AS (
+    host text,
+    port int,
+    "database" text,
+    schema text,
+    "user" text,
+    "password" text
+);
+
+CREATE TYPE "GbifDataProviderDefinition" AS (
+    "name" text,
+    db_config "DatabaseConnectionConfig",
+    cache_ttl int
+);
+
+CREATE TYPE "GfbioAbcdDataProviderDefinition" AS (
+    "name" text,
+    db_config "DatabaseConnectionConfig",
+    cache_ttl int
+);
+
+CREATE TYPE "GfbioCollectionsDataProviderDefinition" AS (
+    "name" text,
+    collection_api_url text,
+    collection_api_auth_token text,
+    abcd_db_config "DatabaseConnectionConfig",
+    pangaea_url text,
+    cache_ttl int
+);
+
+CREATE TYPE "TextMetaDataDefinitionKeyValue" AS (
+    key text,
+    value "MetaDataDefinition"
+);
+
+CREATE DOMAIN "LayerId" AS text;
+
+CREATE DOMAIN "LayerCollectionId" AS text;
+
+CREATE TYPE "MockLayer" AS (
+    id "LayerId",
+    "name" text,
+    "description" text,
+    symbology "Symbology",
+    provenance "Provenance",
+    workflow json, -- TODO: get rid of json type
+    properties "PropertyType" [],
+    metadata "TextTextKeyValue" []
+);
+
+CREATE TYPE "MockCollection" AS (
+    id "LayerCollectionId",
+    "name" text,
+    "description" text,
+    layers "MockLayer" []
+);
+
+CREATE TYPE "MockExternalLayerProviderDefinition" AS (
+    id uuid,
+    root_collection_id "LayerCollectionId",
+    root_collection_name text,
+    root_collection_description text,
+    root_collection_collections "MockCollection" [],
+    root_collection_layers "MockLayer" [],
+    "data" "TextMetaDataDefinitionKeyValue" []
+);
+
+CREATE TYPE "EbvPortalDataProviderDefinition" AS (
+    "name" text,
+    "path" text,
+    base_url text,
+    overviews text,
+    cache_ttl int
+);
+
+CREATE TYPE "NetCdfCfDataProviderDefinition" AS (
+    "name" text,
+    "path" text,
+    overviews text,
+    cache_ttl int
+);
+
+CREATE TYPE "PangaeaDataProviderDefinition" AS (
+    "name" text,
+    base_url text,
+    cache_ttl int
+);
+
+CREATE TYPE "DataProviderDefinition" AS (
+    -- one of
+    aruna_data_provider_definition "ArunaDataProviderDefinition",
+    gbif_data_provider_definition "GbifDataProviderDefinition",
+    gfbio_abcd_data_provider_definition "GfbioAbcdDataProviderDefinition",
+    gfbio_collections_data_provider_definition
+    "GfbioCollectionsDataProviderDefinition",
+    mock_external_layer_provider_definition
+    "MockExternalLayerProviderDefinition",
+    ebv_portal_data_provider_definition "EbvPortalDataProviderDefinition",
+    net_cdf_cf_data_provider_definition "NetCdfCfDataProviderDefinition",
+    pangaea_data_provider_definition "PangaeaDataProviderDefinition"
+);
+
 CREATE TABLE layer_providers (
     id uuid PRIMARY KEY,
     type_name text NOT NULL,
     name text NOT NULL,
-    definition json NOT NULL -- TODO: change
+    definition "DataProviderDefinition" NOT NULL
 );
 
 -- TODO: relationship between uploads and datasets?

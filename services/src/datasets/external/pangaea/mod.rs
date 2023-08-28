@@ -29,9 +29,9 @@ pub const PANGAEA_PROVIDER_ID: DataProviderId =
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PangaeaDataProviderDefinition {
-    name: String,
-    base_url: Url,
-    cache_ttl: CacheTtlSeconds,
+    pub name: String,
+    pub base_url: Url,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[async_trait]

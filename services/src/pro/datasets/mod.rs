@@ -3,4 +3,7 @@ mod external;
 mod postgres;
 
 pub use add_from_directory::add_datasets_from_directory;
-pub use external::TypedProDataProviderDefinition;
+pub use external::{
+    Band, GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries,
+    TypedProDataProviderDefinition, Zone,
+};

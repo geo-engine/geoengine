@@ -638,12 +638,7 @@ where
         let id = provider.id();
         conn.execute(
             &stmt,
-            &[
-                &id,
-                &provider.type_name(),
-                &provider.name(),
-                &serde_json::to_value(provider)?,
-            ],
+            &[&id, &provider.type_name(), &provider.name(), &provider],
         )
         .await?;
         Ok(id)
@@ -706,7 +701,7 @@ where
 
         let row = conn.query_one(&stmt, &[&id]).await?;
 
-        let definition = serde_json::from_value::<TypedDataProviderDefinition>(row.get(0))?;
+        let definition: TypedDataProviderDefinition = row.get(0);
 
         Box::new(definition).initialize().await
     }

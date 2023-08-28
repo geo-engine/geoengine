@@ -52,13 +52,13 @@ pub const GFBIO_COLLECTIONS_PROVIDER_ID: DataProviderId =
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GfbioCollectionsDataProviderDefinition {
-    name: String,
-    collection_api_url: Url,
-    collection_api_auth_token: String,
-    abcd_db_config: DatabaseConnectionConfig,
-    pangaea_url: Url,
+    pub name: String,
+    pub collection_api_url: Url,
+    pub collection_api_auth_token: String,
+    pub abcd_db_config: DatabaseConnectionConfig,
+    pub pangaea_url: Url,
     #[serde(default)]
-    cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 #[async_trait]

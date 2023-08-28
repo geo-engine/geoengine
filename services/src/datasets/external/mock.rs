@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Result;
@@ -19,23 +17,28 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MockExternalLayerProviderDefinition {
     pub id: DataProviderId,
-    pub root_collection: MockCollection,
+    pub root_collection_id: LayerCollectionId,
+    pub root_collection_name: String,
+    pub root_collection_description: String,
+    pub root_collection_collections: Vec<MockCollection>,
+    pub root_collection_layers: Vec<MockLayer>,
     pub data: HashMap<String, MetaDataDefinition>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct MockCollection {
     pub id: LayerCollectionId,
     pub name: String,
     pub description: String,
-    pub collections: Vec<MockCollection>,
     pub layers: Vec<MockLayer>,
 }
 
@@ -55,9 +58,16 @@ pub struct MockLayer {
 #[async_trait]
 impl DataProviderDefinition for MockExternalLayerProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
+        let root_collection = MockCollection {
+            id: self.root_collection_id,
+            name: self.root_collection_name,
+            description: self.root_collection_description,
+            layers: self.root_collection_layers,
+        };
         Ok(Box::new(MockExternalDataProvider {
             id: self.id,
-            root_collection: self.root_collection,
+            root_collection,
+            root_collection_collections: self.root_collection_collections,
             data: self.data,
         }))
     }
@@ -79,19 +89,19 @@ impl DataProviderDefinition for MockExternalLayerProviderDefinition {
 pub struct MockExternalDataProvider {
     id: DataProviderId,
     root_collection: MockCollection,
+    root_collection_collections: Vec<MockCollection>,
     data: HashMap<String, MetaDataDefinition>,
 }
 
 impl MockExternalDataProvider {
     fn collection(&self, collection_id: &LayerCollectionId) -> Option<&MockCollection> {
         let mut queue = vec![&self.root_collection];
+        queue.extend(self.root_collection_collections.iter());
 
         while let Some(current) = queue.pop() {
             if &current.id == collection_id {
                 return Some(current);
             }
-
-            queue.extend(&current.collections);
         }
 
         None
@@ -106,8 +116,6 @@ impl MockExternalDataProvider {
                     return Some(layer);
                 }
             }
-
-            queue.extend(&current.collections);
         }
 
         None
@@ -137,6 +145,23 @@ impl LayerCollectionProvider for MockExternalDataProvider {
                     id: collection.clone(),
                 })?;
 
+        let items: Box<dyn Iterator<Item = CollectionItem>> = if *collection == self.root_collection
+        {
+            Box::new(self.root_collection_collections.iter().map(|c| {
+                CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: self.id,
+                        collection_id: c.id.clone(),
+                    },
+                    name: c.name.clone(),
+                    description: c.description.clone(),
+                    properties: vec![],
+                })
+            }))
+        } else {
+            Box::new(std::iter::empty())
+        };
+
         let out = LayerCollection {
             id: ProviderLayerCollectionId {
                 provider_id: self.id,
@@ -144,20 +169,7 @@ impl LayerCollectionProvider for MockExternalDataProvider {
             },
             name: collection.name.clone(),
             description: collection.description.clone(),
-            items: collection
-                .collections
-                .iter()
-                .map(|c| {
-                    CollectionItem::Collection(LayerCollectionListing {
-                        id: ProviderLayerCollectionId {
-                            provider_id: self.id,
-                            collection_id: c.id.clone(),
-                        },
-                        name: c.name.clone(),
-                        description: c.description.clone(),
-                        properties: Default::default(),
-                    })
-                })
+            items: items
                 .chain(collection.layers.iter().map(|l| {
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {

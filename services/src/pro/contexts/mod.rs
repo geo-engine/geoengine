@@ -1,3 +1,4 @@
+mod db_types;
 mod postgres;
 
 use std::str::FromStr;

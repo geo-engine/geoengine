@@ -737,12 +737,7 @@ where
         let id = provider.id();
         conn.execute(
             &stmt,
-            &[
-                &id,
-                &provider.type_name(),
-                &provider.name(),
-                &serde_json::to_value(provider)?,
-            ],
+            &[&id, &provider.type_name(), &provider.name(), &provider],
         )
         .await?;
         Ok(id)
@@ -819,26 +814,12 @@ where
 
         let row = conn.query_one(&stmt, &[&id]).await?;
 
-        let definition = row
-            .get::<_, Option<serde_json::Value>>(0)
-            .map(serde_json::from_value::<TypedDataProviderDefinition>)
-            .transpose()?;
-        let pro_definition = row
-            .get::<_, Option<serde_json::Value>>(1)
-            .map(serde_json::from_value::<TypedProDataProviderDefinition>)
-            .transpose()?;
-
-        match (definition, pro_definition) {
-            (Some(definition), _) => {
-                return Box::new(definition).initialize().await;
-            }
-            (_, Some(definition)) => {
-                return Box::new(definition).initialize().await;
-            }
-            (None, None) => {
-                unreachable!("definition and pro_definition are not nullable");
-            }
+        if let Some(definition) = row.get::<_, Option<TypedDataProviderDefinition>>(0) {
+            return Box::new(definition).initialize().await;
         }
+
+        let pro_definition: TypedProDataProviderDefinition = row.get(1);
+        Box::new(pro_definition).initialize().await
     }
 }
 
@@ -882,12 +863,7 @@ where
         let id = provider.id();
         conn.execute(
             &stmt,
-            &[
-                &id,
-                &provider.type_name(),
-                &provider.name(),
-                &serde_json::to_value(provider)?,
-            ],
+            &[&id, &provider.type_name(), &provider.name(), &provider],
         )
         .await?;
         Ok(id)

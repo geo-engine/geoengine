@@ -1278,19 +1278,18 @@ let ctx = app_ctx.session_context(session);
 
             let provider = MockExternalLayerProviderDefinition {
                 id: provider_id,
-                root_collection: MockCollection {
-                    id: LayerCollectionId("b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_owned()),
-                    name: "Mock Collection A".to_owned(),
+                root_collection_id: LayerCollectionId(
+                    "b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_owned(),
+                ),
+                root_collection_name: "Mock Collection A".to_owned(),
+                root_collection_description: "Some description".to_owned(),
+                root_collection_collections: vec![MockCollection {
+                    id: LayerCollectionId("21466897-37a1-4666-913a-50b5244699ad".to_owned()),
+                    name: "Mock Collection B".to_owned(),
                     description: "Some description".to_owned(),
-                    collections: vec![MockCollection {
-                        id: LayerCollectionId("21466897-37a1-4666-913a-50b5244699ad".to_owned()),
-                        name: "Mock Collection B".to_owned(),
-                        description: "Some description".to_owned(),
-                        collections: vec![],
-                        layers: vec![],
-                    }],
                     layers: vec![],
-                },
+                }],
+                root_collection_layers: vec![],
                 data: [("myData".to_owned(), meta_data)].into_iter().collect(),
             };
 
