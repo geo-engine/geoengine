@@ -1082,12 +1082,12 @@ mod tests {
     use crate::datasets::upload::{UploadId, VolumeName};
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
-    use crate::test_data;
     use crate::util::tests::with_temp_context;
     use crate::util::tests::{
         read_body_json, read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
     };
     use crate::util::IdResponse;
+    use crate::{getest, test_data};
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -1415,7 +1415,7 @@ mod tests {
         }
     }
 
-    #[geoenginemacros::test(
+    #[getest::test(
         tiling_spec = "my_exe_ctx_tiling_spec",
         query_ctx_chunk_size = "my_chunk_byte_size"
     )]

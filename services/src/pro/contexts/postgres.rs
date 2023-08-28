@@ -524,6 +524,7 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
+    use crate::pro::getest;
     use crate::pro::permissions::{Permission, PermissionDb, RoleDescription, RoleId};
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
@@ -569,36 +570,33 @@ mod tests {
     use openidconnect::SubjectIdentifier;
     use serde_json::json;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test() {
-        with_pro_temp_context(|app_ctx, _| async move {
-            anonymous(&app_ctx).await;
+    #[getest::test]
+    async fn test(app_ctx: ProPostgresContext<NoTls>) {
+        anonymous(&app_ctx).await;
 
-            let _user_id = user_reg_login(&app_ctx).await;
+        let _user_id = user_reg_login(&app_ctx).await;
 
-            let session = app_ctx
-                .login(UserCredentials {
-                    email: "foo@example.com".into(),
-                    password: "secret123".into(),
-                })
-                .await
-                .unwrap();
+        let session = app_ctx
+            .login(UserCredentials {
+                email: "foo@example.com".into(),
+                password: "secret123".into(),
+            })
+            .await
+            .unwrap();
 
-            create_projects(&app_ctx, &session).await;
+        create_projects(&app_ctx, &session).await;
 
-            let projects = list_projects(&app_ctx, &session).await;
+        let projects = list_projects(&app_ctx, &session).await;
 
-            set_session(&app_ctx, &projects).await;
+        set_session(&app_ctx, &projects).await;
 
-            let project_id = projects[0].id;
+        let project_id = projects[0].id;
 
-            update_projects(&app_ctx, &session, project_id).await;
+        update_projects(&app_ctx, &session, project_id).await;
 
-            add_permission(&app_ctx, &session, project_id).await;
+        add_permission(&app_ctx, &session, project_id).await;
 
-            delete_project(&app_ctx, &session, project_id).await;
-        })
-        .await;
+        delete_project(&app_ctx, &session, project_id).await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]

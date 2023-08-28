@@ -2269,6 +2269,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "geoengine-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.25",
+]
+
+[[package]]
 name = "geoengine-operators"
 version = "0.7.0"
 dependencies = [
@@ -2350,8 +2359,8 @@ dependencies = [
  "gdal-sys",
  "geo 0.26.0",
  "geoengine-datatypes",
+ "geoengine-macros",
  "geoengine-operators",
- "geoenginemacros",
  "geojson",
  "httptest",
  "hyper",
@@ -2404,15 +2413,6 @@ dependencies = [
  "walkdir",
  "xml-rs",
  "zip",
-]
-
-[[package]]
-name = "geoenginemacros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.25",
 ]
 
 [[package]]

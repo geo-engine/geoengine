@@ -50,3 +50,8 @@ pub mod workflows;
 pub mod pro;
 
 pub use geoengine_datatypes::test_data;
+
+// re-export test macro
+pub mod getest {
+    pub use geoengine_macros::test;
+}

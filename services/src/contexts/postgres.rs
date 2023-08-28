@@ -519,6 +519,7 @@ mod tests {
     use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
+    use crate::getest;
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
         LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
@@ -2398,7 +2399,7 @@ mod tests {
         .await;
     }
 
-    #[geoenginemacros::test]
+    #[getest::test]
     #[allow(clippy::too_many_lines)]
     async fn it_resolves_dataset_names_to_ids(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.default_session().await.unwrap();
