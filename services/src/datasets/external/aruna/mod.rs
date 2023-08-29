@@ -1808,7 +1808,9 @@ mod tests {
             .unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
-        let TypedVectorQueryProcessor::MultiPoint(proc) = proc else { panic!("Expected MultiPoint QueryProcessor"); };
+        let TypedVectorQueryProcessor::MultiPoint(proc) = proc else {
+            panic!("Expected MultiPoint QueryProcessor");
+        };
 
         let ctx = MockQueryContext::test_default();
 

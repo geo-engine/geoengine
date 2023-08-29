@@ -348,9 +348,13 @@ macro_rules! impl_cache_result_check {
             FeatureCollection<$t>: GeometryCollection,
         {
             fn cache_element_hit(&self, query_rect: &VectorQueryRectangle) -> bool {
-                let Some(bbox) = self.bbox() else {return false;};
+                let Some(bbox) = self.bbox() else {
+                    return false;
+                };
 
-                let Some(time_bounds) = self.time_bounds() else {return false;};
+                let Some(time_bounds) = self.time_bounds() else {
+                    return false;
+                };
 
                 (bbox == query_rect.spatial_bounds
                     || bbox.intersects_bbox(&query_rect.spatial_bounds))

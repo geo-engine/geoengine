@@ -1469,7 +1469,9 @@ impl ToSql for RgbaColor {
         let tuple = self.0.map(i16::from);
 
         let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
-            return Err(Box::new(crate::error::Error::UnexpectedInvalidDbTypeConversion));
+            return Err(Box::new(
+                crate::error::Error::UnexpectedInvalidDbTypeConversion,
+            ));
         };
 
         <[i16; 4] as ToSql>::to_sql(&tuple, inner_type, w)
@@ -1946,7 +1948,7 @@ impl ToSql for MultiPoint {
         w: &mut bytes::BytesMut,
     ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
         let postgres_types::Kind::Array(member_type) = ty.kind() else {
-             panic!("expected array type");
+            panic!("expected array type");
         };
 
         let dimension = postgres_protocol::types::ArrayDimension {
@@ -2053,7 +2055,7 @@ impl ToSql for MultiLineString {
         w: &mut bytes::BytesMut,
     ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
         let postgres_types::Kind::Array(member_type) = ty.kind() else {
-             panic!("expected array type");
+            panic!("expected array type");
         };
 
         let dimension = postgres_protocol::types::ArrayDimension {
@@ -2179,7 +2181,7 @@ impl ToSql for MultiPolygon {
         w: &mut bytes::BytesMut,
     ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
         let postgres_types::Kind::Array(member_type) = ty.kind() else {
-             panic!("expected array type");
+            panic!("expected array type");
         };
 
         let dimension = postgres_protocol::types::ArrayDimension {

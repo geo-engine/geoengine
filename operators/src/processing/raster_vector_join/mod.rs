@@ -444,7 +444,9 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        let FeatureDataRef::Int(data) = result[0].data("ndvi").unwrap() else { unreachable!(); };
+        let FeatureDataRef::Int(data) = result[0].data("ndvi").unwrap() else {
+            unreachable!();
+        };
 
         // these values are taken from loading the tiff in QGIS
         assert_eq!(data.as_ref(), &[54, 55, 51, 55]);
@@ -520,7 +522,9 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        let FeatureDataRef::Float(data) = result[0].data("ndvi").unwrap() else { unreachable!(); };
+        let FeatureDataRef::Float(data) = result[0].data("ndvi").unwrap() else {
+            unreachable!();
+        };
 
         // these values are taken from loading the tiff in QGIS
         assert_eq!(
@@ -599,7 +603,9 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        let FeatureDataRef::Float(data) = result[0].data("ndvi").unwrap() else { unreachable!(); };
+        let FeatureDataRef::Float(data) = result[0].data("ndvi").unwrap() else {
+            unreachable!();
+        };
 
         assert_eq!(data.as_ref(), &[0., 0., 0., 0.]);
 

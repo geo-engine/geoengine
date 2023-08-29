@@ -979,7 +979,7 @@ impl ToSql for PolygonRef<'_> {
         };
 
         let postgres_types::Kind::Array(member_type) = domain_type.kind() else {
-             panic!("expected array type");
+            panic!("expected array type");
         };
 
         let dimension = postgres_protocol::types::ArrayDimension {

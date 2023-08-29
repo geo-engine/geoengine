@@ -282,13 +282,13 @@ where
         let meta_data: MetaDataDefinition = row.get("meta_data");
 
         let MetaDataDefinition::OgrMetaData(meta_data) = meta_data else {
-                return Err(geoengine_operators::error::Error::MetaData {
-                    source: Box::new(geoengine_operators::error::Error::InvalidType {
-                        expected: "OgrMetaData".to_string(),
-                        found: meta_data.type_name().to_string(),
-                    }),
-                });
-            };
+            return Err(geoengine_operators::error::Error::MetaData {
+                source: Box::new(geoengine_operators::error::Error::InvalidType {
+                    expected: "OgrMetaData".to_string(),
+                    found: meta_data.type_name().to_string(),
+                }),
+            });
+        };
 
         Ok(Box::new(meta_data))
     }
