@@ -8,7 +8,7 @@ use std::{pin::Pin, sync::Arc};
 
 type DecompressorFutureType<X> = tokio::task::JoinHandle<std::result::Result<X, CacheError>>;
 
-/// Our own tile stream that "owns" the data (more precisely a reference to the data)
+/// Our own cache element stream that "owns" the data (more precisely a reference to the data)
 
 #[pin_project(project = CacheStreamProjection)]
 pub struct CacheStream<I, O, Q> {
