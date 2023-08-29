@@ -608,12 +608,20 @@ where
 {
     type Query: CacheQueryMatch + Clone + Send + Sync;
 
+    /// Update the stored query rectangle of the cache entry.
+    /// This allows to expand the stored query rectangle to the tile bounds produced by the query.
+    ///
+    /// # Errors
+    /// This method returns an error if the stored query cannot be updated.
     fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError>;
 
+    /// This method returns the cache hint of the element.
     fn cache_hint(&self) -> CacheHint;
 
+    /// This method returns the typed canonical operator name of the element.
     fn typed_canonical_operator_name(key: CanonicOperatorName) -> TypedCanonicOperatorName;
 
+    /// This method checks if this specific element should be included in the answer of the query.
     fn cache_element_hit(&self, query: &Self::Query) -> bool;
 }
 
