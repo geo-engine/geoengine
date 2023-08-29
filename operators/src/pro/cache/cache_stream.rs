@@ -30,8 +30,8 @@ where
     // TODO: we could use a iter + filter adapter here to return refs however this would require a lot of lifetime annotations
     fn next_idx(&mut self) -> Option<usize> {
         for i in self.idx..self.data.len() {
-            let tile_ref = &self.data[i];
-            if tile_ref.cache_element_hit(&self.query) {
+            let element_ref = &self.data[i];
+            if element_ref.cache_element_hit(&self.query) {
                 self.idx = i + 1;
                 return Some(i);
             }
@@ -127,8 +127,8 @@ where
         if let Some(pin_state) = state.as_mut().as_pin_mut() {
             let res = futures::ready!(pin_state.poll(cx));
             state.set(None);
-            let tile = Self::check_decompress_future_res(res);
-            return std::task::Poll::Ready(Some(tile));
+            let element = Self::check_decompress_future_res(res);
+            return std::task::Poll::Ready(Some(element));
         }
 
         std::task::Poll::Ready(None)
@@ -138,7 +138,7 @@ where
         if self.terminated() {
             return (0, Some(0));
         }
-        // There must be a cache hit to produce this stream. So there must be at least one tile inside the query.
+        // There must be a cache hit to produce this stream. So there must be at least one element inside the query.
         (1, Some(self.inner.remaining()))
     }
 }
