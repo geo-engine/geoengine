@@ -175,21 +175,16 @@ where
         Ok(())
     }
 
-    fn cache_element_hit(&self, query: &Self::Query) -> bool {
-        let temporal_hit = if let Some(time_bounds) = self.time_interval {
-            time_bounds == query.time_interval || time_bounds.intersects(&query.time_interval)
-        } else {
-            // If the chunk has no time bounds it must be empty.
-            true
-        };
+    fn intersects_query(&self, query: &Self::Query) -> bool {
+        // If the chunk has no time bounds it must be empty so we can skip the temporal check and return true.
+        let temporal_hit = self
+            .time_interval
+            .map_or(true, |tb| tb.intersects(&query.time_interval));
 
-        let spatial_hit = if let Some(spatial_bounds) = self.spatial_bounds {
-            spatial_bounds == query.spatial_bounds
-                || spatial_bounds.intersects_bbox(&query.spatial_bounds)
-        } else {
-            // If the chunk has no spatial bounds it is either an empty collection or a no geometry collection.
-            true
-        };
+        // If the chunk has no spatial bounds it is either an empty collection or a no geometry collection.
+        let spatial_hit = self
+            .spatial_bounds
+            .map_or(true, |sb| sb.intersects_bbox(&query.spatial_bounds));
 
         temporal_hit && spatial_hit
     }
@@ -595,7 +590,7 @@ mod tests {
         };
 
         for c in &cols {
-            assert!(c.cache_element_hit(&query));
+            assert!(c.intersects_query(&query));
         }
 
         // first element is not contained
@@ -604,9 +599,9 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
         };
-        assert!(!cols[0].cache_element_hit(&query));
+        assert!(!cols[0].intersects_query(&query));
         for c in &cols[1..] {
-            assert!(c.cache_element_hit(&query));
+            assert!(c.intersects_query(&query));
         }
 
         // all elements are not contained
@@ -616,7 +611,7 @@ mod tests {
             spatial_resolution: SpatialResolution::one(),
         };
         for col in &cols {
-            assert!(!col.cache_element_hit(&query));
+            assert!(!col.intersects_query(&query));
         }
     }
 

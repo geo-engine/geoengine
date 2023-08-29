@@ -205,7 +205,7 @@ where
         Ok(())
     }
 
-    fn cache_element_hit(&self, query: &Self::Query) -> bool {
+    fn intersects_query(&self, query: &Self::Query) -> bool {
         self.spatial_partition().intersects(&query.spatial_bounds)
             && self.time.intersects(&query.time_interval)
     }
@@ -684,7 +684,7 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
         };
-        assert!(tile.cache_element_hit(&query));
+        assert!(tile.intersects_query(&query));
 
         // tile is partially contained
         let query = RasterQueryRectangle {
@@ -695,7 +695,7 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
         };
-        assert!(tile.cache_element_hit(&query));
+        assert!(tile.intersects_query(&query));
 
         // tile is not contained
         let query = RasterQueryRectangle {
@@ -706,7 +706,7 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
         };
-        assert!(!tile.cache_element_hit(&query));
+        assert!(!tile.intersects_query(&query));
     }
 
     #[test]

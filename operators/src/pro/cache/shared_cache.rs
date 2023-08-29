@@ -622,7 +622,7 @@ where
     fn typed_canonical_operator_name(key: CanonicOperatorName) -> TypedCanonicOperatorName;
 
     /// This method checks if this specific element should be included in the answer of the query.
-    fn cache_element_hit(&self, query: &Self::Query) -> bool;
+    fn intersects_query(&self, query: &Self::Query) -> bool;
 }
 
 pub trait CacheBackendElementExt: CacheBackendElement {

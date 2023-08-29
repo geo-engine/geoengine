@@ -31,7 +31,7 @@ where
     fn next_idx(&mut self) -> Option<usize> {
         for i in self.idx..self.data.len() {
             let element_ref = &self.data[i];
-            if element_ref.cache_element_hit(&self.query) {
+            if element_ref.intersects_query(&self.query) {
                 self.idx = i + 1;
                 return Some(i);
             }
