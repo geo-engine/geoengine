@@ -51,6 +51,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         .password(&db_config.password)
         .host(&db_config.host)
         .dbname(&db_config.database)
+        .port(db_config.port)
         // fix schema by providing `search_path` option
         .options(&format!("-c search_path={}", db_config.schema));
 
