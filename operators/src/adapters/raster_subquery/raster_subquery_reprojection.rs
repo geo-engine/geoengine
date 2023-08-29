@@ -233,21 +233,20 @@ fn projected_coordinate_grid_parallel(
                     let in_coords = proj.project_coordinates(&out_coords)?;
                     opt_coord_slice
                         .iter_mut()
-                        .zip(in_coords.into_iter())
+                        .zip(in_coords)
                         .for_each(|(opt_coord, in_coord)| *opt_coord = Some(in_coord));
                 } else if valid_out_area.intersects(&chunk_bounds) {
                     debug!("reproject part of tile chunk");
-                    opt_coord_slice
-                        .iter_mut()
-                        .zip(out_coords.into_iter())
-                        .for_each(|(opt_coord, idx_coord)| {
+                    opt_coord_slice.iter_mut().zip(out_coords).for_each(
+                        |(opt_coord, idx_coord)| {
                             let in_coord = if valid_out_area.contains_coordinate(&idx_coord) {
                                 proj.project_coordinate(idx_coord).ok()
                             } else {
                                 None
                             };
                             *opt_coord = in_coord;
-                        });
+                        },
+                    );
                 } else {
                     debug!("reproject empty tile chunk");
                 }

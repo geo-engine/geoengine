@@ -241,13 +241,13 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManagerBackend {
         }
 
         set_status_to_aborting(&task_handle.status).await;
-        let result = clean_up_phase(self.clone(), task_handle, &mut write_lock, task_id).await;
+        clean_up_phase(self.clone(), task_handle, &mut write_lock, task_id);
 
         // propagate abort to subtasks
         drop(write_lock); // prevent deadlocks because the subtask abort tries to fetch the lock
         abort_subtasks(self.clone(), subtask_ids, force, task_id).await;
 
-        result
+        Ok(())
     }
 }
 
@@ -281,7 +281,9 @@ fn run_task(
 
         let mut update_lock = task_manager.write_lock_for_update().await;
 
-        let Some(task_handle) = update_lock.tasks_by_id.remove(&task_id) else { return /* never happens */ };
+        let Some(task_handle) = update_lock.tasks_by_id.remove(&task_id) else {
+            return; /* never happens */
+        };
 
         let task_status = task_handle.status.clone();
 
@@ -306,23 +308,7 @@ fn run_task(
                     )),
                 );
 
-                if let Err(clean_up_err) =
-                    clean_up_phase(task_manager.clone(), task_handle, &mut update_lock, task_id)
-                        .await
-                {
-                    *task_status.write().await = TaskStatus::failed(
-                        err,
-                        TaskCleanUpStatus::Failed {
-                            error: Arc::new(Box::new(clean_up_err)),
-                        },
-                    );
-
-                    let task_handle = update_lock.tasks_by_id.remove(&task_id);
-
-                    if let Some(task_handle) = task_handle {
-                        remove_unique_key(&task_handle, &mut update_lock.unique_tasks);
-                    }
-                }
+                clean_up_phase(task_manager.clone(), task_handle, &mut update_lock, task_id);
             }
         };
 
@@ -395,12 +381,12 @@ async fn set_status_to_clean_up_failed(task_status: &Db<TaskStatus>, error: Box<
     }
 }
 
-async fn clean_up_phase(
+fn clean_up_phase(
     task_manager: SimpleTaskManagerBackend,
     mut task_handle: TaskHandle,
     write_lock: &mut WriteLockForUpdate<'_>,
     task_id: TaskId,
-) -> Result<(), TaskError> {
+) {
     let task = task_handle.task.clone();
     let task_ctx = SimpleTaskManagerContext {
         status: task_handle.status.clone(),
@@ -411,7 +397,9 @@ async fn clean_up_phase(
 
         let mut update_lock = task_manager.write_lock_for_update().await;
 
-        let Some(task_handle) = update_lock.tasks_by_id.remove(&task_id) else { return /* never happens */ };
+        let Some(task_handle) = update_lock.tasks_by_id.remove(&task_id) else {
+            return; /* never happens */
+        };
 
         match result {
             Ok(_) => set_status_to_clean_up_completed(&task_handle.status).await,
@@ -424,8 +412,6 @@ async fn clean_up_phase(
     task_handle.handle = Some(handle);
 
     write_lock.tasks_by_id.insert(task_id, task_handle);
-
-    Ok(())
 }
 
 #[derive(Clone)]

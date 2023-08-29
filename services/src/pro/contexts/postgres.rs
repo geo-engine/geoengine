@@ -107,6 +107,7 @@ where
         })
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub async fn new_with_oidc(
         config: Config,
         tls: Tls,
@@ -151,7 +152,7 @@ where
     }
 
     // TODO: check if the datasets exist already and don't output warnings when skipping them
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
     pub async fn new_with_data(
         config: Config,
         tls: Tls,

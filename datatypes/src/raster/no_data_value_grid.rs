@@ -42,6 +42,7 @@ where
     }
 
     /// Create a new `NoDataValueGrid` from a `MaskedGrid` where each invalid pixel is assigned the `no_data_value`.
+    #[allow(clippy::missing_panics_doc)]
     pub fn from_masked_grid(masked_grid: &MaskedGrid<D, T>, no_data_value: T) -> Self
     where
         D: GridSize + Clone + PartialEq,

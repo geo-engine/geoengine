@@ -44,12 +44,10 @@ pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: 
         Ok(())
     }
 
-    let dir = fs::read_dir(file_path);
-    if dir.is_err() {
+    let Ok(dir) = fs::read_dir(file_path) else {
         warn!("Skipped adding layers from directory because it can't be read");
         return;
-    }
-    let dir = dir.expect("checked");
+    };
 
     for entry in dir {
         match entry {
@@ -101,12 +99,10 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         Ok(())
     }
 
-    let dir = fs::read_dir(file_path);
-    if dir.is_err() {
+    let Ok(dir) = fs::read_dir(file_path) else {
         warn!("Skipped adding layer collections from directory because it can't be read");
         return;
-    }
-    let dir = dir.expect("checked");
+    };
 
     let mut collection_defs = vec![];
 

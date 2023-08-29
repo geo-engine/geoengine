@@ -843,6 +843,7 @@ where
     GeometryIter: std::iter::Iterator<Item = GeometryRef>,
     GeometryRef: crate::primitives::GeometryRef,
 {
+    #[allow(clippy::missing_panics_doc)]
     pub fn new<CollectionType: Geometry + ArrowTyped>(
         collection: &'a FeatureCollection<CollectionType>,
         geometries: GeometryIter,
@@ -1131,6 +1132,7 @@ where
     ///
     /// assert_eq!(pc.len(), 0);
     /// ```
+    #[allow(clippy::missing_panics_doc)]
     pub fn empty() -> Self {
         Self::from_data(vec![], vec![], Default::default(), CacheHint::default())
             .expect("should not fail because no data is given")
