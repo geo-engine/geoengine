@@ -435,7 +435,7 @@ pub trait ChunkCompression {
         let mut file_writer = FileWriter::try_new_with_options(
             Vec::new(),
             record_batch.schema().as_ref(),
-            IpcWriteOptions::default(), // TODO: Add ".try_with_compression(COMPRESSION)?," once issues are resolved
+            IpcWriteOptions::default(), // TODO: Add ".try_with_compression(COMPRESSION)?," once arrow provides a way to ensure that the decompressed data has the same size as the original data.
         )
         .map_err(|source| CacheError::CouldNotWriteElementToBytes { source })?;
         file_writer
