@@ -4231,7 +4231,7 @@ mod tests {
         );
         assert_eq!(ge_default, pg_config.get_dbname().unwrap());
         assert_eq!(
-            &format!("-c search_path={}", schema),
+            &format!("-c search_path={schema}"),
             pg_config.get_options().unwrap()
         );
         assert_eq!(vec![Host::Tcp(host.to_string())], pg_config.get_hosts());
