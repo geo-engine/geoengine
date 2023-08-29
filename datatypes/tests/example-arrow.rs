@@ -5,9 +5,11 @@ use arrow::array::{
     UInt64Array, UInt64Builder,
 };
 use arrow::buffer::Buffer;
-use arrow::compute::gt_eq_scalar;
 use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::{DataType, Field};
+use arrow_array::builder::Int64Builder;
+use arrow_array::cast::AsArray;
+use arrow_ord::cmp::gt_eq;
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 use std::sync::Arc;
 use std::{mem, slice};
@@ -698,9 +700,51 @@ fn gt_eq_example() {
 
     // dbg!(&a);
 
-    let b = gt_eq_scalar(&a, 2).unwrap();
+    let b = gt_eq(&a, &Int32Array::new_scalar(2)).unwrap();
 
     // dbg!(&b);
 
     assert_eq!(&b, &BooleanArray::from(vec![Some(false), Some(true), None]));
+}
+
+#[test]
+fn sort_example() {
+    let a = {
+        let mut builder = FixedSizeListBuilder::new(Int64Builder::new(), 2);
+
+        for value in [[1, 5], [0, 3], [1, 3]] {
+            builder.values().append_slice(&value);
+            builder.append(true);
+        }
+
+        builder.finish()
+    };
+
+    // dbg!(&a);
+
+    let sort_options = Some(arrow::compute::SortOptions {
+        descending: false,
+        nulls_first: false,
+    });
+
+    let sort_indices = arrow::compute::sort_to_indices(&a, sort_options, None).unwrap();
+
+    let array_ref = arrow::compute::take(&a, &sort_indices, None).unwrap();
+
+    let b: &FixedSizeListArray = array_ref.as_fixed_size_list();
+
+    // dbg!(&b);
+
+    let c = {
+        let mut builder = FixedSizeListBuilder::new(Int64Builder::new(), 2);
+
+        for value in [[0, 3], [1, 3], [1, 5]] {
+            builder.values().append_slice(&value);
+            builder.append(true);
+        }
+
+        builder.finish()
+    };
+
+    assert_eq!(b, &c);
 }

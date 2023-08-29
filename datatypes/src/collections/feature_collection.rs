@@ -7,13 +7,14 @@ use arrow::{
     },
     buffer::Buffer,
 };
+use arrow_array::{Date64Array, Float64Array, Int64Array, Scalar, StringArray};
 use serde::{Deserialize, Serialize};
 use serde_json::Map;
 use snafu::ensure;
 
 use std::collections::hash_map;
 use std::collections::{HashMap, HashSet};
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::ops::{Bound, RangeBounds};
 use std::rc::Rc;
@@ -433,58 +434,38 @@ where
 
         match column_type {
             FeatureDataType::Float => {
-                apply_filters(
+                apply_filters::<Scalar<Float64Array>, _, _>(
                     as_primitive_array::<Float64Type>(column),
                     &mut filter_array,
                     ranges,
-                    arrow::compute::gt_eq_scalar,
-                    arrow::compute::gt_scalar,
-                    arrow::compute::lt_eq_scalar,
-                    arrow::compute::lt_scalar,
                 )?;
             }
             FeatureDataType::Int => {
-                apply_filters(
+                apply_filters::<Scalar<Int64Array>, _, _>(
                     as_primitive_array::<Int64Type>(column),
                     &mut filter_array,
                     ranges,
-                    arrow::compute::gt_eq_scalar,
-                    arrow::compute::gt_scalar,
-                    arrow::compute::lt_eq_scalar,
-                    arrow::compute::lt_scalar,
                 )?;
             }
             FeatureDataType::Text => {
-                apply_filters(
+                apply_filters::<Scalar<StringArray>, _, _>(
                     as_string_array(column),
                     &mut filter_array,
                     ranges,
-                    arrow::compute::gt_eq_utf8_scalar,
-                    arrow::compute::gt_utf8_scalar,
-                    arrow::compute::lt_eq_utf8_scalar,
-                    arrow::compute::lt_utf8_scalar,
                 )?;
             }
             FeatureDataType::Bool => {
-                apply_filters(
+                apply_filters::<Scalar<BooleanArray>, _, _>(
                     as_boolean_array(column),
                     &mut filter_array,
                     ranges,
-                    arrow::compute::gt_eq_bool_scalar,
-                    arrow::compute::gt_bool_scalar,
-                    arrow::compute::lt_eq_bool_scalar,
-                    arrow::compute::lt_bool_scalar,
                 )?;
             }
             FeatureDataType::DateTime => {
-                apply_filters(
+                apply_filters::<Scalar<Date64Array>, _, _>(
                     as_primitive_array::<Date64Type>(column),
                     &mut filter_array,
                     ranges,
-                    arrow::compute::gt_eq_scalar,
-                    arrow::compute::gt_scalar,
-                    arrow::compute::lt_eq_scalar,
-                    arrow::compute::lt_scalar,
                 )?;
             }
             FeatureDataType::Category => {
@@ -1379,15 +1360,22 @@ fn update_filter_array(
 fn apply_filter_on_bound<'b, T, A>(
     bound: Bound<&'b FeatureDataValue>,
     array: &'b A,
-    included_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
-    excluded_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
+    included_fn: fn(
+        &dyn arrow_array::Datum,
+        &dyn arrow_array::Datum,
+    ) -> Result<BooleanArray, ArrowError>,
+    excluded_fn: fn(
+        &dyn arrow_array::Datum,
+        &dyn arrow_array::Datum,
+    ) -> Result<BooleanArray, ArrowError>,
 ) -> Result<Option<BooleanArray>>
 where
-    T: TryFrom<&'b FeatureDataValue, Error = error::FeatureCollectionError>,
+    T: TryFrom<&'b FeatureDataValue, Error = error::FeatureCollectionError> + arrow_array::Datum,
+    A: arrow_array::Array,
 {
     Ok(match bound {
-        Bound::Included(v) => Some(included_fn(array, v.try_into()?)?),
-        Bound::Excluded(v) => Some(excluded_fn(array, v.try_into()?)?),
+        Bound::Included(v) => Some(included_fn(array, &T::try_from(v)?)?),
+        Bound::Excluded(v) => Some(excluded_fn(array, &T::try_from(v)?)?),
         Bound::Unbounded => None,
     })
 }
@@ -1396,29 +1384,26 @@ fn apply_filters<'b, T, A, R>(
     column: &'b A,
     filter_array: &mut Option<BooleanArray>,
     ranges: &'b [R],
-    included_lower_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
-    excluded_lower_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
-    included_upper_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
-    excluded_upper_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
 ) -> Result<()>
 where
-    T: TryFrom<&'b FeatureDataValue, Error = error::FeatureCollectionError>,
+    T: TryFrom<&'b FeatureDataValue, Error = error::FeatureCollectionError> + arrow_array::Datum,
     R: RangeBounds<FeatureDataValue>,
+    A: arrow_array::Array,
 {
     for range in ranges {
         update_filter_array(
             filter_array,
-            apply_filter_on_bound(
+            apply_filter_on_bound::<T, _>(
                 range.start_bound(),
                 column,
-                included_lower_fn,
-                excluded_lower_fn,
+                arrow_ord::cmp::gt_eq,
+                arrow_ord::cmp::gt,
             )?,
-            apply_filter_on_bound(
+            apply_filter_on_bound::<T, _>(
                 range.end_bound(),
                 column,
-                included_upper_fn,
-                excluded_upper_fn,
+                arrow_ord::cmp::lt_eq,
+                arrow_ord::cmp::lt,
             )?,
         )?;
     }

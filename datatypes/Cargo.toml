@@ -9,15 +9,17 @@ edition = "2021"
 pro = []
 
 [dependencies]
-arrow = { version = "45.0", features = [
+arrow = { version = "46.0", features = [
     "ipc_compression",
     # TODO: activate SIMD when stable
 ] }
+arrow-array = "46.0"
+arrow-ord = "46.0"
 async-trait = "0.1"
 bytes = "1.0" # for postgres-types impls
 chrono = "0.4"
 float-cmp = "0.9"
-gdal = "0.15"
+gdal = "0.16"
 geo-types = "0.7"
 geo = "0.26"
 geojson = "0.24"
