@@ -179,14 +179,16 @@ where
         let temporal_hit = if let Some(time_bounds) = self.time_interval {
             time_bounds == query.time_interval || time_bounds.intersects(&query.time_interval)
         } else {
-            false // TODO: should we return true here?
+            // If the chunk has no time bounds it must be empty.
+            true
         };
 
         let spatial_hit = if let Some(spatial_bounds) = self.spatial_bounds {
             spatial_bounds == query.spatial_bounds
                 || spatial_bounds.intersects_bbox(&query.spatial_bounds)
         } else {
-            !G::IS_GEOMETRY // return true if the geometry is not spatial
+            // If the chunk has no spatial bounds it is either an empty collection or a no geometry collection.
+            true
         };
 
         temporal_hit && spatial_hit
