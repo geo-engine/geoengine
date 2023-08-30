@@ -683,33 +683,8 @@ CREATE DOMAIN "LayerId" AS text;
 
 CREATE DOMAIN "LayerCollectionId" AS text;
 
-CREATE TYPE "MockLayer" AS (
-    id "LayerId",
-    "name" text,
-    "description" text,
-    symbology "Symbology",
-    provenance "Provenance",
-    workflow json, -- TODO: get rid of json type
-    properties "PropertyType" [],
-    metadata "TextTextKeyValue" []
-);
 
-CREATE TYPE "MockCollection" AS (
-    id "LayerCollectionId",
-    "name" text,
-    "description" text,
-    layers "MockLayer" []
-);
 
-CREATE TYPE "MockExternalLayerProviderDefinition" AS (
-    id uuid,
-    root_collection_id "LayerCollectionId",
-    root_collection_name text,
-    root_collection_description text,
-    root_collection_collections "MockCollection" [],
-    root_collection_layers "MockLayer" [],
-    "data" "TextMetaDataDefinitionKeyValue" []
-);
 
 CREATE TYPE "EbvPortalDataProviderDefinition" AS (
     "name" text,
@@ -739,8 +714,6 @@ CREATE TYPE "DataProviderDefinition" AS (
     gfbio_abcd_data_provider_definition "GfbioAbcdDataProviderDefinition",
     gfbio_collections_data_provider_definition
     "GfbioCollectionsDataProviderDefinition",
-    mock_external_layer_provider_definition
-    "MockExternalLayerProviderDefinition",
     ebv_portal_data_provider_definition "EbvPortalDataProviderDefinition",
     net_cdf_cf_data_provider_definition "NetCdfCfDataProviderDefinition",
     pangaea_data_provider_definition "PangaeaDataProviderDefinition"

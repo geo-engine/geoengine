@@ -519,9 +519,6 @@ mod tests {
     use crate::datasets::external::gbif::GbifDataProviderDefinition;
     use crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition;
     use crate::datasets::external::gfbio_collections::GfbioCollectionsDataProviderDefinition;
-    use crate::datasets::external::mock::{
-        MockCollection, MockExternalLayerProviderDefinition, MockLayer,
-    };
     use crate::datasets::external::netcdfcf::{
         EbvPortalDataProviderDefinition, NetCdfCfDataProviderDefinition,
     };
@@ -555,7 +552,6 @@ mod tests {
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureDataType, RasterQueryRectangle, SpatialResolution,
@@ -563,14 +559,13 @@ mod tests {
     };
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+    use geoengine_datatypes::test_data;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
         RasterResultDescriptor, StaticMetaData, TypedOperator, TypedResultDescriptor,
         VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
-    use geoengine_operators::mock::{
-        MockDatasetDataSource, MockDatasetDataSourceParams, MockPointSource, MockPointSourceParams,
-    };
+    use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{
         CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -1000,82 +995,14 @@ mod tests {
         with_temp_context(|app_ctx, _| async move {
             let db = app_ctx.default_session_context().await.unwrap().db();
 
-            let provider_id =
-                DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
-
-            let loading_info = OgrSourceDataset {
-                file_name: PathBuf::from("test.csv"),
-                layer_name: "test.csv".to_owned(),
-                data_type: Some(VectorDataType::MultiPoint),
-                time: OgrSourceDatasetTimeType::Start {
-                    start_field: "start".to_owned(),
-                    start_format: OgrSourceTimeFormat::Auto,
-                    duration: OgrSourceDurationSpec::Zero,
-                },
-                default_geometry: None,
-                columns: Some(OgrSourceColumnSpec {
-                    format_specifics: Some(FormatSpecifics::Csv {
-                        header: CsvHeader::Auto,
-                    }),
-                    x: "x".to_owned(),
-                    y: None,
-                    int: vec![],
-                    float: vec![],
-                    text: vec![],
-                    bool: vec![],
-                    datetime: vec![],
-                    rename: None,
-                }),
-                force_ogr_time_filter: false,
-                force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Ignore,
-                sql_query: None,
-                attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+            let provider = NetCdfCfDataProviderDefinition {
+                name: "netcdfcf".to_string(),
+                path: test_data!("netcdf4d/").into(),
+                overviews: test_data!("netcdf4d/overviews/").into(),
+                cache_ttl: CacheTtlSeconds::new(0),
             };
 
-            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
-                OgrSourceDataset,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            > {
-                loading_info: loading_info.clone(),
-                result_descriptor: VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [(
-                        "foo".to_owned(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless.into(),
-                        },
-                    )]
-                    .into_iter()
-                    .collect(),
-                    time: None,
-                    bbox: None,
-                },
-                phantom: Default::default(),
-            });
-
-            let provider = MockExternalLayerProviderDefinition {
-                id: provider_id,
-                root_collection_id: LayerCollectionId(
-                    "b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_owned(),
-                ),
-                root_collection_name: "Mock Collection A".to_owned(),
-                root_collection_description: "Some description".to_owned(),
-                root_collection_collections: vec![MockCollection {
-                    id: LayerCollectionId("21466897-37a1-4666-913a-50b5244699ad".to_owned()),
-                    name: "Mock Collection B".to_owned(),
-                    description: "Some description".to_owned(),
-                    layers: vec![],
-                }],
-                root_collection_layers: vec![],
-                data: [("myData".to_owned(), meta_data)].into_iter().collect(),
-            };
-
-            db.add_layer_provider(provider.into()).await.unwrap();
+            let provider_id = db.add_layer_provider(provider.into()).await.unwrap();
 
             let providers = db
                 .list_layer_providers(LayerProviderListingOptions {
@@ -1091,8 +1018,8 @@ mod tests {
                 providers[0],
                 LayerProviderListing {
                     id: provider_id,
-                    name: "MockName".to_owned(),
-                    description: "MockType".to_owned(),
+                    name: "netcdfcf".to_owned(),
+                    description: "NetCdfCfProviderDefinition".to_owned(),
                 }
             );
 
@@ -1109,7 +1036,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(datasets.items.len(), 1);
+            assert_eq!(datasets.items.len(), 3);
         })
         .await;
     }
@@ -4267,73 +4194,6 @@ mod tests {
 
         assert_sql_type(
             pool,
-            "MockLayer",
-            [MockLayer {
-                id: LayerId("389a84ef-add4-4f22-9389-1e4a89396f65".to_string()),
-                name: "Empty Collection".to_string(),
-                description: "bar".to_string(),
-                workflow: Workflow {
-                    operator: TypedOperator::Vector(
-                        MockDatasetDataSource {
-                            params: MockDatasetDataSourceParams {
-                                data: NamedData::with_system_provider(
-                                    "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
-                                    "myMock",
-                                ),
-                            },
-                        }
-                        .boxed(),
-                    ),
-                },
-                symbology: Some(Symbology::Point(PointSymbology {
-                    fill_color: ColorParam::Static {
-                        color: RgbaColor([0, 10, 20, 30]).into(),
-                    },
-                    stroke: StrokeParam {
-                        width: NumberParam::Static { value: 42 },
-                        color: ColorParam::Static {
-                            color: RgbaColor([0, 10, 20, 30]).into(),
-                        },
-                    },
-                    radius: NumberParam::Static { value: 42 },
-                    text: Some(TextSymbology {
-                        attribute: "attribute".to_string(),
-                        fill_color: ColorParam::Static {
-                            color: RgbaColor([0, 10, 20, 30]).into(),
-                        },
-                        stroke: StrokeParam {
-                            width: NumberParam::Static { value: 42 },
-                            color: ColorParam::Static {
-                                color: RgbaColor([0, 10, 20, 30]).into(),
-                            },
-                        },
-                    }),
-                })),
-                provenance: Some(Provenance {
-                    citation: "citation".to_owned(),
-                    license: "license".to_owned(),
-                    uri: "uri".to_owned(),
-                }),
-                properties: vec![],
-                metadata: [("foo".to_string(), "bar".to_string())].into(),
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            pool,
-            "MockCollection",
-            [MockCollection {
-                id: LayerCollectionId("c1351ca5-0353-41ad-9f15-784ea207d0ef".to_string()),
-                name: "Empty Collection".to_string(),
-                description: "foo".to_string(),
-                layers: vec![],
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            pool,
             "\"TextMetaDataDefinitionKeyValue\"[]",
             [HashMapTextMetaDataDefinitionDbType::from(&HashMap::<
                 String,
@@ -4381,115 +4241,6 @@ mod tests {
                 ),
             ]
             ))],
-        )
-        .await;
-
-        assert_sql_type(
-            pool,
-            "MockExternalLayerProviderDefinition",
-            [MockExternalLayerProviderDefinition {
-                id: DataProviderId::from_str("d0535f1d-27b6-4982-b2f8-b1070f1bf6ee").unwrap(),
-                root_collection_id: LayerCollectionId(
-                    "b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_string(),
-                ),
-                root_collection_name: "Mock Collection A".to_string(),
-                root_collection_description: "desc".to_string(),
-                root_collection_collections: vec![MockCollection {
-                    id: LayerCollectionId("c1351ca5-0353-41ad-9f15-784ea207d0ef".to_string()),
-                    name: "Empty Collection".to_string(),
-                    description: "foo".to_string(),
-                    layers: vec![],
-                }],
-                root_collection_layers: vec![MockLayer {
-                    id: LayerId("389a84ef-add4-4f22-9389-1e4a89396f65".to_string()),
-                    name: "Empty Collection".to_string(),
-                    description: "bar".to_string(),
-                    workflow: Workflow {
-                        operator: TypedOperator::Vector(
-                            MockDatasetDataSource {
-                                params: MockDatasetDataSourceParams {
-                                    data: NamedData::with_system_provider(
-                                        "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
-                                        "myMock",
-                                    ),
-                                },
-                            }
-                            .boxed(),
-                        ),
-                    },
-                    symbology: Some(Symbology::Point(PointSymbology {
-                        fill_color: ColorParam::Static {
-                            color: RgbaColor([0, 10, 20, 30]).into(),
-                        },
-                        stroke: StrokeParam {
-                            width: NumberParam::Static { value: 42 },
-                            color: ColorParam::Static {
-                                color: RgbaColor([0, 10, 20, 30]).into(),
-                            },
-                        },
-                        radius: NumberParam::Static { value: 42 },
-                        text: Some(TextSymbology {
-                            attribute: "attribute".to_string(),
-                            fill_color: ColorParam::Static {
-                                color: RgbaColor([0, 10, 20, 30]).into(),
-                            },
-                            stroke: StrokeParam {
-                                width: NumberParam::Static { value: 42 },
-                                color: ColorParam::Static {
-                                    color: RgbaColor([0, 10, 20, 30]).into(),
-                                },
-                            },
-                        }),
-                    })),
-                    provenance: Some(Provenance {
-                        citation: "citation".to_owned(),
-                        license: "license".to_owned(),
-                        uri: "uri".to_owned(),
-                    }),
-                    properties: vec![],
-                    metadata: [("foo".to_string(), "bar".to_string())].into(),
-                }],
-                data: [(
-                    "foo".to_string(),
-                    crate::datasets::storage::MetaDataDefinition::MockMetaData(
-                        crate::api::model::operators::MockMetaData {
-                            loading_info:
-                                crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
-                                    points: vec![
-                                        Coordinate2D::new(0.0f64, 0.5).into(),
-                                        Coordinate2D::new(2., 1.0).into(),
-                                    ],
-                                },
-                            result_descriptor: VectorResultDescriptor {
-                                data_type: VectorDataType::MultiPoint,
-                                spatial_reference: SpatialReferenceOption::SpatialReference(
-                                    SpatialReference::epsg_4326(),
-                                ),
-                                columns: [(
-                                    "foo".to_string(),
-                                    VectorColumnInfo {
-                                        data_type: FeatureDataType::Int,
-                                        measurement: Measurement::Unitless.into(),
-                                    },
-                                )]
-                                .into(),
-                                time: Some(TimeInterval::default()),
-                                bbox: Some(
-                                    BoundingBox2D::new(
-                                        Coordinate2D::new(0.0f64, 0.5),
-                                        Coordinate2D::new(2., 1.0),
-                                    )
-                                    .unwrap(),
-                                ),
-                            }
-                            .into(),
-                            phantom: PhantomData,
-                        }
-                        .into(),
-                    ),
-                )]
-                .into(),
-            }],
         )
         .await;
 
@@ -4588,111 +4339,6 @@ mod tests {
                         },
                         pangaea_url: "http://panaea".try_into().unwrap(),
                         cache_ttl: CacheTtlSeconds::new(0),
-                    },
-                ),
-                TypedDataProviderDefinition::MockExternalLayerProviderDefinition(
-                    MockExternalLayerProviderDefinition {
-                        id: DataProviderId::from_str("d0535f1d-27b6-4982-b2f8-b1070f1bf6ee").unwrap(),
-                        root_collection_id: LayerCollectionId(
-                            "b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_string(),
-                        ),
-                        root_collection_name: "Mock Collection A".to_string(),
-                        root_collection_description: "desc".to_string(),
-                        root_collection_collections: vec![MockCollection {
-                            id: LayerCollectionId("c1351ca5-0353-41ad-9f15-784ea207d0ef".to_string()),
-                            name: "Empty Collection".to_string(),
-                            description: "foo".to_string(),
-                            layers: vec![],
-                        }],
-                        root_collection_layers: vec![MockLayer {
-                            id: LayerId("389a84ef-add4-4f22-9389-1e4a89396f65".to_string()),
-                            name: "Empty Collection".to_string(),
-                            description: "bar".to_string(),
-                            workflow: Workflow {
-                                operator: TypedOperator::Vector(
-                                    MockDatasetDataSource {
-                                        params: MockDatasetDataSourceParams {
-                                            data: NamedData::with_system_provider(
-                                                "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
-                                                "myMock",
-                                            ),
-                                        },
-                                    }
-                                    .boxed(),
-                                ),
-                            },
-                            symbology: Some(Symbology::Point(PointSymbology {
-                                fill_color: ColorParam::Static {
-                                    color: RgbaColor([0, 10, 20, 30]).into(),
-                                },
-                                stroke: StrokeParam {
-                                    width: NumberParam::Static { value: 42 },
-                                    color: ColorParam::Static {
-                                        color: RgbaColor([0, 10, 20, 30]).into(),
-                                    },
-                                },
-                                radius: NumberParam::Static { value: 42 },
-                                text: Some(TextSymbology {
-                                    attribute: "attribute".to_string(),
-                                    fill_color: ColorParam::Static {
-                                        color: RgbaColor([0, 10, 20, 30]).into(),
-                                    },
-                                    stroke: StrokeParam {
-                                        width: NumberParam::Static { value: 42 },
-                                        color: ColorParam::Static {
-                                            color: RgbaColor([0, 10, 20, 30]).into(),
-                                        },
-                                    },
-                                }),
-                            })),
-                            provenance: Some(Provenance {
-                                citation: "citation".to_owned(),
-                                license: "license".to_owned(),
-                                uri: "uri".to_owned(),
-                            }),
-                            properties: vec![],
-                            metadata: [("foo".to_string(), "bar".to_string())].into(),
-                        }],
-                        data: [(
-                            "foo".to_string(),
-                            crate::datasets::storage::MetaDataDefinition::MockMetaData(
-                                crate::api::model::operators::MockMetaData {
-                                    loading_info:
-                                        crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
-                                            points: vec![
-                                                Coordinate2D::new(0.0f64, 0.5).into(),
-                                                Coordinate2D::new(2., 1.0).into(),
-                                            ],
-                                        },
-                                    result_descriptor: VectorResultDescriptor {
-                                        data_type: VectorDataType::MultiPoint,
-                                        spatial_reference: SpatialReferenceOption::SpatialReference(
-                                            SpatialReference::epsg_4326(),
-                                        ),
-                                        columns: [(
-                                            "foo".to_string(),
-                                            VectorColumnInfo {
-                                                data_type: FeatureDataType::Int,
-                                                measurement: Measurement::Unitless.into(),
-                                            },
-                                        )]
-                                        .into(),
-                                        time: Some(TimeInterval::default()),
-                                        bbox: Some(
-                                            BoundingBox2D::new(
-                                                Coordinate2D::new(0.0f64, 0.5),
-                                                Coordinate2D::new(2., 1.0),
-                                            )
-                                            .unwrap(),
-                                        ),
-                                    }
-                                    .into(),
-                                    phantom: PhantomData,
-                                }
-                                .into(),
-                            ),
-                        )]
-                        .into(),
                     },
                 ),
                 TypedDataProviderDefinition::EbvPortalDataProviderDefinition(

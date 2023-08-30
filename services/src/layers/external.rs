@@ -4,7 +4,6 @@ use crate::datasets::external::aruna::ArunaDataProviderDefinition;
 use crate::datasets::external::gbif::GbifDataProviderDefinition;
 use crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition;
 use crate::datasets::external::gfbio_collections::GfbioCollectionsDataProviderDefinition;
-use crate::datasets::external::mock::MockExternalLayerProviderDefinition;
 use crate::datasets::external::netcdfcf::EbvPortalDataProviderDefinition;
 use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
 use crate::datasets::external::pangaea::PangaeaDataProviderDefinition;
@@ -84,7 +83,6 @@ pub enum TypedDataProviderDefinition {
     GbifDataProviderDefinition(GbifDataProviderDefinition),
     GfbioAbcdDataProviderDefinition(GfbioAbcdDataProviderDefinition),
     GfbioCollectionsDataProviderDefinition(GfbioCollectionsDataProviderDefinition),
-    MockExternalLayerProviderDefinition(MockExternalLayerProviderDefinition), // TODO: remove, since it is only mock and should not be used?
     EbvPortalDataProviderDefinition(EbvPortalDataProviderDefinition),
     NetCdfCfDataProviderDefinition(NetCdfCfDataProviderDefinition),
     PangaeaDataProviderDefinition(PangaeaDataProviderDefinition),
@@ -111,12 +109,6 @@ impl From<GfbioAbcdDataProviderDefinition> for TypedDataProviderDefinition {
 impl From<GfbioCollectionsDataProviderDefinition> for TypedDataProviderDefinition {
     fn from(def: GfbioCollectionsDataProviderDefinition) -> Self {
         Self::GfbioCollectionsDataProviderDefinition(def)
-    }
-}
-
-impl From<MockExternalLayerProviderDefinition> for TypedDataProviderDefinition {
-    fn from(def: MockExternalLayerProviderDefinition) -> Self {
-        Self::MockExternalLayerProviderDefinition(def)
     }
 }
 
@@ -147,7 +139,6 @@ impl From<TypedDataProviderDefinition> for Box<dyn DataProviderDefinition> {
             TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => {
                 Box::new(def)
             }
-            TypedDataProviderDefinition::MockExternalLayerProviderDefinition(def) => Box::new(def),
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => Box::new(def),
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => Box::new(def),
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => Box::new(def),
@@ -162,7 +153,6 @@ impl AsRef<dyn DataProviderDefinition> for TypedDataProviderDefinition {
             TypedDataProviderDefinition::GbifDataProviderDefinition(def) => def,
             TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => def,
             TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => def,
-            TypedDataProviderDefinition::MockExternalLayerProviderDefinition(def) => def,
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => def,
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => def,
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => def,
@@ -186,9 +176,6 @@ impl DataProviderDefinition for TypedDataProviderDefinition {
             TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => {
                 Box::new(def).initialize().await
             }
-            TypedDataProviderDefinition::MockExternalLayerProviderDefinition(def) => {
-                Box::new(def).initialize().await
-            }
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => {
                 Box::new(def).initialize().await
             }
@@ -209,9 +196,6 @@ impl DataProviderDefinition for TypedDataProviderDefinition {
             TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => {
                 def.type_name()
             }
-            TypedDataProviderDefinition::MockExternalLayerProviderDefinition(def) => {
-                def.type_name()
-            }
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => def.type_name(),
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => def.type_name(),
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => def.type_name(),
@@ -224,7 +208,6 @@ impl DataProviderDefinition for TypedDataProviderDefinition {
             TypedDataProviderDefinition::GbifDataProviderDefinition(def) => def.name(),
             TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => def.name(),
             TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => def.name(),
-            TypedDataProviderDefinition::MockExternalLayerProviderDefinition(def) => def.name(),
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => def.name(),
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => def.name(),
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => def.name(),
@@ -237,7 +220,6 @@ impl DataProviderDefinition for TypedDataProviderDefinition {
             TypedDataProviderDefinition::GbifDataProviderDefinition(def) => def.id(),
             TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => def.id(),
             TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => def.id(),
-            TypedDataProviderDefinition::MockExternalLayerProviderDefinition(def) => def.id(),
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => def.id(),
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => def.id(),
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => def.id(),

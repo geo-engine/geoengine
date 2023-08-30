@@ -1,10 +1,10 @@
 use super::{
     datatypes::{
         BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-        Coordinate2D, DataProviderId, DateTimeParseFormat, DefaultColors, FeatureDataType, LayerId,
-        LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint,
-        MultiPolygon, NoGeometry, OverUnderColors, Palette, RgbaColor, SpatialReferenceOption,
-        TimeInstance, TimeInterval, TimeStep, VectorDataType,
+        Coordinate2D, DateTimeParseFormat, DefaultColors, FeatureDataType, LinearGradient,
+        LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+        OverUnderColors, Palette, RgbaColor, SpatialReferenceOption, TimeInstance, TimeInterval,
+        TimeStep, VectorDataType,
     },
     operators::{
         CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption,
@@ -23,15 +23,13 @@ use crate::{
             gbif::GbifDataProviderDefinition,
             gfbio_abcd::GfbioAbcdDataProviderDefinition,
             gfbio_collections::GfbioCollectionsDataProviderDefinition,
-            mock::{MockCollection, MockExternalLayerProviderDefinition, MockLayer},
             netcdfcf::{EbvPortalDataProviderDefinition, NetCdfCfDataProviderDefinition},
             pangaea::PangaeaDataProviderDefinition,
         },
-        listing::Provenance,
         storage::MetaDataDefinition,
     },
     error::Error,
-    layers::{external::TypedDataProviderDefinition, layer::Property, listing::LayerCollectionId},
+    layers::external::TypedDataProviderDefinition,
     projects::{
         ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
         PolygonSymbology, RasterSymbology, Symbology,
@@ -1734,52 +1732,6 @@ impl TryFrom<PangaeaDataProviderDefinitionDbType> for PangaeaDataProviderDefinit
     }
 }
 
-#[derive(Debug, ToSql, FromSql)]
-#[postgres(name = "MockLayer")]
-pub struct MockLayerDbType {
-    pub id: LayerId,
-    pub name: String,
-    pub description: String,
-    pub symbology: Option<Symbology>,
-    pub provenance: Option<Provenance>,
-    // TODO: resolve into non-json type
-    pub workflow: serde_json::Value,
-    pub properties: Vec<Property>,
-    pub metadata: HashMapTextTextDbType,
-}
-
-impl From<&MockLayer> for MockLayerDbType {
-    fn from(other: &MockLayer) -> Self {
-        Self {
-            id: other.id.clone(),
-            name: other.name.clone(),
-            description: other.description.clone(),
-            symbology: other.symbology.clone(),
-            provenance: other.provenance.clone(),
-            workflow: serde_json::to_value(&other.workflow).expect("`Workflow` is serializable"),
-            properties: other.properties.clone(),
-            metadata: HashMapTextTextDbType::from(&other.metadata),
-        }
-    }
-}
-
-impl TryFrom<MockLayerDbType> for MockLayer {
-    type Error = Error;
-
-    fn try_from(other: MockLayerDbType) -> Result<Self, Self::Error> {
-        Ok(Self {
-            id: other.id,
-            name: other.name,
-            description: other.description,
-            symbology: other.symbology,
-            provenance: other.provenance,
-            workflow: serde_json::from_value(other.workflow)?,
-            properties: other.properties,
-            metadata: other.metadata.into(),
-        })
-    }
-}
-
 #[derive(Debug, PartialEq, ToSql, FromSql)]
 pub struct TextMetaDataDefinitionKeyValue {
     key: String,
@@ -1815,55 +1767,12 @@ impl<S: std::hash::BuildHasher + std::default::Default> From<HashMapTextMetaData
 }
 
 #[derive(Debug, ToSql, FromSql)]
-#[postgres(name = "MockExternalLayerProviderDefinition")]
-pub struct MockExternalLayerProviderDefinitionDbType {
-    pub id: DataProviderId,
-    pub root_collection_id: LayerCollectionId,
-    pub root_collection_name: String,
-    pub root_collection_description: String,
-    pub root_collection_collections: Vec<MockCollection>,
-    pub root_collection_layers: Vec<MockLayer>,
-    pub data: HashMapTextMetaDataDefinitionDbType,
-}
-
-impl From<&MockExternalLayerProviderDefinition> for MockExternalLayerProviderDefinitionDbType {
-    fn from(other: &MockExternalLayerProviderDefinition) -> Self {
-        Self {
-            id: other.id,
-            root_collection_id: other.root_collection_id.clone(),
-            root_collection_name: other.root_collection_name.clone(),
-            root_collection_description: other.root_collection_description.clone(),
-            root_collection_collections: other.root_collection_collections.clone(),
-            root_collection_layers: other.root_collection_layers.clone(),
-            data: HashMapTextMetaDataDefinitionDbType::from(&other.data),
-        }
-    }
-}
-
-impl TryFrom<MockExternalLayerProviderDefinitionDbType> for MockExternalLayerProviderDefinition {
-    type Error = Error;
-
-    fn try_from(other: MockExternalLayerProviderDefinitionDbType) -> Result<Self, Self::Error> {
-        Ok(Self {
-            id: other.id,
-            root_collection_id: other.root_collection_id,
-            root_collection_name: other.root_collection_name,
-            root_collection_description: other.root_collection_description,
-            root_collection_collections: other.root_collection_collections,
-            root_collection_layers: other.root_collection_layers,
-            data: other.data.into(),
-        })
-    }
-}
-
-#[derive(Debug, ToSql, FromSql)]
 #[postgres(name = "DataProviderDefinition")]
 pub struct TypedDataProviderDefinitionDbType {
     aruna_data_provider_definition: Option<ArunaDataProviderDefinition>,
     gbif_data_provider_definition: Option<GbifDataProviderDefinition>,
     gfbio_abcd_data_provider_definition: Option<GfbioAbcdDataProviderDefinition>,
     gfbio_collections_data_provider_definition: Option<GfbioCollectionsDataProviderDefinition>,
-    mock_external_layer_provider_definition: Option<MockExternalLayerProviderDefinition>,
     ebv_portal_data_provider_definition: Option<EbvPortalDataProviderDefinition>,
     net_cdf_cf_data_provider_definition: Option<NetCdfCfDataProviderDefinition>,
     pangaea_data_provider_definition: Option<PangaeaDataProviderDefinition>,
@@ -1878,7 +1787,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                     gbif_data_provider_definition: None,
                     gfbio_abcd_data_provider_definition: None,
                     gfbio_collections_data_provider_definition: None,
-                    mock_external_layer_provider_definition: None,
                     ebv_portal_data_provider_definition: None,
                     net_cdf_cf_data_provider_definition: None,
                     pangaea_data_provider_definition: None,
@@ -1890,7 +1798,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                     gbif_data_provider_definition: Some(data_provider_definition.clone()),
                     gfbio_abcd_data_provider_definition: None,
                     gfbio_collections_data_provider_definition: None,
-                    mock_external_layer_provider_definition: None,
                     ebv_portal_data_provider_definition: None,
                     net_cdf_cf_data_provider_definition: None,
                     pangaea_data_provider_definition: None,
@@ -1903,7 +1810,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: Some(data_provider_definition.clone()),
                 gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: None,
                 ebv_portal_data_provider_definition: None,
                 net_cdf_cf_data_provider_definition: None,
                 pangaea_data_provider_definition: None,
@@ -1915,19 +1821,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
                 gfbio_collections_data_provider_definition: Some(data_provider_definition.clone()),
-                mock_external_layer_provider_definition: None,
-                ebv_portal_data_provider_definition: None,
-                net_cdf_cf_data_provider_definition: None,
-                pangaea_data_provider_definition: None,
-            },
-            TypedDataProviderDefinition::MockExternalLayerProviderDefinition(
-                data_provider_definition,
-            ) => Self {
-                aruna_data_provider_definition: None,
-                gbif_data_provider_definition: None,
-                gfbio_abcd_data_provider_definition: None,
-                gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: Some(data_provider_definition.clone()),
                 ebv_portal_data_provider_definition: None,
                 net_cdf_cf_data_provider_definition: None,
                 pangaea_data_provider_definition: None,
@@ -1939,7 +1832,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
                 gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: None,
                 ebv_portal_data_provider_definition: Some(data_provider_definition.clone()),
                 net_cdf_cf_data_provider_definition: None,
                 pangaea_data_provider_definition: None,
@@ -1951,7 +1843,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
                 gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: None,
                 ebv_portal_data_provider_definition: None,
                 net_cdf_cf_data_provider_definition: Some(data_provider_definition.clone()),
                 pangaea_data_provider_definition: None,
@@ -1963,7 +1854,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
                 gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: None,
                 ebv_portal_data_provider_definition: None,
                 net_cdf_cf_data_provider_definition: None,
                 pangaea_data_provider_definition: Some(data_provider_definition.clone()),
@@ -1983,7 +1873,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
                 gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: None,
                 ebv_portal_data_provider_definition: None,
                 net_cdf_cf_data_provider_definition: None,
                 pangaea_data_provider_definition: None,
@@ -1995,7 +1884,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 gbif_data_provider_definition: Some(data_provider_definition),
                 gfbio_abcd_data_provider_definition: None,
                 gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: None,
                 ebv_portal_data_provider_definition: None,
                 net_cdf_cf_data_provider_definition: None,
                 pangaea_data_provider_definition: None,
@@ -2007,7 +1895,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: Some(data_provider_definition),
                 gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: None,
                 ebv_portal_data_provider_definition: None,
                 net_cdf_cf_data_provider_definition: None,
                 pangaea_data_provider_definition: None,
@@ -2021,7 +1908,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
                 gfbio_collections_data_provider_definition: Some(data_provider_definition),
-                mock_external_layer_provider_definition: None,
                 ebv_portal_data_provider_definition: None,
                 net_cdf_cf_data_provider_definition: None,
                 pangaea_data_provider_definition: None,
@@ -2035,21 +1921,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
                 gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: Some(data_provider_definition),
-                ebv_portal_data_provider_definition: None,
-                net_cdf_cf_data_provider_definition: None,
-                pangaea_data_provider_definition: None,
-            } => Ok(
-                TypedDataProviderDefinition::MockExternalLayerProviderDefinition(
-                    data_provider_definition,
-                ),
-            ),
-            TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
-                gbif_data_provider_definition: None,
-                gfbio_abcd_data_provider_definition: None,
-                gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: None,
                 ebv_portal_data_provider_definition: Some(data_provider_definition),
                 net_cdf_cf_data_provider_definition: None,
                 pangaea_data_provider_definition: None,
@@ -2063,7 +1934,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
                 gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: None,
                 ebv_portal_data_provider_definition: None,
                 net_cdf_cf_data_provider_definition: Some(data_provider_definition),
                 pangaea_data_provider_definition: None,
@@ -2075,7 +1945,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
                 gfbio_collections_data_provider_definition: None,
-                mock_external_layer_provider_definition: None,
                 ebv_portal_data_provider_definition: None,
                 net_cdf_cf_data_provider_definition: None,
                 pangaea_data_provider_definition: Some(data_provider_definition),
@@ -2148,12 +2017,7 @@ delegate_from_to_sql!(
 );
 delegate_from_to_sql!(Measurement, MeasurementDbType);
 delegate_from_to_sql!(MetaDataDefinition, MetaDataDefinitionDbType);
-delegate_from_to_sql!(
-    MockExternalLayerProviderDefinition,
-    MockExternalLayerProviderDefinitionDbType
-);
 delegate_from_to_sql!(MockMetaData, MockMetaDataDbType);
-delegate_from_to_sql!(MockLayer, MockLayerDbType);
 delegate_from_to_sql!(NumberParam, NumberParamDbType);
 delegate_from_to_sql!(
     NetCdfCfDataProviderDefinition,
