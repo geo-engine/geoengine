@@ -17,8 +17,8 @@ pub(crate) use error::FeatureCollectionError;
 use feature_collection::FilterArray;
 pub use feature_collection::{
     ChunksEqualIgnoringCacheHint, FeatureCollection, FeatureCollectionInfos,
-    FeatureCollectionIterator, FeatureCollectionModifications, FeatureCollectionRow,
-    FilteredColumnNameIter, ToGeoJson,
+    FeatureCollectionInternals, FeatureCollectionIterator, FeatureCollectionModifications,
+    FeatureCollectionRow, FilteredColumnNameIter, ToGeoJson,
 };
 pub use feature_collection_builder::{
     BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,

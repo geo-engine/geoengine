@@ -13,6 +13,7 @@ use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 
 use crate::projects::{ProjectId, STRectangle};
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
+use crate::util::config;
 use crate::util::config::get_config_element;
 use async_trait::async_trait;
 use bb8_postgres::{
@@ -494,6 +495,21 @@ where
 {
 }
 
+impl From<config::Postgres> for Config {
+    fn from(db_config: config::Postgres) -> Self {
+        let mut pg_config = Config::new();
+        pg_config
+            .user(&db_config.user)
+            .password(&db_config.password)
+            .host(&db_config.host)
+            .dbname(&db_config.database)
+            .port(db_config.port)
+            // fix schema by providing `search_path` option
+            .options(&format!("-c search_path={}", db_config.schema));
+        pg_config
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -564,6 +580,7 @@ mod tests {
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use ordered_float::NotNan;
     use serde_json::json;
+    use tokio_postgres::config::Host;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test() {
@@ -4186,5 +4203,38 @@ mod tests {
             .await;
         })
         .await;
+    }
+
+    #[test]
+    fn test_postgres_config_translation() {
+        let host = "localhost";
+        let port = 8095;
+        let ge_default = "geoengine";
+        let schema = "public";
+
+        let db_config = config::Postgres {
+            host: host.to_string(),
+            port,
+            database: ge_default.to_string(),
+            schema: schema.to_string(),
+            user: ge_default.to_string(),
+            password: ge_default.to_string(),
+            clear_database_on_start: false,
+        };
+
+        let pg_config = Config::from(db_config);
+
+        assert_eq!(ge_default, pg_config.get_user().unwrap());
+        assert_eq!(
+            <str as AsRef<[u8]>>::as_ref(ge_default).to_vec(),
+            pg_config.get_password().unwrap()
+        );
+        assert_eq!(ge_default, pg_config.get_dbname().unwrap());
+        assert_eq!(
+            &format!("-c search_path={schema}"),
+            pg_config.get_options().unwrap()
+        );
+        assert_eq!(vec![Host::Tcp(host.to_string())], pg_config.get_hosts());
+        assert_eq!(vec![port], pg_config.get_ports());
     }
 }

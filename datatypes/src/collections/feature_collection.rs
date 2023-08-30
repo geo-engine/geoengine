@@ -88,6 +88,36 @@ impl<CollectionType> AsRef<FeatureCollection<CollectionType>>
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct FeatureCollectionInternals<G> {
+    pub table: StructArray,
+    pub types: HashMap<String, FeatureDataType>,
+    pub collection_type: PhantomData<G>,
+    pub cache_hint: CacheHint,
+}
+
+impl<G> From<FeatureCollectionInternals<G>> for FeatureCollection<G> {
+    fn from(internals: FeatureCollectionInternals<G>) -> FeatureCollection<G> {
+        FeatureCollection {
+            table: internals.table,
+            types: internals.types,
+            collection_type: internals.collection_type,
+            cache_hint: internals.cache_hint,
+        }
+    }
+}
+
+impl<G> From<FeatureCollection<G>> for FeatureCollectionInternals<G> {
+    fn from(collection: FeatureCollection<G>) -> FeatureCollectionInternals<G> {
+        FeatureCollectionInternals {
+            table: collection.table,
+            types: collection.types,
+            collection_type: collection.collection_type,
+            cache_hint: collection.cache_hint,
+        }
+    }
+}
+
 /// A trait for common feature collection modifications that are independent of the geometry type
 pub trait FeatureCollectionModifications {
     type Output;
