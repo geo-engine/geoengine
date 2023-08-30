@@ -52,8 +52,8 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     pub name: String,
     pub id: DataProviderId,
     pub api_url: String,
-    pub bands: Vec<Band>,
-    pub zones: Vec<Zone>,
+    pub bands: Vec<StacBand>,
+    pub zones: Vec<StacZone>,
     #[serde(default)]
     pub stac_api_retries: StacApiRetries,
     #[serde(default)]
@@ -125,22 +125,22 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
-pub struct Band {
+pub struct StacBand {
     pub name: String,
     pub no_data_value: Option<f64>,
     pub data_type: RasterDataType,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, FromSql, ToSql)]
-pub struct Zone {
+pub struct StacZone {
     pub name: String,
     pub epsg: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SentinelDataset {
-    band: Band,
-    zone: Zone,
+    band: StacBand,
+    zone: StacZone,
     listing: Layer,
 }
 
@@ -162,8 +162,8 @@ impl SentinelS2L2aCogsDataProvider {
     pub fn new(
         id: DataProviderId,
         api_url: String,
-        bands: &[Band],
-        zones: &[Zone],
+        bands: &[StacBand],
+        zones: &[StacZone],
         stac_api_retries: StacApiRetries,
         gdal_retries: GdalRetries,
         cache_ttl: CacheTtlSeconds,
@@ -180,8 +180,8 @@ impl SentinelS2L2aCogsDataProvider {
 
     fn create_datasets(
         id: &DataProviderId,
-        bands: &[Band],
-        zones: &[Zone],
+        bands: &[StacBand],
+        zones: &[StacZone],
     ) -> HashMap<LayerId, SentinelDataset> {
         zones
             .iter()
@@ -340,8 +340,8 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
 #[derive(Debug, Clone)]
 pub struct SentinelS2L2aCogsMetaData {
     api_url: String,
-    zone: Zone,
-    band: Band,
+    zone: StacZone,
+    band: StacBand,
     stac_api_retries: StacApiRetries,
     gdal_retries: GdalRetries,
     cache_ttl: CacheTtlSeconds,
@@ -1153,12 +1153,12 @@ mod tests {
                 name: "Element 84 AWS STAC".into(),
                 id: provider_id,
                 api_url: server.url_str("/v0/collections/sentinel-s2-l2a-cogs/items"),
-                bands: vec![Band {
+                bands: vec![StacBand {
                     name: "B04".into(),
                     no_data_value: Some(0.),
                     data_type: RasterDataType::U16,
                 }],
-                zones: vec![Zone {
+                zones: vec![StacZone {
                     name: "UTM36S".into(),
                     epsg: 32736,
                 }],

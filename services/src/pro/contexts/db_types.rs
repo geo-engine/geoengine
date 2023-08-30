@@ -116,7 +116,7 @@ mod tests {
     use crate::{
         api::model::datatypes::DataProviderId,
         pro::{
-            datasets::{Band, Zone},
+            datasets::{StacBand, StacZone},
             util::tests::with_pro_temp_context,
         },
         util::postgres::assert_sql_type,
@@ -151,7 +151,7 @@ mod tests {
             assert_sql_type(
                 &pool,
                 "Band",
-                [Band {
+                [StacBand {
                     name: "band".to_owned(),
                     no_data_value: Some(133.7),
                     data_type: geoengine_datatypes::raster::RasterDataType::F32,
@@ -162,7 +162,7 @@ mod tests {
             assert_sql_type(
                 &pool,
                 "Zone",
-                [Zone {
+                [StacZone {
                     name: "zone".to_owned(),
                     epsg: 4326,
                 }],
@@ -176,12 +176,12 @@ mod tests {
                     name: "foo".to_owned(),
                     id: DataProviderId::new(),
                     api_url: "http://api.url".to_owned(),
-                    bands: vec![Band {
+                    bands: vec![StacBand {
                         name: "band".to_owned(),
                         no_data_value: Some(133.7),
                         data_type: geoengine_datatypes::raster::RasterDataType::F32,
                     }],
-                    zones: vec![Zone {
+                    zones: vec![StacZone {
                         name: "zone".to_owned(),
                         epsg: 4326,
                     }],
@@ -207,12 +207,12 @@ mod tests {
                             name: "foo".to_owned(),
                             id: DataProviderId::new(),
                             api_url: "http://api.url".to_owned(),
-                            bands: vec![Band {
+                            bands: vec![StacBand {
                                 name: "band".to_owned(),
                                 no_data_value: Some(133.7),
                                 data_type: geoengine_datatypes::raster::RasterDataType::F32,
                             }],
-                            zones: vec![Zone {
+                            zones: vec![StacZone {
                                 name: "zone".to_owned(),
                                 epsg: 4326,
                             }],

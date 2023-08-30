@@ -1,10 +1,10 @@
-CREATE TYPE "Band" AS (
+CREATE TYPE "StacBand" AS (
     "name" text,
     no_data_value double precision,
     data_type "RasterDataType"
 );
 
-CREATE TYPE "Zone" AS (
+CREATE TYPE "StacZone" AS (
     "name" text,
     epsg oid
 );
@@ -23,8 +23,8 @@ CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     "name" text,
     id uuid,
     api_url text,
-    bands "Band" [],
-    zones "Zone" [],
+    bands "StacBand" [],
+    zones "StacZone" [],
     stac_api_retries "StacApiRetries",
     gdal_retries "GdalRetries",
     cache_ttl int

@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 pub use sentinel_s2_l2a_cogs::{
-    Band, GdalRetries, SentinelDataset, SentinelS2L2ACogsProviderDefinition,
-    SentinelS2L2aCogsDataProvider, SentinelS2L2aCogsMetaData, StacApiRetries, Zone,
+    GdalRetries, SentinelDataset, SentinelS2L2ACogsProviderDefinition,
+    SentinelS2L2aCogsDataProvider, SentinelS2L2aCogsMetaData, StacApiRetries, StacBand, StacZone,
 };
 
 #[derive(PartialEq, Debug, Serialize, Deserialize, Clone)]
