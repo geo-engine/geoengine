@@ -1,3 +1,4 @@
+pub mod error;
 pub mod postgres_projectdb;
 mod project;
 mod projectdb;

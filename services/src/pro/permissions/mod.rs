@@ -127,6 +127,13 @@ pub trait PermissionDb {
         permission: Permission,
     ) -> Result<bool>;
 
+    /// Ensure `permission` for `resource` exists. Throws error if not allowed.
+    async fn ensure_permission<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        permission: Permission,
+    ) -> Result<()>;
+
     /// Give `permission` to `role` for `resource`.
     /// Requires `Owner` permission for `resource`.
     async fn add_permission<R: Into<ResourceId> + Send + Sync>(

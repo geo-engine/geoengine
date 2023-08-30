@@ -8,6 +8,9 @@ use crate::projects::{
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use crate::util::IdResponse;
 use actix_web::{web, FromRequest, HttpResponse, Responder};
+use snafu::ResultExt;
+
+use error::ProjectHandlerError;
 
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -35,6 +38,44 @@ where
         );
 }
 
+mod error {
+    use actix_web::{HttpResponse, ResponseError};
+    use snafu::prelude::*;
+    use strum::IntoStaticStr;
+
+    use crate::{handlers::ErrorResponse, projects::error::ProjectDbError};
+
+    #[derive(Debug, Snafu, IntoStaticStr)]
+    #[snafu(visibility(pub(crate)))]
+    #[snafu(context(suffix(false)))]
+    pub enum ProjectHandlerError {
+        #[snafu(display("Could not create project: {source}"))]
+        CreateProject { source: ProjectDbError },
+        #[snafu(display("Could not list projects: {source}"))]
+        ListProjects { source: ProjectDbError },
+        #[snafu(display("Could not update project: {source}"))]
+        UpdateProject { source: ProjectDbError },
+        #[snafu(display("Could not delete project: {source}"))]
+        DeleteProject { source: ProjectDbError },
+        #[snafu(display("Could not load project version: {source}"))]
+        LoadProjectVersion { source: ProjectDbError },
+        #[snafu(display("Could not load latest project version: {source}"))]
+        LoadLatestProjectVersion { source: ProjectDbError },
+        #[snafu(display("Could not list project versions: {source}"))]
+        ListProjectVersions { source: ProjectDbError },
+    }
+
+    impl ResponseError for ProjectHandlerError {
+        fn status_code(&self) -> actix_http::StatusCode {
+            actix_http::StatusCode::INTERNAL_SERVER_ERROR
+        }
+
+        fn error_response(&self) -> HttpResponse<actix_http::body::BoxBody> {
+            HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+        }
+    }
+}
+
 /// Create a new project for the user.
 #[utoipa::path(
     tag = "Projects",
@@ -52,13 +93,14 @@ pub(crate) async fn create_project_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: ValidatedJson<CreateProject>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let create = create.into_inner();
     let id = app_ctx
         .session_context(session)
         .db()
         .create_project(create)
-        .await?;
+        .await
+        .context(error::CreateProject)?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -90,13 +132,14 @@ pub(crate) async fn list_projects_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     options: ValidatedQuery<ProjectListOptions>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let options = options.into_inner();
     let listing = app_ctx
         .session_context(session)
         .db()
         .list_projects(options)
-        .await?;
+        .await
+        .context(error::ListProjects)?;
     Ok(web::Json(listing))
 }
 
@@ -122,14 +165,15 @@ pub(crate) async fn update_project_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     update: ValidatedJson<UpdateProject>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let mut update = update.into_inner();
     update.id = project.into_inner(); // TODO: avoid passing project id in path AND body
     app_ctx
         .session_context(session)
         .db()
         .update_project(update)
-        .await?;
+        .await
+        .context(error::UpdateProject)?;
     Ok(HttpResponse::Ok())
 }
 
@@ -152,12 +196,13 @@ pub(crate) async fn delete_project_handler<C: ApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     app_ctx
         .session_context(session)
         .db()
         .delete_project(*project)
-        .await?;
+        .await
+        .context(error::DeleteProject)?;
     Ok(HttpResponse::Ok())
 }
 
@@ -215,13 +260,14 @@ pub(crate) async fn load_project_version_handler<C: ApplicationContext>(
     project: web::Path<(ProjectId, ProjectVersionId)>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let project = project.into_inner();
     let id = app_ctx
         .session_context(session)
         .db()
         .load_project_version(project.0, LoadVersion::Version(project.1))
-        .await?;
+        .await
+        .context(error::LoadProjectVersion)?;
     Ok(web::Json(id))
 }
 
@@ -278,12 +324,13 @@ pub(crate) async fn load_project_latest_handler<C: ApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let id = app_ctx
         .session_context(session)
         .db()
         .load_project_version(project.into_inner(), LoadVersion::Latest)
-        .await?;
+        .await
+        .context(error::LoadLatestProjectVersion)?;
     Ok(web::Json(id))
 }
 
@@ -319,12 +366,13 @@ pub(crate) async fn project_versions_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     project: web::Path<ProjectId>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let versions = app_ctx
         .session_context(session)
         .db()
         .list_project_versions(project.into_inner())
-        .await?;
+        .await
+        .context(error::ListProjectVersions)?;
     Ok(web::Json(versions))
 }
 
@@ -1071,9 +1119,9 @@ mod tests {
 
             ErrorResponse::assert(
                 res,
-                400,
-                "ProjectDeleteFailed",
-                "Failed to delete the project.",
+                500,
+                "DeleteProject",
+                &format!("Could not delete project: Project {project} does not exist"),
             )
             .await;
         })
@@ -1137,7 +1185,7 @@ mod tests {
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
             let res = send_test_request(req, app_ctx).await;
 
-            assert_eq!(res.status(), 400);
+            assert_eq!(res.status(), 500);
         })
         .await;
     }

@@ -772,6 +772,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[serial]
     async fn register() {
         with_pro_temp_context(|app_ctx, _| async move {
             let res = register_test_helper(app_ctx, Method::POST, "foo@example.com").await;
@@ -784,6 +785,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[serial]
     async fn register_fail() {
         with_pro_temp_context(|app_ctx, _| async move {
             let res = register_test_helper(app_ctx, Method::POST, "notanemail").await;
@@ -794,6 +796,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[serial]
     async fn register_duplicate_email() {
         with_pro_temp_context(|app_ctx, _| async move {
             register_test_helper(app_ctx.clone(), Method::POST, "foo@example.com").await;

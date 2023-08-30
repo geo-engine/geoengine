@@ -1,8 +1,12 @@
-use crate::error::{self, Result};
+use crate::error::Result;
 use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::PermissionDb;
 use crate::pro::users::UserId;
+use crate::projects::error::ProjectNotFoundProjectDbError;
+use crate::projects::error::{
+    AccessFailedProjectDbError, Bb8ProjectDbError, PostgresProjectDbError, ProjectDbError,
+};
 use crate::projects::ProjectLayer;
 use crate::projects::{
     CreateProject, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
@@ -18,12 +22,12 @@ use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{
     tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
-use snafu::ensure;
+use snafu::{ensure, ResultExt};
 
 async fn list_plots<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
     project_version_id: &ProjectVersionId,
-) -> Result<Vec<String>>
+) -> Result<Vec<String>, ProjectDbError>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -38,9 +42,13 @@ where
                     WHERE project_version_id = $1;
                 ",
         )
-        .await?;
+        .await
+        .context(PostgresProjectDbError)?;
 
-    let plot_rows = conn.query(&stmt, &[project_version_id]).await?;
+    let plot_rows = conn
+        .query(&stmt, &[project_version_id])
+        .await
+        .context(PostgresProjectDbError)?;
     let plot_names = plot_rows.iter().map(|row| row.get(0)).collect();
 
     Ok(plot_names)
@@ -49,7 +57,7 @@ where
 async fn load_plots<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
     project_version_id: &ProjectVersionId,
-) -> Result<Vec<Plot>>
+) -> Result<Vec<Plot>, ProjectDbError>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -66,9 +74,13 @@ where
                 ORDER BY plot_index ASC
                 ",
         )
-        .await?;
+        .await
+        .context(PostgresProjectDbError)?;
 
-    let rows = conn.query(&stmt, &[project_version_id]).await?;
+    let rows = conn
+        .query(&stmt, &[project_version_id])
+        .await
+        .context(PostgresProjectDbError)?;
 
     let plots = rows
         .into_iter()
@@ -86,7 +98,7 @@ async fn update_plots(
     project_id: &ProjectId,
     project_version_id: &ProjectVersionId,
     plots: &[Plot],
-) -> Result<()> {
+) -> Result<(), ProjectDbError> {
     for (idx, plot) in plots.iter().enumerate() {
         let stmt = trans
             .prepare(
@@ -100,7 +112,8 @@ async fn update_plots(
                     VALUES ($1, $2, $3, $4, $5);
                     ",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         trans
             .execute(
@@ -113,7 +126,8 @@ async fn update_plots(
                     &plot.workflow,
                 ],
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
     }
 
     Ok(())
@@ -127,10 +141,13 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn list_projects(&self, options: ProjectListOptions) -> Result<Vec<ProjectListing>> {
+    async fn list_projects(
+        &self,
+        options: ProjectListOptions,
+    ) -> Result<Vec<ProjectListing>, ProjectDbError> {
         // TODO: project filters
 
-        let conn = self.conn_pool.get().await?;
+        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
         let stmt = conn
             .prepare(&format!(
@@ -145,7 +162,7 @@ where
         OFFSET $3;",
                 options.order.to_sql_string()
             ))
-            .await?;
+            .await.context(PostgresProjectDbError)?;
 
         let project_rows = conn
             .query(
@@ -156,7 +173,8 @@ where
                     &i64::from(options.offset),
                 ],
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         let mut project_listings = vec![];
         for project_row in project_rows {
@@ -173,9 +191,13 @@ where
                     FROM project_version_layers
                     WHERE project_version_id = $1;",
                 )
-                .await?;
+                .await
+                .context(PostgresProjectDbError)?;
 
-            let layer_rows = conn.query(&stmt, &[&project_version_id]).await?;
+            let layer_rows = conn
+                .query(&stmt, &[&project_version_id])
+                .await
+                .context(PostgresProjectDbError)?;
             let layer_names = layer_rows.iter().map(|row| row.get(0)).collect();
 
             project_listings.push(ProjectListing {
@@ -190,18 +212,26 @@ where
         Ok(project_listings)
     }
 
-    async fn create_project(&self, create: CreateProject) -> Result<ProjectId> {
-        let mut conn = self.conn_pool.get().await?;
+    async fn create_project(&self, create: CreateProject) -> Result<ProjectId, ProjectDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
         let project: Project = Project::from_create_project(create);
 
-        let trans = conn.build_transaction().start().await?;
+        let trans = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresProjectDbError)?;
 
         let stmt = trans
             .prepare("INSERT INTO projects (id) VALUES ($1);")
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
-        trans.execute(&stmt, &[&project.id]).await?;
+        trans
+            .execute(&stmt, &[&project.id])
+            .await
+            .context(PostgresProjectDbError)?;
 
         let stmt = trans
             .prepare(
@@ -215,7 +245,8 @@ where
                     changed)
                     VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         let version_id = ProjectVersionId::new();
 
@@ -231,7 +262,8 @@ where
                     &project.time_step,
                 ],
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         let stmt = trans
             .prepare(
@@ -240,47 +272,53 @@ where
                 VALUES 
                     ($1, $2);",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         trans
             .execute(&stmt, &[&version_id, &self.session.user.id])
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         let stmt = trans
             .prepare(
                 "INSERT INTO permissions (role_id, permission, project_id) VALUES ($1, $2, $3);",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         trans
             .execute(
                 &stmt,
                 &[&self.session.user.id, &Permission::Owner, &project.id],
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
-        trans.commit().await?;
+        trans.commit().await.context(PostgresProjectDbError)?;
 
         Ok(project.id)
     }
 
-    async fn load_project(&self, project: ProjectId) -> Result<Project> {
+    async fn load_project(&self, project: ProjectId) -> Result<Project, ProjectDbError> {
         self.load_project_version(project, LoadVersion::Latest)
             .await
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn update_project(&self, update: UpdateProject) -> Result<()> {
-        let update = update;
+    async fn update_project(&self, update: UpdateProject) -> Result<(), ProjectDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
-        let mut conn = self.conn_pool.get().await?;
+        self.ensure_permission(update.id, Permission::Owner)
+            .await
+            .map_err(|e| Box::new(e) as Box<(dyn std::error::Error + 'static)>)
+            .context(AccessFailedProjectDbError { project: update.id })?;
 
-        ensure!(
-            self.has_permission(update.id, Permission::Owner).await?,
-            error::PermissionDenied
-        );
-
-        let trans = conn.build_transaction().start().await?;
+        let trans = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresProjectDbError)?;
 
         let project = self.load_project(update.id).await?; // TODO: move inside transaction?
 
@@ -299,7 +337,8 @@ where
                     changed)
                 VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         trans
             .execute(
@@ -313,7 +352,8 @@ where
                     &project.time_step,
                 ],
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         let stmt = trans
             .prepare(
@@ -322,11 +362,13 @@ where
                 VALUES 
                     ($1, $2);",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         trans
             .execute(&stmt, &[&project.version.id, &self.session.user.id])
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         for (idx, layer) in project.layers.iter().enumerate() {
             let stmt = trans
@@ -342,7 +384,8 @@ where
                     visibility)
                 VALUES ($1, $2, $3, $4, $5, $6, $7);",
                 )
-                .await?;
+                .await
+                .context(PostgresProjectDbError)?;
 
             trans
                 .execute(
@@ -357,29 +400,39 @@ where
                         &layer.visibility,
                     ],
                 )
-                .await?;
+                .await
+                .context(PostgresProjectDbError)?;
         }
 
         update_plots(&trans, &project.id, &project.version.id, &project.plots).await?;
 
-        trans.commit().await?;
+        trans.commit().await.context(PostgresProjectDbError)?;
 
         Ok(())
     }
 
-    async fn delete_project(&self, project: ProjectId) -> Result<()> {
-        let conn = self.conn_pool.get().await?;
+    async fn delete_project(&self, project: ProjectId) -> Result<(), ProjectDbError> {
+        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+
+        self.ensure_permission(project, Permission::Owner)
+            .await
+            .map_err(|e| Box::new(e) as Box<(dyn std::error::Error + 'static)>)
+            .context(AccessFailedProjectDbError { project })?;
+
+        let stmt = conn
+            .prepare("DELETE FROM projects WHERE id = $1;")
+            .await
+            .context(PostgresProjectDbError)?;
+
+        let rows_affected = conn
+            .execute(&stmt, &[&project])
+            .await
+            .context(PostgresProjectDbError)?;
 
         ensure!(
-            self.has_permission(project, Permission::Owner).await?,
-            error::PermissionDenied
+            rows_affected == 1,
+            ProjectNotFoundProjectDbError { project }
         );
-
-        let stmt = conn.prepare("DELETE FROM projects WHERE id = $1;").await?;
-
-        let rows_affected = conn.execute(&stmt, &[&project]).await?;
-
-        ensure!(rows_affected == 1, error::ProjectDeleteFailed);
 
         Ok(())
     }
@@ -389,15 +442,15 @@ where
         &self,
         project: ProjectId,
         version: LoadVersion,
-    ) -> Result<Project> {
-        let conn = self.conn_pool.get().await?;
+    ) -> Result<Project, ProjectDbError> {
+        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
-        ensure!(
-            self.has_permission(project, Permission::Read).await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission(project, Permission::Owner)
+            .await
+            .map_err(|e| Box::new(e) as Box<(dyn std::error::Error + 'static)>)
+            .context(AccessFailedProjectDbError { project })?;
 
-        let row = if let LoadVersion::Version(version) = version {
+        let rows = if let LoadVersion::Version(version) = version {
             let stmt = conn
                 .prepare(
                     "
@@ -414,9 +467,12 @@ where
                 project_versions p JOIN project_version_authors a ON (p.id = a.project_version_id)
             WHERE p.project_id = $1 AND p.id = $2",
                 )
-                .await?;
+                .await
+                .context(PostgresProjectDbError)?;
 
-            conn.query_one(&stmt, &[&project, &version]).await?
+            conn.query(&stmt, &[&project, &version])
+                .await
+                .context(PostgresProjectDbError)?
         } else {
             let stmt = conn
                 .prepare(
@@ -436,10 +492,19 @@ where
                 SELECT changed FROM project_versions WHERE project_id = $1
             )",
                 )
-                .await?;
+                .await
+                .context(PostgresProjectDbError)?;
 
-            conn.query_one(&stmt, &[&project]).await?
+            conn.query(&stmt, &[&project])
+                .await
+                .context(PostgresProjectDbError)?
         };
+
+        if rows.is_empty() {
+            return Err(ProjectDbError::ProjectNotFound { project });
+        }
+
+        let row = &rows[0];
 
         let project_id = ProjectId(row.get(0));
         let version_id = ProjectVersionId(row.get(1));
@@ -459,9 +524,13 @@ where
         WHERE project_version_id = $1
         ORDER BY layer_index ASC",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
-        let rows = conn.query(&stmt, &[&version_id]).await?;
+        let rows = conn
+            .query(&stmt, &[&version_id])
+            .await
+            .context(PostgresProjectDbError)?;
 
         let mut layers = vec![];
         for row in rows {
@@ -488,13 +557,16 @@ where
         })
     }
 
-    async fn list_project_versions(&self, project: ProjectId) -> Result<Vec<ProjectVersion>> {
-        let conn = self.conn_pool.get().await?;
+    async fn list_project_versions(
+        &self,
+        project: ProjectId,
+    ) -> Result<Vec<ProjectVersion>, ProjectDbError> {
+        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
-        ensure!(
-            self.has_permission(project, Permission::Read).await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission(project, Permission::Read)
+            .await
+            .map_err(|e| Box::new(e) as Box<(dyn std::error::Error + 'static)>)
+            .context(AccessFailedProjectDbError { project })?;
 
         let stmt = conn
             .prepare(
@@ -508,9 +580,12 @@ where
                 ORDER BY 
                     p.changed DESC, a.user_id DESC",
             )
-            .await?;
+            .await.context(PostgresProjectDbError)?;
 
-        let rows = conn.query(&stmt, &[&project]).await?;
+        let rows = conn
+            .query(&stmt, &[&project])
+            .await
+            .context(PostgresProjectDbError)?;
 
         Ok(rows
             .iter()
