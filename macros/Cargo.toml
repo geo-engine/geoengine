@@ -3,8 +3,12 @@ name = "geoengine-macros" # having a dash in the name breaks test runner codelen
 version = "0.1.0"
 edition = "2021"
 
+
 [lib]
 proc-macro = true
+
+[features]
+pro = []
 
 [dependencies]
 proc-macro2 = "1.0"

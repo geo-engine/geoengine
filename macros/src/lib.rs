@@ -1,5 +1,7 @@
 use proc_macro2::TokenStream;
 
+/// Compiles Geo Engine Pro
+#[cfg(feature = "pro")]
 mod pro;
 mod testing;
 
@@ -14,6 +16,7 @@ pub fn test(
     }
 }
 
+#[cfg(feature = "pro")]
 #[proc_macro_attribute]
 pub fn pro_test(
     attr: proc_macro::TokenStream,
