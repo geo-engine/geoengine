@@ -150,7 +150,7 @@ mod tests {
 
             assert_sql_type(
                 &pool,
-                "Band",
+                "StacBand",
                 [StacBand {
                     name: "band".to_owned(),
                     no_data_value: Some(133.7),
@@ -161,7 +161,7 @@ mod tests {
 
             assert_sql_type(
                 &pool,
-                "Zone",
+                "StacZone",
                 [StacZone {
                     name: "zone".to_owned(),
                     epsg: 4326,
