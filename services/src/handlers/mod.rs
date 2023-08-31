@@ -13,7 +13,6 @@ use utoipa::ToSchema;
 pub mod datasets;
 pub mod ebv;
 pub mod layers;
-
 pub mod plots;
 pub mod projects;
 pub mod session;

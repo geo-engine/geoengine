@@ -681,8 +681,8 @@ mod tests {
     use geoengine_datatypes::collections::MultiPointCollection;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
-        ContinuousMeasurement, FeatureData, Measurement, MultiPoint, SpatialPartition2D,
-        SpatialResolution, TimeInterval,
+        ContinuousMeasurement, FeatureData, Measurement, MultiPoint, RasterQueryRectangle,
+        SpatialPartition2D, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -702,7 +702,6 @@ mod tests {
         single_timestep_raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata,
         GdalGeoTiffOptions,
     };
-
     use serde_json::json;
     use std::io::Read;
     use std::sync::Arc;

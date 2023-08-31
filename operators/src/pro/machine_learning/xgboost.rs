@@ -70,15 +70,14 @@ impl RasterOperator for XgboostOperator {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        // reconstruct model path from the given uuid, then load the actual model
-        let model_path = self.params.model_id;
-
         let model_access = context
             .extensions()
             .get::<MlModelAccess>()
-            .expect("`MlModelDb` extension should be set during `ProContext` creation");
+            .expect("`MlModelAccess` extension should be set during `ProContext` creation");
 
-        let model = model_access.load_ml_model_by_id(model_path).await?;
+        let model = model_access
+            .load_ml_model_by_id(self.params.model_id)
+            .await?;
 
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
 

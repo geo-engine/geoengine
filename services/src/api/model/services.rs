@@ -5,7 +5,6 @@ use crate::api::model::operators::{
 use crate::datasets::listing::Provenance;
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::projects::Symbology;
-
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId};
@@ -19,7 +20,6 @@ use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
-use std::collections::HashMap;
 
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};

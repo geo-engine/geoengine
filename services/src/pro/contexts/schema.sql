@@ -162,7 +162,6 @@ INNER JOIN permissions AS p ON (
     r.role_id = p.role_id AND p.layer_id IS NOT NULL
 );
 
-
 CREATE TABLE ml_models (
     id UUID PRIMARY KEY,
     content TEXT NOT NULL
