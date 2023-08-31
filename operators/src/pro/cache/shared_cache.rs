@@ -41,6 +41,7 @@ pub struct CacheBackend {
 
 impl CacheBackend {
     /// This method removes entries from the cache until it can fit the given amount of bytes.
+    #[allow(clippy::missing_panics_doc)]
     pub fn evict_until_can_fit_bytes(&mut self, bytes: usize) {
         while !self.cache_size.can_fit_bytes(bytes) {
             if let Some((pop_id, pop_key)) = self.lru.pop_lru() {

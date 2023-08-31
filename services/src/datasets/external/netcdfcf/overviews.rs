@@ -761,7 +761,7 @@ fn generate_loading_info(
         }
         TimeCoverage::List { ref time_stamps } => {
             let mut params_list = Vec::with_capacity(time_stamps.len());
-            for time_instance in time_stamps.iter() {
+            for time_instance in time_stamps {
                 let mut params = params.clone();
 
                 params.file_path = params

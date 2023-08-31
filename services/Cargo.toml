@@ -33,7 +33,7 @@ flexi_logger = { version = "0.25", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
-gdal = "0.15.0"
+gdal = "0.16"
 gdal-sys = "0.9"
 geo = "0.26"
 geoengine-datatypes = { path = "../datatypes" }
@@ -85,7 +85,7 @@ walkdir = "2.3"
 zip = "0.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = "0.26"
+nix = { version = "0.27", features = ["socket"] }
 
 [dev-dependencies]
 assert_cmd = "2.0"
