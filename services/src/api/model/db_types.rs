@@ -1732,40 +1732,6 @@ impl TryFrom<PangaeaDataProviderDefinitionDbType> for PangaeaDataProviderDefinit
     }
 }
 
-#[derive(Debug, PartialEq, ToSql, FromSql)]
-pub struct TextMetaDataDefinitionKeyValue {
-    key: String,
-    value: MetaDataDefinition,
-}
-
-#[derive(Debug, PartialEq, ToSql, FromSql)]
-#[postgres(transparent)]
-pub struct HashMapTextMetaDataDefinitionDbType(pub Vec<TextMetaDataDefinitionKeyValue>);
-
-impl From<&HashMap<String, MetaDataDefinition>> for HashMapTextMetaDataDefinitionDbType {
-    fn from(map: &HashMap<String, MetaDataDefinition>) -> Self {
-        Self(
-            map.iter()
-                .map(|(key, value)| TextMetaDataDefinitionKeyValue {
-                    key: key.clone(),
-                    value: value.clone(),
-                })
-                .collect(),
-        )
-    }
-}
-
-impl<S: std::hash::BuildHasher + std::default::Default> From<HashMapTextMetaDataDefinitionDbType>
-    for HashMap<String, MetaDataDefinition, S>
-{
-    fn from(map: HashMapTextMetaDataDefinitionDbType) -> Self {
-        map.0
-            .into_iter()
-            .map(|TextMetaDataDefinitionKeyValue { key, value }| (key, value))
-            .collect()
-    }
-}
-
 #[derive(Debug, ToSql, FromSql)]
 #[postgres(name = "DataProviderDefinition")]
 pub struct TypedDataProviderDefinitionDbType {

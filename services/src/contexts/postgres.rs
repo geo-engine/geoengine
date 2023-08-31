@@ -528,9 +528,7 @@ mod tests {
     };
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
-    use crate::api::model::{
-        ColorizerTypeDbType, HashMapTextMetaDataDefinitionDbType, HashMapTextTextDbType,
-    };
+    use crate::api::model::{ColorizerTypeDbType, HashMapTextTextDbType};
     use crate::datasets::external::aruna::ArunaDataProviderDefinition;
     use crate::datasets::external::gbif::GbifDataProviderDefinition;
     use crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition;
@@ -4233,66 +4231,7 @@ mod tests {
         )
         .await;
 
-        assert_sql_type(
-            pool,
-            "LayerId",
-            [LayerId("389a84ef-add4-4f22-9389-1e4a89396f65".to_string())],
-        )
-        .await;
-
         assert_sql_type(pool, "\"PropertyType\"[]", [Vec::<Property>::new()]).await;
-
-        assert_sql_type(
-            pool,
-            "\"TextMetaDataDefinitionKeyValue\"[]",
-            [HashMapTextMetaDataDefinitionDbType::from(&HashMap::<
-                String,
-                crate::datasets::storage::MetaDataDefinition,
-            >::from(
-                [
-                (
-                    "foo".to_string(),
-                    crate::datasets::storage::MetaDataDefinition::MockMetaData(
-                        crate::api::model::operators::MockMetaData {
-                            loading_info:
-                                crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
-                                    points: vec![
-                                        Coordinate2D::new(0.0f64, 0.5).into(),
-                                        Coordinate2D::new(2., 1.0).into(),
-                                    ],
-                                },
-                            result_descriptor: VectorResultDescriptor {
-                                data_type: VectorDataType::MultiPoint,
-                                spatial_reference: SpatialReferenceOption::SpatialReference(
-                                    SpatialReference::epsg_4326(),
-                                ),
-                                columns: [(
-                                    "foo".to_string(),
-                                    VectorColumnInfo {
-                                        data_type: FeatureDataType::Int,
-                                        measurement: Measurement::Unitless.into(),
-                                    },
-                                )]
-                                .into(),
-                                time: Some(TimeInterval::default()),
-                                bbox: Some(
-                                    BoundingBox2D::new(
-                                        Coordinate2D::new(0.0f64, 0.5),
-                                        Coordinate2D::new(2., 1.0),
-                                    )
-                                    .unwrap(),
-                                ),
-                            }
-                            .into(),
-                            phantom: PhantomData,
-                        }
-                        .into(),
-                    ),
-                ),
-            ]
-            ))],
-        )
-        .await;
 
         assert_sql_type(
             pool,

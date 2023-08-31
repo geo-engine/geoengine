@@ -674,18 +674,6 @@ CREATE TYPE "GfbioCollectionsDataProviderDefinition" AS (
     cache_ttl int
 );
 
-CREATE TYPE "TextMetaDataDefinitionKeyValue" AS (
-    key text,
-    value "MetaDataDefinition"
-);
-
-CREATE DOMAIN "LayerId" AS text;
-
-CREATE DOMAIN "LayerCollectionId" AS text;
-
-
-
-
 CREATE TYPE "EbvPortalDataProviderDefinition" AS (
     "name" text,
     "path" text,
