@@ -10,8 +10,7 @@ edition = "2021"
 
 [features]
 # This compiles Geo Engine Pro
-pro = ["geoengine-datatypes/pro"]
-xgboost = ["dep:xgboost-rs", "pro"]
+pro = ["geoengine-datatypes/pro", "dep:xgboost-rs"]
 
 [dependencies]
 arrow = { version = "45.0" } # TODO: activate SIMD when stable

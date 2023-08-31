@@ -135,7 +135,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::upload::upload_handler,
         pro::handlers::permissions::add_permission_handler,
         pro::handlers::permissions::remove_permission_handler,
-        pro::handlers::model_training::ml_model_from_workflow_handler,
+        pro::handlers::machine_learning::ml_model_from_workflow_handler,
     ),
     components(
         responses(

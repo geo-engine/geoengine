@@ -58,7 +58,7 @@ mod tests {
     use geoengine_operators::engine::MultipleRasterSources;
     use geoengine_operators::{
         engine::QueryProcessor,
-        pro::ml::xgboost::{XgboostOperator, XgboostParams},
+        pro::machine_learning::xgboost::{XgboostOperator, XgboostParams},
     };
 
     use crate::pro::machine_learning::ModelType::XGBoost;
@@ -80,10 +80,10 @@ mod tests {
     use geoengine_operators::engine::SourceOperator;
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor};
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
-    use geoengine_operators::pro::ml::MlModelAccess;
+    use geoengine_operators::pro::machine_learning::MlModelAccess;
     use geoengine_operators::util::Result;
     use std::sync::Arc;
-    #[cfg(feature = "xgboost")]
+
     use {
         crate::pro::machine_learning::MachineLearningModelFromWorkflowResult,
         geoengine_datatypes::primitives::{BoundingBox2D, QueryRectangle, VectorQueryRectangle},
@@ -159,7 +159,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "xgboost")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[serial]
     async fn ml_model_from_workflow_task_success() {
@@ -600,7 +599,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "xgboost")]
     #[serial]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn complete_train_predict_cycle() {

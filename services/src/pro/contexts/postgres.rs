@@ -34,8 +34,8 @@ use geoengine_operators::engine::{
     ChunkByteSize, ExecutionContextExtensions, QueryContextExtensions,
 };
 use geoengine_operators::pro::cache::shared_cache::SharedCache;
+use geoengine_operators::pro::machine_learning::{LoadMlModel, MlModelAccess};
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
-use geoengine_operators::pro::ml::{LoadMlModel, MlModelAccess};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, info};
 use pwhash::bcrypt;

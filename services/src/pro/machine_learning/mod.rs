@@ -4,20 +4,16 @@ mod ml_tasks;
 
 pub mod ml_error;
 
-#[cfg(feature = "xgboost")]
 pub mod xgb_config_builder;
 
-#[cfg(feature = "xgboost")]
 mod xgboost_training;
 
 use crate::error::Result;
 use std::collections::HashMap;
 
-#[cfg(feature = "xgboost")]
 pub(crate) use ml_tasks::{schedule_ml_model_training_task, MLTrainRequest};
 
 #[cfg(test)] //TODO: remove test config, once its used outside of tests
-#[cfg(feature = "xgboost")]
 pub(crate) use ml_tasks::MachineLearningModelFromWorkflowResult;
 
 use serde::Deserialize;
@@ -27,7 +23,6 @@ use typetag::serde;
 
 use utoipa::ToSchema;
 
-#[cfg(feature = "xgboost")]
 pub use xgboost_training::XGBoostModel;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -82,7 +77,6 @@ impl TrainableModel for GenericModel {
 /// Depending on the variant, a different implementation of the `TrainableModel` trait will be used.
 #[derive(Clone, Deserialize, Serialize, ToSchema)]
 pub enum ModelType {
-    #[cfg(feature = "xgboost")]
     XGBoost(XGBoostModel),
     #[cfg(not(feature = "xgboost"))]
     // TODO: This is a hack to prevent utoipa schema derivation errors and to manage compiler warnings with different feature sets
@@ -97,7 +91,6 @@ impl TrainableModel for ModelType {
         training_config: &HashMap<String, String>,
     ) -> Result<Value> {
         match self {
-            #[cfg(feature = "xgboost")]
             ModelType::XGBoost(model) => {
                 model.train_model(input_feature_data, input_label_data, training_config)
             }

@@ -360,7 +360,7 @@ mod tests {
     };
     use crate::error::Error;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use crate::pro::ml::{LoadMlModel, MlModelAccess};
+    use crate::pro::machine_learning::{LoadMlModel, MlModelAccess};
     use async_trait::async_trait;
     use geoengine_datatypes::pro::MlModelId;
 

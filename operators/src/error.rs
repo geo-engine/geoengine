@@ -372,7 +372,6 @@ pub enum Error {
     #[snafu(display("Valid filetypes: 'json'"))]
     NoValidMlModelFileType,
 
-    #[cfg(feature = "xgboost")]
     #[snafu(context(false))]
     XGBoost {
         source: crate::pro::xg_error::XGBoostModuleError,

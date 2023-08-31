@@ -47,7 +47,7 @@ where
             .configure(configure_extractors)
             .configure(pro::handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
-            .configure(pro::handlers::model_training::init_ml_routes::<C>)
+            .configure(pro::handlers::machine_learning::init_ml_routes::<C>)
             .configure(pro::handlers::permissions::init_permissions_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(handlers::projects::init_project_routes::<C>)

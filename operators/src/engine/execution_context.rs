@@ -62,7 +62,7 @@ pub trait ExecutionContext: Send
     fn extensions(&self) -> &ExecutionContextExtensions;
 }
 
-/// This type allows adding additional information to the `QueryContext`.
+/// This type allows adding additional information to the `ExecutionContext`.
 /// It acts like a type map, allowing one to store one value per type.
 #[derive(Default)]
 pub struct ExecutionContextExtensions {

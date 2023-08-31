@@ -5,8 +5,5 @@ pub mod cache;
 pub mod engine;
 pub mod meta;
 
-#[cfg(feature = "xgboost")]
-pub mod ml;
-
-#[cfg(feature = "xgboost")]
-pub use ml::xg_error;
+pub mod machine_learning;
+pub use machine_learning::xg_error;

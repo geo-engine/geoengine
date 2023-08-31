@@ -10,7 +10,7 @@ use crate::pro::machine_learning::{
     Aggregatable, MachineLearningAggregator, MachineLearningFeature, ModelType,
     ReservoirSamplingAggregator, SimpleAggregator, TrainableModel,
 };
-#[cfg(feature = "xgboost")]
+
 use crate::tasks::TaskManager;
 use crate::tasks::{Task, TaskId, TaskStatusInfo};
 use crate::util::config::get_config_element;
@@ -241,7 +241,6 @@ where
     }
 }
 
-#[cfg(feature = "xgboost")]
 pub async fn schedule_ml_model_training_task<C: SessionContext>(
     ctx: Arc<C>,
     ml_train_request: MLTrainRequest,

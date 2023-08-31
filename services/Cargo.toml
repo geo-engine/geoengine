@@ -11,9 +11,7 @@ build = "build.rs"
 
 [features]
 # This compiles Geo Engine Pro
-pro = ["geoengine-operators/pro", "geoengine-datatypes/pro", "xgboost"]
-xgboost = ["dep:xgboost-rs", "pro", "geoengine-operators/xgboost"]
-
+pro = ["geoengine-operators/pro", "geoengine-datatypes/pro", "dep:xgboost-rs"]
 
 [dependencies]
 actix = { version = "0.13", default-features = false }

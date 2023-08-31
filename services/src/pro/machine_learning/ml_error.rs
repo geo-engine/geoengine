@@ -1,6 +1,5 @@
 use snafu::Snafu;
 
-#[cfg(feature = "xgboost")]
 use xgboost_rs::XGBError;
 
 use geoengine_datatypes::{error::ErrorSource, pro::MlModelId};
@@ -9,13 +8,11 @@ use geoengine_datatypes::{error::ErrorSource, pro::MlModelId};
 #[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
 pub enum MachineLearningError {
     #[snafu(display("XG Booster instance could not complete training process.",))]
-    #[cfg(feature = "xgboost")]
     BoosterTrainingError {
         source: XGBError,
     },
 
     #[snafu(display("The XGBoost library could not complete the operation successfully.",))]
-    #[cfg(feature = "xgboost")]
     LibraryError {
         source: XGBError,
     },
@@ -26,31 +23,26 @@ pub enum MachineLearningError {
     },
 
     #[snafu(display("Could not write model to buffer.",))]
-    #[cfg(feature = "xgboost")]
     ModelStorageError {
         source: XGBError,
     },
 
     #[snafu(display("Couldn't create a booster instance from the content of the model file.",))]
-    #[cfg(feature = "xgboost")]
     LoadBoosterFromModelError {
         source: XGBError,
     },
 
     #[snafu(display("Couldn't generate a xgboost dmatrix from the given data.",))]
-    #[cfg(feature = "xgboost")]
     CreateDMatrixError {
         source: XGBError,
     },
 
     #[snafu(display("Couldn't set the label data for the given dmatrix.",))]
-    #[cfg(feature = "xgboost")]
     DMatrixSetLabelsError {
         source: XGBError,
     },
 
     #[snafu(display("Couldn't calculate predictions from the given data.",))]
-    #[cfg(feature = "xgboost")]
     PredictionError {
         source: XGBError,
     },
@@ -330,7 +322,6 @@ impl From<std::io::Error> for MachineLearningError {
     }
 }
 
-#[cfg(feature = "xgboost")]
 impl From<XGBError> for MachineLearningError {
     fn from(source: XGBError) -> Self {
         Self::LibraryError { source }
