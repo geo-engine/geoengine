@@ -17,12 +17,24 @@ use super::{
     },
 };
 use crate::{
-    datasets::storage::MetaDataDefinition,
+    datasets::{
+        external::{
+            aruna::ArunaDataProviderDefinition,
+            gbif::GbifDataProviderDefinition,
+            gfbio_abcd::GfbioAbcdDataProviderDefinition,
+            gfbio_collections::GfbioCollectionsDataProviderDefinition,
+            netcdfcf::{EbvPortalDataProviderDefinition, NetCdfCfDataProviderDefinition},
+            pangaea::PangaeaDataProviderDefinition,
+        },
+        storage::MetaDataDefinition,
+    },
     error::Error,
+    layers::external::TypedDataProviderDefinition,
     projects::{
         ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
         PolygonSymbology, RasterSymbology, Symbology,
     },
+    util::postgres::DatabaseConnectionConfig,
 };
 use fallible_iterator::FallibleIterator;
 use geoengine_datatypes::primitives::CacheTtlSeconds;
@@ -1539,6 +1551,377 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
     }
 }
 
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "DatabaseConnectionConfig")]
+pub struct DatabaseConnectionConfigDbType {
+    pub host: String,
+    pub port: i32,
+    pub database: String,
+    pub schema: String,
+    pub user: String,
+    pub password: String,
+}
+
+impl From<&DatabaseConnectionConfig> for DatabaseConnectionConfigDbType {
+    fn from(other: &DatabaseConnectionConfig) -> Self {
+        Self {
+            host: other.host.clone(),
+            port: i32::from(other.port),
+            database: other.database.clone(),
+            schema: other.schema.clone(),
+            user: other.user.clone(),
+            password: other.password.clone(),
+        }
+    }
+}
+
+impl TryFrom<DatabaseConnectionConfigDbType> for DatabaseConnectionConfig {
+    type Error = Error;
+
+    fn try_from(other: DatabaseConnectionConfigDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            host: other.host,
+            port: other.port as u16,
+            database: other.database,
+            schema: other.schema,
+            user: other.user,
+            password: other.password,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "GfbioCollectionsDataProviderDefinition")]
+pub struct GfbioCollectionsDataProviderDefinitionDbType {
+    pub name: String,
+    pub collection_api_url: String,
+    pub collection_api_auth_token: String,
+    pub abcd_db_config: DatabaseConnectionConfig,
+    pub pangaea_url: String,
+    pub cache_ttl: CacheTtlSeconds,
+}
+
+impl From<&GfbioCollectionsDataProviderDefinition>
+    for GfbioCollectionsDataProviderDefinitionDbType
+{
+    fn from(other: &GfbioCollectionsDataProviderDefinition) -> Self {
+        Self {
+            name: other.name.clone(),
+            collection_api_url: other.collection_api_url.clone().into(),
+            collection_api_auth_token: other.collection_api_auth_token.clone(),
+            abcd_db_config: other.abcd_db_config.clone(),
+            pangaea_url: other.pangaea_url.clone().into(),
+            cache_ttl: other.cache_ttl,
+        }
+    }
+}
+
+impl TryFrom<GfbioCollectionsDataProviderDefinitionDbType>
+    for GfbioCollectionsDataProviderDefinition
+{
+    type Error = Error;
+
+    fn try_from(other: GfbioCollectionsDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: other.name,
+            collection_api_url: other.collection_api_url.as_str().try_into()?,
+            collection_api_auth_token: other.collection_api_auth_token,
+            abcd_db_config: other.abcd_db_config,
+            pangaea_url: other.pangaea_url.as_str().try_into()?,
+            cache_ttl: other.cache_ttl,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "EbvPortalDataProviderDefinition")]
+pub struct EbvPortalDataProviderDefinitionDbType {
+    pub name: String,
+    pub path: String,
+    pub base_url: String,
+    pub overviews: String,
+    pub cache_ttl: CacheTtlSeconds,
+}
+
+impl From<&EbvPortalDataProviderDefinition> for EbvPortalDataProviderDefinitionDbType {
+    fn from(other: &EbvPortalDataProviderDefinition) -> Self {
+        Self {
+            name: other.name.clone(),
+            path: other.path.to_string_lossy().to_string(),
+            base_url: other.base_url.clone().into(),
+            overviews: other.overviews.to_string_lossy().to_string(),
+            cache_ttl: other.cache_ttl,
+        }
+    }
+}
+
+impl TryFrom<EbvPortalDataProviderDefinitionDbType> for EbvPortalDataProviderDefinition {
+    type Error = Error;
+
+    fn try_from(other: EbvPortalDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: other.name,
+            path: other.path.into(),
+            base_url: other.base_url.as_str().try_into()?,
+            overviews: other.overviews.into(),
+            cache_ttl: other.cache_ttl,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "NetCdfCfDataProviderDefinition")]
+pub struct NetCdfCfDataProviderDefinitionDbType {
+    pub name: String,
+    pub path: String,
+    pub overviews: String,
+    pub cache_ttl: CacheTtlSeconds,
+}
+
+impl From<&NetCdfCfDataProviderDefinition> for NetCdfCfDataProviderDefinitionDbType {
+    fn from(other: &NetCdfCfDataProviderDefinition) -> Self {
+        Self {
+            name: other.name.clone(),
+            path: other.path.to_string_lossy().to_string(),
+            overviews: other.overviews.to_string_lossy().to_string(),
+            cache_ttl: other.cache_ttl,
+        }
+    }
+}
+
+impl TryFrom<NetCdfCfDataProviderDefinitionDbType> for NetCdfCfDataProviderDefinition {
+    type Error = Error;
+
+    fn try_from(other: NetCdfCfDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: other.name,
+            path: other.path.into(),
+            overviews: other.overviews.into(),
+            cache_ttl: other.cache_ttl,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "PangaeaDataProviderDefinition")]
+pub struct PangaeaDataProviderDefinitionDbType {
+    pub name: String,
+    pub base_url: String,
+    pub cache_ttl: CacheTtlSeconds,
+}
+
+impl From<&PangaeaDataProviderDefinition> for PangaeaDataProviderDefinitionDbType {
+    fn from(other: &PangaeaDataProviderDefinition) -> Self {
+        Self {
+            name: other.name.clone(),
+            base_url: other.base_url.clone().into(),
+            cache_ttl: other.cache_ttl,
+        }
+    }
+}
+
+impl TryFrom<PangaeaDataProviderDefinitionDbType> for PangaeaDataProviderDefinition {
+    type Error = Error;
+
+    fn try_from(other: PangaeaDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: other.name,
+            base_url: other.base_url.as_str().try_into()?,
+            cache_ttl: other.cache_ttl,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "DataProviderDefinition")]
+pub struct TypedDataProviderDefinitionDbType {
+    aruna_data_provider_definition: Option<ArunaDataProviderDefinition>,
+    gbif_data_provider_definition: Option<GbifDataProviderDefinition>,
+    gfbio_abcd_data_provider_definition: Option<GfbioAbcdDataProviderDefinition>,
+    gfbio_collections_data_provider_definition: Option<GfbioCollectionsDataProviderDefinition>,
+    ebv_portal_data_provider_definition: Option<EbvPortalDataProviderDefinition>,
+    net_cdf_cf_data_provider_definition: Option<NetCdfCfDataProviderDefinition>,
+    pangaea_data_provider_definition: Option<PangaeaDataProviderDefinition>,
+}
+
+impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
+    fn from(other: &TypedDataProviderDefinition) -> Self {
+        match other {
+            TypedDataProviderDefinition::ArunaDataProviderDefinition(data_provider_definition) => {
+                Self {
+                    aruna_data_provider_definition: Some(data_provider_definition.clone()),
+                    gbif_data_provider_definition: None,
+                    gfbio_abcd_data_provider_definition: None,
+                    gfbio_collections_data_provider_definition: None,
+                    ebv_portal_data_provider_definition: None,
+                    net_cdf_cf_data_provider_definition: None,
+                    pangaea_data_provider_definition: None,
+                }
+            }
+            TypedDataProviderDefinition::GbifDataProviderDefinition(data_provider_definition) => {
+                Self {
+                    aruna_data_provider_definition: None,
+                    gbif_data_provider_definition: Some(data_provider_definition.clone()),
+                    gfbio_abcd_data_provider_definition: None,
+                    gfbio_collections_data_provider_definition: None,
+                    ebv_portal_data_provider_definition: None,
+                    net_cdf_cf_data_provider_definition: None,
+                    pangaea_data_provider_definition: None,
+                }
+            }
+            TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
+                data_provider_definition,
+            ) => Self {
+                aruna_data_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: Some(data_provider_definition.clone()),
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+            },
+            TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
+                data_provider_definition,
+            ) => Self {
+                aruna_data_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: Some(data_provider_definition.clone()),
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+            },
+            TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
+                data_provider_definition,
+            ) => Self {
+                aruna_data_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: Some(data_provider_definition.clone()),
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+            },
+            TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
+                data_provider_definition,
+            ) => Self {
+                aruna_data_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: Some(data_provider_definition.clone()),
+                pangaea_data_provider_definition: None,
+            },
+            TypedDataProviderDefinition::PangaeaDataProviderDefinition(
+                data_provider_definition,
+            ) => Self {
+                aruna_data_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: Some(data_provider_definition.clone()),
+            },
+        }
+    }
+}
+
+impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition {
+    type Error = Error;
+
+    #[allow(clippy::too_many_lines)]
+    fn try_from(result_descriptor: TypedDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
+        match result_descriptor {
+            TypedDataProviderDefinitionDbType {
+                aruna_data_provider_definition: Some(data_provider_definition),
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+            } => Ok(TypedDataProviderDefinition::ArunaDataProviderDefinition(
+                data_provider_definition,
+            )),
+            TypedDataProviderDefinitionDbType {
+                aruna_data_provider_definition: None,
+                gbif_data_provider_definition: Some(data_provider_definition),
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+            } => Ok(TypedDataProviderDefinition::GbifDataProviderDefinition(
+                data_provider_definition,
+            )),
+            TypedDataProviderDefinitionDbType {
+                aruna_data_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: Some(data_provider_definition),
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+            } => Ok(
+                TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
+                    data_provider_definition,
+                ),
+            ),
+            TypedDataProviderDefinitionDbType {
+                aruna_data_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: Some(data_provider_definition),
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+            } => Ok(
+                TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
+                    data_provider_definition,
+                ),
+            ),
+            TypedDataProviderDefinitionDbType {
+                aruna_data_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: Some(data_provider_definition),
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+            } => Ok(
+                TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
+                    data_provider_definition,
+                ),
+            ),
+            TypedDataProviderDefinitionDbType {
+                aruna_data_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: Some(data_provider_definition),
+                pangaea_data_provider_definition: None,
+            } => Ok(TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
+                data_provider_definition,
+            )),
+            TypedDataProviderDefinitionDbType {
+                aruna_data_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: Some(data_provider_definition),
+            } => Ok(TypedDataProviderDefinition::PangaeaDataProviderDefinition(
+                data_provider_definition,
+            )),
+            _ => Err(Error::UnexpectedInvalidDbTypeConversion),
+        }
+    }
+}
+
 /// A macro for quickly implementing `FromSql` and `ToSql` for `$RustType` if there is a `From` and `Into`
 /// implementation for another type `$DbType` that already implements it.
 ///
@@ -1548,6 +1931,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
 /// delegate_from_to_sql!($RustType, $DbType)
 /// ```
 ///
+#[macro_export]
 macro_rules! delegate_from_to_sql {
     ( $RustType:ty, $DbType:ty ) => {
         impl ToSql for $RustType {
@@ -1583,22 +1967,43 @@ macro_rules! delegate_from_to_sql {
 
 delegate_from_to_sql!(Colorizer, ColorizerDbType);
 delegate_from_to_sql!(ColorParam, ColorParamDbType);
+delegate_from_to_sql!(DatabaseConnectionConfig, DatabaseConnectionConfigDbType);
 delegate_from_to_sql!(DefaultColors, DefaultColorsDbType);
+delegate_from_to_sql!(
+    EbvPortalDataProviderDefinition,
+    EbvPortalDataProviderDefinitionDbType
+);
 delegate_from_to_sql!(FormatSpecifics, FormatSpecificsDbType);
 delegate_from_to_sql!(GdalDatasetParameters, GdalDatasetParametersDbType);
 delegate_from_to_sql!(GdalMetadataNetCdfCf, GdalMetadataNetCdfCfDbType);
 delegate_from_to_sql!(GdalMetaDataRegular, GdalMetaDataRegularDbType);
+delegate_from_to_sql!(
+    GfbioCollectionsDataProviderDefinition,
+    GfbioCollectionsDataProviderDefinitionDbType
+);
 delegate_from_to_sql!(Measurement, MeasurementDbType);
 delegate_from_to_sql!(MetaDataDefinition, MetaDataDefinitionDbType);
 delegate_from_to_sql!(MockMetaData, MockMetaDataDbType);
 delegate_from_to_sql!(NumberParam, NumberParamDbType);
+delegate_from_to_sql!(
+    NetCdfCfDataProviderDefinition,
+    NetCdfCfDataProviderDefinitionDbType
+);
 delegate_from_to_sql!(OgrMetaData, OgrMetaDataDbType);
 delegate_from_to_sql!(OgrSourceColumnSpec, OgrSourceColumnSpecDbType);
 delegate_from_to_sql!(OgrSourceDataset, OgrSourceDatasetDbType);
 delegate_from_to_sql!(OgrSourceDatasetTimeType, OgrSourceDatasetTimeTypeDbType);
 delegate_from_to_sql!(OgrSourceDurationSpec, OgrSourceDurationSpecDbType);
 delegate_from_to_sql!(OgrSourceTimeFormat, OgrSourceTimeFormatDbType);
+delegate_from_to_sql!(
+    PangaeaDataProviderDefinition,
+    PangaeaDataProviderDefinitionDbType
+);
 delegate_from_to_sql!(Symbology, SymbologyDbType);
+delegate_from_to_sql!(VectorResultDescriptor, VectorResultDescriptorDbType);
+delegate_from_to_sql!(
+    TypedDataProviderDefinition,
+    TypedDataProviderDefinitionDbType
+);
 delegate_from_to_sql!(TypedGeometry, TypedGeometryDbType);
 delegate_from_to_sql!(TypedResultDescriptor, TypedResultDescriptorDbType);
-delegate_from_to_sql!(VectorResultDescriptor, VectorResultDescriptorDbType);

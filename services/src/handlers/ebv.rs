@@ -639,12 +639,15 @@ mod tests {
             let overview_folder = tempfile::tempdir().unwrap();
 
             ctx.db()
-                .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
-                    name: "test".to_string(),
-                    path: test_data!("netcdf4d").to_path_buf(),
-                    overviews: overview_folder.path().to_path_buf(),
-                    cache_ttl: Default::default(),
-                }))
+                .add_layer_provider(
+                    NetCdfCfDataProviderDefinition {
+                        name: "test".to_string(),
+                        path: test_data!("netcdf4d").to_path_buf(),
+                        overviews: overview_folder.path().to_path_buf(),
+                        cache_ttl: Default::default(),
+                    }
+                    .into(),
+                )
                 .await
                 .unwrap();
 
@@ -724,12 +727,15 @@ mod tests {
             let overview_folder = tempfile::tempdir().unwrap();
 
             ctx.db()
-                .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
-                    name: "test".to_string(),
-                    path: test_data!("netcdf4d").to_path_buf(),
-                    overviews: overview_folder.path().to_path_buf(),
-                    cache_ttl: Default::default(),
-                }))
+                .add_layer_provider(
+                    NetCdfCfDataProviderDefinition {
+                        name: "test".to_string(),
+                        path: test_data!("netcdf4d").to_path_buf(),
+                        overviews: overview_folder.path().to_path_buf(),
+                        cache_ttl: Default::default(),
+                    }
+                    .into(),
+                )
                 .await
                 .unwrap();
 
@@ -774,12 +780,12 @@ mod tests {
         let overview_folder = tempfile::tempdir().unwrap();
 
         ctx.db()
-            .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
+            .add_layer_provider(NetCdfCfDataProviderDefinition {
                 name: "test".to_string(),
                 path: test_data!("netcdf4d").to_path_buf(),
                 overviews: overview_folder.path().to_path_buf(),
                 cache_ttl: Default::default(),
-            }))
+            }.into())
             .await
             .unwrap();
 
