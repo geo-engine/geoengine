@@ -22,6 +22,7 @@ use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{
     tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
+use geoengine_datatypes::error::BoxedResultExt;
 use snafu::{ensure, ResultExt};
 
 async fn list_plots<Tls>(
@@ -311,8 +312,7 @@ where
 
         self.ensure_permission(update.id, Permission::Owner)
             .await
-            .map_err(|e| Box::new(e) as Box<(dyn std::error::Error + 'static)>)
-            .context(AccessFailedProjectDbError { project: update.id })?;
+            .boxed_context(AccessFailedProjectDbError { project: update.id })?;
 
         let trans = conn
             .build_transaction()
@@ -416,8 +416,7 @@ where
 
         self.ensure_permission(project, Permission::Owner)
             .await
-            .map_err(|e| Box::new(e) as Box<(dyn std::error::Error + 'static)>)
-            .context(AccessFailedProjectDbError { project })?;
+            .boxed_context(AccessFailedProjectDbError { project })?;
 
         let stmt = conn
             .prepare("DELETE FROM projects WHERE id = $1;")
@@ -447,8 +446,7 @@ where
 
         self.ensure_permission(project, Permission::Owner)
             .await
-            .map_err(|e| Box::new(e) as Box<(dyn std::error::Error + 'static)>)
-            .context(AccessFailedProjectDbError { project })?;
+            .boxed_context(AccessFailedProjectDbError { project })?;
 
         let rows = if let LoadVersion::Version(version) = version {
             let stmt = conn
@@ -565,8 +563,7 @@ where
 
         self.ensure_permission(project, Permission::Read)
             .await
-            .map_err(|e| Box::new(e) as Box<(dyn std::error::Error + 'static)>)
-            .context(AccessFailedProjectDbError { project })?;
+            .boxed_context(AccessFailedProjectDbError { project })?;
 
         let stmt = conn
             .prepare(

@@ -7,10 +7,12 @@ use crate::projects::{
 };
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use crate::util::IdResponse;
-use actix_web::{web, FromRequest, HttpResponse, Responder};
+use actix_web::{web, FromRequest, HttpResponse, Responder, ResponseError};
+use snafu::prelude::*;
 use snafu::ResultExt;
+use strum::IntoStaticStr;
 
-use error::ProjectHandlerError;
+use crate::{handlers::ErrorResponse, projects::error::ProjectDbError};
 
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -38,41 +40,33 @@ where
         );
 }
 
-mod error {
-    use actix_web::{HttpResponse, ResponseError};
-    use snafu::prelude::*;
-    use strum::IntoStaticStr;
+#[derive(Debug, Snafu, IntoStaticStr)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)), module(error))]
+pub enum ProjectHandlerError {
+    #[snafu(display("Could not create project: {source}"))]
+    CreateProject { source: ProjectDbError },
+    #[snafu(display("Could not list projects: {source}"))]
+    ListProjects { source: ProjectDbError },
+    #[snafu(display("Could not update project: {source}"))]
+    UpdateProject { source: ProjectDbError },
+    #[snafu(display("Could not delete project: {source}"))]
+    DeleteProject { source: ProjectDbError },
+    #[snafu(display("Could not load project version: {source}"))]
+    LoadProjectVersion { source: ProjectDbError },
+    #[snafu(display("Could not load latest project version: {source}"))]
+    LoadLatestProjectVersion { source: ProjectDbError },
+    #[snafu(display("Could not list project versions: {source}"))]
+    ListProjectVersions { source: ProjectDbError },
+}
 
-    use crate::{handlers::ErrorResponse, projects::error::ProjectDbError};
-
-    #[derive(Debug, Snafu, IntoStaticStr)]
-    #[snafu(visibility(pub(crate)))]
-    #[snafu(context(suffix(false)))]
-    pub enum ProjectHandlerError {
-        #[snafu(display("Could not create project: {source}"))]
-        CreateProject { source: ProjectDbError },
-        #[snafu(display("Could not list projects: {source}"))]
-        ListProjects { source: ProjectDbError },
-        #[snafu(display("Could not update project: {source}"))]
-        UpdateProject { source: ProjectDbError },
-        #[snafu(display("Could not delete project: {source}"))]
-        DeleteProject { source: ProjectDbError },
-        #[snafu(display("Could not load project version: {source}"))]
-        LoadProjectVersion { source: ProjectDbError },
-        #[snafu(display("Could not load latest project version: {source}"))]
-        LoadLatestProjectVersion { source: ProjectDbError },
-        #[snafu(display("Could not list project versions: {source}"))]
-        ListProjectVersions { source: ProjectDbError },
+impl ResponseError for ProjectHandlerError {
+    fn status_code(&self) -> actix_http::StatusCode {
+        actix_http::StatusCode::INTERNAL_SERVER_ERROR
     }
 
-    impl ResponseError for ProjectHandlerError {
-        fn status_code(&self) -> actix_http::StatusCode {
-            actix_http::StatusCode::INTERNAL_SERVER_ERROR
-        }
-
-        fn error_response(&self) -> HttpResponse<actix_http::body::BoxBody> {
-            HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
-        }
+    fn error_response(&self) -> HttpResponse<actix_http::body::BoxBody> {
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
     }
 }
 

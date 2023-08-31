@@ -1,5 +1,4 @@
-use std::error::Error;
-
+use geoengine_datatypes::error::ErrorSource;
 use snafu::prelude::*;
 
 use super::ProjectId;
@@ -15,7 +14,7 @@ pub enum ProjectDbError {
     #[snafu(display("Accessing project {project} failed"))]
     AccessFailed {
         project: ProjectId,
-        source: Box<dyn Error>,
+        source: Box<dyn ErrorSource>,
     },
     #[snafu(display("An unexpected database error occurred."))]
     Postgres { source: tokio_postgres::Error },
