@@ -1,7 +1,7 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
 use crate::pro::contexts::ProPostgresDb;
-use crate::pro::permissions::{Role, RoleId};
+use crate::pro::permissions::{Role, RoleDescription, RoleId};
 use crate::pro::users::oidc::ExternalUserClaims;
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
@@ -706,5 +706,37 @@ where
         ensure!(deleted > 0, error::RoleNotAssigned);
 
         Ok(())
+    }
+
+    async fn get_role_descriptions(&self, user_id: &UserId) -> Result<Vec<RoleDescription>> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "SELECT roles.id, roles.name \
+                FROM roles JOIN user_roles ON (roles.id=user_roles.role_id) \
+                WHERE user_roles.user_id=$1 \
+                ORDER BY roles.name;",
+            )
+            .await?;
+
+        let results = conn.query(&stmt, &[&user_id]).await?;
+
+        let mut result_vec = Vec::new();
+
+        for result in results {
+            let id = result.get(0);
+            let name = result.get(1);
+            let individual = UserId(id) == *user_id;
+            result_vec.push(RoleDescription {
+                role: Role {
+                    id: RoleId(id),
+                    name,
+                },
+                individual,
+            });
+        }
+
+        Ok(result_vec)
     }
 }

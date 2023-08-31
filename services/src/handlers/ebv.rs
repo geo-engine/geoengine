@@ -631,12 +631,6 @@ mod tests {
             directory.read_dir().unwrap().next().is_none()
         }
 
-        crate::util::config::set_config(
-            "session.admin_session_token",
-            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
-        )
-        .unwrap();
-
         with_temp_context(|app_ctx, _| async move {
             let ctx = app_ctx.default_session_context().await.unwrap();
 
@@ -723,12 +717,6 @@ mod tests {
     async fn test_remove_overviews_non_existing() {
         // setup
 
-        crate::util::config::set_config(
-            "session.admin_session_token",
-            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
-        )
-        .unwrap();
-
         with_temp_context(|app_ctx, _| async move {
             let ctx = app_ctx.default_session_context().await.unwrap();
             let session_id = app_ctx.default_session_id().await;
@@ -778,12 +766,6 @@ mod tests {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }
-
-        crate::util::config::set_config(
-            "session.admin_session_token",
-            "8aca8875-425a-4ef1-8ee6-cdfc62dd7525",
-        )
-        .unwrap();
 
         with_temp_context(|app_ctx, _| async move {
         let ctx = app_ctx.default_session_context().await.unwrap();

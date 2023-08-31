@@ -65,7 +65,7 @@ use utoipa::{Modify, OpenApi};
 use super::handlers::permissions::{PermissionRequest, Resource};
 use super::handlers::users::AddRole;
 use super::machine_learning::MLTrainRequest;
-use super::permissions::{Permission, ResourceId, RoleId};
+use super::permissions::{Permission, ResourceId, RoleDescription, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 
 #[derive(OpenApi)]
@@ -115,6 +115,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::remove_role_handler,
         pro::handlers::users::assign_role_handler,
         pro::handlers::users::revoke_role_handler,
+        pro::handlers::users::get_role_descriptions,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
@@ -358,6 +359,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             ResourceId,
             Permission,
             AddRole,
+            RoleDescription,
 
             MLTrainRequest,
         ),

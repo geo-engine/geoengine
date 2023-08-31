@@ -1,3 +1,4 @@
+use super::cache_stream::CacheStream;
 use super::error::CacheError;
 use super::shared_cache::{
     CacheBackendElement, CacheBackendElementExt, CacheElement, CacheElementsContainer,
@@ -5,8 +6,6 @@ use super::shared_cache::{
     RasterLandingQueryEntry,
 };
 use crate::util::Result;
-use futures::stream::FusedStream;
-use futures::{Future, Stream};
 use geoengine_datatypes::primitives::SpatialPartitioned;
 use geoengine_datatypes::raster::{
     BaseTile, EmptyGrid, Grid, GridOrEmpty, GridShape2D, GridSize, GridSpaceToLinearSpace,
@@ -17,9 +16,8 @@ use geoengine_datatypes::{
     raster::{Pixel, RasterTile2D},
     util::ByteSize,
 };
-use pin_project::pin_project;
 use std::marker::PhantomData;
-use std::{pin::Pin, sync::Arc};
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum CachedTiles {
@@ -173,6 +171,15 @@ where
     }
 }
 
+impl From<RasterLandingQueryEntry> for RasterCacheQueryEntry {
+    fn from(value: RasterLandingQueryEntry) -> Self {
+        Self {
+            query: value.query,
+            elements: value.elements.into(),
+        }
+    }
+}
+
 impl<T> CacheBackendElement for CompressedRasterTile2D<T>
 where
     T: Pixel,
@@ -196,6 +203,11 @@ where
             .union(&self.time)
             .map_err(|_| CacheError::ElementAndQueryDoNotIntersect)?;
         Ok(())
+    }
+
+    fn intersects_query(&self, query: &Self::Query) -> bool {
+        self.spatial_partition().intersects(&query.spatial_bounds)
+            && self.time.intersects(&query.time_interval)
     }
 }
 
@@ -248,165 +260,6 @@ impl_cache_element_subtype!(i64, I64);
 impl_cache_element_subtype!(u64, U64);
 impl_cache_element_subtype!(f32, F32);
 impl_cache_element_subtype!(f64, F64);
-
-type DecompressorFutureType<T> =
-    tokio::task::JoinHandle<std::result::Result<RasterTile2D<T>, CacheError>>;
-
-/// Our own tile stream that "owns" the data (more precisely a reference to the data)
-
-#[pin_project(project = CacheTileStreamProjection)]
-pub struct CacheTileStream<T> {
-    inner: CacheTileStreamInner<T>,
-    #[pin]
-    state: Option<DecompressorFutureType<T>>,
-}
-
-pub struct CacheTileStreamInner<T> {
-    data: Arc<Vec<CompressedRasterTile2D<T>>>,
-    query: RasterQueryRectangle,
-    idx: usize,
-}
-
-impl<T> CacheTileStreamInner<T>
-where
-    T: Pixel,
-{
-    // TODO: we could use a iter + filter adapter here to return refs however this would require a lot of lifetime annotations
-    fn next_idx(&mut self) -> Option<usize> {
-        let query_st_bounds = self.query.spatial_bounds;
-        let query_time_bounds = self.query.time_interval;
-        for i in self.idx..self.data.len() {
-            let tile_ref = &self.data[i];
-            let tile_bbox = tile_ref.spatial_partition();
-            if tile_bbox.intersects(&query_st_bounds)
-                && tile_ref.time.intersects(&query_time_bounds)
-            {
-                self.idx = i + 1;
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    fn data_arc(&self) -> Arc<Vec<CompressedRasterTile2D<T>>> {
-        self.data.clone()
-    }
-
-    fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    fn remaining(&self) -> usize {
-        self.len() - self.idx
-    }
-
-    fn terminated(&self) -> bool {
-        self.idx >= self.len()
-    }
-
-    fn new(data: Arc<Vec<CompressedRasterTile2D<T>>>, query: RasterQueryRectangle) -> Self {
-        Self {
-            data,
-            query,
-            idx: 0,
-        }
-    }
-}
-
-impl<T> CacheTileStream<T>
-where
-    T: Pixel,
-{
-    pub fn new(data: Arc<Vec<CompressedRasterTile2D<T>>>, query: RasterQueryRectangle) -> Self {
-        Self {
-            inner: CacheTileStreamInner::new(data, query),
-            state: None,
-        }
-    }
-
-    pub fn element_count(&self) -> usize {
-        self.inner.len()
-    }
-
-    fn terminated(&self) -> bool {
-        self.state.is_none() && self.inner.terminated()
-    }
-
-    fn check_decompress_future_res(
-        tile_future_res: Result<Result<RasterTile2D<T>, CacheError>, tokio::task::JoinError>,
-    ) -> Result<RasterTile2D<T>, CacheError> {
-        match tile_future_res {
-            Ok(Ok(tile)) => Ok(tile),
-            Ok(Err(err)) => Err(err),
-            Err(source) => Err(CacheError::CouldNotRunDecompressionTask { source }),
-        }
-    }
-
-    fn create_decompression_future(
-        data: Arc<Vec<CompressedRasterTile2D<T>>>,
-        idx: usize,
-    ) -> DecompressorFutureType<T>
-    where
-        T: Pixel,
-        CompressedRasterTile2D<T>: CacheBackendElementExt<Query = RasterQueryRectangle>,
-    {
-        crate::util::spawn_blocking(move || RasterTile2D::<T>::from_stored_element_ref(&data[idx]))
-    }
-}
-
-impl<T: Pixel> Stream for CacheTileStream<T>
-where
-    RasterTile2D<T>: CacheElement<StoredCacheElement = CompressedRasterTile2D<T>>,
-    CompressedRasterTile2D<T>: CacheBackendElementExt<Query = RasterQueryRectangle>,
-{
-    type Item = Result<RasterTile2D<T>, CacheError>;
-
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        if self.terminated() {
-            return std::task::Poll::Ready(None);
-        }
-
-        let CacheTileStreamProjection { inner, mut state } = self.as_mut().project();
-
-        if state.is_none() {
-            if let Some(next) = inner.next_idx() {
-                let future_data = inner.data_arc();
-                let future = Self::create_decompression_future(future_data, next);
-                state.set(Some(future));
-            }
-        }
-
-        if let Some(pin_state) = state.as_mut().as_pin_mut() {
-            let res = futures::ready!(pin_state.poll(cx));
-            state.set(None);
-            let tile = Self::check_decompress_future_res(res);
-            return std::task::Poll::Ready(Some(tile));
-        }
-
-        std::task::Poll::Ready(None)
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        if self.terminated() {
-            return (0, Some(0));
-        }
-        // There must be a cache hit to produce this stream. So there must be at least one tile inside the query.
-        (1, Some(self.inner.remaining()))
-    }
-}
-
-impl<T> FusedStream for CacheTileStream<T>
-where
-    T: Pixel,
-    CompressedRasterTile2D<T>: CacheBackendElementExt<Query = RasterQueryRectangle>,
-{
-    fn is_terminated(&self) -> bool {
-        self.terminated()
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct CompressedMaskedGrid<D, T, C> {
@@ -665,7 +518,8 @@ where
 {
     type StoredCacheElement = CompressedRasterTile2D<T>;
     type Query = RasterQueryRectangle;
-    type ResultStream = CacheTileStream<T>;
+    type ResultStream =
+        CacheStream<CompressedRasterTile2D<T>, RasterTile2D<T>, RasterQueryRectangle>;
 
     fn into_stored_element(self) -> Self::StoredCacheElement {
         CompressedRasterTile2D::compress_tile(self)
@@ -679,7 +533,7 @@ where
         stored_data: Arc<Vec<Self::StoredCacheElement>>,
         query: Self::Query,
     ) -> Self::ResultStream {
-        CacheTileStream::new(stored_data, query)
+        CacheStream::new(stored_data, query)
     }
 }
 
@@ -738,5 +592,159 @@ impl TileCompression for Lz4FlexCompression {
         let decompressed_data_as_t_slice =
             Self::cast_u8_slice_to_data_slice(decompressed_data.as_slice());
         Ok(decompressed_data_as_t_slice.to_vec())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use geoengine_datatypes::{
+        primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution},
+        raster::GeoTransform,
+        util::test::TestDefault,
+    };
+
+    use crate::pro::cache::{
+        cache_tiles::CachedTiles,
+        shared_cache::{
+            CacheBackendElement, CacheBackendElementExt, CacheQueryMatch, RasterCacheQueryEntry,
+            RasterLandingQueryEntry,
+        },
+    };
+
+    use super::{
+        CompressedGridOrEmpty, CompressedMaskedGrid, CompressedRasterTile2D, LandingZoneQueryTiles,
+    };
+
+    fn create_test_tile() -> CompressedRasterTile2D<u8> {
+        CompressedRasterTile2D {
+            grid_array: CompressedGridOrEmpty::Compressed(CompressedMaskedGrid::<_, u8, _> {
+                shape: [2, 2].into(),
+                type_marker: Default::default(),
+                data: vec![16; 4],
+                mask: vec![1; 4],
+                compression_marker: Default::default(),
+            }),
+            time: Default::default(),
+            cache_hint: Default::default(),
+            global_geo_transform: GeoTransform::test_default(),
+            properties: Default::default(),
+            tile_position: [0, 0].into(),
+        }
+    }
+
+    #[test]
+    fn create_empty_landing_zone() {
+        let landing_zone = super::CompressedRasterTile2D::<u8>::create_empty_landing_zone();
+        assert!(landing_zone.is_empty());
+        if let super::LandingZoneQueryTiles::U8(v) = landing_zone {
+            assert!(v.is_empty());
+        } else {
+            panic!("wrong type");
+        }
+    }
+
+    #[test]
+    fn move_element_to_landing_zone() {
+        let mut landing_zone = CompressedRasterTile2D::<u8>::create_empty_landing_zone();
+        let tile = create_test_tile();
+        tile.move_element_into_landing_zone(&mut landing_zone)
+            .unwrap();
+        if let LandingZoneQueryTiles::U8(v) = landing_zone {
+            assert_eq!(v.len(), 1);
+        } else {
+            panic!("wrong type");
+        }
+    }
+
+    #[test]
+    fn landing_zone_to_cache_entry() {
+        let tile = create_test_tile();
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+        let mut lq = RasterLandingQueryEntry::create_empty::<CompressedRasterTile2D<u8>>(query);
+        tile.move_element_into_landing_zone(lq.elements_mut())
+            .unwrap();
+        let mut cache_entry = CompressedRasterTile2D::<u8>::landing_zone_to_cache_entry(lq);
+        assert_eq!(cache_entry.query(), &query);
+        assert!(cache_entry.elements_mut().is_expired());
+    }
+
+    #[test]
+    fn cache_element_hit() {
+        let tile = create_test_tile();
+
+        // tile is fully contained
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert!(tile.intersects_query(&query));
+
+        // tile is partially contained
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (0.5, -0.5).into(),
+                (1.5, -1.5).into(),
+            ),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert!(tile.intersects_query(&query));
+
+        // tile is not contained
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (10., -10.).into(),
+                (11., -11.).into(),
+            ),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert!(!tile.intersects_query(&query));
+    }
+
+    #[test]
+    fn cache_entry_matches() {
+        let cache_entry_bounds = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let cache_query_entry = RasterCacheQueryEntry {
+            query: cache_entry_bounds,
+            elements: CachedTiles::U8(Arc::new(Vec::new())),
+        };
+
+        // query is equal
+        let query = cache_entry_bounds;
+        assert!(cache_query_entry.query().is_match(&query));
+
+        // query is fully contained
+        let query2 = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (0.1, -0.1).into(),
+                (0.9, -0.9).into(),
+            ),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert!(cache_query_entry.query().is_match(&query2));
+
+        // query is exceeds cached bounds
+        let query3 = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (-0.1, 0.1).into(),
+                (1.1, -1.1).into(),
+            ),
+            time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        assert!(!cache_query_entry.query().is_match(&query3));
     }
 }

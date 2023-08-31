@@ -31,6 +31,12 @@ pub struct Role {
     pub name: String,
 }
 
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
+pub struct RoleDescription {
+    pub role: Role,
+    pub individual: bool,
+}
+
 impl Role {
     pub fn admin_role_id() -> RoleId {
         RoleId::from_str("d5328854-6190-4af9-ad69-4e74b0961ac9").expect("valid")
