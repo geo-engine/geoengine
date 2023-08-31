@@ -25,7 +25,7 @@ use utoipa::ToSchema;
 
 pub use xgboost_training::XGBoostModel;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum TrainingParams {
     Xgboost(XgboostTrainingParams),
@@ -103,7 +103,7 @@ impl TrainableModel for ModelType {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct XgboostTrainingParams {
     // A float value that represents missing or null data in the input.
@@ -135,7 +135,7 @@ impl MachineLearningFeature {
 
 /// This enum represents the different aggregators that can be used to initialize the
 /// different algorithms for collecting the data used in ml training.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum MachineLearningAggregator {
     Simple,
