@@ -13,9 +13,7 @@ use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
 use futures::{ready, Stream, StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, Geometry, QueryRectangle, VectorQueryRectangle,
-};
+use geoengine_datatypes::primitives::{Geometry, QueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::{pin_project, pinned_drop};
@@ -164,8 +162,8 @@ where
 #[async_trait]
 impl<P, E, S> QueryProcessor for CacheQueryProcessor<P, E, S>
 where
-    P: QueryProcessor<Output = E, SpatialBounds = S> + Sized,
-    S: AxisAlignedRectangle + Send + Sync + 'static,
+    P: QueryProcessor<Output = E, SpatialQuery = S> + Sized,
+    S: Copy + Send + Sync + 'static,
     E: CacheElement<Query = QueryRectangle<S>>
         + Send
         + Sync
@@ -176,7 +174,7 @@ where
     SharedCache: AsyncCache<E>,
 {
     type Output = E;
-    type SpatialBounds = S;
+    type SpatialQuery = S;
 
     async fn _query<'a>(
         &'a self,

@@ -155,22 +155,20 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, sync::Arc};
-
-    use geoengine_datatypes::{
-        collections::MultiPointCollection,
-        primitives::{
-            BoundingBox2D, CacheHint, FeatureData, MultiPoint, RasterQueryRectangle,
-            SpatialPartition2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
-        },
-        raster::{GeoTransform, Grid2D, GridIdx2D, RasterTile2D},
-    };
-
     use crate::pro::cache::{
         cache_chunks::CompressedFeatureCollection,
         cache_stream::CacheStreamInner,
         cache_tiles::{CompressedRasterTile2D, CompressedRasterTileExt},
     };
+    use geoengine_datatypes::{
+        collections::MultiPointCollection,
+        primitives::{
+            BoundingBox2D, CacheHint, Coordinate2D, FeatureData, MultiPoint, RasterQueryRectangle,
+            SpatialPartition2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
+        },
+        raster::{GeoTransform, Grid2D, GridIdx2D, RasterTile2D},
+    };
+    use std::{collections::HashMap, sync::Arc};
 
     fn create_test_raster_data() -> Vec<CompressedRasterTile2D<u8>> {
         let mut data = Vec::new();
@@ -223,11 +221,12 @@ mod tests {
     #[test]
     fn test_cache_stream_inner_raster() {
         let data = Arc::new(create_test_raster_data());
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((2., -2.).into(), (8., -8.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::zero_point_five(),
-        };
+        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new_unchecked((2., -2.).into(), (8., -8.).into()),
+            SpatialResolution::zero_point_five(),
+            Coordinate2D::new(0., 0.),
+            TimeInterval::new_unchecked(0, 10),
+        );
 
         let mut res = Vec::new();
         let mut inner = CacheStreamInner::new(data, query);
@@ -243,11 +242,11 @@ mod tests {
     #[test]
     fn test_cache_stream_inner_vector() {
         let data = Arc::new(create_test_vecor_data());
-        let query = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked((2.1, 2.1).into(), (7.9, 7.9).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::zero_point_five(),
-        };
+        let query = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new_unchecked((2.1, 2.1).into(), (7.9, 7.9).into()),
+            TimeInterval::new_unchecked(0, 10),
+            SpatialResolution::zero_point_five(),
+        );
 
         let mut res = Vec::new();
         let mut inner = CacheStreamInner::new(data, query);

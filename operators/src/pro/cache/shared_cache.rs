@@ -11,7 +11,7 @@ use futures::Stream;
 use geoengine_datatypes::{
     identifier,
     primitives::{CacheHint, Geometry, RasterQueryRectangle, VectorQueryRectangle},
-    raster::Pixel,
+    raster::{GridContains, Pixel},
     util::{arrow::ArrowTyped, test::TestDefault, ByteSize, Identifier},
 };
 use log::{debug, log_enabled};
