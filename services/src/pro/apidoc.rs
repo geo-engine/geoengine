@@ -66,7 +66,7 @@ use super::handlers::permissions::{PermissionRequest, Resource};
 use super::handlers::users::AddRole;
 use super::machine_learning::{
     GenericModel, MLTrainRequest, MachineLearningAggregator, ModelType, TrainingParams,
-    XGBoostModel, XgboostTrainingParams,
+    XgboostTrainingParams,
 };
 use super::permissions::{Permission, ResourceId, RoleDescription, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
@@ -367,7 +367,6 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             MLTrainRequest,
             ModelType,
             TrainingParams,
-            XGBoostModel,
             GenericModel,
             XgboostTrainingParams,
             MachineLearningAggregator

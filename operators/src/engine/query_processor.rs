@@ -1,3 +1,6 @@
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use super::query::QueryContext;
 use crate::processing::RasterTypeConversionQueryProcessor;
 use crate::util::Result;
@@ -15,8 +18,6 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel};
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 use ouroboros::self_referencing;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 
 /// An instantiation of an operator that produces a stream of results for a query
 #[async_trait]

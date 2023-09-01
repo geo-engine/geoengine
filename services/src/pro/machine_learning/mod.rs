@@ -23,12 +23,18 @@ use typetag::serde;
 
 use utoipa::ToSchema;
 
-pub use xgboost_training::XGBoostModel;
-
 #[derive(Clone, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum TrainingParams {
     Xgboost(XgboostTrainingParams),
+}
+
+impl TrainingParams {
+    pub fn no_data_value(&self) -> f32 {
+        match self {
+            TrainingParams::Xgboost(params) => params.no_data_value,
+        }
+    }
 }
 
 /// The `TrainableModel` trait defines the common behavior for all trainable machine learning models.
@@ -77,10 +83,7 @@ impl TrainableModel for GenericModel {
 /// Depending on the variant, a different implementation of the `TrainableModel` trait will be used.
 #[derive(Clone, Deserialize, Serialize, ToSchema)]
 pub enum ModelType {
-    XGBoost(XGBoostModel),
-    #[cfg(not(feature = "xgboost"))]
-    // TODO: This is a hack to prevent utoipa schema derivation errors and to manage compiler warnings with different feature sets
-    Dummy(GenericModel),
+    XGBoost,
 }
 
 impl TrainableModel for ModelType {
@@ -91,13 +94,8 @@ impl TrainableModel for ModelType {
         training_config: &HashMap<String, String>,
     ) -> Result<Value> {
         match self {
-            ModelType::XGBoost(model) => {
-                model.train_model(input_feature_data, input_label_data, training_config)
-            }
-
-            #[cfg(not(feature = "xgboost"))]
-            ModelType::Dummy(model) => {
-                model.train_model(input_feature_data, input_label_data, training_config)
+            ModelType::XGBoost => {
+                xgboost_training::train_model(input_feature_data, input_label_data, training_config)
             }
         }
     }
@@ -156,13 +154,14 @@ pub trait Aggregatable {
     fn finish(&mut self) -> Vec<Self::Data>;
 
     /// Used to generate a new instance of an aggregatable within a generic context
-    fn new(data: Vec<f32>, memory_limit: Option<usize>) -> Self;
+    fn new(data: Vec<f32>, no_data_value: f32, memory_limit: Option<usize>) -> Self;
 }
 
 /// A simple aggregator that just collects all incoming data in a vector.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SimpleAggregator {
     pub data: Vec<f32>,
+    no_data_value: f32,
 }
 
 impl Aggregatable for SimpleAggregator {
@@ -174,20 +173,26 @@ impl Aggregatable for SimpleAggregator {
     {
         let out_data_sink = incoming_data
             .into_iter()
-            .flatten()
-            .map(Into::into)
+            .map(|opt| match opt {
+                Some(value) => value.into(),
+                None => self.no_data_value,
+            })
             .collect::<Vec<f32>>();
 
         self.data.extend(out_data_sink);
     }
 
     fn finish(&mut self) -> Vec<f32> {
+        // TODO: consume self instead
         std::mem::take(&mut self.data)
     }
 
     // TODO: implement memory limit
-    fn new(data: Vec<f32>, _memory_limit: Option<usize>) -> Self {
-        SimpleAggregator { data }
+    fn new(data: Vec<f32>, no_data_value: f32, _memory_limit: Option<usize>) -> Self {
+        SimpleAggregator {
+            data,
+            no_data_value,
+        }
     }
 }
 
@@ -196,6 +201,7 @@ impl Aggregatable for SimpleAggregator {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ReservoirSamplingAggregator {
     pub data: Vec<f32>,
+    no_data_value: f32,
 }
 
 // TODO: implement reservoir sampling
@@ -219,7 +225,10 @@ impl Aggregatable for ReservoirSamplingAggregator {
     }
 
     // TODO: implement memory limit
-    fn new(data: Vec<f32>, _memory_limit: Option<usize>) -> Self {
-        ReservoirSamplingAggregator { data }
+    fn new(data: Vec<f32>, no_data_value: f32, _memory_limit: Option<usize>) -> Self {
+        ReservoirSamplingAggregator {
+            data,
+            no_data_value,
+        }
     }
 }

@@ -63,7 +63,7 @@ mod tests {
 
     use crate::pro::machine_learning::ModelType::XGBoost;
     use crate::pro::machine_learning::{
-        MachineLearningAggregator, TrainingParams, XGBoostModel, XgboostTrainingParams,
+        MachineLearningAggregator, TrainingParams, XgboostTrainingParams,
     };
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::TaskStatus;
@@ -174,10 +174,6 @@ mod tests {
             TestDefault::test_default(),
             get_config_element::<Quota>().unwrap(),
             |app_ctx, _| async move {
-                let cfg = get_config_element::<crate::util::config::MachineLearning>().unwrap();
-
-                std::fs::create_dir_all(&cfg.model_defs_path).unwrap();
-
                 let session = app_ctx.create_anonymous_session().await.unwrap();
                 let ctx = app_ctx.session_context(session.clone());
 
@@ -247,7 +243,7 @@ mod tests {
                     }),
                     input_workflows: vec![workflow_a, workflow_b],
                     label_workflows: vec![workflow_target],
-                    model_instance: XGBoost(XGBoostModel),
+                    model_type: XGBoost,
                 };
 
                 let req = test::TestRequest::post()
@@ -308,14 +304,6 @@ mod tests {
                     .expect("Could not read specified ml model from disk");
 
                 assert_eq!(&test_model_bytes as &[u8], model_from_disk.as_bytes());
-
-                // clean up after testing
-                std::fs::remove_dir_all(
-                    cfg.model_defs_path
-                        .parent()
-                        .expect("Could not access parent directory of test model store directory"),
-                )
-                .expect("Could not delete test model store directory");
             },
         )
         .await;
@@ -595,11 +583,11 @@ mod tests {
                 workflow_temperature,
             ],
             label_workflows: vec![workflow_target],
-            model_instance: XGBoost(XGBoostModel),
+            model_type: XGBoost,
         }
     }
 
-    #[serial]
+    #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn complete_train_predict_cycle() {
         // -----------------------------------------------------

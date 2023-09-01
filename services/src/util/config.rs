@@ -371,15 +371,6 @@ impl ConfigElement for Session {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct MachineLearning {
-    pub model_defs_path: PathBuf,
-}
-
-impl ConfigElement for MachineLearning {
-    const KEY: &'static str = "machinelearning";
-}
-
-#[derive(Debug, Deserialize)]
 pub struct GFBio {
     #[serde(deserialize_with = "crate::util::parsing::deserialize_base_url")]
     pub basket_api_base_url: url::Url,

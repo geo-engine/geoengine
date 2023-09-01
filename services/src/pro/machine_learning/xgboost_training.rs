@@ -1,11 +1,8 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
-
 use serde_json::Value;
 use snafu::{ensure, ResultExt};
-use utoipa::ToSchema;
 use xgboost_rs::{Booster, DMatrix};
 
 use crate::error::Result;
@@ -13,86 +10,78 @@ use crate::pro::machine_learning::ml_error as XgModuleError;
 use crate::pro::machine_learning::MachineLearningFeature;
 use ordered_float::NotNan;
 
-use super::TrainableModel;
+pub fn train_model(
+    input_feature_data: &mut [MachineLearningFeature],
+    input_label_data: &mut [MachineLearningFeature],
+    training_config: &HashMap<String, String>,
+) -> Result<Value> {
+    // TODO:
+    // add functionallity to handle multiple target columns to this function
 
-#[derive(Clone, Deserialize, Serialize, ToSchema)]
-pub struct XGBoostModel;
+    ensure!(
+        !input_feature_data.is_empty() && !input_label_data.is_empty(),
+        XgModuleError::error::MachineLearningMustHaveAtLeastOneFeatureAndOneLabel
+    );
 
-impl TrainableModel for XGBoostModel {
-    fn train_model(
-        &self,
-        input_feature_data: &mut [MachineLearningFeature],
-        input_label_data: &mut [MachineLearningFeature],
-        training_config: &HashMap<String, String>,
-    ) -> Result<Value> {
-        // TODO:
-        // add functionallity to handle multiple target columns to this function
+    let n_features = input_feature_data.len();
 
-        ensure!(
-            !input_feature_data.is_empty() && !input_label_data.is_empty(),
-            XgModuleError::error::MachineLearningMustHaveAtLeastOneFeatureAndOneLabel
-        );
+    let raw_feature_data: Vec<&f32> = input_feature_data
+        .iter()
+        .flat_map(|elem| &elem.feature_data)
+        .collect();
 
-        let n_features = input_feature_data.len();
+    let raw_label_data: Vec<f32> = input_label_data
+        .iter()
+        .flat_map(|elem| elem.feature_data.clone())
+        .collect();
 
-        let raw_feature_data: Vec<&f32> = input_feature_data
-            .iter()
-            .flat_map(|elem| &elem.feature_data)
-            .collect();
+    let n_rows = raw_feature_data.len() / n_features;
 
-        let raw_label_data: Vec<f32> = input_label_data
-            .iter()
-            .flat_map(|elem| elem.feature_data.clone())
-            .collect();
+    let strides_ax_0 = 1;
+    let strides_ax_1 = n_rows;
+    let byte_size_ax_0 = std::mem::size_of::<f32>() * strides_ax_0;
+    let byte_size_ax_1 = std::mem::size_of::<f32>() * strides_ax_1;
 
-        let n_rows = raw_feature_data.len() / n_features;
+    let mut dmatrix = DMatrix::from_col_major_f32(
+        raw_feature_data
+            .into_iter()
+            .copied()
+            .collect::<Vec<f32>>()
+            .as_slice(),
+        byte_size_ax_0,
+        byte_size_ax_1,
+        n_rows,
+        n_features,
+        -1,
+        f32::NAN,
+    )
+    .context(XgModuleError::error::CreateDMatrix)?;
 
-        let strides_ax_0 = 1;
-        let strides_ax_1 = n_rows;
-        let byte_size_ax_0 = std::mem::size_of::<f32>() * strides_ax_0;
-        let byte_size_ax_1 = std::mem::size_of::<f32>() * strides_ax_1;
+    let lbls_remap = remap_labels(raw_label_data)?;
 
-        let mut dmatrix = DMatrix::from_col_major_f32(
-            raw_feature_data
-                .into_iter()
-                .copied()
-                .collect::<Vec<f32>>()
-                .as_slice(),
-            byte_size_ax_0,
-            byte_size_ax_1,
-            n_rows,
-            n_features,
-            -1,
-            f32::NAN,
-        )
-        .context(XgModuleError::error::CreateDMatrix)?;
+    dmatrix
+        .set_labels(lbls_remap.as_slice())
+        .context(XgModuleError::error::DMatrixSetLabels)?; // <- here we need the remapped target values
 
-        let lbls_remap = remap_labels(raw_label_data)?;
+    let evals = &[(&dmatrix, "train")];
 
-        dmatrix
-            .set_labels(lbls_remap.as_slice())
-            .context(XgModuleError::error::DMatrixSetLabels)?; // <- here we need the remapped target values
+    // TODO:
+    // So far, this only accepts a single target column.
+    // Add boilerplate code to use xgboost capability to train a model with multiple target columns.
+    let bst = Booster::train(
+        Some(evals),
+        &dmatrix,
+        training_config.clone(),
+        None, // <- No old model yet
+    )
+    .context(XgModuleError::error::BoosterTraining)?;
 
-        let evals = &[(&dmatrix, "train")];
+    let model = bst
+        .save_to_buffer("json".into())
+        .context(XgModuleError::error::ModelStorage)?;
 
-        // TODO:
-        // So far, this only accepts a single target column.
-        // Add boilerplate code to use xgboost capability to train a model with multiple target columns.
-        let bst = Booster::train(
-            Some(evals),
-            &dmatrix,
-            training_config.clone(),
-            None, // <- No old model yet
-        )
-        .context(XgModuleError::error::BoosterTraining)?;
-
-        let model = bst
-            .save_to_buffer("json".into())
-            .context(XgModuleError::error::ModelStorage)?;
-
-        let res = serde_json::from_str(model.as_str())?;
-        Ok(res)
-    }
+    let res = serde_json::from_str(model.as_str())?;
+    Ok(res)
 }
 
 /// Maps a vector of labels to a sequence of whole numbers, as required by `XGBoost`.

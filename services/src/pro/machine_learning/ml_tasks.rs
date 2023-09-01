@@ -13,30 +13,28 @@ use crate::pro::machine_learning::{
 
 use crate::tasks::TaskManager;
 use crate::tasks::{Task, TaskId, TaskStatusInfo};
-use crate::util::config::get_config_element;
 use crate::workflows::workflow::Workflow;
-use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
+use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::pro::MlModelId;
 use geoengine_datatypes::util::Identifier;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use snafu::{ensure, ResultExt};
+use snafu::ensure;
 use std::sync::Arc;
-use tokio::fs;
 use utoipa::ToSchema;
 
 use super::TrainingParams;
 
 #[derive(Clone, Deserialize, Serialize, ToSchema)]
-#[schema(example = json!({"inputWorkflows":[{"operator":{"params":{}}},{"operator":{"params":{}}},],"labelWorkflow":[{"operator":{"params":{}}}],"params":{},"query":{}, "modelInstance":{}}))]
+#[schema(example = json!({"inputWorkflows":[{"operator":{"params":{}}},{"operator":{"params":{}}},],"labelWorkflow":[{"operator":{"params":{}}}],"params":{},"query":{}, "modelType":{}}))]
 #[serde(rename_all = "camelCase")]
 pub struct MLTrainRequest {
     pub params: TrainingParams,
     pub input_workflows: Vec<Workflow>,
     pub label_workflows: Vec<Workflow>,
     pub query: VectorQueryRectangle,
-    pub model_instance: ModelType,
+    pub model_type: ModelType,
 }
 
 /// response of the machine learning model from workflow handler
@@ -127,13 +125,13 @@ where
 
         (0..n_rasters).for_each(|_| {
             let data = Vec::new();
-            let agg: A = Aggregatable::new(data, memory_limit);
+            let agg: A = Aggregatable::new(data, self.request.params.no_data_value(), memory_limit);
             aggregator_vec.push(agg);
         });
 
         (0..n_rasters_label).for_each(|_| {
             let data = Vec::new();
-            let agg: A = Aggregatable::new(data, memory_limit);
+            let agg: A = Aggregatable::new(data, self.request.params.no_data_value(), memory_limit);
             aggregator_vec_labels.push(agg);
         });
 
@@ -158,7 +156,7 @@ where
         // TODO: inspect, if this is a proper way to handle different kinds of ml models
         // Explanation: the different training methods for each ml type have to be handled differently
         // here is a trait implementation used to choose the correct training method
-        let content_of_trained_model: Value = self.request.model_instance.train_model(
+        let content_of_trained_model: Value = self.request.model_type.train_model(
             &mut feature_data,
             &mut label_data,
             training_config,
@@ -211,20 +209,6 @@ where
     }
 
     async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
-        let model_defs_path = get_config_element::<crate::util::config::MachineLearning>()
-            .boxed_context(
-                crate::pro::machine_learning::ml_error::error::CouldNotGetMlModelConfigPath,
-            )
-            .map_err(ErrorSource::boxed)?
-            .model_defs_path;
-
-        let model_dir = model_defs_path.join(self.model_id.to_string());
-
-        fs::remove_dir_all(model_dir)
-            .await
-            .context(crate::error::Io)
-            .map_err(ErrorSource::boxed)?;
-
         Ok(())
     }
 
