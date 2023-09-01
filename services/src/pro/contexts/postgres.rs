@@ -1,3 +1,4 @@
+use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 use crate::api::model::datatypes::DatasetName;
 use crate::contexts::{ApplicationContext, PostgresContext, QueryContextImpl, SessionId};
 use crate::contexts::{GeoEngineDb, SessionContext};
@@ -9,13 +10,13 @@ use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::datasets::add_datasets_from_directory;
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
+    add_pro_providers_from_directory,
 };
 use crate::pro::permissions::Role;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::{OidcRequestDb, UserAuth, UserSession};
 use crate::pro::util::config::{Cache, Oidc, Quota};
-
 use crate::tasks::SimpleTaskManagerContext;
 use crate::util::config::get_config_element;
 use async_trait::async_trait;
@@ -38,8 +39,6 @@ use rayon::ThreadPool;
 use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
 use std::sync::Arc;
-
-use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 
 // TODO: do not report postgres error details to user
 
@@ -107,6 +106,7 @@ where
         })
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub async fn new_with_oidc(
         config: Config,
         tls: Tls,
@@ -151,7 +151,7 @@ where
     }
 
     // TODO: check if the datasets exist already and don't output warnings when skipping them
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
     pub async fn new_with_data(
         config: Config,
         tls: Tls,
@@ -210,12 +210,9 @@ where
 
             add_datasets_from_directory(&mut db, dataset_defs_path).await;
 
-            add_providers_from_directory(
-                &mut db,
-                provider_defs_path.clone(),
-                &[provider_defs_path.join("pro")],
-            )
-            .await;
+            add_providers_from_directory(&mut db, provider_defs_path.clone()).await;
+
+            add_pro_providers_from_directory(&mut db, provider_defs_path.join("pro")).await;
         }
 
         Ok(app_ctx)
@@ -509,7 +506,7 @@ mod tests {
     use crate::api::model::datatypes::{DataProviderId, DatasetName, LayerId};
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
-    use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
+    use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
     use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
@@ -524,7 +521,7 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
-    use crate::pro::permissions::{Permission, PermissionDb};
+    use crate::pro::permissions::{Permission, PermissionDb, RoleDescription, RoleId};
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
     };
@@ -551,6 +548,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+    use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
@@ -1219,83 +1217,14 @@ let ctx = app_ctx.session_context(session);
         with_pro_temp_context(|app_ctx, _| async move {
             let db = app_ctx.session_context(UserSession::admin_session()).db();
 
-            let provider_id =
-                DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
-
-            let loading_info = OgrSourceDataset {
-                file_name: PathBuf::from("test.csv"),
-                layer_name: "test.csv".to_owned(),
-                data_type: Some(VectorDataType::MultiPoint),
-                time: OgrSourceDatasetTimeType::Start {
-                    start_field: "start".to_owned(),
-                    start_format: OgrSourceTimeFormat::Auto,
-                    duration: OgrSourceDurationSpec::Zero,
-                },
-                default_geometry: None,
-                columns: Some(OgrSourceColumnSpec {
-                    format_specifics: Some(FormatSpecifics::Csv {
-                        header: CsvHeader::Auto,
-                    }),
-                    x: "x".to_owned(),
-                    y: None,
-                    int: vec![],
-                    float: vec![],
-                    text: vec![],
-                    bool: vec![],
-                    datetime: vec![],
-                    rename: None,
-                }),
-                force_ogr_time_filter: false,
-                force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Ignore,
-                sql_query: None,
-                attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+            let provider = NetCdfCfDataProviderDefinition {
+                name: "netcdfcf".to_string(),
+                path: test_data!("netcdf4d/").into(),
+                overviews: test_data!("netcdf4d/overviews/").into(),
+                cache_ttl: CacheTtlSeconds::new(0),
             };
 
-            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
-                OgrSourceDataset,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            > {
-                loading_info: loading_info.clone(),
-                result_descriptor: VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [(
-                        "foo".to_owned(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    )]
-                    .into_iter()
-                    .collect(),
-                    time: None,
-                    bbox: None,
-                },
-                phantom: Default::default(),
-            });
-
-            let provider = MockExternalLayerProviderDefinition {
-                id: provider_id,
-                root_collection: MockCollection {
-                    id: LayerCollectionId("b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_owned()),
-                    name: "Mock Collection A".to_owned(),
-                    description: "Some description".to_owned(),
-                    collections: vec![MockCollection {
-                        id: LayerCollectionId("21466897-37a1-4666-913a-50b5244699ad".to_owned()),
-                        name: "Mock Collection B".to_owned(),
-                        description: "Some description".to_owned(),
-                        collections: vec![],
-                        layers: vec![],
-                    }],
-                    layers: vec![],
-                },
-                data: [("myData".to_owned(), meta_data)].into_iter().collect(),
-            };
-
-            db.add_layer_provider(Box::new(provider)).await.unwrap();
+            let provider_id = db.add_layer_provider(provider.into()).await.unwrap();
 
             let providers = db
                 .list_layer_providers(LayerProviderListingOptions {
@@ -1311,8 +1240,8 @@ let ctx = app_ctx.session_context(session);
                 providers[0],
                 LayerProviderListing {
                     id: provider_id,
-                    name: "MockName".to_owned(),
-                    description: "MockType".to_owned(),
+                    name: "netcdfcf".to_owned(),
+                    description: "NetCdfCfProviderDefinition".to_owned(),
                 }
             );
 
@@ -1329,7 +1258,7 @@ let ctx = app_ctx.session_context(session);
                 .await
                 .unwrap();
 
-            assert_eq!(datasets.items.len(), 1);
+            assert_eq!(datasets.items.len(), 3);
         })
         .await;
     }
@@ -3008,6 +2937,7 @@ let ctx = app_ctx.session_context(session);
         .await;
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_handles_user_roles() {
         with_pro_temp_context(|app_ctx, _| async move {
@@ -3038,6 +2968,38 @@ let ctx = app_ctx.session_context(session);
 
             assert!(!user_session.roles.contains(&role_id));
 
+            //user can query their role descriptions (user role and registered user)
+            assert_eq!(user_session.roles.len(), 2);
+
+            let expected_user_role_description = RoleDescription {
+                role: Role {
+                    id: RoleId::from(user_id),
+                    name: "foo@example.com".to_string(),
+                },
+                individual: true,
+            };
+            let expected_registered_role_description = RoleDescription {
+                role: Role {
+                    id: Role::registered_user_role_id(),
+                    name: "user".to_string(),
+                },
+                individual: false,
+            };
+
+            let user_role_descriptions = app_ctx
+                .session_context(user_session.clone())
+                .db()
+                .get_role_descriptions(&user_id)
+                .await
+                .unwrap();
+            assert_eq!(
+                vec![
+                    expected_user_role_description.clone(),
+                    expected_registered_role_description.clone(),
+                ],
+                user_role_descriptions
+            );
+
             // we assign the role to the user
             admin_db.assign_role(&role_id, &user_id).await.unwrap();
 
@@ -3052,6 +3014,30 @@ let ctx = app_ctx.session_context(session);
             // should be present now
             assert!(user_session.roles.contains(&role_id));
 
+            //user can query their role descriptions (now an additional foo role)
+            let expected_foo_role_description = RoleDescription {
+                role: Role {
+                    id: role_id,
+                    name: "foo".to_string(),
+                },
+                individual: false,
+            };
+
+            let user_role_descriptions = app_ctx
+                .session_context(user_session.clone())
+                .db()
+                .get_role_descriptions(&user_id)
+                .await
+                .unwrap();
+            assert_eq!(
+                vec![
+                    expected_foo_role_description,
+                    expected_user_role_description.clone(),
+                    expected_registered_role_description.clone(),
+                ],
+                user_role_descriptions
+            );
+
             // we revoke it
             admin_db.revoke_role(&role_id, &user_id).await.unwrap();
 
@@ -3065,6 +3051,21 @@ let ctx = app_ctx.session_context(session);
 
             // the role is gone now
             assert!(!user_session.roles.contains(&role_id));
+
+            //user can query their role descriptions (user role and registered user)
+            let user_role_descriptions = app_ctx
+                .session_context(user_session.clone())
+                .db()
+                .get_role_descriptions(&user_id)
+                .await
+                .unwrap();
+            assert_eq!(
+                vec![
+                    expected_user_role_description.clone(),
+                    expected_registered_role_description.clone(),
+                ],
+                user_role_descriptions
+            );
 
             // assign it again and then delete the whole role, should not be present at user
 
@@ -3081,6 +3082,21 @@ let ctx = app_ctx.session_context(session);
                 .unwrap();
 
             assert!(!user_session.roles.contains(&role_id));
+
+            //user can query their role descriptions (user role and registered user)
+            let user_role_descriptions = app_ctx
+                .session_context(user_session.clone())
+                .db()
+                .get_role_descriptions(&user_id)
+                .await
+                .unwrap();
+            assert_eq!(
+                vec![
+                    expected_user_role_description,
+                    expected_registered_role_description.clone(),
+                ],
+                user_role_descriptions
+            );
         })
         .await;
     }

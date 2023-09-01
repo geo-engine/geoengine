@@ -11,7 +11,7 @@ use utoipa::ToSchema;
 use super::datatypes::DatasetName;
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
 #[serde(tag = "type")]
 pub enum MetaDataDefinition {
     MockMetaData(MockMetaData),

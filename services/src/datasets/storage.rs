@@ -141,6 +141,17 @@ impl MetaDataDefinition {
         }
     }
 
+    pub fn type_name(&self) -> &str {
+        match self {
+            MetaDataDefinition::MockMetaData(_) => "MockMetaData",
+            MetaDataDefinition::OgrMetaData(_) => "OgrMetaData",
+            MetaDataDefinition::GdalMetaDataRegular(_) => "GdalMetaDataRegular",
+            MetaDataDefinition::GdalStatic(_) => "GdalStatic",
+            MetaDataDefinition::GdalMetadataNetCdfCf(_) => "GdalMetadataNetCdfCf",
+            MetaDataDefinition::GdalMetaDataList(_) => "GdalMetaDataList",
+        }
+    }
+
     pub async fn result_descriptor(&self) -> Result<TypedResultDescriptor> {
         match self {
             MetaDataDefinition::MockMetaData(m) => m

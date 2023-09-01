@@ -13,6 +13,7 @@ use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 
 use crate::projects::{ProjectId, STRectangle};
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
+use crate::util::config;
 use crate::util::config::get_config_element;
 use async_trait::async_trait;
 use bb8_postgres::{
@@ -140,7 +141,7 @@ where
 
             add_datasets_from_directory(&mut db, dataset_defs_path).await;
 
-            add_providers_from_directory(&mut db, provider_defs_path, &[]).await;
+            add_providers_from_directory(&mut db, provider_defs_path).await;
         }
 
         Ok(app_ctx)
@@ -494,30 +495,57 @@ where
 {
 }
 
+impl From<config::Postgres> for Config {
+    fn from(db_config: config::Postgres) -> Self {
+        let mut pg_config = Config::new();
+        pg_config
+            .user(&db_config.user)
+            .password(&db_config.password)
+            .host(&db_config.host)
+            .dbname(&db_config.database)
+            .port(db_config.port)
+            // fix schema by providing `search_path` option
+            .options(&format!("-c search_path={}", db_config.schema));
+        pg_config
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::marker::PhantomData;
     use std::str::FromStr;
 
     use super::*;
     use crate::api::model::datatypes::{
         Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement, DataProviderId,
         DatasetName, DefaultColors, LayerId, LinearGradient, LogarithmicGradient, Measurement,
-        NotNanF64, OverUnderColors, Palette, RgbaColor, SpatialPartition2D,
+        MultiLineString, MultiPoint, MultiPolygon, NoGeometry, NotNanF64, OverUnderColors, Palette,
+        RasterPropertiesEntryType, RasterPropertiesKey, RgbaColor, SpatialPartition2D, StringPair,
     };
-    use crate::api::model::operators::PlotResultDescriptor;
+    use crate::api::model::operators::{
+        GdalSourceTimePlaceholder, PlotResultDescriptor, TimeReference, UnixTimeStampType,
+    };
     use crate::api::model::responses::datasets::DatasetIdAndName;
     use crate::api::model::services::AddDataset;
     use crate::api::model::{ColorizerTypeDbType, HashMapTextTextDbType};
-    use crate::datasets::external::mock::{MockCollection, MockExternalLayerProviderDefinition};
+    use crate::datasets::external::aruna::ArunaDataProviderDefinition;
+    use crate::datasets::external::gbif::GbifDataProviderDefinition;
+    use crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition;
+    use crate::datasets::external::gfbio_collections::GfbioCollectionsDataProviderDefinition;
+    use crate::datasets::external::netcdfcf::{
+        EbvPortalDataProviderDefinition, NetCdfCfDataProviderDefinition,
+    };
+    use crate::datasets::external::pangaea::PangaeaDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
     use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
+    use crate::layers::external::TypedDataProviderDefinition;
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
-        LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
+        LayerCollectionListing, LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
     };
     use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
     use crate::layers::storage::{
@@ -530,6 +558,7 @@ mod tests {
         ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
         RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
     };
+    use crate::util::postgres::{assert_sql_type, DatabaseConnectionConfig};
     use crate::util::tests::register_ndvi_workflow_helper;
     use crate::util::tests::with_temp_context;
     use crate::workflows::registry::WorkflowRegistry;
@@ -544,6 +573,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+    use geoengine_datatypes::test_data;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
         RasterResultDescriptor, StaticMetaData, TypedOperator, TypedResultDescriptor,
@@ -560,6 +590,7 @@ mod tests {
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use ordered_float::NotNan;
     use serde_json::json;
+    use tokio_postgres::config::Host;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test() {
@@ -976,83 +1007,14 @@ mod tests {
         with_temp_context(|app_ctx, _| async move {
             let db = app_ctx.default_session_context().await.unwrap().db();
 
-            let provider_id =
-                DataProviderId::from_str("7b20c8d7-d754-4f8f-ad44-dddd25df22d2").unwrap();
-
-            let loading_info = OgrSourceDataset {
-                file_name: PathBuf::from("test.csv"),
-                layer_name: "test.csv".to_owned(),
-                data_type: Some(VectorDataType::MultiPoint),
-                time: OgrSourceDatasetTimeType::Start {
-                    start_field: "start".to_owned(),
-                    start_format: OgrSourceTimeFormat::Auto,
-                    duration: OgrSourceDurationSpec::Zero,
-                },
-                default_geometry: None,
-                columns: Some(OgrSourceColumnSpec {
-                    format_specifics: Some(FormatSpecifics::Csv {
-                        header: CsvHeader::Auto,
-                    }),
-                    x: "x".to_owned(),
-                    y: None,
-                    int: vec![],
-                    float: vec![],
-                    text: vec![],
-                    bool: vec![],
-                    datetime: vec![],
-                    rename: None,
-                }),
-                force_ogr_time_filter: false,
-                force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Ignore,
-                sql_query: None,
-                attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+            let provider = NetCdfCfDataProviderDefinition {
+                name: "netcdfcf".to_string(),
+                path: test_data!("netcdf4d/").into(),
+                overviews: test_data!("netcdf4d/overviews/").into(),
+                cache_ttl: CacheTtlSeconds::new(0),
             };
 
-            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
-                OgrSourceDataset,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            > {
-                loading_info: loading_info.clone(),
-                result_descriptor: VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [(
-                        "foo".to_owned(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless.into(),
-                        },
-                    )]
-                    .into_iter()
-                    .collect(),
-                    time: None,
-                    bbox: None,
-                },
-                phantom: Default::default(),
-            });
-
-            let provider = MockExternalLayerProviderDefinition {
-                id: provider_id,
-                root_collection: MockCollection {
-                    id: LayerCollectionId("b5f82c7c-9133-4ac1-b4ae-8faac3b9a6df".to_owned()),
-                    name: "Mock Collection A".to_owned(),
-                    description: "Some description".to_owned(),
-                    collections: vec![MockCollection {
-                        id: LayerCollectionId("21466897-37a1-4666-913a-50b5244699ad".to_owned()),
-                        name: "Mock Collection B".to_owned(),
-                        description: "Some description".to_owned(),
-                        collections: vec![],
-                        layers: vec![],
-                    }],
-                    layers: vec![],
-                },
-                data: [("myData".to_owned(), meta_data)].into_iter().collect(),
-            };
-
-            db.add_layer_provider(Box::new(provider)).await.unwrap();
+            let provider_id = db.add_layer_provider(provider.into()).await.unwrap();
 
             let providers = db
                 .list_layer_providers(LayerProviderListingOptions {
@@ -1068,8 +1030,8 @@ mod tests {
                 providers[0],
                 LayerProviderListing {
                     id: provider_id,
-                    name: "MockName".to_owned(),
-                    description: "MockType".to_owned(),
+                    name: "netcdfcf".to_owned(),
+                    description: "NetCdfCfProviderDefinition".to_owned(),
                 }
             );
 
@@ -1086,7 +1048,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(datasets.items.len(), 1);
+            assert_eq!(datasets.items.len(), 3);
         })
         .await;
     }
@@ -2486,46 +2448,19 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn test_postgres_type_serialization() {
-        pub async fn test_type<T>(
-            conn: &PooledConnection<'_, PostgresConnectionManager<tokio_postgres::NoTls>>,
-            sql_type: &str,
-            checks: impl IntoIterator<Item = T>,
-        ) where
-            T: PartialEq + postgres_types::FromSqlOwned + postgres_types::ToSql + Sync,
-        {
-            const UNQUOTED: [&str; 1] = ["double precision"];
-
-            // don't quote built-in types
-            let quote = if UNQUOTED.contains(&sql_type) || sql_type.contains('[') {
-                ""
-            } else {
-                "\""
-            };
-
-            for value in checks {
-                let stmt = conn
-                    .prepare(&format!("SELECT $1::{quote}{sql_type}{quote}"))
-                    .await
-                    .unwrap();
-                let result: T = conn.query_one(&stmt, &[&value]).await.unwrap().get(0);
-
-                assert_eq!(value, result);
-            }
-        }
-
         with_temp_context(|app_ctx, _| async move {
             let pool = app_ctx.pool.get().await.unwrap();
 
-            test_type(&pool, "RgbaColor", [RgbaColor([0, 1, 2, 3])]).await;
+            assert_sql_type(&pool, "RgbaColor", [RgbaColor([0, 1, 2, 3])]).await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "double precision",
                 [NotNanF64::from(NotNan::<f64>::new(1.0).unwrap())],
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "Breakpoint",
                 [Breakpoint {
@@ -2535,7 +2470,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "DefaultColors",
                 [
@@ -2550,7 +2485,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "ColorizerType",
                 [
@@ -2562,7 +2497,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "Colorizer",
                 [
@@ -2620,7 +2555,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "ColorParam",
                 [
@@ -2635,7 +2570,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "NumberParam",
                 [
@@ -2649,7 +2584,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "StrokeParam",
                 [StrokeParam {
@@ -2661,7 +2596,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "TextSymbology",
                 [TextSymbology {
@@ -2679,7 +2614,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "Symbology",
                 [
@@ -2776,7 +2711,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "RasterDataType",
                 [
@@ -2794,7 +2729,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "Measurement",
                 [
@@ -2811,7 +2746,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "Coordinate2D",
                 [crate::api::model::datatypes::Coordinate2D::from(
@@ -2820,7 +2755,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "SpatialPartition2D",
                 [crate::api::model::datatypes::SpatialPartition2D {
@@ -2830,7 +2765,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "BoundingBox2D",
                 [crate::api::model::datatypes::BoundingBox2D {
@@ -2840,14 +2775,14 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "SpatialResolution",
                 [crate::api::model::datatypes::SpatialResolution { x: 1.2, y: 2.3 }],
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "VectorDataType",
                 [
@@ -2859,7 +2794,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "FeatureDataType",
                 [
@@ -2873,7 +2808,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "TimeInterval",
                 [crate::api::model::datatypes::TimeInterval::from(
@@ -2882,7 +2817,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "SpatialReference",
                 [
@@ -2894,7 +2829,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "PlotResultDescriptor",
                 [PlotResultDescriptor {
@@ -2905,7 +2840,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "VectorResultDescriptor",
                 [crate::api::model::operators::VectorResultDescriptor {
@@ -2936,7 +2871,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "RasterResultDescriptor",
                 [crate::api::model::operators::RasterResultDescriptor {
@@ -2956,7 +2891,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "ResultDescriptor",
                 [
@@ -3012,7 +2947,7 @@ mod tests {
             )
             .await;
 
-            test_type(
+            assert_sql_type(
                 &pool,
                 "\"TextTextKeyValue\"[]",
                 [HashMapTextTextDbType::from(
@@ -3023,7 +2958,1401 @@ mod tests {
                 )],
             )
             .await;
+
+            assert_sql_type(
+                &pool,
+                "MockDatasetDataSourceLoadingInfo",
+                [
+                    crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
+                        points: vec![
+                            Coordinate2D::new(0.0f64, 0.5).into(),
+                            Coordinate2D::new(2., 1.0).into(),
+                        ],
+                    },
+                ],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "OgrSourceTimeFormat",
+                [
+                    crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                    crate::api::model::operators::OgrSourceTimeFormat::Custom {
+                        custom_format:
+                            geoengine_datatypes::primitives::DateTimeParseFormat::custom(
+                                "%Y-%m-%dT%H:%M:%S%.3fZ".to_string(),
+                            )
+                            .into(),
+                    },
+                    crate::api::model::operators::OgrSourceTimeFormat::UnixTimeStamp {
+                        timestamp_type: UnixTimeStampType::EpochSeconds,
+                        fmt: geoengine_datatypes::primitives::DateTimeParseFormat::unix().into(),
+                    },
+                ],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "OgrSourceDurationSpec",
+                [
+                    crate::api::model::operators::OgrSourceDurationSpec::Infinite,
+                    crate::api::model::operators::OgrSourceDurationSpec::Zero,
+                    crate::api::model::operators::OgrSourceDurationSpec::Value(
+                        TimeStep {
+                            granularity: TimeGranularity::Millis,
+                            step: 1000,
+                        }
+                        .into(),
+                    ),
+                ],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "OgrSourceDatasetTimeType",
+                [
+                    crate::api::model::operators::OgrSourceDatasetTimeType::None,
+                    crate::api::model::operators::OgrSourceDatasetTimeType::Start {
+                        start_field: "start".to_string(),
+                        start_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                        duration: crate::api::model::operators::OgrSourceDurationSpec::Zero,
+                    },
+                    crate::api::model::operators::OgrSourceDatasetTimeType::StartEnd {
+                        start_field: "start".to_string(),
+                        start_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                        end_field: "end".to_string(),
+                        end_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                    },
+                    crate::api::model::operators::OgrSourceDatasetTimeType::StartDuration {
+                        start_field: "start".to_string(),
+                        start_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                        duration_field: "duration".to_string(),
+                    },
+                ],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "FormatSpecifics",
+                [crate::api::model::operators::FormatSpecifics::Csv {
+                    header: CsvHeader::Yes.into(),
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "OgrSourceColumnSpec",
+                [crate::api::model::operators::OgrSourceColumnSpec {
+                    format_specifics: Some(crate::api::model::operators::FormatSpecifics::Csv {
+                        header: CsvHeader::Auto.into(),
+                    }),
+                    x: "x".to_string(),
+                    y: Some("y".to_string()),
+                    int: vec!["int".to_string()],
+                    float: vec!["float".to_string()],
+                    text: vec!["text".to_string()],
+                    bool: vec!["bool".to_string()],
+                    datetime: vec!["datetime".to_string()],
+                    rename: Some(
+                        [
+                            ("xx".to_string(), "xx_renamed".to_string()),
+                            ("yx".to_string(), "yy_renamed".to_string()),
+                        ]
+                        .into(),
+                    ),
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "point[]",
+                [MultiPoint {
+                    coordinates: vec![
+                        Coordinate2D::new(0.0f64, 0.5).into(),
+                        Coordinate2D::new(2., 1.0).into(),
+                    ],
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "path[]",
+                [MultiLineString {
+                    coordinates: vec![
+                        vec![
+                            Coordinate2D::new(0.0f64, 0.5).into(),
+                            Coordinate2D::new(2., 1.0).into(),
+                        ],
+                        vec![
+                            Coordinate2D::new(0.0f64, 0.5).into(),
+                            Coordinate2D::new(2., 1.0).into(),
+                        ],
+                    ],
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "\"Polygon\"[]",
+                [MultiPolygon {
+                    polygons: vec![
+                        vec![
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                            ],
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                            ],
+                        ],
+                        vec![
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                            ],
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                            ],
+                        ],
+                    ],
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "TypedGeometry",
+                [
+                    crate::api::model::operators::TypedGeometry::Data(NoGeometry),
+                    crate::api::model::operators::TypedGeometry::MultiPoint(MultiPoint {
+                        coordinates: vec![
+                            Coordinate2D::new(0.0f64, 0.5).into(),
+                            Coordinate2D::new(2., 1.0).into(),
+                        ],
+                    }),
+                    crate::api::model::operators::TypedGeometry::MultiLineString(MultiLineString {
+                        coordinates: vec![
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                            ],
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                            ],
+                        ],
+                    }),
+                    crate::api::model::operators::TypedGeometry::MultiPolygon(MultiPolygon {
+                        polygons: vec![
+                            vec![
+                                vec![
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                ],
+                                vec![
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                ],
+                            ],
+                            vec![
+                                vec![
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                ],
+                                vec![
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                ],
+                            ],
+                        ],
+                    }),
+                ],
+            )
+            .await;
+
+            assert_sql_type(&pool, "int", [CacheTtlSeconds::new(100)]).await;
+
+            assert_sql_type(
+                &pool,
+                "OgrSourceDataset",
+                [crate::api::model::operators::OgrSourceDataset {
+                    file_name: "test".into(),
+                    layer_name: "test".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint.into()),
+                    time: crate::api::model::operators::OgrSourceDatasetTimeType::Start {
+                        start_field: "start".to_string(),
+                        start_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                        duration: crate::api::model::operators::OgrSourceDurationSpec::Zero,
+                    },
+                    default_geometry: Some(
+                        crate::api::model::operators::TypedGeometry::MultiPoint(MultiPoint {
+                            coordinates: vec![
+                                Coordinate2D::new(0.0f64, 0.5).into(),
+                                Coordinate2D::new(2., 1.0).into(),
+                            ],
+                        }),
+                    ),
+                    columns: Some(crate::api::model::operators::OgrSourceColumnSpec {
+                        format_specifics: Some(
+                            crate::api::model::operators::FormatSpecifics::Csv {
+                                header: CsvHeader::Auto.into(),
+                            },
+                        ),
+                        x: "x".to_string(),
+                        y: Some("y".to_string()),
+                        int: vec!["int".to_string()],
+                        float: vec!["float".to_string()],
+                        text: vec!["text".to_string()],
+                        bool: vec!["bool".to_string()],
+                        datetime: vec!["datetime".to_string()],
+                        rename: Some(
+                            [
+                                ("xx".to_string(), "xx_renamed".to_string()),
+                                ("yx".to_string(), "yy_renamed".to_string()),
+                            ]
+                            .into(),
+                        ),
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: true,
+                    on_error: crate::api::model::operators::OgrSourceErrorSpec::Abort,
+                    sql_query: None,
+                    attribute_query: Some("foo = 'bar'".to_string()),
+                    cache_ttl: CacheTtlSeconds::new(5),
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "MockMetaData",
+                [crate::api::model::operators::MockMetaData {
+                    loading_info: crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
+                        points: vec![
+                            Coordinate2D::new(0.0f64, 0.5).into(),
+                            Coordinate2D::new(2., 1.0).into(),
+                        ],
+                    },
+                    result_descriptor: VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReferenceOption::SpatialReference(
+                            SpatialReference::epsg_4326(),
+                        ),
+                        columns: [(
+                            "foo".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Int,
+                                measurement: Measurement::Unitless.into(),
+                            },
+                        )]
+                        .into(),
+                        time: Some(TimeInterval::default()),
+                        bbox: Some(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(0.0f64, 0.5),
+                                Coordinate2D::new(2., 1.0),
+                            )
+                            .unwrap(),
+                        ),
+                    }
+                    .into(),
+                    phantom: PhantomData,
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "OgrMetaData",
+                [crate::api::model::operators::OgrMetaData {
+                    loading_info: crate::api::model::operators::OgrSourceDataset {
+                        file_name: "test".into(),
+                        layer_name: "test".to_string(),
+                        data_type: Some(VectorDataType::MultiPoint.into()),
+                        time: crate::api::model::operators::OgrSourceDatasetTimeType::Start {
+                            start_field: "start".to_string(),
+                            start_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                            duration: crate::api::model::operators::OgrSourceDurationSpec::Zero,
+                        },
+                        default_geometry: Some(
+                            crate::api::model::operators::TypedGeometry::MultiPoint(MultiPoint {
+                                coordinates: vec![
+                                    Coordinate2D::new(0.0f64, 0.5).into(),
+                                    Coordinate2D::new(2., 1.0).into(),
+                                ],
+                            }),
+                        ),
+                        columns: Some(crate::api::model::operators::OgrSourceColumnSpec {
+                            format_specifics: Some(
+                                crate::api::model::operators::FormatSpecifics::Csv {
+                                    header: CsvHeader::Auto.into(),
+                                },
+                            ),
+                            x: "x".to_string(),
+                            y: Some("y".to_string()),
+                            int: vec!["int".to_string()],
+                            float: vec!["float".to_string()],
+                            text: vec!["text".to_string()],
+                            bool: vec!["bool".to_string()],
+                            datetime: vec!["datetime".to_string()],
+                            rename: Some(
+                                [
+                                    ("xx".to_string(), "xx_renamed".to_string()),
+                                    ("yx".to_string(), "yy_renamed".to_string()),
+                                ]
+                                .into(),
+                            ),
+                        }),
+                        force_ogr_time_filter: false,
+                        force_ogr_spatial_filter: true,
+                        on_error: crate::api::model::operators::OgrSourceErrorSpec::Abort,
+                        sql_query: None,
+                        attribute_query: Some("foo = 'bar'".to_string()),
+                        cache_ttl: CacheTtlSeconds::new(5),
+                    },
+                    result_descriptor: VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReferenceOption::SpatialReference(
+                            SpatialReference::epsg_4326(),
+                        ),
+                        columns: [(
+                            "foo".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Int,
+                                measurement: Measurement::Unitless.into(),
+                            },
+                        )]
+                        .into(),
+                        time: Some(TimeInterval::default()),
+                        bbox: Some(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(0.0f64, 0.5),
+                                Coordinate2D::new(2., 1.0),
+                            )
+                            .unwrap(),
+                        ),
+                    }
+                    .into(),
+                    phantom: PhantomData,
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "GdalDatasetGeoTransform",
+                [crate::api::model::operators::GdalDatasetGeoTransform {
+                    origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                    x_pixel_size: 1.0,
+                    y_pixel_size: 2.0,
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "FileNotFoundHandling",
+                [
+                    crate::api::model::operators::FileNotFoundHandling::NoData,
+                    crate::api::model::operators::FileNotFoundHandling::Error,
+                ],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "GdalMetadataMapping",
+                [crate::api::model::operators::GdalMetadataMapping {
+                    source_key: RasterPropertiesKey {
+                        domain: None,
+                        key: "foo".to_string(),
+                    },
+                    target_key: RasterPropertiesKey {
+                        domain: Some("bar".to_string()),
+                        key: "foo".to_string(),
+                    },
+                    target_type: RasterPropertiesEntryType::String,
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "StringPair",
+                [StringPair::from(("foo".to_string(), "bar".to_string()))],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "GdalDatasetParameters",
+                [crate::api::model::operators::GdalDatasetParameters {
+                    file_path: "text".into(),
+                    rasterband_channel: 1,
+                    geo_transform: crate::api::model::operators::GdalDatasetGeoTransform {
+                        origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                        x_pixel_size: 1.0,
+                        y_pixel_size: 2.0,
+                    },
+                    width: 42,
+                    height: 23,
+                    file_not_found_handling:
+                        crate::api::model::operators::FileNotFoundHandling::NoData,
+                    no_data_value: Some(42.0),
+                    properties_mapping: Some(vec![
+                        crate::api::model::operators::GdalMetadataMapping {
+                            source_key: RasterPropertiesKey {
+                                domain: None,
+                                key: "foo".to_string(),
+                            },
+                            target_key: RasterPropertiesKey {
+                                domain: Some("bar".to_string()),
+                                key: "foo".to_string(),
+                            },
+                            target_type: RasterPropertiesEntryType::String,
+                        },
+                    ]),
+                    gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                    gdal_config_options: Some(vec![
+                        crate::api::model::operators::GdalConfigOption::from((
+                            "foo".to_string(),
+                            "bar".to_string(),
+                        )),
+                    ]),
+                    allow_alphaband_as_mask: false,
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "TextGdalSourceTimePlaceholderKeyValue",
+                [crate::api::model::TextGdalSourceTimePlaceholderKeyValue {
+                    key: "foo".to_string(),
+                    value: GdalSourceTimePlaceholder {
+                        format: geoengine_datatypes::primitives::DateTimeParseFormat::unix().into(),
+                        reference: TimeReference::Start,
+                    },
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "GdalMetaDataRegular",
+                [crate::api::model::operators::GdalMetaDataRegular {
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "Temperature".to_string(),
+                            unit: Some("°C".to_string()),
+                        })
+                        .into(),
+                        time: TimeInterval::new_unchecked(0, 1).into(),
+                        bbox: Some(
+                            crate::api::model::datatypes::SpatialPartition2D {
+                                upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                                lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                            }
+                            .into(),
+                        ),
+                        resolution: Some(SpatialResolution::zero_point_one()),
+                    }
+                    .into(),
+                    params: crate::api::model::operators::GdalDatasetParameters {
+                        file_path: "text".into(),
+                        rasterband_channel: 1,
+                        geo_transform: crate::api::model::operators::GdalDatasetGeoTransform {
+                            origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                            x_pixel_size: 1.0,
+                            y_pixel_size: 2.0,
+                        },
+                        width: 42,
+                        height: 23,
+                        file_not_found_handling:
+                            crate::api::model::operators::FileNotFoundHandling::NoData,
+                        no_data_value: Some(42.0),
+                        properties_mapping: Some(vec![
+                            crate::api::model::operators::GdalMetadataMapping {
+                                source_key: RasterPropertiesKey {
+                                    domain: None,
+                                    key: "foo".to_string(),
+                                },
+                                target_key: RasterPropertiesKey {
+                                    domain: Some("bar".to_string()),
+                                    key: "foo".to_string(),
+                                },
+                                target_type: RasterPropertiesEntryType::String,
+                            },
+                        ]),
+                        gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                        gdal_config_options: Some(vec![
+                            crate::api::model::operators::GdalConfigOption::from((
+                                "foo".to_string(),
+                                "bar".to_string(),
+                            )),
+                        ]),
+                        allow_alphaband_as_mask: false,
+                    },
+                    time_placeholders: [(
+                        "foo".to_string(),
+                        GdalSourceTimePlaceholder {
+                            format: geoengine_datatypes::primitives::DateTimeParseFormat::unix()
+                                .into(),
+                            reference: TimeReference::Start,
+                        },
+                    )]
+                    .into(),
+                    data_time: TimeInterval::new_unchecked(0, 1).into(),
+                    step: TimeStep {
+                        granularity: TimeGranularity::Millis,
+                        step: 1,
+                    }
+                    .into(),
+                    cache_ttl: CacheTtlSeconds::max(),
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "GdalMetaDataStatic",
+                [crate::api::model::operators::GdalMetaDataStatic {
+                    time: Some(TimeInterval::new_unchecked(0, 1).into()),
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "Temperature".to_string(),
+                            unit: Some("°C".to_string()),
+                        })
+                        .into(),
+                        time: TimeInterval::new_unchecked(0, 1).into(),
+                        bbox: Some(
+                            crate::api::model::datatypes::SpatialPartition2D {
+                                upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                                lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                            }
+                            .into(),
+                        ),
+                        resolution: Some(SpatialResolution::zero_point_one()),
+                    }
+                    .into(),
+                    params: crate::api::model::operators::GdalDatasetParameters {
+                        file_path: "text".into(),
+                        rasterband_channel: 1,
+                        geo_transform: crate::api::model::operators::GdalDatasetGeoTransform {
+                            origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                            x_pixel_size: 1.0,
+                            y_pixel_size: 2.0,
+                        },
+                        width: 42,
+                        height: 23,
+                        file_not_found_handling:
+                            crate::api::model::operators::FileNotFoundHandling::NoData,
+                        no_data_value: Some(42.0),
+                        properties_mapping: Some(vec![
+                            crate::api::model::operators::GdalMetadataMapping {
+                                source_key: RasterPropertiesKey {
+                                    domain: None,
+                                    key: "foo".to_string(),
+                                },
+                                target_key: RasterPropertiesKey {
+                                    domain: Some("bar".to_string()),
+                                    key: "foo".to_string(),
+                                },
+                                target_type: RasterPropertiesEntryType::String,
+                            },
+                        ]),
+                        gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                        gdal_config_options: Some(vec![
+                            crate::api::model::operators::GdalConfigOption::from((
+                                "foo".to_string(),
+                                "bar".to_string(),
+                            )),
+                        ]),
+                        allow_alphaband_as_mask: false,
+                    },
+                    cache_ttl: CacheTtlSeconds::max(),
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "GdalMetadataNetCdfCf",
+                [crate::api::model::operators::GdalMetadataNetCdfCf {
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "Temperature".to_string(),
+                            unit: Some("°C".to_string()),
+                        })
+                        .into(),
+                        time: TimeInterval::new_unchecked(0, 1).into(),
+                        bbox: Some(
+                            crate::api::model::datatypes::SpatialPartition2D {
+                                upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                                lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                            }
+                            .into(),
+                        ),
+                        resolution: Some(SpatialResolution::zero_point_one()),
+                    }
+                    .into(),
+                    params: crate::api::model::operators::GdalDatasetParameters {
+                        file_path: "text".into(),
+                        rasterband_channel: 1,
+                        geo_transform: crate::api::model::operators::GdalDatasetGeoTransform {
+                            origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                            x_pixel_size: 1.0,
+                            y_pixel_size: 2.0,
+                        },
+                        width: 42,
+                        height: 23,
+                        file_not_found_handling:
+                            crate::api::model::operators::FileNotFoundHandling::NoData,
+                        no_data_value: Some(42.0),
+                        properties_mapping: Some(vec![
+                            crate::api::model::operators::GdalMetadataMapping {
+                                source_key: RasterPropertiesKey {
+                                    domain: None,
+                                    key: "foo".to_string(),
+                                },
+                                target_key: RasterPropertiesKey {
+                                    domain: Some("bar".to_string()),
+                                    key: "foo".to_string(),
+                                },
+                                target_type: RasterPropertiesEntryType::String,
+                            },
+                        ]),
+                        gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                        gdal_config_options: Some(vec![
+                            crate::api::model::operators::GdalConfigOption::from((
+                                "foo".to_string(),
+                                "bar".to_string(),
+                            )),
+                        ]),
+                        allow_alphaband_as_mask: false,
+                    },
+                    start: TimeInstance::from_millis(0).unwrap().into(),
+                    end: TimeInstance::from_millis(1000).unwrap().into(),
+                    cache_ttl: CacheTtlSeconds::max(),
+                    step: TimeStep {
+                        granularity: TimeGranularity::Millis,
+                        step: 1,
+                    }
+                    .into(),
+                    band_offset: 3,
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "GdalMetaDataList",
+                [crate::api::model::operators::GdalMetaDataList {
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "Temperature".to_string(),
+                            unit: Some("°C".to_string()),
+                        })
+                        .into(),
+                        time: TimeInterval::new_unchecked(0, 1).into(),
+                        bbox: Some(
+                            crate::api::model::datatypes::SpatialPartition2D {
+                                upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                                lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                            }
+                            .into(),
+                        ),
+                        resolution: Some(SpatialResolution::zero_point_one()),
+                    }
+                    .into(),
+                    params: vec![crate::api::model::operators::GdalLoadingInfoTemporalSlice {
+                        time: TimeInterval::new_unchecked(0, 1).into(),
+                        params: Some(crate::api::model::operators::GdalDatasetParameters {
+                            file_path: "text".into(),
+                            rasterband_channel: 1,
+                            geo_transform: crate::api::model::operators::GdalDatasetGeoTransform {
+                                origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                                x_pixel_size: 1.0,
+                                y_pixel_size: 2.0,
+                            },
+                            width: 42,
+                            height: 23,
+                            file_not_found_handling:
+                                crate::api::model::operators::FileNotFoundHandling::NoData,
+                            no_data_value: Some(42.0),
+                            properties_mapping: Some(vec![
+                                crate::api::model::operators::GdalMetadataMapping {
+                                    source_key: RasterPropertiesKey {
+                                        domain: None,
+                                        key: "foo".to_string(),
+                                    },
+                                    target_key: RasterPropertiesKey {
+                                        domain: Some("bar".to_string()),
+                                        key: "foo".to_string(),
+                                    },
+                                    target_type: RasterPropertiesEntryType::String,
+                                },
+                            ]),
+                            gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                            gdal_config_options: Some(vec![
+                                crate::api::model::operators::GdalConfigOption::from((
+                                    "foo".to_string(),
+                                    "bar".to_string(),
+                                )),
+                            ]),
+                            allow_alphaband_as_mask: false,
+                        }),
+                        cache_ttl: CacheTtlSeconds::max(),
+                    }],
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "MetaDataDefinition",
+                [
+                    crate::datasets::storage::MetaDataDefinition::MockMetaData(
+                        crate::api::model::operators::MockMetaData {
+                            loading_info:
+                                crate::api::model::operators::MockDatasetDataSourceLoadingInfo {
+                                    points: vec![
+                                        Coordinate2D::new(0.0f64, 0.5).into(),
+                                        Coordinate2D::new(2., 1.0).into(),
+                                    ],
+                                },
+                            result_descriptor: VectorResultDescriptor {
+                                data_type: VectorDataType::MultiPoint,
+                                spatial_reference: SpatialReferenceOption::SpatialReference(
+                                    SpatialReference::epsg_4326(),
+                                ),
+                                columns: [(
+                                    "foo".to_string(),
+                                    VectorColumnInfo {
+                                        data_type: FeatureDataType::Int,
+                                        measurement: Measurement::Unitless.into(),
+                                    },
+                                )]
+                                .into(),
+                                time: Some(TimeInterval::default()),
+                                bbox: Some(
+                                    BoundingBox2D::new(
+                                        Coordinate2D::new(0.0f64, 0.5),
+                                        Coordinate2D::new(2., 1.0),
+                                    )
+                                    .unwrap(),
+                                ),
+                            }
+                            .into(),
+                            phantom: PhantomData,
+                        }.into(),
+                    ),
+                    crate::api::model::services::MetaDataDefinition::OgrMetaData(crate::api::model::operators::OgrMetaData {
+                        loading_info: crate::api::model::operators::OgrSourceDataset {
+                            file_name: "test".into(),
+                            layer_name: "test".to_string(),
+                            data_type: Some(VectorDataType::MultiPoint.into()),
+                            time: crate::api::model::operators::OgrSourceDatasetTimeType::Start {
+                                start_field: "start".to_string(),
+                                start_format: crate::api::model::operators::OgrSourceTimeFormat::Auto,
+                                duration: crate::api::model::operators::OgrSourceDurationSpec::Zero,
+                            },
+                            default_geometry: Some(
+                                crate::api::model::operators::TypedGeometry::MultiPoint(MultiPoint {
+                                    coordinates: vec![
+                                        Coordinate2D::new(0.0f64, 0.5).into(),
+                                        Coordinate2D::new(2., 1.0).into(),
+                                    ],
+                                }),
+                            ),
+                            columns: Some(crate::api::model::operators::OgrSourceColumnSpec {
+                                format_specifics: Some(
+                                    crate::api::model::operators::FormatSpecifics::Csv {
+                                        header: CsvHeader::Auto.into(),
+                                    },
+                                ),
+                                x: "x".to_string(),
+                                y: Some("y".to_string()),
+                                int: vec!["int".to_string()],
+                                float: vec!["float".to_string()],
+                                text: vec!["text".to_string()],
+                                bool: vec!["bool".to_string()],
+                                datetime: vec!["datetime".to_string()],
+                                rename: Some(
+                                    [
+                                        ("xx".to_string(), "xx_renamed".to_string()),
+                                        ("yx".to_string(), "yy_renamed".to_string()),
+                                    ]
+                                    .into(),
+                                ),
+                            }),
+                            force_ogr_time_filter: false,
+                            force_ogr_spatial_filter: true,
+                            on_error: crate::api::model::operators::OgrSourceErrorSpec::Abort,
+                            sql_query: None,
+                            attribute_query: Some("foo = 'bar'".to_string()),
+                            cache_ttl: CacheTtlSeconds::new(5),
+                        },
+                        result_descriptor: VectorResultDescriptor {
+                            data_type: VectorDataType::MultiPoint,
+                            spatial_reference: SpatialReferenceOption::SpatialReference(
+                                SpatialReference::epsg_4326(),
+                            ),
+                            columns: [(
+                                "foo".to_string(),
+                                VectorColumnInfo {
+                                    data_type: FeatureDataType::Int,
+                                    measurement: Measurement::Unitless.into(),
+                                },
+                            )]
+                            .into(),
+                            time: Some(TimeInterval::default()),
+                            bbox: Some(
+                                BoundingBox2D::new(
+                                    Coordinate2D::new(0.0f64, 0.5),
+                                    Coordinate2D::new(2., 1.0),
+                                )
+                                .unwrap(),
+                            ),
+                        }
+                        .into(),
+                        phantom: PhantomData,
+                    }).into(),
+                    crate::api::model::services::MetaDataDefinition::GdalMetaDataRegular(crate::api::model::operators::GdalMetaDataRegular {
+                        result_descriptor: RasterResultDescriptor {
+                            data_type: RasterDataType::U8,
+                            spatial_reference: SpatialReference::epsg_4326().into(),
+                            measurement: Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "Temperature".to_string(),
+                                unit: Some("°C".to_string()),
+                            })
+                            .into(),
+                            time: TimeInterval::new_unchecked(0, 1).into(),
+                            bbox: Some(
+                                crate::api::model::datatypes::SpatialPartition2D {
+                                    upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                                    lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                                }
+                                .into(),
+                            ),
+                            resolution: Some(SpatialResolution::zero_point_one()),
+                        }
+                        .into(),
+                        params: crate::api::model::operators::GdalDatasetParameters {
+                            file_path: "text".into(),
+                            rasterband_channel: 1,
+                            geo_transform: crate::api::model::operators::GdalDatasetGeoTransform {
+                                origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                                x_pixel_size: 1.0,
+                                y_pixel_size: 2.0,
+                            },
+                            width: 42,
+                            height: 23,
+                            file_not_found_handling:
+                                crate::api::model::operators::FileNotFoundHandling::NoData,
+                            no_data_value: Some(42.0),
+                            properties_mapping: Some(vec![
+                                crate::api::model::operators::GdalMetadataMapping {
+                                    source_key: RasterPropertiesKey {
+                                        domain: None,
+                                        key: "foo".to_string(),
+                                    },
+                                    target_key: RasterPropertiesKey {
+                                        domain: Some("bar".to_string()),
+                                        key: "foo".to_string(),
+                                    },
+                                    target_type: RasterPropertiesEntryType::String,
+                                },
+                            ]),
+                            gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                            gdal_config_options: Some(vec![
+                                crate::api::model::operators::GdalConfigOption::from((
+                                    "foo".to_string(),
+                                    "bar".to_string(),
+                                )),
+                            ]),
+                            allow_alphaband_as_mask: false,
+                        },
+                        time_placeholders: [(
+                            "foo".to_string(),
+                            GdalSourceTimePlaceholder {
+                                format: geoengine_datatypes::primitives::DateTimeParseFormat::unix()
+                                    .into(),
+                                reference: TimeReference::Start,
+                            },
+                        )]
+                        .into(),
+                        data_time: TimeInterval::new_unchecked(0, 1).into(),
+                        step: TimeStep {
+                            granularity: TimeGranularity::Millis,
+                            step: 1,
+                        }
+                        .into(),
+                        cache_ttl: CacheTtlSeconds::max(),
+                    }).into(),
+                    crate::api::model::services::MetaDataDefinition::GdalStatic(crate::api::model::operators::GdalMetaDataStatic {
+                        time: Some(TimeInterval::new_unchecked(0, 1).into()),
+                        result_descriptor: RasterResultDescriptor {
+                            data_type: RasterDataType::U8,
+                            spatial_reference: SpatialReference::epsg_4326().into(),
+                            measurement: Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "Temperature".to_string(),
+                                unit: Some("°C".to_string()),
+                            })
+                            .into(),
+                            time: TimeInterval::new_unchecked(0, 1).into(),
+                            bbox: Some(
+                                crate::api::model::datatypes::SpatialPartition2D {
+                                    upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                                    lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                                }
+                                .into(),
+                            ),
+                            resolution: Some(SpatialResolution::zero_point_one()),
+                        }
+                        .into(),
+                        params: crate::api::model::operators::GdalDatasetParameters {
+                            file_path: "text".into(),
+                            rasterband_channel: 1,
+                            geo_transform: crate::api::model::operators::GdalDatasetGeoTransform {
+                                origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                                x_pixel_size: 1.0,
+                                y_pixel_size: 2.0,
+                            },
+                            width: 42,
+                            height: 23,
+                            file_not_found_handling:
+                                crate::api::model::operators::FileNotFoundHandling::NoData,
+                            no_data_value: Some(42.0),
+                            properties_mapping: Some(vec![
+                                crate::api::model::operators::GdalMetadataMapping {
+                                    source_key: RasterPropertiesKey {
+                                        domain: None,
+                                        key: "foo".to_string(),
+                                    },
+                                    target_key: RasterPropertiesKey {
+                                        domain: Some("bar".to_string()),
+                                        key: "foo".to_string(),
+                                    },
+                                    target_type: RasterPropertiesEntryType::String,
+                                },
+                            ]),
+                            gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                            gdal_config_options: Some(vec![
+                                crate::api::model::operators::GdalConfigOption::from((
+                                    "foo".to_string(),
+                                    "bar".to_string(),
+                                )),
+                            ]),
+                            allow_alphaband_as_mask: false,
+                        },
+                        cache_ttl: CacheTtlSeconds::max(),
+                    }).into(),
+                    crate::api::model::services::MetaDataDefinition::GdalMetadataNetCdfCf(crate::api::model::operators::GdalMetadataNetCdfCf {
+                        result_descriptor: RasterResultDescriptor {
+                            data_type: RasterDataType::U8,
+                            spatial_reference: SpatialReference::epsg_4326().into(),
+                            measurement: Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "Temperature".to_string(),
+                                unit: Some("°C".to_string()),
+                            })
+                            .into(),
+                            time: TimeInterval::new_unchecked(0, 1).into(),
+                            bbox: Some(
+                                crate::api::model::datatypes::SpatialPartition2D {
+                                    upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                                    lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                                }
+                                .into(),
+                            ),
+                            resolution: Some(SpatialResolution::zero_point_one()),
+                        }
+                        .into(),
+                        params: crate::api::model::operators::GdalDatasetParameters {
+                            file_path: "text".into(),
+                            rasterband_channel: 1,
+                            geo_transform: crate::api::model::operators::GdalDatasetGeoTransform {
+                                origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                                x_pixel_size: 1.0,
+                                y_pixel_size: 2.0,
+                            },
+                            width: 42,
+                            height: 23,
+                            file_not_found_handling:
+                                crate::api::model::operators::FileNotFoundHandling::NoData,
+                            no_data_value: Some(42.0),
+                            properties_mapping: Some(vec![
+                                crate::api::model::operators::GdalMetadataMapping {
+                                    source_key: RasterPropertiesKey {
+                                        domain: None,
+                                        key: "foo".to_string(),
+                                    },
+                                    target_key: RasterPropertiesKey {
+                                        domain: Some("bar".to_string()),
+                                        key: "foo".to_string(),
+                                    },
+                                    target_type: RasterPropertiesEntryType::String,
+                                },
+                            ]),
+                            gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                            gdal_config_options: Some(vec![
+                                crate::api::model::operators::GdalConfigOption::from((
+                                    "foo".to_string(),
+                                    "bar".to_string(),
+                                )),
+                            ]),
+                            allow_alphaband_as_mask: false,
+                        },
+                        start: TimeInstance::from_millis(0).unwrap().into(),
+                        end: TimeInstance::from_millis(1000).unwrap().into(),
+                        cache_ttl: CacheTtlSeconds::max(),
+                        step: TimeStep {
+                            granularity: TimeGranularity::Millis,
+                            step: 1,
+                        }
+                        .into(),
+                        band_offset: 3,
+                    }).into(),
+                    crate::api::model::services::MetaDataDefinition::GdalMetaDataList(
+                        crate::api::model::operators::GdalMetaDataList {
+                            result_descriptor: RasterResultDescriptor {
+                                data_type: RasterDataType::U8,
+                                spatial_reference: SpatialReference::epsg_4326().into(),
+                                measurement: Measurement::Continuous(ContinuousMeasurement {
+                                    measurement: "Temperature".to_string(),
+                                    unit: Some("°C".to_string()),
+                                })
+                                .into(),
+                                time: TimeInterval::new_unchecked(0, 1).into(),
+                                bbox: Some(
+                                    crate::api::model::datatypes::SpatialPartition2D {
+                                        upper_left_coordinate: Coordinate2D::new(0.0f64, 1.).into(),
+                                        lower_right_coordinate: Coordinate2D::new(2., 0.5).into(),
+                                    }
+                                    .into(),
+                                ),
+                                resolution: Some(SpatialResolution::zero_point_one()),
+                            }
+                            .into(),
+                            params: vec![crate::api::model::operators::GdalLoadingInfoTemporalSlice {
+                                time: TimeInterval::new_unchecked(0, 1).into(),
+                                params: Some(crate::api::model::operators::GdalDatasetParameters {
+                                    file_path: "text".into(),
+                                    rasterband_channel: 1,
+                                    geo_transform: crate::api::model::operators::GdalDatasetGeoTransform {
+                                        origin_coordinate: Coordinate2D::new(0.0f64, 0.5).into(),
+                                        x_pixel_size: 1.0,
+                                        y_pixel_size: 2.0,
+                                    },
+                                    width: 42,
+                                    height: 23,
+                                    file_not_found_handling:
+                                        crate::api::model::operators::FileNotFoundHandling::NoData,
+                                    no_data_value: Some(42.0),
+                                    properties_mapping: Some(vec![
+                                        crate::api::model::operators::GdalMetadataMapping {
+                                            source_key: RasterPropertiesKey {
+                                                domain: None,
+                                                key: "foo".to_string(),
+                                            },
+                                            target_key: RasterPropertiesKey {
+                                                domain: Some("bar".to_string()),
+                                                key: "foo".to_string(),
+                                            },
+                                            target_type: RasterPropertiesEntryType::String,
+                                        },
+                                    ]),
+                                    gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                                    gdal_config_options: Some(vec![
+                                        crate::api::model::operators::GdalConfigOption::from((
+                                            "foo".to_string(),
+                                            "bar".to_string(),
+                                        )),
+                                    ]),
+                                    allow_alphaband_as_mask: false,
+                                }),
+                                cache_ttl: CacheTtlSeconds::max(),
+                            }],
+                        },
+                    ).into(),
+                ],
+            )
+            .await;
+
+            test_data_provider_definition_types(&pool).await;
+
         })
+        .await;
+    }
+
+    #[test]
+    fn test_postgres_config_translation() {
+        let host = "localhost";
+        let port = 8095;
+        let ge_default = "geoengine";
+        let schema = "public";
+
+        let db_config = config::Postgres {
+            host: host.to_string(),
+            port,
+            database: ge_default.to_string(),
+            schema: schema.to_string(),
+            user: ge_default.to_string(),
+            password: ge_default.to_string(),
+            clear_database_on_start: false,
+        };
+
+        let pg_config = Config::from(db_config);
+
+        assert_eq!(ge_default, pg_config.get_user().unwrap());
+        assert_eq!(
+            <str as AsRef<[u8]>>::as_ref(ge_default).to_vec(),
+            pg_config.get_password().unwrap()
+        );
+        assert_eq!(ge_default, pg_config.get_dbname().unwrap());
+        assert_eq!(
+            &format!("-c search_path={schema}"),
+            pg_config.get_options().unwrap()
+        );
+        assert_eq!(vec![Host::Tcp(host.to_string())], pg_config.get_hosts());
+        assert_eq!(vec![port], pg_config.get_ports());
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn test_data_provider_definition_types(
+        pool: &PooledConnection<'_, PostgresConnectionManager<tokio_postgres::NoTls>>,
+    ) {
+        assert_sql_type(
+            pool,
+            "ArunaDataProviderDefinition",
+            [ArunaDataProviderDefinition {
+                id: DataProviderId::from_str("86a7f7ce-1bab-4ce9-a32b-172c0f958ee0").unwrap(),
+                name: "NFDI".to_string(),
+                api_url: "http://test".to_string(),
+                project_id: "project".to_string(),
+                api_token: "api_token".to_string(),
+                filter_label: "filter".to_string(),
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "GbifDataProviderDefinition",
+            [GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                db_config: DatabaseConnectionConfig {
+                    host: "testhost".to_string(),
+                    port: 1234,
+                    database: "testdb".to_string(),
+                    schema: "testschema".to_string(),
+                    user: "testuser".to_string(),
+                    password: "testpass".to_string(),
+                },
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "GfbioAbcdDataProviderDefinition",
+            [GfbioAbcdDataProviderDefinition {
+                name: "GFbio".to_string(),
+                db_config: DatabaseConnectionConfig {
+                    host: "testhost".to_string(),
+                    port: 1234,
+                    database: "testdb".to_string(),
+                    schema: "testschema".to_string(),
+                    user: "testuser".to_string(),
+                    password: "testpass".to_string(),
+                },
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "GfbioCollectionsDataProviderDefinition",
+            [GfbioCollectionsDataProviderDefinition {
+                name: "GFbio".to_string(),
+                collection_api_url: "http://testhost".try_into().unwrap(),
+                collection_api_auth_token: "token".to_string(),
+                abcd_db_config: DatabaseConnectionConfig {
+                    host: "testhost".to_string(),
+                    port: 1234,
+                    database: "testdb".to_string(),
+                    schema: "testschema".to_string(),
+                    user: "testuser".to_string(),
+                    password: "testpass".to_string(),
+                },
+                pangaea_url: "http://panaea".try_into().unwrap(),
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(pool, "\"PropertyType\"[]", [Vec::<Property>::new()]).await;
+
+        assert_sql_type(
+            pool,
+            "EbvPortalDataProviderDefinition",
+            [EbvPortalDataProviderDefinition {
+                name: "ebv".to_string(),
+                path: "a_path".into(),
+                base_url: "http://base".try_into().unwrap(),
+                overviews: "another_path".into(),
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "NetCdfCfDataProviderDefinition",
+            [NetCdfCfDataProviderDefinition {
+                name: "netcdfcf".to_string(),
+                path: "a_path".into(),
+                overviews: "another_path".into(),
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "PangaeaDataProviderDefinition",
+            [PangaeaDataProviderDefinition {
+                name: "pangaea".to_string(),
+                base_url: "http://base".try_into().unwrap(),
+                cache_ttl: CacheTtlSeconds::new(0),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            pool,
+            "DataProviderDefinition",
+            [
+                TypedDataProviderDefinition::ArunaDataProviderDefinition(
+                    ArunaDataProviderDefinition {
+                        id: DataProviderId::from_str("86a7f7ce-1bab-4ce9-a32b-172c0f958ee0")
+                            .unwrap(),
+                        name: "NFDI".to_string(),
+                        api_url: "http://test".to_string(),
+                        project_id: "project".to_string(),
+                        api_token: "api_token".to_string(),
+                        filter_label: "filter".to_string(),
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::GbifDataProviderDefinition(
+                    GbifDataProviderDefinition {
+                        name: "GBIF".to_string(),
+                        db_config: DatabaseConnectionConfig {
+                            host: "testhost".to_string(),
+                            port: 1234,
+                            database: "testdb".to_string(),
+                            schema: "testschema".to_string(),
+                            user: "testuser".to_string(),
+                            password: "testpass".to_string(),
+                        },
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
+                    GfbioAbcdDataProviderDefinition {
+                        name: "GFbio".to_string(),
+                        db_config: DatabaseConnectionConfig {
+                            host: "testhost".to_string(),
+                            port: 1234,
+                            database: "testdb".to_string(),
+                            schema: "testschema".to_string(),
+                            user: "testuser".to_string(),
+                            password: "testpass".to_string(),
+                        },
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
+                    GfbioCollectionsDataProviderDefinition {
+                        name: "GFbio".to_string(),
+                        collection_api_url: "http://testhost".try_into().unwrap(),
+                        collection_api_auth_token: "token".to_string(),
+                        abcd_db_config: DatabaseConnectionConfig {
+                            host: "testhost".to_string(),
+                            port: 1234,
+                            database: "testdb".to_string(),
+                            schema: "testschema".to_string(),
+                            user: "testuser".to_string(),
+                            password: "testpass".to_string(),
+                        },
+                        pangaea_url: "http://panaea".try_into().unwrap(),
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
+                    EbvPortalDataProviderDefinition {
+                        name: "ebv".to_string(),
+                        path: "a_path".into(),
+                        base_url: "http://base".try_into().unwrap(),
+                        overviews: "another_path".into(),
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
+                    NetCdfCfDataProviderDefinition {
+                        name: "netcdfcf".to_string(),
+                        path: "a_path".into(),
+                        overviews: "another_path".into(),
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+                TypedDataProviderDefinition::PangaeaDataProviderDefinition(
+                    PangaeaDataProviderDefinition {
+                        name: "pangaea".to_string(),
+                        base_url: "http://base".try_into().unwrap(),
+                        cache_ttl: CacheTtlSeconds::new(0),
+                    },
+                ),
+            ],
+        )
         .await;
     }
 }

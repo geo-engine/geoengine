@@ -22,7 +22,7 @@ jobs:
 
     strategy:
       matrix:
-        cargo-features: ["pro", "nfdi", "ebv", ""]
+        cargo-features: ["pro", ""]
 
     runs-on: ubuntu-22.04
 

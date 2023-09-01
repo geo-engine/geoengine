@@ -26,15 +26,14 @@ pub const PANGAEA_PROVIDER_ID: DataProviderId =
 
 /// The pangaea provider allows to include datasets from
 /// <http://pangaea.de/>
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PangaeaDataProviderDefinition {
-    name: String,
-    base_url: Url,
-    cache_ttl: CacheTtlSeconds,
+    pub name: String,
+    pub base_url: Url,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for PangaeaDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {

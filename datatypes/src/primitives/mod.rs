@@ -2,7 +2,7 @@ mod bounding_box;
 mod circle;
 mod coordinate;
 mod datetime;
-pub(self) mod error;
+mod error;
 mod feature_data;
 mod geometry;
 mod line;

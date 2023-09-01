@@ -14,7 +14,7 @@ use arrow::array::{
 use arrow::datatypes::{ArrowPrimitiveType, Date64Type, Field, Float64Type, Int64Type, UInt8Type};
 use snafu::ensure;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::iter;
 use std::marker::PhantomData;
 
@@ -96,7 +96,6 @@ where
                 .collect(),
             types: self.types,
             rows: 0,
-            bool_column_nulls: Default::default(),
             _collection_type: PhantomData,
             cache_hint: self.cache_hint.clone_with_current_datetime(),
         }
@@ -131,8 +130,6 @@ where
     types: HashMap<String, FeatureDataType>,
     rows: usize,
     // bool builder have no access to nulls, so we have to store it externally
-    // TODO: remove when possible
-    bool_column_nulls: HashSet<String>,
     cache_hint: CacheHint,
     _collection_type: PhantomData<CollectionType>,
 }
@@ -160,7 +157,7 @@ where
         // also checks that column exists
         let (Some(data_builder), Some(column_type)) =
             (self.builders.get_mut(column), self.types.get(column))
-         else {
+        else {
             return Err(FeatureCollectionError::ColumnDoesNotExist {
                 name: column.to_string(),
             }
@@ -216,10 +213,6 @@ where
             FeatureDataValue::NullableBool(value) => {
                 let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
                 bool_builder.append_option(value);
-
-                if value.is_none() && !self.bool_column_nulls.contains(column) {
-                    self.bool_column_nulls.insert(column.to_string());
-                }
             }
             FeatureDataValue::DateTime(value) => {
                 let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
@@ -235,6 +228,7 @@ where
     }
 
     /// Append a null to `column` if possible
+    #[allow(clippy::missing_panics_doc)]
     pub fn push_null(&mut self, column: &str) -> Result<()> {
         // also checks that column exists
         let Some(data_builder) = self.builders.get_mut(column) else {
@@ -266,10 +260,6 @@ where
             FeatureDataType::Bool => {
                 let bool_builder: &mut BooleanBuilder = downcast_mut_array(data_builder.as_mut());
                 bool_builder.append_null();
-
-                if !self.bool_column_nulls.contains(column) {
-                    self.bool_column_nulls.insert(column.to_string());
-                }
             }
             FeatureDataType::DateTime => {
                 let dt_builder: &mut Date64Builder = downcast_mut_array(data_builder.as_mut());
@@ -319,8 +309,8 @@ where
 
         let attributes_size = self
             .builders
-            .iter()
-            .map(|(name, builder)| {
+            .values()
+            .map(|builder| {
                 let values_size = if builder.as_any().is::<Float64Builder>() {
                     estimate_primitive_arrow_array_size::<Float64Type>(builder.as_ref())
                 } else if builder.as_any().is::<Int64Builder>() {
@@ -348,13 +338,8 @@ where
                     let static_size = std::mem::size_of::<BooleanArray>();
                     // arrow buffer internally packs 8 bools in 1 byte
                     let buffer_size = arrow::util::bit_util::ceil(builder.len(), 8);
-
-                    // `BooleanBuilder` has no access to nulls
-                    // TODO: replace if possible
-                    let null_buffer_size = self
-                        .bool_column_nulls
-                        .get(name)
-                        .map_or(0, |_| builder.len() / 8);
+                    let null_buffer_size =
+                        builder.validity_slice().map_or(0, std::mem::size_of_val);
 
                     static_size
                         + padded_buffer_size(buffer_size, 64)
@@ -388,6 +373,7 @@ where
     ///
     /// This call fails if the lengths of the columns do not match the number of times `finish_row()` was called.
     ///
+    #[allow(clippy::missing_panics_doc)]
     pub fn build(mut self) -> Result<FeatureCollection<CollectionType>> {
         for builder in self
             .builders

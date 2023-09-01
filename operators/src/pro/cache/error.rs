@@ -19,4 +19,21 @@ pub enum CacheError {
     QueryIdAlreadyInLandingZone,
     CacheEntryIdAlreadyInCache,
     CouldNotFilterResults,
+    #[snafu(display("Compressed element could not be decompressed"))]
+    CouldNotDecompressElement {
+        source: lz4_flex::block::DecompressError,
+    },
+    BlockingElementConversion,
+    #[snafu(display("Could not run decompression task"))]
+    CouldNotRunDecompressionTask {
+        source: tokio::task::JoinError,
+    },
+    #[snafu(display("Could not convert Arrow element to bytes"))]
+    CouldNotWriteElementToBytes {
+        source: arrow::error::ArrowError,
+    },
+    #[snafu(display("Could not convert bytes to Arrow element"))]
+    CouldNotReadElementFromBytes {
+        source: arrow::error::ArrowError,
+    },
 }

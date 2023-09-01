@@ -8,6 +8,7 @@ use geoengine_operators::engine::TypedOperator;
 identifier!(WorkflowId);
 
 impl WorkflowId {
+    #[allow(clippy::missing_panics_doc)]
     pub fn from_hash(workflow: &Workflow) -> Self {
         Self(Uuid::new_v5(
             &Uuid::NAMESPACE_OID,

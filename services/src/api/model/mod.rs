@@ -4,4 +4,7 @@ pub mod operators;
 pub mod responses;
 pub mod services;
 
-pub use db_types::{ColorizerTypeDbType, HashMapTextTextDbType};
+pub use db_types::{
+    ColorizerTypeDbType, HashMapTextTextDbType, PolygonOwned, PolygonRef,
+    TextGdalSourceTimePlaceholderKeyValue,
+};

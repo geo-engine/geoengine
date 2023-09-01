@@ -49,19 +49,18 @@ use super::pangaea::{PangaeaDataProvider, PangaeaMetaData};
 pub const GFBIO_COLLECTIONS_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0xf64e_2d5b_3b80_476a_83f5_c330_956b_2909);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GfbioCollectionsDataProviderDefinition {
-    name: String,
-    collection_api_url: Url,
-    collection_api_auth_token: String,
-    abcd_db_config: DatabaseConnectionConfig,
-    pangaea_url: Url,
+    pub name: String,
+    pub collection_api_url: Url,
+    pub collection_api_auth_token: String,
+    pub abcd_db_config: DatabaseConnectionConfig,
+    pub pangaea_url: Url,
     #[serde(default)]
-    cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for GfbioCollectionsDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {

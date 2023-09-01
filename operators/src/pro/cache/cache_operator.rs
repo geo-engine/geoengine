@@ -1,17 +1,22 @@
-use super::shared_cache::{CacheElement, CacheElementSubType};
+use super::cache_chunks::CacheElementSpatialBounds;
+use super::error::CacheError;
+use super::shared_cache::CacheElement;
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
     CanonicOperatorName, ChunkByteSize, InitializedRasterOperator, InitializedVectorOperator,
     QueryContext, QueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
 };
+use crate::error::Error;
 use crate::pro::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
-use futures::{ready, Stream};
-use geoengine_datatypes::collections::FeatureCollection;
-use geoengine_datatypes::primitives::{Geometry, QueryRectangle};
-use geoengine_datatypes::raster::RasterTile2D;
+use futures::{ready, Stream, StreamExt, TryStreamExt};
+use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, Geometry, QueryRectangle, VectorQueryRectangle,
+};
+use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::{pin_project, pinned_drop};
 use std::pin::Pin;
@@ -157,22 +162,21 @@ where
 }
 
 #[async_trait]
-impl<P, S, E, Q> QueryProcessor for CacheQueryProcessor<P, E, Q>
+impl<P, E, S> QueryProcessor for CacheQueryProcessor<P, E, S>
 where
-    P: QueryProcessor<Output = E, SpatialQuery = Q> + Sized,
-    E: CacheElement<CacheElementSubType = S, Query = QueryRectangle<Q>>
-        + ResultStreamWrapper
+    P: QueryProcessor<Output = E, SpatialBounds = S> + Sized,
+    S: AxisAlignedRectangle + Send + Sync + 'static,
+    E: CacheElement<Query = QueryRectangle<S>>
         + Send
         + Sync
-        + Clone
-        + 'static,
-    S: CacheElementSubType<CacheElementType = E> + Send + Sync + 'static,
-    Q: Send + Sync + 'static + Copy,
-    E::ResultStream: Stream<Item = Result<E>> + Send + Sync + 'static,
+        + 'static
+        + ResultStreamWrapper
+        + Clone,
+    E::ResultStream: Stream<Item = Result<E, CacheError>> + Send + Sync + 'static,
     SharedCache: AsyncCache<E>,
 {
     type Output = E;
-    type SpatialQuery = Q;
+    type SpatialBounds = S;
 
     async fn _query<'a>(
         &'a self,
@@ -184,13 +188,14 @@ where
             .get::<Arc<SharedCache>>()
             .expect("`SharedCache` extension should be set during `ProContext` creation");
 
-        let cache_result = shared_cache.query_cache::<S>(&self.cache_key, &query).await;
+        let cache_result = shared_cache.query_cache(&self.cache_key, &query).await;
 
         if let Ok(Some(cache_result)) = cache_result {
             // cache hit
             log::debug!("cache hit for operator {}", self.cache_key);
 
-            let wrapped_result_steam = E::wrap_result_stream(cache_result, ctx.chunk_byte_size());
+            let wrapped_result_steam =
+                E::wrap_result_stream(cache_result, ctx.chunk_byte_size(), query);
 
             return Ok(wrapped_result_steam);
         }
@@ -199,9 +204,7 @@ where
         log::debug!("cache miss for operator {}", self.cache_key);
         let source_stream = self.processor.query(query, ctx).await?;
 
-        let query_id = shared_cache
-            .insert_query::<S>(&self.cache_key, &query)
-            .await;
+        let query_id = shared_cache.insert_query(&self.cache_key, &query).await;
 
         if let Err(e) = query_id {
             log::debug!("could not insert query into cache: {}", e);
@@ -220,7 +223,7 @@ where
                 match event {
                     SourceStreamEvent::Element(tile) => {
                         let result = tile_cache
-                            .insert_query_element::<S>(&cache_key, &query_id, tile)
+                            .insert_query_element(&cache_key, &query_id, tile)
                             .await;
                         log::trace!(
                             "inserted tile into cache for cache key {} and query id {}. result: {:?}",
@@ -230,7 +233,7 @@ where
                         );
                     }
                     SourceStreamEvent::Abort => {
-                        tile_cache.abort_query::<S>(&cache_key, &query_id).await;
+                        tile_cache.abort_query(&cache_key, &query_id).await;
                         log::debug!(
                             "aborted cache insertion for cache key {} and query id {}",
                             cache_key,
@@ -238,7 +241,7 @@ where
                         );
                     }
                     SourceStreamEvent::Finished => {
-                        let result = tile_cache.finish_query::<S>(&cache_key, &query_id).await;
+                        let result = tile_cache.finish_query(&cache_key, &query_id).await;
                         log::debug!(
                             "finished cache insertion for cache key {} and query id {}, result: {:?}",
                             cache_key,query_id,
@@ -272,7 +275,7 @@ enum SourceStreamEvent<E: CacheElement> {
 struct CacheOutputStream<S, E>
 where
     S: Stream<Item = Result<E>>,
-    E: CacheElement,
+    E: CacheElement + Clone,
 {
     #[pin]
     source: S,
@@ -337,7 +340,7 @@ where
 impl<S, E> PinnedDrop for CacheOutputStream<S, E>
 where
     S: Stream<Item = Result<E>>,
-    E: CacheElement,
+    E: CacheElement + Clone,
 {
     fn drop(self: Pin<&mut Self>) {
         if !self.finished {
@@ -354,38 +357,50 @@ trait ResultStreamWrapper: CacheElement {
     fn wrap_result_stream<'a>(
         stream: Self::ResultStream,
         chunk_byte_size: ChunkByteSize,
+        query: Self::Query,
     ) -> BoxStream<'a, Result<Self>>;
 }
 
 impl<G> ResultStreamWrapper for FeatureCollection<G>
 where
     G: Geometry + ArrowTyped + Send + Sync + 'static,
-    FeatureCollection<G>: CacheElement,
-    <FeatureCollection<G> as CacheElement>::ResultStream: FusedStream + Send,
-    <FeatureCollection<G> as CacheElement>::ResultStream: Stream<Item = Result<Self>>,
+    FeatureCollection<G>:
+        CacheElement<Query = VectorQueryRectangle> + Send + Sync + CacheElementSpatialBounds,
+    Self::ResultStream: FusedStream + Send + Sync,
 {
     fn wrap_result_stream<'a>(
         stream: Self::ResultStream,
         chunk_byte_size: ChunkByteSize,
+        query: Self::Query,
     ) -> BoxStream<'a, Result<Self>> {
-        Box::pin(FeatureCollectionChunkMerger::new(
-            stream,
-            chunk_byte_size.into(),
-        ))
+        let filter_stream = stream.filter_map(move |result| async move {
+            result
+                .and_then(|collection| collection.filter_cache_element_entries(&query))
+                .map_err(|source| Error::CacheCantProduceResult {
+                    source: source.into(),
+                })
+                .map(|fc| if fc.is_empty() { None } else { Some(fc) })
+                .transpose()
+        });
+
+        let merger_stream =
+            FeatureCollectionChunkMerger::new(filter_stream, chunk_byte_size.into());
+        Box::pin(merger_stream)
     }
 }
 
 impl<P> ResultStreamWrapper for RasterTile2D<P>
 where
-    P: 'static,
+    P: 'static + Pixel,
     RasterTile2D<P>: CacheElement,
-    <RasterTile2D<P> as CacheElement>::ResultStream: Stream<Item = Result<Self>> + Send,
+    Self::ResultStream: Send + Sync,
 {
     fn wrap_result_stream<'a>(
         stream: Self::ResultStream,
         _chunk_byte_size: ChunkByteSize,
+        _query: Self::Query,
     ) -> BoxStream<'a, Result<Self>> {
-        Box::pin(stream)
+        Box::pin(stream.map_err(|ce| Error::CacheCantProduceResult { source: ce.into() }))
     }
 }
 

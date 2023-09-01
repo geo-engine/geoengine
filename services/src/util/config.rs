@@ -261,6 +261,11 @@ pub enum OgcDefaultTime {
 }
 
 impl OgcDefaultTime {
+    ///  # Panics
+    ///
+    /// Panics if configuration is invalid
+    /// # TODO: return result instead
+    ///
     pub fn time_interval(&self) -> TimeInterval {
         match self {
             OgcDefaultTime::Now => geoengine_datatypes::primitives::TimeInterval::new_instant(
@@ -379,7 +384,6 @@ impl ConfigElement for MachineLearning {
     const KEY: &'static str = "machinelearning";
 }
 
-#[cfg(feature = "nfdi")]
 #[derive(Debug, Deserialize)]
 pub struct GFBio {
     #[serde(deserialize_with = "crate::util::parsing::deserialize_base_url")]
@@ -387,7 +391,6 @@ pub struct GFBio {
     pub group_abcd_units: bool,
 }
 
-#[cfg(feature = "nfdi")]
 impl ConfigElement for GFBio {
     const KEY: &'static str = "gfbio";
 }

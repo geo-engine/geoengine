@@ -1,13 +1,13 @@
 {
-  "type": "GbifDataProviderDefinition",
-  "name": "GBIF",
+  "type": "GfbioAbcdDataProviderDefinition",
+  "name": "GFBio ABCD Datasets",
   "dbConfig": {
     "user": "geoengine",
     "password": "geoengine",
     "host": "localhost",
     "port": 5432,
     "database": "geoengine",
-    "schema": "public"
+    "schema": "abcd"
   },
   "cacheTtl": 0
 }

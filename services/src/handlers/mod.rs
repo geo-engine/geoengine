@@ -11,7 +11,6 @@ use std::str::FromStr;
 use utoipa::ToSchema;
 
 pub mod datasets;
-#[cfg(feature = "ebv")]
 pub mod ebv;
 pub mod layers;
 pub mod plots;

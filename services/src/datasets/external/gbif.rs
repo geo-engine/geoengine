@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::primitives::CacheTtlSeconds;
-use postgres_types::ToSql;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use tokio_postgres::NoTls;
@@ -39,16 +39,15 @@ use crate::workflows::workflow::Workflow;
 pub const GBIF_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x1c01_dbb9_e3ab_f9a2_06f5_228b_a4b6_bf7a);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GbifDataProviderDefinition {
-    name: String,
-    db_config: DatabaseConnectionConfig,
+    pub name: String,
+    pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
-    cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for GbifDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
