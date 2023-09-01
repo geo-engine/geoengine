@@ -41,8 +41,7 @@ where
 }
 
 #[derive(Debug, Snafu, IntoStaticStr)]
-#[snafu(visibility(pub(crate)))]
-#[snafu(context(suffix(false)), module(error))]
+#[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
 pub enum ProjectHandlerError {
     #[snafu(display("Could not create project: {source}"))]
     CreateProject { source: ProjectDbError },

@@ -4,8 +4,7 @@ use snafu::prelude::*;
 use super::ProjectId;
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility(pub(crate)))]
-#[snafu(context(suffix(ProjectDbError)))]
+#[snafu(visibility(pub(crate)), context(suffix(ProjectDbError)))]
 pub enum ProjectDbError {
     #[snafu(display("Project {project} does not exist"))]
     ProjectNotFound { project: ProjectId },
