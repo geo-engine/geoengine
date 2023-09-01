@@ -5,6 +5,15 @@ use proc_macro2::TokenStream;
 mod pro;
 mod testing;
 
+/// A macro to generate tests for Geo Engine services.
+/// It automatically spins up a database context.
+///
+/// # Parameters
+///
+/// - `tiling_spec` - a function that returns a [`geoengine_datatypes::raster::TilingSpecification`] to use for the test
+/// - `query_ctx_chunk_size` - a function that returns a [`geoengine_operators::engine::ChunkByteSize`] to use for the test
+/// - `test_execution` - `parallel` (default) or `serial`, which isolates this test from other tests
+///
 #[proc_macro_attribute]
 pub fn test(
     attr: proc_macro::TokenStream,
@@ -17,6 +26,22 @@ pub fn test(
 }
 
 #[cfg(feature = "pro")]
+/// A macro to generate tests for Geo Engine pro services.
+/// It automatically spins up a database context.
+///
+/// # Parameters
+///
+/// - `tiling_spec` - a function that returns a [`geoengine_datatypes::raster::TilingSpecification`] to use for the test
+/// - `query_ctx_chunk_size` - a function that returns a [`geoengine_operators::engine::ChunkByteSize`] to use for the test
+/// - `test_execution` - `parallel` (default) or `serial`, which isolates this test from other tests
+///
+/// ## Pro Parameters
+///
+/// - `quota_config` - a function that returns a [`crate::pro::util::config::Quota`] to use for the test
+/// - `oidc_db` - a tuple `(handle, f)` with
+///     - `handle` being a handle of an OpenID-Connect endpoint, preventing it from dropping too early, and
+///     - `f` begin function that returns a [`crate::pro::users::OidcRequestDb`] to use for the test
+///
 #[proc_macro_attribute]
 pub fn pro_test(
     attr: proc_macro::TokenStream,

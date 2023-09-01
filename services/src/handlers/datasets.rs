@@ -1098,7 +1098,6 @@ mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         ExecutionContext, InitializedVectorOperator, QueryProcessor, StaticMetaData,
         VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
@@ -1404,36 +1403,27 @@ mod tests {
         .map_err(Into::into)
     }
 
-    fn my_chunk_byte_size() -> geoengine_operators::engine::ChunkByteSize {
-        TestDefault::test_default()
-    }
-
-    fn my_exe_ctx_tiling_spec() -> TilingSpecification {
+    fn ctx_tiling_spec_600x600() -> TilingSpecification {
         TilingSpecification {
             origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
         }
     }
 
-    #[getest::test(
-        tiling_spec = "my_exe_ctx_tiling_spec",
-        query_ctx_chunk_size = "my_chunk_byte_size"
-    )]
-    async fn create_dataset(app_ctx: PostgresContext<NoTls>) {
+    #[getest::test(tiling_spec = "ctx_tiling_spec_600x600")]
+    async fn create_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
         let session_id = app_ctx.default_session_id().await;
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let ctx = app_ctx.default_session_context().await?;
 
-        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id)
-            .await
-            .unwrap();
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
         test_data.uploads.push(upload_id);
 
         let _dataset_id =
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
-        let exe_ctx = ctx.execution_context().unwrap();
+        let exe_ctx = ctx.execution_context()?;
 
         let source = make_ogr_source(
             &exe_ctx,
@@ -1443,26 +1433,23 @@ mod tests {
                 name: "uploaded_ne_10m_ports".to_string(),
             },
         )
-        .await
-        .unwrap();
+        .await?;
 
-        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
-        let query_ctx = ctx.query_context().unwrap();
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+        let query_ctx = ctx.query_context()?;
 
         let query = query_processor
             .query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())
-                        .unwrap(),
+                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
                 &query_ctx,
             )
-            .await
-            .unwrap();
+            .await?;
 
-        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
 
         let coords = result[0].coordinates();
         assert_eq!(coords.len(), 10);
@@ -1481,6 +1468,8 @@ mod tests {
                 [4.292_873_969, 51.927_222_22].into(),
             ]
         );
+
+        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]

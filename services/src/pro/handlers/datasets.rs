@@ -327,6 +327,7 @@ mod tests {
             exe_ctx_tiling_spec,
             TestDefault::test_default(),
             get_config_element::<Quota>().unwrap(),
+            None::<fn() -> crate::pro::users::OidcRequestDb>,
             |app_ctx, _| async move {
                 let session = app_ctx.create_anonymous_session().await.unwrap();
                 let ctx = app_ctx.session_context(session.clone());

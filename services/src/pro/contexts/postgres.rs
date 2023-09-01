@@ -76,6 +76,7 @@ where
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
         quota_config: Quota,
+        oidc_db: Option<OidcRequestDb>,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -99,7 +100,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            oidc_request_db: Arc::new(None),
+            oidc_request_db: Arc::new(oidc_db),
             quota,
             pool,
             volumes: Default::default(),

@@ -719,6 +719,7 @@ mod tests {
 
     use crate::contexts::{Session, SessionContext};
     use crate::handlers::ErrorResponse;
+    use crate::pro::getest;
     use crate::pro::util::tests::mock_oidc::{
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
     };
@@ -1344,27 +1345,24 @@ mod tests {
         send_pro_test_request(req, ctx).await
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn oidc_init() {
+    fn oidc_attr_for_test() -> (Server, impl Fn() -> OidcRequestDb) {
         let server = mock_valid_provider_discovery(1);
         let server_url = format!("http://{}", server.addr());
 
-        with_pro_temp_context_and_oidc(
-            || single_state_nonce_request_db(server_url),
-            TestDefault::test_default(),
-            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
-            |app_ctx, _| async move {
-                let res = oidc_init_test_helper(Method::POST, app_ctx).await;
-
-                assert_eq!(res.status(), 200);
-                let _auth_code_url: AuthCodeRequestURL = test::read_body_json(res).await;
-            },
-        )
-        .await;
+        (server, move || {
+            single_state_nonce_request_db(server_url.clone())
+        })
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn oidc_illegal_provider() {
+    #[getest::test(oidc_db = "oidc_attr_for_test")]
+    async fn oidc_init(app_ctx: ProPostgresContext<NoTls>) {
+        let res = oidc_init_test_helper(Method::POST, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+        let _auth_code_url: AuthCodeRequestURL = test::read_body_json(res).await;
+    }
+
+    fn oidc_bad_server() -> (Server, impl Fn() -> OidcRequestDb) {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
 
@@ -1386,21 +1384,21 @@ mod tests {
             ),
         );
 
-        with_pro_temp_context_and_oidc(
-            || single_state_nonce_request_db(server_url),
-            TestDefault::test_default(),
-            get_config_element::<crate::pro::util::config::Quota>().unwrap(),
-            |app_ctx, _| async move {
+        (server, move || {
+            single_state_nonce_request_db(server_url.clone())
+        })
+    }
 
-            let res = oidc_init_test_helper(Method::POST, app_ctx).await;
+    #[getest::test(oidc_db = "oidc_bad_server")]
+    async fn oidc_illegal_provider(app_ctx: ProPostgresContext<NoTls>) {
+        let res = oidc_init_test_helper(Method::POST, app_ctx).await;
 
-            ErrorResponse::assert(
-                res,
-                400,
-                "OidcError",
-                "OidcError: ProviderDiscoveryError: Server returned invalid response: HTTP status code 404 Not Found",
-            ).await;
-        }).await;
+        ErrorResponse::assert(
+            res,
+            400,
+            "OidcError",
+            "OidcError: ProviderDiscoveryError: Server returned invalid response: HTTP status code 404 Not Found",
+        ).await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
