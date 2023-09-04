@@ -59,9 +59,28 @@ pub enum ProjectHandlerError {
     ListProjectVersions { source: ProjectDbError },
 }
 
+impl ProjectHandlerError {
+    pub fn source(&self) -> &ProjectDbError {
+        match self {
+            ProjectHandlerError::CreateProject { source }
+            | ProjectHandlerError::ListProjects { source }
+            | ProjectHandlerError::UpdateProject { source }
+            | ProjectHandlerError::DeleteProject { source }
+            | ProjectHandlerError::LoadProjectVersion { source }
+            | ProjectHandlerError::LoadLatestProjectVersion { source }
+            | ProjectHandlerError::ListProjectVersions { source } => source,
+        }
+    }
+}
+
 impl ResponseError for ProjectHandlerError {
     fn status_code(&self) -> actix_http::StatusCode {
-        actix_http::StatusCode::INTERNAL_SERVER_ERROR
+        match self.source() {
+            ProjectDbError::Postgres { .. } | ProjectDbError::Bb8 { .. } => {
+                actix_http::StatusCode::INTERNAL_SERVER_ERROR
+            }
+            _ => actix_http::StatusCode::BAD_REQUEST,
+        }
     }
 
     fn error_response(&self) -> HttpResponse<actix_http::body::BoxBody> {
@@ -1112,7 +1131,7 @@ mod tests {
 
             ErrorResponse::assert(
                 res,
-                500,
+                400,
                 "DeleteProject",
                 &format!("Could not delete project: Project {project} does not exist"),
             )
@@ -1178,7 +1197,7 @@ mod tests {
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
             let res = send_test_request(req, app_ctx).await;
 
-            assert_eq!(res.status(), 500);
+            assert_eq!(res.status(), 400);
         })
         .await;
     }
