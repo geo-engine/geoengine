@@ -2,7 +2,7 @@ use crate::api::handlers;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::{Error, Result};
 use crate::pro;
-use crate::pro::apidoc::ApiDoc;
+use crate::pro::api::ApiDoc;
 
 use crate::pro::contexts::ProPostgresContext;
 use crate::util::config::{self, get_config_element};
@@ -45,12 +45,12 @@ where
     HttpServer::new(move || {
         let mut api = web::scope(&api_prefix)
             .configure(configure_extractors)
-            .configure(pro::handlers::datasets::init_dataset_routes::<C>)
+            .configure(pro::api::handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
-            .configure(pro::handlers::permissions::init_permissions_routes::<C>)
+            .configure(pro::api::handlers::permissions::init_permissions_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(handlers::projects::init_project_routes::<C>)
-            .configure(pro::handlers::users::init_user_routes::<C>)
+            .configure(pro::api::handlers::users::init_user_routes::<C>)
             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
             .configure(handlers::upload::init_upload_routes::<C>)
             .configure(handlers::tasks::init_task_routes::<C>)

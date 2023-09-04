@@ -1,3 +1,5 @@
+use super::handlers::permissions::{PermissionRequest, Resource};
+use super::handlers::users::AddRole;
 use crate::api::handlers;
 use crate::api::handlers::plots::WrappedPlotOutput;
 use crate::api::handlers::spatial_references::{
@@ -50,7 +52,9 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::LayerCollectionId;
 use crate::pro;
-use crate::pro::handlers::users::{Quota, UpdateQuota};
+use crate::pro::api::handlers::users::{Quota, UpdateQuota};
+use crate::pro::permissions::{Permission, ResourceId, RoleDescription, RoleId};
+use crate::pro::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
@@ -62,11 +66,6 @@ use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
-
-use super::handlers::permissions::{PermissionRequest, Resource};
-use super::handlers::users::AddRole;
-use super::permissions::{Permission, ResourceId, RoleDescription, RoleId};
-use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -103,19 +102,19 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::workflows::load_workflow_handler,
         handlers::workflows::raster_stream_websocket,
         handlers::workflows::register_workflow_handler,
-        pro::handlers::users::anonymous_handler,
-        pro::handlers::users::login_handler,
-        pro::handlers::users::logout_handler,
-        pro::handlers::users::quota_handler,
-        pro::handlers::users::get_user_quota_handler,
-        pro::handlers::users::update_user_quota_handler,
-        pro::handlers::users::register_user_handler,
-        pro::handlers::users::session_handler,
-        pro::handlers::users::add_role_handler,
-        pro::handlers::users::remove_role_handler,
-        pro::handlers::users::assign_role_handler,
-        pro::handlers::users::revoke_role_handler,
-        pro::handlers::users::get_role_descriptions,
+        pro::api::handlers::users::anonymous_handler,
+        pro::api::handlers::users::login_handler,
+        pro::api::handlers::users::logout_handler,
+        pro::api::handlers::users::quota_handler,
+        pro::api::handlers::users::get_user_quota_handler,
+        pro::api::handlers::users::update_user_quota_handler,
+        pro::api::handlers::users::register_user_handler,
+        pro::api::handlers::users::session_handler,
+        pro::api::handlers::users::add_role_handler,
+        pro::api::handlers::users::remove_role_handler,
+        pro::api::handlers::users::assign_role_handler,
+        pro::api::handlers::users::revoke_role_handler,
+        pro::api::handlers::users::get_role_descriptions,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
@@ -134,8 +133,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::upload::list_upload_files_handler,
         handlers::upload::list_upload_file_layers_handler,
         handlers::upload::upload_handler,
-        pro::handlers::permissions::add_permission_handler,
-        pro::handlers::permissions::remove_permission_handler
+        pro::api::handlers::permissions::add_permission_handler,
+        pro::api::handlers::permissions::remove_permission_handler
     ),
     components(
         responses(
