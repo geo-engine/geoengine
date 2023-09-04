@@ -2,6 +2,11 @@ use actix_web::{web, FromRequest};
 use snafu::ResultExt;
 
 use crate::{
+    api::handlers::datasets::{
+        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
+        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
+        suggest_meta_data_handler,
+    },
     api::model::{
         responses::datasets::{errors::*, DatasetNameResponse},
         services::{CreateDataset, DataPath, DatasetDefinition},
@@ -12,11 +17,6 @@ use crate::{
         upload::{Volume, VolumeName},
     },
     error::Result,
-    handlers::datasets::{
-        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
-        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
-        suggest_meta_data_handler,
-    },
     pro::{
         contexts::{ProApplicationContext, ProGeoEngineDb},
         permissions::{Permission, PermissionDb, Role},

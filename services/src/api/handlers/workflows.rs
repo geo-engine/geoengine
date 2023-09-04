@@ -1,14 +1,12 @@
-use std::collections::HashMap;
-use std::io::{Cursor, Write};
-use std::sync::Arc;
-
+use super::tasks::TaskResponse;
 use crate::api::model::datatypes::{DataId, TimeInterval};
-use crate::contexts::ApplicationContext;
+use crate::api::ogc::util::{parse_bbox, parse_time};
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
+use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::Result;
-use crate::handlers::SessionContext;
 use crate::layers::storage::LayerProviderDb;
-use crate::ogc::util::{parse_bbox, parse_time};
+use crate::util::config::get_config_element;
 use crate::util::parsing::{parse_spatial_partition, parse_spatial_resolution};
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
@@ -26,12 +24,11 @@ use geoengine_operators::engine::{
     ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
-
-use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
-use crate::handlers::tasks::TaskResponse;
-use crate::util::config::get_config_element;
 use snafu::{ResultExt, Snafu};
+use std::collections::HashMap;
+use std::io::{Cursor, Write};
+use std::sync::Arc;
+use utoipa::{IntoParams, ToSchema};
 use zip::{write::FileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
@@ -661,9 +658,9 @@ pub enum WorkflowApiError {
 mod tests {
 
     use super::*;
+    use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{Session, SimpleApplicationContext};
     use crate::datasets::RasterDatasetFromWorkflowResult;
-    use crate::handlers::ErrorResponse;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
@@ -1488,8 +1485,9 @@ mod tests {
                 .unwrap();
 
                 assert_eq!(
-                    include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                        as &[u8],
+                    include_bytes!(
+                        "../../../../test_data/raster/geotiff_from_stream_compressed.tiff"
+                    ) as &[u8],
                     result.as_slice()
                 );
             },

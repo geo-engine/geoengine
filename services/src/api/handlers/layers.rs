@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
+use super::tasks::TaskResponse;
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::contexts::ApplicationContext;
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::{Error, Result};
-use crate::handlers::tasks::TaskResponse;
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
     ProviderLayerCollectionId,
@@ -891,9 +891,9 @@ async fn remove_collection_from_collection<C: ApplicationContext>(
 mod tests {
 
     use super::*;
+    use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{SessionId, SimpleApplicationContext, SimpleSession};
     use crate::datasets::RasterDatasetFromWorkflowResult;
-    use crate::handlers::ErrorResponse;
     use crate::layers::layer::Layer;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};

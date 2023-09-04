@@ -8,6 +8,7 @@ use crate::api::model::operators::GdalDatasetGeoTransform;
 use crate::api::model::operators::GdalDatasetParameters;
 use crate::api::model::operators::GdalMetaDataStatic;
 use crate::api::model::operators::RasterResultDescriptor;
+use crate::api::model::responses::ErrorResponse;
 use crate::api::model::services::AddDataset;
 use crate::contexts::GeoEngineDb;
 use crate::contexts::PostgresContext;
@@ -16,7 +17,6 @@ use crate::datasets::listing::Provenance;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
 use crate::datasets::upload::UploadRootPath;
-use crate::handlers::ErrorResponse;
 use crate::projects::{
     CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
@@ -26,9 +26,9 @@ use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
+    api::handlers,
     contexts::SessionContext,
     datasets::storage::{DatasetDefinition, MetaDataDefinition},
-    handlers,
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{http, http::header, http::Method, middleware, test, web, App};

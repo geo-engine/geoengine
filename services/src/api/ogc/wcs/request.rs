@@ -1,10 +1,10 @@
 use crate::api::model::datatypes::SpatialReference;
 use crate::api::model::datatypes::TimeInterval;
-use crate::error::{self, Result};
-use crate::ogc::util::{
+use crate::api::ogc::util::{
     parse_time_option, parse_wcs_bbox, parse_wcs_crs, rectangle_from_ogc_params,
     tuple_from_ogc_params,
 };
+use crate::error::{self, Result};
 use crate::util::from_str_option;
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution};
 use serde::de::Error;

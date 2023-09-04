@@ -12,9 +12,9 @@ use utoipa::ToSchema;
 
 use super::wcs::request::WcsBoundingbox;
 use super::wfs::request::WfsResolution;
+use crate::api::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
 use crate::api::model::datatypes::TimeInterval;
 use crate::error::{self, Result};
-use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
 use crate::workflows::workflow::WorkflowId;
 
 #[derive(PartialEq, Debug, Deserialize, Serialize, Clone, Copy)]

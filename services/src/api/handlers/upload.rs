@@ -10,11 +10,10 @@ use actix_web::{web, FromRequest, Responder};
 use futures::StreamExt;
 use geoengine_datatypes::util::Identifier;
 
-use crate::contexts::ApplicationContext;
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::upload::{FileId, FileUpload, Upload, UploadDb, UploadId, UploadRootPath};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::handlers::SessionContext;
 use crate::util::{path_with_base_path, IdResponse};
 use snafu::ResultExt;
 use utoipa::{ToResponse, ToSchema};

@@ -1,5 +1,5 @@
+use crate::api::model::responses::ErrorResponse;
 use crate::contexts::{PostgresContext, SessionId, SimpleApplicationContext};
-use crate::handlers::ErrorResponse;
 use actix_web::dev::ServiceResponse;
 use actix_web::http::{header, Method};
 use actix_web::test::TestRequest;

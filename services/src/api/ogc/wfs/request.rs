@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::TimeInterval;
-use crate::ogc::util::{
+use crate::api::ogc::util::{
     parse_ogc_bbox, parse_time_option, parse_wfs_resolution_option, OgcBoundingBox,
 };
 use crate::util::from_str_option;

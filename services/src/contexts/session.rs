@@ -1,6 +1,6 @@
+use crate::api::handlers::get_token;
 use crate::contexts::PostgresContext;
 use crate::error::{self};
-use crate::handlers::get_token;
 use crate::identifier;
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;

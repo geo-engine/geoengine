@@ -1,6 +1,6 @@
+use crate::api::handlers;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::{Error, Result};
-use crate::handlers;
 use crate::pro;
 use crate::pro::apidoc::ApiDoc;
 
@@ -84,7 +84,7 @@ where
                 "EBV",
                 "../api-docs/ebv/openapi.json",
                 "/api-docs/ebv/openapi.json",
-                crate::handlers::ebv::ApiDoc::openapi(),
+                crate::api::handlers::ebv::ApiDoc::openapi(),
             );
         }
 

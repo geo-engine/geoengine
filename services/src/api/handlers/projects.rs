@@ -1,6 +1,5 @@
-use crate::contexts::ApplicationContext;
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
-use crate::handlers::SessionContext;
 use crate::projects::{
     CreateProject, LoadVersion, ProjectDb, ProjectId, ProjectListOptions, ProjectVersionId,
     UpdateProject,
@@ -332,8 +331,8 @@ pub(crate) async fn project_versions_handler<C: ApplicationContext>(
 mod tests {
     use super::*;
     use crate::api::model::datatypes::Colorizer;
+    use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{Session, SimpleApplicationContext, SimpleSession};
-    use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, send_test_request,
         update_project_helper, with_temp_context,

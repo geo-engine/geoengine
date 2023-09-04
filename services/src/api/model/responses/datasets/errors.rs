@@ -1,5 +1,5 @@
+use crate::api::model::responses::ErrorResponse;
 use crate::error;
-use crate::handlers::ErrorResponse;
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, ResponseError};
 use snafu::prelude::*;

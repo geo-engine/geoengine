@@ -717,8 +717,8 @@ where
 mod tests {
     use super::*;
 
+    use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{Session, SessionContext};
-    use crate::handlers::ErrorResponse;
     use crate::pro::util::tests::mock_oidc::{
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
     };

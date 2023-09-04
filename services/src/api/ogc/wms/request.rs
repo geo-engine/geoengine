@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{SpatialReference, TimeInterval};
-use crate::ogc::util::{parse_ogc_bbox, parse_time_option, OgcBoundingBox};
+use crate::api::ogc::util::{parse_ogc_bbox, parse_time_option, OgcBoundingBox};
 use crate::util::{bool_option_case_insensitive, from_str};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};

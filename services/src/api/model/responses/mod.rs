@@ -1,7 +1,65 @@
 pub mod datasets;
 
-use crate::handlers::ErrorResponse;
-use utoipa::ToResponse;
+use actix_http::StatusCode;
+use actix_web::{dev::ServiceResponse, HttpResponse};
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use utoipa::{ToResponse, ToSchema};
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct ErrorResponse {
+    pub error: String,
+    pub message: String,
+}
+
+impl ErrorResponse {
+    /// Assert that a `Response` has a certain `status` and `error` message.
+    ///
+    /// # Panics
+    /// Panics if `status` or `error` do not match.
+    ///
+    pub async fn assert(res: ServiceResponse, status: u16, error: &str, message: &str) {
+        assert_eq!(res.status(), status);
+
+        let body: Self = actix_web::test::read_body_json(res).await;
+        assert_eq!(
+            body,
+            Self {
+                error: error.to_string(),
+                message: message.to_string(),
+            }
+        );
+    }
+}
+
+impl<'a, T> From<&'a T> for ErrorResponse
+where
+    T: snafu::Error,
+    &'static str: From<&'a T>,
+{
+    fn from(value: &'a T) -> Self {
+        ErrorResponse {
+            error: Into::<&str>::into(value).to_string(),
+            message: value.to_string(),
+        }
+    }
+}
+
+impl actix_web::ResponseError for ErrorResponse {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(self)
+    }
+
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+}
+
+impl fmt::Display for ErrorResponse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {}", self.error, self.message)
+    }
+}
 
 #[derive(ToResponse)]
 #[response(description = "Media type of application/json is expected", example = json!({

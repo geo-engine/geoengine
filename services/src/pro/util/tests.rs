@@ -1,4 +1,5 @@
 use crate::{
+    api::handlers,
     api::model::{
         datatypes::{DatasetId, DatasetName, NamedData},
         services::AddDataset,
@@ -8,7 +9,7 @@ use crate::{
         listing::Provenance,
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
     },
-    handlers, pro,
+    pro,
     pro::{
         contexts::{ProApplicationContext, ProGeoEngineDb, ProPostgresContext},
         permissions::{Permission, PermissionDb, Role},

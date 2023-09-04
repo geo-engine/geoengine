@@ -129,8 +129,8 @@ async fn session_view_handler<C: SimpleApplicationContext>(
 mod tests {
     use super::*;
 
+    use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{Session, SessionContext};
-    use crate::handlers::ErrorResponse;
     use crate::util::tests::with_temp_context;
     use crate::{
         contexts::SimpleSession,

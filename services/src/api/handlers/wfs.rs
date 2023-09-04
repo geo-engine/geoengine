@@ -12,12 +12,12 @@ use utoipa::openapi::ArrayBuilder;
 use utoipa::ToSchema;
 
 use crate::api::model::datatypes::TimeInterval;
+use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
+use crate::api::ogc::wfs::request::{GetCapabilities, GetFeature};
 use crate::contexts::ApplicationContext;
+use crate::contexts::SessionContext;
 use crate::error;
 use crate::error::Result;
-use crate::handlers::SessionContext;
-use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
-use crate::ogc::wfs::request::{GetCapabilities, GetFeature};
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
@@ -697,9 +697,9 @@ mod tests {
     use super::*;
 
     use crate::api::model::datatypes::{DataId, DatasetId};
+    use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
     use crate::datasets::storage::{DatasetDefinition, DatasetStore};
-    use crate::handlers::ErrorResponse;
     use crate::util::tests::with_temp_context;
     use crate::util::tests::with_temp_context_from_spec;
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
