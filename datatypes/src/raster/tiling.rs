@@ -33,6 +33,40 @@ impl TilingSpecification {
 
         TilingStrategy::new_with_tiling_spec(self, x_pixel_size, y_pixel_size)
     }
+
+    pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
+        let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
+        let [y_tile_size, x_tile_size] = self.tile_size_in_pixels.into_inner();
+        //let y_tile_idx = (y_pixel_idx as f64 / y_tile_size as f64).floor() as isize;
+        //let x_tile_idx = (x_pixel_idx as f64 / x_tile_size as f64).floor() as isize;
+        let y_tile_idx = num::integer::div_floor(y_pixel_idx, y_tile_size as isize);
+        let x_tile_idx = num::integer::div_floor(x_pixel_idx, x_tile_size as isize);
+        [y_tile_idx, x_tile_idx].into()
+    }
+
+    pub fn tile_idx_to_global_pixel_idx(&self, tile_idx: GridIdx2D) -> GridIdx2D {
+        let GridIdx([y_tile_idx, x_tile_idx]) = tile_idx;
+        let [y_tile_size, x_tile_size] = self.tile_size_in_pixels.into_inner();
+        [
+            y_tile_idx * y_tile_size as isize,
+            x_tile_idx * x_tile_size as isize,
+        ]
+        .into()
+    }
+
+    pub fn origin_pixel_tile_coord(
+        geo_transform: &GeoTransform,
+        tiling_spec: &TilingSpecification,
+    ) -> (GridIdx2D, GridIdx2D) {
+        let nearest_pixel_to_zero = geo_transform.nearest_pixel_to_zero();
+        let pixel_distance_reverse = nearest_pixel_to_zero * -1;
+
+        let origin_pixel_tile = tiling_spec.pixel_idx_to_tile_idx(pixel_distance_reverse);
+        let origin_pixel_offset =
+            tiling_spec.tile_idx_to_global_pixel_idx(origin_pixel_tile) - pixel_distance_reverse;
+
+        (origin_pixel_tile, origin_pixel_offset)
+    }
 }
 
 impl GridShapeAccess for TilingSpecification {
@@ -275,7 +309,7 @@ impl SpatialPartitioned for TileInformation {
 #[cfg(test)]
 mod tests {
 
-    use crate::raster::GridIntersection;
+    use crate::raster::{geo_transform, GridIntersection};
 
     use super::*;
 
@@ -313,5 +347,55 @@ mod tests {
         for tile in tiles {
             assert!(grid_bounds.intersects(&tile.global_pixel_bounds()));
         }
+    }
+
+    #[test]
+    fn tiling_tile_tile() {
+        let geo_transform = GeoTransform::new(
+            (-1234567890., 1234567890.).into(),
+            0.0000333374,
+            -0.0000333374,
+        );
+        let nearest_to_zero = geo_transform.nearest_pixel_to_zero();
+        println!("nearest_to_zero: {:?}", nearest_to_zero);
+
+        let nearest_to_zero_coord =
+            geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(nearest_to_zero);
+        println!("nearest_to_zero_coord: {:?}", nearest_to_zero_coord);
+
+        let tiling_spec = TilingSpecification::new((-1000., 1000.).into(), [512, 512].into());
+        let tile_size = tiling_spec.tile_size_in_pixels;
+        println!("tile_size: {:?}", tile_size);
+
+        let tile_idx = tiling_spec.pixel_idx_to_tile_idx(nearest_to_zero);
+        println!("near zero tile_idx: {:?}", tile_idx);
+
+        let (origin_tile, origin_offset) =
+            TilingSpecification::origin_pixel_tile_coord(&geo_transform, &tiling_spec);
+
+        println!("origin_tile: {:?}", origin_tile);
+        println!("origin_offset: {:?}", origin_offset);
+
+        let GridIdx([y, x]) = origin_tile * tile_size;
+        println!("y: {:?}", y);
+        println!("x: {:?}", x);
+        let coord_x = x as f64 * geo_transform.x_pixel_size();
+        let coord_y = y as f64 * geo_transform.y_pixel_size();
+        println!("coord_x: {:?}", coord_x);
+        println!("coord_y: {:?}", coord_y);
+        let coord_x_off = (x - origin_offset.inner()[1]) as f64 * geo_transform.x_pixel_size();
+        let coord_y_off = (y - origin_offset.inner()[0]) as f64 * geo_transform.y_pixel_size();
+        println!("coord_x_off: {:?}", coord_x_off);
+        println!("coord_y_off: {:?}", coord_y_off);
+        let rgx = coord_x_off + nearest_to_zero_coord.x;
+        let rgy = coord_y_off + nearest_to_zero_coord.y;
+        println!("rgx: {:?}", rgx);
+        println!("rgy: {:?}", rgy);
+
+        let control_x = geo_transform.x_pixel_size() * x as f64;
+        let control_y = geo_transform.y_pixel_size() * y as f64;
+
+        println!("control_x: {:?}", control_x);
+        println!("control_y: {:?}", control_y);
     }
 }

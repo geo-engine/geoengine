@@ -233,6 +233,10 @@ impl GeoTransform {
     pub fn origin_coordinate(&self) -> Coordinate2D {
         self.origin_coordinate
     }
+
+    pub fn nearest_pixel_to_zero(&self) -> GridIdx2D {
+        self.coordinate_to_grid_idx_2d(Coordinate2D { x: 0., y: 0. }) // TODO: currently this is the pixel thats starts top left of 0.0, 0.0. Its coordinate is not the nearest to 0.0, 0.0!
+    }
 }
 
 impl TestDefault for GeoTransform {

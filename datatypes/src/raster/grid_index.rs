@@ -3,6 +3,8 @@ use std::ops::{Add, Div, Mul, Rem, Sub};
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
+use super::GridShape2D;
+
 ///
 /// The grid index struct. This is a wrapper for arrays with added methods and traits, e.g. Add, Sub...
 ///
@@ -225,6 +227,19 @@ where
         let GridIdx([a_other, b_other]) = rhs.into();
         // TODO: handle overflows
         GridIdx([a * a_other, b * b_other])
+    }
+}
+
+impl Mul<GridShape2D> for GridIdx2D {
+    type Output = Self;
+
+    fn mul(self, rhs: GridShape2D) -> Self::Output {
+        let GridIdx([a, b]) = self;
+        let GridShape2D {
+            shape_array: [shape_a, shape_b],
+        } = rhs;
+
+        GridIdx([a * shape_a as isize, b * shape_b as isize])
     }
 }
 
