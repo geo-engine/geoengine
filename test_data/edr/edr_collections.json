@@ -1,30 +1,8 @@
 {
-    "links": [
-      {
-        "href": "https://ogcie.iblsoft.com/edr/collections?f=JSON",
-        "rel": "self",
-        "type": "application/json",
-        "title": "Collections metadata in JSON"
-      }
-    ],
     "collections": [
       {
         "id": "GFS_single-level",
         "title": "GFS - Single Level",
-        "links": [
-          {
-            "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level?f=JSON",
-            "rel": "data",
-            "type": "application/json",
-            "title": "Collection metadata in JSON"
-          },
-          {
-            "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/instances?f=JSON",
-            "rel": "data",
-            "type": "application/json",
-            "title": "Instances metadata in JSON"
-          }
-        ],
         "extent": {
           "spatial": {
             "bbox": [
@@ -109,7 +87,7 @@
         "data_queries": {
           "position": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/position",
+              "href": "https://example.com/edr/collections/GFS_single-level/position",
               "rel": "data",
               "title": "Position Query",
               "templated": false,
@@ -135,7 +113,7 @@
           },
           "radius": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/radius",
+              "href": "https://example.com/edr/collections/GFS_single-level/radius",
               "rel": "data",
               "title": "Radius Query",
               "templated": false,
@@ -168,7 +146,7 @@
           },
           "area": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/area",
+              "href": "https://example.com/edr/collections/GFS_single-level/area",
               "rel": "data",
               "title": "Area Query",
               "templated": false,
@@ -202,7 +180,7 @@
           },
           "cube": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/cube",
+              "href": "https://example.com/edr/collections/GFS_single-level/cube",
               "rel": "data",
               "title": "Cube Query",
               "templated": false,
@@ -233,7 +211,7 @@
           },
           "trajectory": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/trajectory",
+              "href": "https://example.com/edr/collections/GFS_single-level/trajectory",
               "rel": "data",
               "title": "Trajectory Query",
               "templated": false,
@@ -258,7 +236,7 @@
           },
           "corridor": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/corridor",
+              "href": "https://example.com/edr/collections/GFS_single-level/corridor",
               "rel": "data",
               "title": "Corridor Query",
               "templated": false,
@@ -306,9 +284,9 @@
               "label": "Temperature"
             },
             "measurementType": {
-              "method": "ibl#spec:regular"
+              "method": "spec:regular"
             },
-            "_verticalReference": "ibl#special_max-wind"
+            "_verticalReference": "special_max-wind"
           }
         }
       },
@@ -317,13 +295,13 @@
         "title": "GFS - Single Level (50)",
         "links": [
           {
-            "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level_50?f=JSON",
+            "href": "https://example.com/edr/collections/GFS_single-level_50?f=JSON",
             "rel": "data",
             "type": "application/json",
             "title": "Collection metadata in JSON"
           },
           {
-            "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level_50/instances?f=JSON",
+            "href": "https://example.com/edr/collections/GFS_single-level_50/instances?f=JSON",
             "rel": "data",
             "type": "application/json",
             "title": "Instances metadata in JSON"
@@ -356,7 +334,7 @@
         "data_queries": {
           "position": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level_50/position",
+              "href": "https://example.com/edr/collections/GFS_single-level_50/position",
               "rel": "data",
               "title": "Position Query",
               "templated": false,
@@ -382,7 +360,7 @@
           },
           "radius": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level_50/radius",
+              "href": "https://example.com/edr/collections/GFS_single-level_50/radius",
               "rel": "data",
               "title": "Radius Query",
               "templated": false,
@@ -415,7 +393,7 @@
           },
           "area": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level_50/area",
+              "href": "https://example.com/edr/collections/GFS_single-level_50/area",
               "rel": "data",
               "title": "Area Query",
               "templated": false,
@@ -449,7 +427,7 @@
           },
           "cube": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level_50/cube",
+              "href": "https://example.com/edr/collections/GFS_single-level_50/cube",
               "rel": "data",
               "title": "Cube Query",
               "templated": false,
@@ -480,7 +458,7 @@
           },
           "trajectory": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level_50/trajectory",
+              "href": "https://example.com/edr/collections/GFS_single-level_50/trajectory",
               "rel": "data",
               "title": "Trajectory Query",
               "templated": false,
@@ -505,7 +483,7 @@
           },
           "corridor": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level_50/corridor",
+              "href": "https://example.com/edr/collections/GFS_single-level_50/corridor",
               "rel": "data",
               "title": "Corridor Query",
               "templated": false,
@@ -553,10 +531,10 @@
               "label": "Total precipitation"
             },
             "measurementType": {
-              "method": "ibl#spec:regular;stat:accumulation/P6DT3H",
+              "method": "spec:regular;stat:accumulation/P6DT3H",
               "duration": "P6DT3H"
             },
-            "_verticalReference": "ibl#special_gnd-surf"
+            "_verticalReference": "special_gnd-surf"
           },
           "convective-precipitation_gnd-surf_stat:acc/P6DT3H": {
             "type": "Parameter",
@@ -570,10 +548,10 @@
               "label": "Convective precipitation"
             },
             "measurementType": {
-              "method": "ibl#spec:regular;stat:accumulation/P6DT3H",
+              "method": "spec:regular;stat:accumulation/P6DT3H",
               "duration": "P6DT3H"
             },
-            "_verticalReference": "ibl#special_gnd-surf"
+            "_verticalReference": "special_gnd-surf"
           }
         }
       },
@@ -582,13 +560,13 @@
         "title": "GFS - Isobaric level",
         "links": [
           {
-            "href": "https://ogcie.iblsoft.com/edr/collections/GFS_isobaric?f=JSON",
+            "href": "https://example.com/edr/collections/GFS_isobaric?f=JSON",
             "rel": "data",
             "type": "application/json",
             "title": "Collection metadata in JSON"
           },
           {
-            "href": "https://ogcie.iblsoft.com/edr/collections/GFS_isobaric/instances?f=JSON",
+            "href": "https://example.com/edr/collections/GFS_isobaric/instances?f=JSON",
             "rel": "data",
             "type": "application/json",
             "title": "Instances metadata in JSON"
@@ -618,7 +596,7 @@
               "0.01",
               "1000"
             ],
-            "vrs": "ibl#isobaric"
+            "vrs": "isobaric"
           },
           "temporal": {
             "interval": [
@@ -691,7 +669,7 @@
         "data_queries": {
           "position": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_isobaric/position",
+              "href": "https://example.com/edr/collections/GFS_isobaric/position",
               "rel": "data",
               "title": "Position Query",
               "templated": false,
@@ -717,7 +695,7 @@
           },
           "radius": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_isobaric/radius",
+              "href": "https://example.com/edr/collections/GFS_isobaric/radius",
               "rel": "data",
               "title": "Radius Query",
               "templated": false,
@@ -750,7 +728,7 @@
           },
           "area": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_isobaric/area",
+              "href": "https://example.com/edr/collections/GFS_isobaric/area",
               "rel": "data",
               "title": "Area Query",
               "templated": false,
@@ -784,7 +762,7 @@
           },
           "cube": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_isobaric/cube",
+              "href": "https://example.com/edr/collections/GFS_isobaric/cube",
               "rel": "data",
               "title": "Cube Query",
               "templated": false,
@@ -815,7 +793,7 @@
           },
           "trajectory": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_isobaric/trajectory",
+              "href": "https://example.com/edr/collections/GFS_isobaric/trajectory",
               "rel": "data",
               "title": "Trajectory Query",
               "templated": false,
@@ -840,7 +818,7 @@
           },
           "corridor": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_isobaric/corridor",
+              "href": "https://example.com/edr/collections/GFS_isobaric/corridor",
               "rel": "data",
               "title": "Corridor Query",
               "templated": false,
@@ -891,7 +869,7 @@
               "label": "Temperature"
             },
             "measurementType": {
-              "method": "ibl#spec:regular"
+              "method": "spec:regular"
             }
           }
         }
@@ -901,13 +879,13 @@
         "title": "GFS - Layer between two depths below land surface",
         "links": [
           {
-            "href": "https://ogcie.iblsoft.com/edr/collections/GFS_between-depth?f=JSON",
+            "href": "https://example.com/edr/collections/GFS_between-depth?f=JSON",
             "rel": "data",
             "type": "application/json",
             "title": "Collection metadata in JSON"
           },
           {
-            "href": "https://ogcie.iblsoft.com/edr/collections/GFS_between-depth/instances?f=JSON",
+            "href": "https://example.com/edr/collections/GFS_between-depth/instances?f=JSON",
             "rel": "data",
             "type": "application/json",
             "title": "Instances metadata in JSON"
@@ -939,7 +917,7 @@
               "10\\40cm",
               "40\\100cm"
             ],
-            "vrs": "ibl#between-depth"
+            "vrs": "between-depth"
           },
           "temporal": {
             "interval": [
@@ -1002,7 +980,7 @@
         "data_queries": {
           "position": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_between-depth/position",
+              "href": "https://example.com/edr/collections/GFS_between-depth/position",
               "rel": "data",
               "title": "Position Query",
               "templated": false,
@@ -1026,7 +1004,7 @@
           },
           "radius": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_between-depth/radius",
+              "href": "https://example.com/edr/collections/GFS_between-depth/radius",
               "rel": "data",
               "title": "Radius Query",
               "templated": false,
@@ -1057,7 +1035,7 @@
           },
           "area": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_between-depth/area",
+              "href": "https://example.com/edr/collections/GFS_between-depth/area",
               "rel": "data",
               "title": "Area Query",
               "templated": false,
@@ -1085,7 +1063,7 @@
           },
           "cube": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_between-depth/cube",
+              "href": "https://example.com/edr/collections/GFS_between-depth/cube",
               "rel": "data",
               "title": "Cube Query",
               "templated": false,
@@ -1112,7 +1090,7 @@
           },
           "trajectory": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_between-depth/trajectory",
+              "href": "https://example.com/edr/collections/GFS_between-depth/trajectory",
               "rel": "data",
               "title": "Trajectory Query",
               "templated": false,
@@ -1135,7 +1113,7 @@
           },
           "corridor": {
             "link": {
-              "href": "https://ogcie.iblsoft.com/edr/collections/GFS_between-depth/corridor",
+              "href": "https://example.com/edr/collections/GFS_between-depth/corridor",
               "rel": "data",
               "title": "Corridor Query",
               "templated": false,
@@ -1181,7 +1159,7 @@
               "label": "Soil temperature"
             },
             "measurementType": {
-              "method": "ibl#spec:regular"
+              "method": "spec:regular"
             }
           },
           "volumetric-soil-moisture-content": {
@@ -1193,7 +1171,7 @@
               "label": "Volumetric soil moisture content"
             },
             "measurementType": {
-              "method": "ibl#spec:regular"
+              "method": "spec:regular"
             }
           },
           "liquid-volumetric-soil-moisture-non-frozen": {
@@ -1208,7 +1186,7 @@
               "label": "Liquid volumetric soil moisture (non frozen)"
             },
             "measurementType": {
-              "method": "ibl#spec:regular"
+              "method": "spec:regular"
             }
           }
         }
@@ -1329,7 +1307,7 @@
               "0\\10cm",
               "10\\40cm"
             ],
-            "vrs": "ibl#between-depth"
+            "vrs": "between-depth"
           },
           "temporal": {
             "interval": [

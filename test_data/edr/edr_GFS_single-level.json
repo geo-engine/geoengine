@@ -1,20 +1,6 @@
 {
   "id": "GFS_single-level",
   "title": "GFS - Single Level",
-  "links": [
-    {
-      "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level?f=JSON",
-      "rel": "self",
-      "type": "application/json",
-      "title": "Collection metadata in JSON"
-    },
-    {
-      "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/instances?f=JSON",
-      "rel": "data",
-      "type": "application/json",
-      "title": "Instances metadata in JSON"
-    }
-  ],
   "extent": {
     "spatial": {
       "bbox": [
@@ -77,7 +63,7 @@
   "data_queries": {
     "position": {
       "link": {
-        "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/position",
+        "href": "https://example.com/edr/collections/GFS_single-level/position",
         "rel": "data",
         "title": "Position Query",
         "templated": false,
@@ -103,7 +89,7 @@
     },
     "radius": {
       "link": {
-        "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/radius",
+        "href": "https://example.com/edr/collections/GFS_single-level/radius",
         "rel": "data",
         "title": "Radius Query",
         "templated": false,
@@ -136,7 +122,7 @@
     },
     "area": {
       "link": {
-        "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/area",
+        "href": "https://example.com/edr/collections/GFS_single-level/area",
         "rel": "data",
         "title": "Area Query",
         "templated": false,
@@ -170,7 +156,7 @@
     },
     "cube": {
       "link": {
-        "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/cube",
+        "href": "https://example.com/edr/collections/GFS_single-level/cube",
         "rel": "data",
         "title": "Cube Query",
         "templated": false,
@@ -201,7 +187,7 @@
     },
     "trajectory": {
       "link": {
-        "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/trajectory",
+        "href": "https://example.com/edr/collections/GFS_single-level/trajectory",
         "rel": "data",
         "title": "Trajectory Query",
         "templated": false,
@@ -226,7 +212,7 @@
     },
     "corridor": {
       "link": {
-        "href": "https://ogcie.iblsoft.com/edr/collections/GFS_single-level/corridor",
+        "href": "https://example.com/edr/collections/GFS_single-level/corridor",
         "rel": "data",
         "title": "Corridor Query",
         "templated": false,
@@ -274,9 +260,9 @@
         "label": "Temperature"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "temperature_max-wind": {
       "type": "Parameter",
@@ -290,9 +276,9 @@
         "label": "Temperature"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_max-wind"
+      "_verticalReference": "special_max-wind"
     },
     "temperature_tropopause": {
       "type": "Parameter",
@@ -306,9 +292,9 @@
         "label": "Temperature"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_tropopause"
+      "_verticalReference": "special_tropopause"
     },
     "relative-humidity_0-isoterm": {
       "type": "Parameter",
@@ -322,9 +308,9 @@
         "label": "Relative humidity"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_0-isoterm"
+      "_verticalReference": "special_0-isoterm"
     },
     "relative-humidity_atmosphere": {
       "type": "Parameter",
@@ -338,9 +324,9 @@
         "label": "Relative humidity"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_atmosphere"
+      "_verticalReference": "special_atmosphere"
     },
     "relative-humidity_tropo-freeze": {
       "type": "Parameter",
@@ -354,9 +340,9 @@
         "label": "Relative humidity"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_tropo-freeze"
+      "_verticalReference": "special_tropo-freeze"
     },
     "precipitable-water_atmosphere": {
       "type": "Parameter",
@@ -370,9 +356,9 @@
         "label": "Precipitable water"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_atmosphere"
+      "_verticalReference": "special_atmosphere"
     },
     "precipitation-rate_gnd-surf": {
       "type": "Parameter",
@@ -386,9 +372,9 @@
         "label": "Precipitation rate"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "snow-depth_gnd-surf": {
       "type": "Parameter",
@@ -402,9 +388,9 @@
         "label": "Snow depth"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "water-equivalent-of-accumulated-snow-depth_gnd-surf": {
       "type": "Parameter",
@@ -415,9 +401,9 @@
         "label": "Water equivalent of accumulated snow depth"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "percent-frozen-precipitation_gnd-surf": {
       "type": "Parameter",
@@ -431,9 +417,9 @@
         "label": "Percent frozen precipitation"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "categorical-rain-yes-1-no-0_gnd-surf": {
       "type": "Parameter",
@@ -447,9 +433,9 @@
         "label": "Categorical rain (yes=1; no=0)"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "categorical-freezing-rain-yes-1-no-0_gnd-surf": {
       "type": "Parameter",
@@ -463,9 +449,9 @@
         "label": "Categorical freezing rain (yes=1; no=0)"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "categorical-ice-pellets-yes-1-no-0_gnd-surf": {
       "type": "Parameter",
@@ -479,9 +465,9 @@
         "label": "Categorical ice pellets (yes=1; no=0)"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "categorical-snow-yes-1-no-0_gnd-surf": {
       "type": "Parameter",
@@ -495,9 +481,9 @@
         "label": "Categorical snow (yes=1; no=0)"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "u-component-of-wind_max-wind": {
       "type": "Parameter",
@@ -511,9 +497,9 @@
         "label": "U component of wind"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_max-wind"
+      "_verticalReference": "special_max-wind"
     },
     "u-component-of-wind_tropopause": {
       "type": "Parameter",
@@ -527,9 +513,9 @@
         "label": "U component of wind"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_tropopause"
+      "_verticalReference": "special_tropopause"
     },
     "u-component-of-wind_PBL": {
       "type": "Parameter",
@@ -543,9 +529,9 @@
         "label": "U component of wind"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_PBL"
+      "_verticalReference": "special_PBL"
     },
     "v-component-of-wind_max-wind": {
       "type": "Parameter",
@@ -559,9 +545,9 @@
         "label": "V component of wind"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_max-wind"
+      "_verticalReference": "special_max-wind"
     },
     "v-component-of-wind_tropopause": {
       "type": "Parameter",
@@ -575,9 +561,9 @@
         "label": "V component of wind"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_tropopause"
+      "_verticalReference": "special_tropopause"
     },
     "v-component-of-wind_PBL": {
       "type": "Parameter",
@@ -591,9 +577,9 @@
         "label": "V component of wind"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_PBL"
+      "_verticalReference": "special_PBL"
     },
     "wind-speed-gust_gnd-surf": {
       "type": "Parameter",
@@ -607,9 +593,9 @@
         "label": "Wind speed (gust)"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "vertical-speed-shear_tropopause": {
       "type": "Parameter",
@@ -620,9 +606,9 @@
         "label": "Vertical speed shear"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_tropopause"
+      "_verticalReference": "special_tropopause"
     },
     "frictional-velocity_gnd-surf": {
       "type": "Parameter",
@@ -636,9 +622,9 @@
         "label": "Frictional velocity"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "ventilation-rate_PBL": {
       "type": "Parameter",
@@ -649,9 +635,9 @@
         "label": "Ventilation rate"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_PBL"
+      "_verticalReference": "special_PBL"
     },
     "pressure_gnd-surf": {
       "type": "Parameter",
@@ -665,9 +651,9 @@
         "label": "Pressure"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "pressure_max-wind": {
       "type": "Parameter",
@@ -681,9 +667,9 @@
         "label": "Pressure"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_max-wind"
+      "_verticalReference": "special_max-wind"
     },
     "pressure_tropopause": {
       "type": "Parameter",
@@ -697,9 +683,9 @@
         "label": "Pressure"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_tropopause"
+      "_verticalReference": "special_tropopause"
     },
     "pressure-reduced-to-msl_mean-sea": {
       "type": "Parameter",
@@ -713,9 +699,9 @@
         "label": "Pressure reduced to MSL"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_mean-sea"
+      "_verticalReference": "special_mean-sea"
     },
     "icao-standard-atmosphere-reference-height_max-wind": {
       "type": "Parameter",
@@ -729,9 +715,9 @@
         "label": "ICAO Standard Atmosphere reference height"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_max-wind"
+      "_verticalReference": "special_max-wind"
     },
     "icao-standard-atmosphere-reference-height_tropopause": {
       "type": "Parameter",
@@ -745,9 +731,9 @@
         "label": "ICAO Standard Atmosphere reference height"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_tropopause"
+      "_verticalReference": "special_tropopause"
     },
     "geopotential-height_gnd-surf": {
       "type": "Parameter",
@@ -761,9 +747,9 @@
         "label": "Geopotential height"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "geopotential-height_0-isoterm": {
       "type": "Parameter",
@@ -777,9 +763,9 @@
         "label": "Geopotential height"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_0-isoterm"
+      "_verticalReference": "special_0-isoterm"
     },
     "geopotential-height_max-wind": {
       "type": "Parameter",
@@ -793,9 +779,9 @@
         "label": "Geopotential height"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_max-wind"
+      "_verticalReference": "special_max-wind"
     },
     "geopotential-height_tropopause": {
       "type": "Parameter",
@@ -809,9 +795,9 @@
         "label": "Geopotential height"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_tropopause"
+      "_verticalReference": "special_tropopause"
     },
     "geopotential-height_tropo-freeze": {
       "type": "Parameter",
@@ -825,9 +811,9 @@
         "label": "Geopotential height"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_tropo-freeze"
+      "_verticalReference": "special_tropo-freeze"
     },
     "geopotential-height_cloud-ceiling": {
       "type": "Parameter",
@@ -841,9 +827,9 @@
         "label": "Geopotential height"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_cloud-ceiling"
+      "_verticalReference": "special_cloud-ceiling"
     },
     "msl-pressure-eta-reduction_mean-sea": {
       "type": "Parameter",
@@ -857,9 +843,9 @@
         "label": "MSL pressure (Eta reduction)"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_mean-sea"
+      "_verticalReference": "special_mean-sea"
     },
     "planetary-boundary-layer-height_gnd-surf": {
       "type": "Parameter",
@@ -873,9 +859,9 @@
         "label": "Planetary boundary layer height"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "total-cloud-cover_atmosphere": {
       "type": "Parameter",
@@ -889,9 +875,9 @@
         "label": "Total cloud cover"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_atmosphere"
+      "_verticalReference": "special_atmosphere"
     },
     "low-cloud-cover_low-cloud": {
       "type": "Parameter",
@@ -905,9 +891,9 @@
         "label": "Low cloud cover"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_low-cloud"
+      "_verticalReference": "special_low-cloud"
     },
     "medium-cloud-cover_mid-cloud": {
       "type": "Parameter",
@@ -921,9 +907,9 @@
         "label": "Medium cloud cover"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_mid-cloud"
+      "_verticalReference": "special_mid-cloud"
     },
     "high-cloud-cover_high-cld": {
       "type": "Parameter",
@@ -937,9 +923,9 @@
         "label": "High cloud cover"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_high-cld"
+      "_verticalReference": "special_high-cld"
     },
     "cloud-water_atmosphere": {
       "type": "Parameter",
@@ -950,9 +936,9 @@
         "label": "Cloud water"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_atmosphere"
+      "_verticalReference": "special_atmosphere"
     },
     "sunshine-duration_gnd-surf": {
       "type": "Parameter",
@@ -966,9 +952,9 @@
         "label": "Sunshine duration"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "convective-available-potential-energy_gnd-surf": {
       "type": "Parameter",
@@ -979,9 +965,9 @@
         "label": "Convective available potential energy"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "convective-inhibition_gnd-surf": {
       "type": "Parameter",
@@ -992,9 +978,9 @@
         "label": "Convective inhibition"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "surface-lifted-index_gnd-surf": {
       "type": "Parameter",
@@ -1008,9 +994,9 @@
         "label": "Surface lifted index"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "best-4-layer-lifted-index_gnd-surf": {
       "type": "Parameter",
@@ -1024,9 +1010,9 @@
         "label": "Best (4 layer) lifted index"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "total-ozone_atmosphere": {
       "type": "Parameter",
@@ -1037,9 +1023,9 @@
         "label": "Total ozone"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_atmosphere"
+      "_verticalReference": "special_atmosphere"
     },
     "composite-reflectivity_atmosphere": {
       "type": "Parameter",
@@ -1050,9 +1036,9 @@
         "label": "Composite reflectivity"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_atmosphere"
+      "_verticalReference": "special_atmosphere"
     },
     "visibility_gnd-surf": {
       "type": "Parameter",
@@ -1066,9 +1052,9 @@
         "label": "Visibility"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "land-cover_gnd-surf": {
       "type": "Parameter",
@@ -1079,9 +1065,9 @@
         "label": "Land cover"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "surface-roughness_gnd-surf": {
       "type": "Parameter",
@@ -1095,9 +1081,9 @@
         "label": "Surface roughness"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "vegetation_gnd-surf": {
       "type": "Parameter",
@@ -1108,9 +1094,9 @@
         "label": "Vegetation"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "plant-canopy-surface-water_gnd-surf": {
       "type": "Parameter",
@@ -1121,9 +1107,9 @@
         "label": "Plant canopy surface water"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "wilting-point_gnd-surf": {
       "type": "Parameter",
@@ -1137,9 +1123,9 @@
         "label": "Wilting point"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "soil-type_gnd-surf": {
       "type": "Parameter",
@@ -1150,9 +1136,9 @@
         "label": "Soil type"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "field-capacity_gnd-surf": {
       "type": "Parameter",
@@ -1166,9 +1152,9 @@
         "label": "Field capacity"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "haines-index_gnd-surf": {
       "type": "Parameter",
@@ -1182,9 +1168,9 @@
         "label": "Haines index"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "ice-cover_gnd-surf": {
       "type": "Parameter",
@@ -1195,9 +1181,9 @@
         "label": "Ice cover"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "ice-thickness_gnd-surf": {
       "type": "Parameter",
@@ -1211,9 +1197,9 @@
         "label": "Ice thickness"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     },
     "ice-temperature_gnd-surf": {
       "type": "Parameter",
@@ -1227,9 +1213,9 @@
         "label": "Ice temperature"
       },
       "measurementType": {
-        "method": "ibl#spec:regular"
+        "method": "spec:regular"
       },
-      "_verticalReference": "ibl#special_gnd-surf"
+      "_verticalReference": "special_gnd-surf"
     }
   }
 }

@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
-use crate::datasets::listing::ProvenanceOutput;
+use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
@@ -64,6 +64,7 @@ pub struct EdrDataProviderDefinition {
     #[serde(default)]
     /// List of vertical reference systems with a discrete scale
     discrete_vrs: Vec<String>,
+    provenance: Option<Vec<Provenance>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +85,7 @@ impl DataProviderDefinition for EdrDataProviderDefinition {
             client: Client::new(),
             cache_ttl: self.cache_ttl,
             discrete_vrs: self.discrete_vrs,
+            provenance: self.provenance,
         }))
     }
 
@@ -109,6 +111,7 @@ pub struct EdrDataProvider {
     cache_ttl: CacheTtlSeconds,
     /// List of vertical reference systems with a discrete scale
     discrete_vrs: Vec<String>,
+    provenance: Option<Vec<Provenance>>,
 }
 
 #[async_trait]
@@ -116,7 +119,7 @@ impl DataProvider for EdrDataProvider {
     async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             data: id.clone(),
-            provenance: None,
+            provenance: self.provenance.clone(),
         })
     }
 }
@@ -1187,7 +1190,8 @@ mod tests {
                 time: "time".to_string(),
             }),
             cache_ttl: Default::default(),
-            discrete_vrs: vec!["ibl#between-depth".to_string()],
+            discrete_vrs: vec!["between-depth".to_string()],
+            provenance: None,
         })
         .initialize()
         .await
