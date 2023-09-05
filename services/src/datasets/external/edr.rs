@@ -74,7 +74,6 @@ pub struct EdrVectorSpec {
     time: String,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for EdrDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
