@@ -266,11 +266,15 @@ where
             .map(|use_area| use_area.reproject(&area_of_use_projector))
             .transpose()?;
 
-        let Some(area_of_use_proj) = area_of_use_proj else { return Ok(None); };
+        let Some(area_of_use_proj) = area_of_use_proj else {
+            return Ok(None);
+        };
 
         let clipped_bbox = self.intersection(&area_of_use_proj);
 
-        let Some(clipped_bbox) = clipped_bbox else { return Ok(None); };
+        let Some(clipped_bbox) = clipped_bbox else {
+            return Ok(None);
+        };
 
         // project points on the bbox
         let upper_line = Line::new(clipped_bbox.upper_left(), clipped_bbox.upper_right())
@@ -456,7 +460,11 @@ pub fn reproject_query<S: AxisAlignedRectangle>(
     source: SpatialReference,
     target: SpatialReference,
 ) -> Result<Option<QueryRectangle<S>>> {
-    let (Some(s_bbox), Some(p_bbox)) = reproject_and_unify_bbox(query.spatial_bounds, target, source)? else { return Ok(None); };
+    let (Some(s_bbox), Some(p_bbox)) =
+        reproject_and_unify_bbox(query.spatial_bounds, target, source)?
+    else {
+        return Ok(None);
+    };
 
     let p_spatial_resolution =
         suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;

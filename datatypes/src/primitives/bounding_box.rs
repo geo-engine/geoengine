@@ -590,7 +590,9 @@ impl ApproxEq for BoundingBox2D {
 pub fn bboxes_extent<I: Iterator<Item = Option<BoundingBox2D>>>(
     mut bboxes: I,
 ) -> Option<BoundingBox2D> {
-    let Some(Some(mut extent)) = bboxes.next() else { return None; };
+    let Some(Some(mut extent)) = bboxes.next() else {
+        return None;
+    };
 
     for bbox in bboxes {
         if let Some(bbox) = bbox {

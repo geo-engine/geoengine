@@ -87,7 +87,7 @@ where
             .data
             .iter_mut()
             .zip(validity_mask.data.iter_mut())
-            .zip(data.data.into_iter())
+            .zip(data.data)
             .for_each(|((o, m), i)| {
                 let in_value = if *m { Some(i) } else { None };
 

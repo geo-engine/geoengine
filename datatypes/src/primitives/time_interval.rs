@@ -509,7 +509,9 @@ impl ArrowTyped for TimeInterval {
 pub fn time_interval_extent<I: Iterator<Item = Option<TimeInterval>>>(
     mut times: I,
 ) -> Option<TimeInterval> {
-    let Some(Some(mut extent)) = times.next()  else { return None; };
+    let Some(Some(mut extent)) = times.next() else {
+        return None;
+    };
 
     for time in times {
         if let Some(time) = time {

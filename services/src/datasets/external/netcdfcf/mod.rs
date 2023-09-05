@@ -66,13 +66,15 @@ mod ebvportal_provider;
 pub mod error;
 mod overviews;
 
+pub use ebvportal_provider::EbvPortalDataProviderDefinition;
+
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
 /// Singleton Provider with id `1690c483-b17f-4d98-95c8-00a64849cd0b`
 pub const NETCDF_CF_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x1690_c483_b17f_4d98_95c8_00a6_4849_cd0b);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NetCdfCfDataProviderDefinition {
     pub name: String,
@@ -90,7 +92,6 @@ pub struct NetCdfCfDataProvider {
     pub cache_ttl: CacheTtlSeconds,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for NetCdfCfDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
@@ -2241,17 +2242,17 @@ mod tests {
 
         let land_cover_dataset_id = add_land_cover_to_datasets(&ctx.db()).await;
 
-        let provider_definition: Box<dyn DataProviderDefinition> =
-            Box::new(EbvPortalDataProviderDefinition {
+        let provider_definition  =
+            EbvPortalDataProviderDefinition {
                 name: "EBV Portal".to_string(),
                 path: test_data!("netcdf4d/").into(),
                 base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
                 overviews: test_data!("netcdf4d/overviews/").into(),
                 cache_ttl: Default::default(),
-            });
+            };
 
         ctx.db()
-            .add_layer_provider(provider_definition)
+            .add_layer_provider(provider_definition.into())
             .await
             .unwrap();
 

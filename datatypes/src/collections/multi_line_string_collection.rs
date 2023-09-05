@@ -59,6 +59,7 @@ impl GeometryCollection for MultiLineStringCollection {
 }
 
 impl MultiLineStringCollection {
+    #[allow(clippy::missing_panics_doc)]
     pub fn line_string_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table

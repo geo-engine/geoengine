@@ -38,14 +38,17 @@ pub struct RoleDescription {
 }
 
 impl Role {
+    #[allow(clippy::missing_panics_doc)]
     pub fn admin_role_id() -> RoleId {
         RoleId::from_str("d5328854-6190-4af9-ad69-4e74b0961ac9").expect("valid")
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn registered_user_role_id() -> RoleId {
         RoleId::from_str("4e8081b6-8aa6-4275-af0c-2fa2da557d28").expect("valid")
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn anonymous_role_id() -> RoleId {
         RoleId::from_str("fd8e87bf-515c-4f36-8da6-1a53702ff102").expect("valid")
     }

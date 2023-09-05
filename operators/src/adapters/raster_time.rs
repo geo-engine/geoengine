@@ -1551,7 +1551,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn query_contained_in_tile_array() {
-        let no_data_value = Some(0);
+        let no_data_value = 0;
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams::<u8> {
                 data: vec![
@@ -1615,7 +1615,7 @@ mod tests {
                         time: TimeInterval::new_unchecked(4, 10),
                         tile_position: [-1, 0].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: Grid::new([3, 2].into(), vec![no_data_value.unwrap(); 6])
+                        grid_array: Grid::new([3, 2].into(), vec![no_data_value; 6])
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
@@ -1625,7 +1625,7 @@ mod tests {
                         time: TimeInterval::new_unchecked(4, 10),
                         tile_position: [-1, 1].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: Grid::new([3, 2].into(), vec![no_data_value.unwrap(); 6])
+                        grid_array: Grid::new([3, 2].into(), vec![no_data_value; 6])
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
@@ -1882,7 +1882,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn array_tiles_longer_valid_than_query() {
-        let no_data_value = Some(0);
+        let no_data_value = 0;
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams::<u8> {
                 data: vec![
@@ -1910,7 +1910,7 @@ mod tests {
                         time: TimeInterval::new_unchecked(10, 20),
                         tile_position: [-1, 0].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: Grid::new([3, 2].into(), vec![no_data_value.unwrap(); 6])
+                        grid_array: Grid::new([3, 2].into(), vec![no_data_value; 6])
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
@@ -1920,7 +1920,7 @@ mod tests {
                         time: TimeInterval::new_unchecked(10, 20),
                         tile_position: [-1, 1].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: Grid::new([3, 2].into(), vec![no_data_value.unwrap(); 6])
+                        grid_array: Grid::new([3, 2].into(), vec![no_data_value; 6])
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
@@ -1966,7 +1966,7 @@ mod tests {
                         time: TimeInterval::new_unchecked(9, 20),
                         tile_position: [-1, 0].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: Grid::new([3, 2].into(), vec![no_data_value.unwrap(); 6])
+                        grid_array: Grid::new([3, 2].into(), vec![no_data_value; 6])
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),
@@ -1976,7 +1976,7 @@ mod tests {
                         time: TimeInterval::new_unchecked(9, 20),
                         tile_position: [-1, 1].into(),
                         global_geo_transform: TestDefault::test_default(),
-                        grid_array: Grid::new([3, 2].into(), vec![no_data_value.unwrap(); 6])
+                        grid_array: Grid::new([3, 2].into(), vec![no_data_value; 6])
                             .unwrap()
                             .into(),
                         properties: RasterProperties::default(),

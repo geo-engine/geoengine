@@ -35,6 +35,7 @@ use geoengine_operators::source::{
 };
 use geoengine_operators::util::retry::retry;
 use log::debug;
+use postgres_types::{FromSql, ToSql};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
@@ -45,28 +46,28 @@ use std::path::PathBuf;
 
 static STAC_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct SentinelS2L2ACogsProviderDefinition {
-    name: String,
-    id: DataProviderId,
-    api_url: String,
-    bands: Vec<Band>,
-    zones: Vec<Zone>,
+    pub name: String,
+    pub id: DataProviderId,
+    pub api_url: String,
+    pub bands: Vec<StacBand>,
+    pub zones: Vec<StacZone>,
     #[serde(default)]
-    stac_api_retries: StacApiRetries,
+    pub stac_api_retries: StacApiRetries,
     #[serde(default)]
-    gdal_retries: GdalRetries,
+    pub gdal_retries: GdalRetries,
     #[serde(default)]
-    cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StacApiRetries {
-    number_of_retries: usize,
-    initial_delay_ms: u64,
-    exponential_backoff_factor: f64,
+    pub number_of_retries: usize,
+    pub initial_delay_ms: u64,
+    pub exponential_backoff_factor: f64,
 }
 
 impl Default for StacApiRetries {
@@ -80,11 +81,11 @@ impl Default for StacApiRetries {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalRetries {
     /// retry at most `number_of_retries` times with exponential backoff
-    number_of_retries: usize,
+    pub number_of_retries: usize,
 }
 
 impl Default for GdalRetries {
@@ -95,7 +96,6 @@ impl Default for GdalRetries {
     }
 }
 
-#[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
@@ -123,24 +123,24 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
-pub struct Band {
+pub struct StacBand {
     pub name: String,
     pub no_data_value: Option<f64>,
     pub data_type: RasterDataType,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Zone {
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, FromSql, ToSql)]
+pub struct StacZone {
     pub name: String,
     pub epsg: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SentinelDataset {
-    band: Band,
-    zone: Zone,
+    band: StacBand,
+    zone: StacZone,
     listing: Layer,
 }
 
@@ -162,8 +162,8 @@ impl SentinelS2L2aCogsDataProvider {
     pub fn new(
         id: DataProviderId,
         api_url: String,
-        bands: &[Band],
-        zones: &[Zone],
+        bands: &[StacBand],
+        zones: &[StacZone],
         stac_api_retries: StacApiRetries,
         gdal_retries: GdalRetries,
         cache_ttl: CacheTtlSeconds,
@@ -180,8 +180,8 @@ impl SentinelS2L2aCogsDataProvider {
 
     fn create_datasets(
         id: &DataProviderId,
-        bands: &[Band],
-        zones: &[Zone],
+        bands: &[StacBand],
+        zones: &[StacZone],
     ) -> HashMap<LayerId, SentinelDataset> {
         zones
             .iter()
@@ -340,8 +340,8 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
 #[derive(Debug, Clone)]
 pub struct SentinelS2L2aCogsMetaData {
     api_url: String,
-    zone: Zone,
-    band: Band,
+    zone: StacZone,
+    band: StacBand,
     stac_api_retries: StacApiRetries,
     gdal_retries: GdalRetries,
     cache_ttl: CacheTtlSeconds,
@@ -749,9 +749,17 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::BufReader, str::FromStr};
-
-    use crate::{api::model::datatypes::ExternalDataId, test_data};
+    use super::*;
+    use crate::{
+        api::model::datatypes::ExternalDataId,
+        contexts::{ApplicationContext, SessionContext},
+        layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
+        pro::{
+            layers::ProLayerProviderDb,
+            util::tests::{admin_login, with_pro_temp_context},
+        },
+        test_data,
+    };
     use futures::StreamExt;
     use geoengine_datatypes::{
         dataset::DatasetId,
@@ -771,18 +779,17 @@ mod tests {
         responders::{self},
         Expectation, Server,
     };
-
-    use super::*;
+    use std::{fs::File, io::BufReader, str::FromStr};
 
     #[tokio::test]
     async fn loading_info() -> Result<()> {
         // TODO: mock STAC endpoint
 
-        let def: Box<dyn DataProviderDefinition> = serde_json::from_reader(BufReader::new(
+        let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
             File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
-        let provider = def.initialize().await?;
+        let provider = Box::new(def).initialize().await?;
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
@@ -858,11 +865,11 @@ mod tests {
 
         let mut exe = MockExecutionContext::test_default();
 
-        let def: Box<dyn DataProviderDefinition> = serde_json::from_reader(BufReader::new(
+        let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
             File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
-        let provider = def.initialize().await?;
+        let provider = Box::new(def).initialize().await?;
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
@@ -1146,12 +1153,12 @@ mod tests {
                 name: "Element 84 AWS STAC".into(),
                 id: provider_id,
                 api_url: server.url_str("/v0/collections/sentinel-s2-l2a-cogs/items"),
-                bands: vec![Band {
+                bands: vec![StacBand {
                     name: "B04".into(),
                     no_data_value: Some(0.),
                     data_type: RasterDataType::U16,
                 }],
-                zones: vec![Zone {
+                zones: vec![StacZone {
                     name: "UTM36S".into(),
                     epsg: 32736,
                 }],
@@ -1397,5 +1404,48 @@ mod tests {
         ];
 
         assert_eq!(uts, expected_timestamps);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_adds_the_data_provider_to_the_db() {
+        with_pro_temp_context(|app_ctx, _| async move {
+            let session = admin_login(&app_ctx).await;
+            let ctx = app_ctx.session_context(session.clone());
+
+            let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
+                File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json")).unwrap(),
+            ))
+            .unwrap();
+
+            ctx.db().add_pro_layer_provider(def.into()).await.unwrap();
+
+            ctx.db()
+                .load_layer_provider(DataProviderId::from_u128(
+                    0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5,
+                ))
+                .await
+                .unwrap();
+
+            let providers = ctx
+                .db()
+                .list_layer_providers(LayerProviderListingOptions {
+                    offset: 0,
+                    limit: 2,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(providers.len(), 1);
+
+            assert_eq!(
+                providers[0],
+                LayerProviderListing {
+                    id: DataProviderId::from_u128(0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5),
+                    name: "Element 84 AWS STAC".to_owned(),
+                    description: "SentinelS2L2ACogsProviderDefinition".to_owned(),
+                }
+            );
+        })
+        .await;
     }
 }

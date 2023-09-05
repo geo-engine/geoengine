@@ -1,5 +1,5 @@
 use super::{
-    cache_chunks::{CacheElementHitCheck, CachedFeatures, LandingZoneQueryFeatures},
+    cache_chunks::{CachedFeatures, CompressedFeatureCollection, LandingZoneQueryFeatures},
     cache_tiles::{CachedTiles, CompressedRasterTile2D, LandingZoneQueryTiles},
     error::CacheError,
     util::CacheSize,
@@ -9,7 +9,6 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::Stream;
 use geoengine_datatypes::{
-    collections::FeatureCollection,
     identifier,
     primitives::{CacheHint, Geometry, RasterQueryRectangle, VectorQueryRectangle},
     raster::Pixel,
@@ -42,6 +41,7 @@ pub struct CacheBackend {
 
 impl CacheBackend {
     /// This method removes entries from the cache until it can fit the given amount of bytes.
+    #[allow(clippy::missing_panics_doc)]
     pub fn evict_until_can_fit_bytes(&mut self, bytes: usize) {
         while !self.cache_size.can_fit_bytes(bytes) {
             if let Some((pop_id, pop_key)) = self.lru.pop_lru() {
@@ -563,20 +563,19 @@ where
     }
 }
 
-impl<T> Cache<FeatureCollection<T>> for CacheBackend
+impl<T> Cache<CompressedFeatureCollection<T>> for CacheBackend
 where
     T: Geometry + ArrowTyped,
-    FeatureCollection<T>: CacheElementHitCheck
-        + CacheBackendElementExt<
-            Query = VectorQueryRectangle,
-            LandingZoneContainer = LandingZoneQueryFeatures,
-            CacheContainer = CachedFeatures,
-        >,
+    CompressedFeatureCollection<T>: CacheBackendElementExt<
+        Query = VectorQueryRectangle,
+        LandingZoneContainer = LandingZoneQueryFeatures,
+        CacheContainer = CachedFeatures,
+    >,
 {
     fn operator_cache_view_mut(
         &mut self,
         key: &CanonicOperatorName,
-    ) -> Option<OperatorCacheEntryView<FeatureCollection<T>>> {
+    ) -> Option<OperatorCacheEntryView<CompressedFeatureCollection<T>>> {
         self.vector_caches
             .get_mut(key)
             .map(|op| OperatorCacheEntryView {
@@ -604,17 +603,27 @@ impl CacheView<VectorCacheQueryEntry, VectorLandingQueryEntry> for CacheBackend 
     }
 }
 
-pub trait CacheBackendElement: ByteSize + Send + ByteSize
+pub trait CacheBackendElement: ByteSize + Send + ByteSize + Sync
 where
     Self: Sized,
 {
     type Query: CacheQueryMatch + Clone + Send + Sync;
 
+    /// Update the stored query rectangle of the cache entry.
+    /// This allows to expand the stored query rectangle to the tile bounds produced by the query.
+    ///
+    /// # Errors
+    /// This method returns an error if the stored query cannot be updated.
     fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError>;
 
+    /// This method returns the cache hint of the element.
     fn cache_hint(&self) -> CacheHint;
 
+    /// This method returns the typed canonical operator name of the element.
     fn typed_canonical_operator_name(key: CanonicOperatorName) -> TypedCanonicOperatorName;
+
+    /// This method checks if this specific element should be included in the answer of the query.
+    fn intersects_query(&self, query: &Self::Query) -> bool;
 }
 
 pub trait CacheBackendElementExt: CacheBackendElement {
@@ -779,8 +788,8 @@ impl ByteSize for CacheEntryId {}
 /// Holds all the elements for a given query and is able to answer queries that are fully contained
 #[derive(Debug, Hash)]
 pub struct CacheQueryEntry<Query, Elements> {
-    query: Query,
-    elements: Elements,
+    pub query: Query,
+    pub elements: Elements,
 }
 type RasterOperatorCacheEntry = OperatorCacheEntry<RasterCacheQueryEntry, RasterLandingQueryEntry>;
 pub type RasterCacheQueryEntry = CacheQueryEntry<RasterQueryRectangle, CachedTiles>;
@@ -860,25 +869,6 @@ pub trait CacheElementsContainer<Query, E>: CacheElementsContainerInfos<Query> {
     fn results_arc(&self) -> Option<Arc<Vec<E>>>;
 }
 
-impl CacheQueryEntry<RasterQueryRectangle, CachedTiles> {
-    /// Return true if the query can be answered in full by this cache entry
-    /// For this, the bbox and time has to be fully contained, and the spatial resolution has to match
-    pub fn matches(&self, query: &RasterQueryRectangle) -> bool {
-        self.query.spatial_bounds.contains(&query.spatial_bounds)
-            && self.query.time_interval.contains(&query.time_interval)
-            && self.query.spatial_resolution == query.spatial_resolution
-    }
-}
-
-impl From<RasterLandingQueryEntry> for RasterCacheQueryEntry {
-    fn from(value: RasterLandingQueryEntry) -> Self {
-        Self {
-            query: value.query,
-            elements: value.elements.into(),
-        }
-    }
-}
-
 impl From<VectorLandingQueryEntry> for VectorCacheQueryEntry {
     fn from(value: VectorLandingQueryEntry) -> Self {
         Self {
@@ -888,7 +878,7 @@ impl From<VectorLandingQueryEntry> for VectorCacheQueryEntry {
     }
 }
 
-pub trait CacheElement: Sized {
+pub trait CacheElement: Sized + Send + Sync {
     type StoredCacheElement: CacheBackendElementExt<Query = Self::Query>;
     type Query: CacheQueryMatch;
     type ResultStream: Stream<Item = Result<Self, CacheError>>;

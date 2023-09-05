@@ -1,3 +1,4 @@
+use super::cache_chunks::CacheElementSpatialBounds;
 use super::error::CacheError;
 use super::shared_cache::CacheElement;
 use crate::adapters::FeatureCollectionChunkMerger;
@@ -10,9 +11,11 @@ use crate::pro::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
-use futures::{ready, Stream, TryStreamExt};
-use geoengine_datatypes::collections::FeatureCollection;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, Geometry, QueryRectangle};
+use futures::{ready, Stream, StreamExt, TryStreamExt};
+use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, Geometry, QueryRectangle, VectorQueryRectangle,
+};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::{pin_project, pinned_drop};
@@ -191,7 +194,8 @@ where
             // cache hit
             log::debug!("cache hit for operator {}", self.cache_key);
 
-            let wrapped_result_steam = E::wrap_result_stream(cache_result, ctx.chunk_byte_size());
+            let wrapped_result_steam =
+                E::wrap_result_stream(cache_result, ctx.chunk_byte_size(), query);
 
             return Ok(wrapped_result_steam);
         }
@@ -353,23 +357,35 @@ trait ResultStreamWrapper: CacheElement {
     fn wrap_result_stream<'a>(
         stream: Self::ResultStream,
         chunk_byte_size: ChunkByteSize,
+        query: Self::Query,
     ) -> BoxStream<'a, Result<Self>>;
 }
 
 impl<G> ResultStreamWrapper for FeatureCollection<G>
 where
     G: Geometry + ArrowTyped + Send + Sync + 'static,
-    FeatureCollection<G>: CacheElement + Send + Sync,
+    FeatureCollection<G>:
+        CacheElement<Query = VectorQueryRectangle> + Send + Sync + CacheElementSpatialBounds,
     Self::ResultStream: FusedStream + Send + Sync,
 {
     fn wrap_result_stream<'a>(
         stream: Self::ResultStream,
         chunk_byte_size: ChunkByteSize,
+        query: Self::Query,
     ) -> BoxStream<'a, Result<Self>> {
-        Box::pin(FeatureCollectionChunkMerger::new(
-            stream.map_err(|ce| Error::CacheCantProduceResult { source: ce.into() }),
-            chunk_byte_size.into(),
-        ))
+        let filter_stream = stream.filter_map(move |result| async move {
+            result
+                .and_then(|collection| collection.filter_cache_element_entries(&query))
+                .map_err(|source| Error::CacheCantProduceResult {
+                    source: source.into(),
+                })
+                .map(|fc| if fc.is_empty() { None } else { Some(fc) })
+                .transpose()
+        });
+
+        let merger_stream =
+            FeatureCollectionChunkMerger::new(filter_stream, chunk_byte_size.into());
+        Box::pin(merger_stream)
     }
 }
 
@@ -382,6 +398,7 @@ where
     fn wrap_result_stream<'a>(
         stream: Self::ResultStream,
         _chunk_byte_size: ChunkByteSize,
+        _query: Self::Query,
     ) -> BoxStream<'a, Result<Self>> {
         Box::pin(stream.map_err(|ce| Error::CacheCantProduceResult { source: ce.into() }))
     }

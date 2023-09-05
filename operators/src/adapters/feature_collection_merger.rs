@@ -179,7 +179,10 @@ mod tests {
             .await
             .unwrap();
 
-        let TypedVectorQueryProcessor::MultiPoint(processor) = source.query_processor().unwrap() else { unreachable!(); };
+        let TypedVectorQueryProcessor::MultiPoint(processor) = source.query_processor().unwrap()
+        else {
+            unreachable!();
+        };
 
         let qrect = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
@@ -250,7 +253,9 @@ mod tests {
             .await
             .unwrap();
 
-        let TypedVectorQueryProcessor::Data(processor) = source.query_processor().unwrap() else { unreachable!(); };
+        let TypedVectorQueryProcessor::Data(processor) = source.query_processor().unwrap() else {
+            unreachable!();
+        };
 
         let qrect = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),

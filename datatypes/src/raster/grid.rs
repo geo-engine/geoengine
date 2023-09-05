@@ -311,6 +311,7 @@ where
         Ok(Self { shape, data })
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn new_filled(shape: D, fill_value: T) -> Self {
         let data = vec![fill_value; shape.number_of_elements()];
         Self::new(shape, data).expect("sizes must match")
