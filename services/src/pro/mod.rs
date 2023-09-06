@@ -15,6 +15,6 @@ pub mod util;
 pub mod workflows;
 
 // re-export test macro
-pub mod getest {
+pub mod ge_context {
     pub use geoengine_macros::pro_test as test;
 }

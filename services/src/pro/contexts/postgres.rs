@@ -525,7 +525,7 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
-    use crate::pro::getest;
+    use crate::pro::ge_context;
     use crate::pro::permissions::{Permission, PermissionDb, RoleDescription, RoleId};
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
@@ -571,7 +571,7 @@ mod tests {
     use openidconnect::SubjectIdentifier;
     use serde_json::json;
 
-    #[getest::test]
+    #[ge_context::test]
     async fn test(app_ctx: ProPostgresContext<NoTls>) {
         anonymous(&app_ctx).await;
 

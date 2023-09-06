@@ -1087,7 +1087,7 @@ mod tests {
         read_body_json, read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
     };
     use crate::util::IdResponse;
-    use crate::{getest, test_data};
+    use crate::{ge_context, test_data};
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -1410,7 +1410,7 @@ mod tests {
         }
     }
 
-    #[getest::test(tiling_spec = "ctx_tiling_spec_600x600")]
+    #[ge_context::test(tiling_spec = "ctx_tiling_spec_600x600")]
     async fn create_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 

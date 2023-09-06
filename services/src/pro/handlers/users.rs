@@ -719,7 +719,7 @@ mod tests {
 
     use crate::contexts::{Session, SessionContext};
     use crate::handlers::ErrorResponse;
-    use crate::pro::getest;
+    use crate::pro::ge_context;
     use crate::pro::util::tests::mock_oidc::{
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
     };
@@ -1354,7 +1354,7 @@ mod tests {
         })
     }
 
-    #[getest::test(oidc_db = "oidc_attr_for_test")]
+    #[ge_context::test(oidc_db = "oidc_attr_for_test")]
     async fn oidc_init(app_ctx: ProPostgresContext<NoTls>) {
         let res = oidc_init_test_helper(Method::POST, app_ctx).await;
 
@@ -1389,7 +1389,7 @@ mod tests {
         })
     }
 
-    #[getest::test(oidc_db = "oidc_bad_server")]
+    #[ge_context::test(oidc_db = "oidc_bad_server")]
     async fn oidc_illegal_provider(app_ctx: ProPostgresContext<NoTls>) {
         let res = oidc_init_test_helper(Method::POST, app_ctx).await;
 
