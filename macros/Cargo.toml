@@ -1,5 +1,5 @@
 [package]
-name = "geoengine-macros" # having a dash in the name breaks test runner codelense in rust analyzer
+name = "geoengine-macros"
 version = "0.1.0"
 edition = "2021"
 
