@@ -406,9 +406,16 @@ where
                 .await
                 .context(PostgresProjectDbError)?;
 
-            conn.query(&stmt, &[&project, &version])
+            let rows = conn
+                .query(&stmt, &[&project, &version])
                 .await
-                .context(PostgresProjectDbError)?
+                .context(PostgresProjectDbError)?;
+
+            if rows.is_empty() {
+                return Err(ProjectDbError::ProjectVersionNotFound { project, version });
+            }
+
+            rows
         } else {
             let stmt = conn
                 .prepare(
@@ -430,14 +437,17 @@ where
                 .await
                 .context(PostgresProjectDbError)?;
 
-            conn.query(&stmt, &[&project])
+            let rows = conn
+                .query(&stmt, &[&project])
                 .await
-                .context(PostgresProjectDbError)?
-        };
+                .context(PostgresProjectDbError)?;
 
-        if rows.is_empty() {
-            return Err(ProjectDbError::ProjectNotFound { project });
-        }
+            if rows.is_empty() {
+                return Err(ProjectDbError::ProjectNotFound { project });
+            }
+
+            rows
+        };
 
         let row = &rows[0];
 

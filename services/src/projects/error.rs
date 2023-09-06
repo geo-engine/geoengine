@@ -1,13 +1,18 @@
 use geoengine_datatypes::error::ErrorSource;
 use snafu::prelude::*;
 
-use super::ProjectId;
+use super::{ProjectId, ProjectVersionId};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)), context(suffix(ProjectDbError)))]
 pub enum ProjectDbError {
     #[snafu(display("Project {project} does not exist"))]
     ProjectNotFound { project: ProjectId },
+    #[snafu(display("Version {version} of project {project} does not exist"))]
+    ProjectVersionNotFound {
+        project: ProjectId,
+        version: ProjectVersionId,
+    },
     #[snafu(display("Updating project {project} failed"))]
     ProjectUpdateFailed { project: ProjectId },
     #[snafu(display("Accessing project {project} failed: {source}"))]
