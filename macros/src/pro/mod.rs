@@ -41,6 +41,7 @@ pub fn test(attr: TokenStream, item: TokenStream) -> Result<TokenStream, syn::Er
     let tiling_spec = test_config.tiling_spec();
     let query_ctx_chunk_size = test_config.query_ctx_chunk_size();
     let test_execution = test_config.test_execution();
+    let before = test_config.before();
     let quota_config = test_config.quota_config();
     let oidc_db = test_config.oidc_db();
 
@@ -54,6 +55,8 @@ pub fn test(attr: TokenStream, item: TokenStream) -> Result<TokenStream, syn::Er
             let query_ctx_chunk_size = #query_ctx_chunk_size;
             let quota_config = #quota_config;
             let (server, oidc_db) = #oidc_db.unzip();
+
+            #before;
 
             crate::pro::util::tests::with_pro_temp_context_from_spec(
                 tiling_spec,
@@ -106,6 +109,10 @@ impl ProTestConfig {
         self.test_config.test_execution()
     }
 
+    pub fn before(&self) -> TokenStream {
+        self.test_config.before()
+    }
+
     pub fn quota_config(&self) -> TokenStream {
         self.quota_config.clone().unwrap_or_else(|| {
             quote!(
@@ -149,6 +156,8 @@ mod tests {
                     .unwrap();
                 let (server, oidc_db) = None::<((), fn() -> crate::pro::users::OidcRequestDb)>.unzip();
 
+                (|| {})();
+
                 crate::pro::util::tests::with_pro_temp_context_from_spec(
                     tiling_spec,
                     query_ctx_chunk_size,
@@ -175,6 +184,7 @@ mod tests {
             tiling_spec = "foo",
             query_ctx_chunk_size = "bar",
             test_execution = "serial",
+            before = "before_fn",
             quota_config = "baz",
             oidc_db = "qux",
         };
@@ -191,6 +201,8 @@ mod tests {
                 let query_ctx_chunk_size = bar();
                 let quota_config = baz();
                 let (server, oidc_db) = Some(qux()).unzip();
+
+                before_fn();
 
                 crate::pro::util::tests::with_pro_temp_context_from_spec(
                     tiling_spec,

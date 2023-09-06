@@ -46,6 +46,7 @@ pub fn test(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     let tiling_spec = test_config.tiling_spec();
     let query_ctx_chunk_size = test_config.query_ctx_chunk_size();
     let test_execution = test_config.test_execution();
+    let before = test_config.before();
 
     let output = quote! {
         #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -55,6 +56,8 @@ pub fn test(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
 
             let tiling_spec = #tiling_spec;
             let query_ctx_chunk_size = #query_ctx_chunk_size;
+
+            #before;
 
             crate::util::tests::with_temp_context_from_spec(
                 tiling_spec,
@@ -71,6 +74,7 @@ pub struct TestConfig {
     tiling_spec: Option<TokenStream>,
     query_ctx_chunk_size: Option<TokenStream>,
     test_execution: Option<TokenStream>,
+    before: Option<TokenStream>,
 }
 
 impl TestConfig {
@@ -79,6 +83,7 @@ impl TestConfig {
             tiling_spec: None,
             query_ctx_chunk_size: None,
             test_execution: None,
+            before: None,
         };
 
         if let Some(lit) = args.remove("tiling_spec") {
@@ -109,6 +114,10 @@ impl TestConfig {
             }
         }
 
+        if let Some(lit) = args.remove("before") {
+            this.before = Some(literal_to_fn(&lit)?);
+        }
+
         Ok(this)
     }
 
@@ -128,6 +137,10 @@ impl TestConfig {
         self.test_execution
             .clone()
             .unwrap_or_else(|| quote!(#[serial_test::parallel]))
+    }
+
+    pub fn before(&self) -> TokenStream {
+        self.before.clone().unwrap_or_else(|| quote!((|| {})()))
     }
 }
 
@@ -195,6 +208,8 @@ mod tests {
                 let tiling_spec = geoengine_datatypes::util::test::TestDefault::test_default();
                 let query_ctx_chunk_size = geoengine_datatypes::util::test::TestDefault::test_default();
 
+                (|| {})();
+
                 crate::util::tests::with_temp_context_from_spec(
                     tiling_spec,
                     query_ctx_chunk_size,
@@ -228,6 +243,8 @@ mod tests {
                 let tiling_spec = geoengine_datatypes::util::test::TestDefault::test_default();
                 let query_ctx_chunk_size = geoengine_datatypes::util::test::TestDefault::test_default();
 
+                (|| {})();
+
                 crate::util::tests::with_temp_context_from_spec(
                     tiling_spec,
                     query_ctx_chunk_size,
@@ -252,6 +269,7 @@ mod tests {
             tiling_spec = "foo",
             query_ctx_chunk_size = "bar",
             test_execution = "serial",
+            before = "before_fn",
         };
 
         let expected = quote! {
@@ -264,6 +282,8 @@ mod tests {
 
                 let tiling_spec = foo();
                 let query_ctx_chunk_size = bar();
+
+                before_fn();
 
                 crate::util::tests::with_temp_context_from_spec(
                     tiling_spec,

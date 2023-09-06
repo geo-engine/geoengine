@@ -13,6 +13,7 @@ mod testing;
 /// - `tiling_spec` - a function that returns a [`geoengine_datatypes::raster::TilingSpecification`] to use for the test
 /// - `query_ctx_chunk_size` - a function that returns a [`geoengine_operators::engine::ChunkByteSize`] to use for the test
 /// - `test_execution` - `parallel` (default) or `serial`, which isolates this test from other tests
+/// - `before` - a function that is called before the context is created and the test is executed
 ///
 #[proc_macro_attribute]
 pub fn test(
@@ -34,6 +35,7 @@ pub fn test(
 /// - `tiling_spec` - a function that returns a [`geoengine_datatypes::raster::TilingSpecification`] to use for the test
 /// - `query_ctx_chunk_size` - a function that returns a [`geoengine_operators::engine::ChunkByteSize`] to use for the test
 /// - `test_execution` - `parallel` (default) or `serial`, which isolates this test from other tests
+/// - `before` - a function that is called before the context is created and the test is executed
 ///
 /// ## Pro Parameters
 ///

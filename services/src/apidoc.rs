@@ -380,6 +380,7 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ge_context;
     use crate::util::tests::send_test_request;
     use crate::util::tests::with_temp_context;
 
@@ -388,16 +389,13 @@ mod tests {
         crate::util::openapi_examples::can_resolve_api(ApiDoc::openapi());
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn can_run_examples() {
-        with_temp_context(|app_ctx, _| async move {
-            crate::util::openapi_examples::can_run_examples(
-                app_ctx,
-                ApiDoc::openapi(),
-                send_test_request,
-            )
-            .await;
-        })
+    #[ge_context::test]
+    async fn can_run_examples(app_ctx: PostgresContext<NoTls>) {
+        crate::util::openapi_examples::can_run_examples(
+            app_ctx,
+            ApiDoc::openapi(),
+            send_test_request,
+        )
         .await;
     }
 }
