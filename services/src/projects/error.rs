@@ -10,7 +10,7 @@ pub enum ProjectDbError {
     ProjectNotFound { project: ProjectId },
     #[snafu(display("Updating project {project} failed"))]
     ProjectUpdateFailed { project: ProjectId },
-    #[snafu(display("Accessing project {project} failed"))]
+    #[snafu(display("Accessing project {project} failed: {source}"))]
     AccessFailed {
         project: ProjectId,
         source: Box<dyn ErrorSource>,
