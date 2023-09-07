@@ -130,18 +130,6 @@ impl Modify for TransformSchemasWithTag {
 
             for item in items {
                 let Some(variant_tag) = Self::get_variant_tag(item, discriminator) else { continue 'outer; };
-                /*let variant_schema_name = format!(
-                    "{}With{}",
-                    Self::get_base_type_name(item).map_or_else(
-                        || format!(
-                            "{}{}",
-                            schema_name,
-                            Self::uppercase_first_letter(variant_tag)
-                        ),
-                        std::borrow::ToOwned::to_owned
-                    ),
-                    Self::uppercase_first_letter(discriminator)
-                );*/
                 let variant_schema_name = match Self::get_base_type_name(item) {
                     Some(base_type) => format!(
                         "{}With{}",
@@ -150,8 +138,8 @@ impl Modify for TransformSchemasWithTag {
                     ),
                     None => format!(
                         "{}{}",
-                        schema_name,
-                        Self::uppercase_first_letter(variant_tag)
+                        Self::uppercase_first_letter(variant_tag),
+                        schema_name
                     ),
                 };
 
