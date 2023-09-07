@@ -14,6 +14,7 @@ mod testing;
 /// - `query_ctx_chunk_size` - a function that returns a [`geoengine_operators::engine::ChunkByteSize`] to use for the test
 /// - `test_execution` - `parallel` (default) or `serial`, which isolates this test from other tests
 /// - `before` - a function that is called before the context is created and the test is executed
+/// - `expect_panic` - if the test is expected to panic
 ///
 #[proc_macro_attribute]
 pub fn test(
@@ -36,6 +37,7 @@ pub fn test(
 /// - `query_ctx_chunk_size` - a function that returns a [`geoengine_operators::engine::ChunkByteSize`] to use for the test
 /// - `test_execution` - `parallel` (default) or `serial`, which isolates this test from other tests
 /// - `before` - a function that is called before the context is created and the test is executed
+/// - `expect_panic` - if the test is expected to panic
 ///
 /// ## Pro Parameters
 ///

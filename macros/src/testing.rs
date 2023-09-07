@@ -47,9 +47,11 @@ pub fn test(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     let query_ctx_chunk_size = test_config.query_ctx_chunk_size();
     let test_execution = test_config.test_execution();
     let before = test_config.before();
+    let expect_panic = test_config.expect_panic();
 
     let output = quote! {
         #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+        #expect_panic
         #test_execution
         async fn #test_name () #test_output {
             #input
@@ -75,6 +77,7 @@ pub struct TestConfig {
     query_ctx_chunk_size: Option<TokenStream>,
     test_execution: Option<TokenStream>,
     before: Option<TokenStream>,
+    expect_panic: Option<TokenStream>,
 }
 
 impl TestConfig {
@@ -84,6 +87,7 @@ impl TestConfig {
             query_ctx_chunk_size: None,
             test_execution: None,
             before: None,
+            expect_panic: None,
         };
 
         if let Some(lit) = args.remove("tiling_spec") {
@@ -118,6 +122,21 @@ impl TestConfig {
             this.before = Some(literal_to_fn(&lit)?);
         }
 
+        if let Some(lit) = args.remove("expect_panic") {
+            let Lit::Str(lit_str) = &lit else {
+                return Err(syn::Error::new_spanned(
+                    lit,
+                    "test_execution must be a string",
+                ));
+            };
+
+            let expected_str = lit_str.value();
+
+            this.expect_panic = Some(quote!(
+                #[should_panic(expected = #expected_str)]
+            ));
+        }
+
         Ok(this)
     }
 
@@ -141,6 +160,10 @@ impl TestConfig {
 
     pub fn before(&self) -> TokenStream {
         self.before.clone().unwrap_or_else(|| quote!((|| {})()))
+    }
+
+    pub fn expect_panic(&self) -> TokenStream {
+        self.expect_panic.clone().unwrap_or_else(TokenStream::new)
     }
 }
 
@@ -270,10 +293,12 @@ mod tests {
             query_ctx_chunk_size = "bar",
             test_execution = "serial",
             before = "before_fn",
+            expect_panic = "panic!!!",
         };
 
         let expected = quote! {
             #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+            #[should_panic(expected = "panic!!!")]
             #[serial_test::serial]
             async fn it_works() {
                 async fn it_works(app_ctx: PostgresContext<NoTls>) {

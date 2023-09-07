@@ -332,21 +332,18 @@ pub(crate) async fn project_versions_handler<C: ApplicationContext>(
 mod tests {
     use super::*;
     use crate::api::model::datatypes::Colorizer;
-    use crate::contexts::{Session, SimpleApplicationContext, SimpleSession};
+    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext, SimpleSession};
     use crate::ge_context;
     use crate::handlers::ErrorResponse;
+    use crate::projects::{
+        LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,
+        ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
+    };
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
     };
     use crate::util::Identifier;
     use crate::workflows::workflow::WorkflowId;
-    use crate::{
-        contexts::PostgresContext,
-        projects::{
-            LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,
-            ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
-        },
-    };
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;

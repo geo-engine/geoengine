@@ -380,9 +380,10 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::PostgresContext;
     use crate::ge_context;
     use crate::util::tests::send_test_request;
-    use crate::util::tests::with_temp_context;
+    use tokio_postgres::NoTls;
 
     #[test]
     fn can_resolve_api() {

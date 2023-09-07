@@ -42,11 +42,13 @@ pub fn test(attr: TokenStream, item: TokenStream) -> Result<TokenStream, syn::Er
     let query_ctx_chunk_size = test_config.query_ctx_chunk_size();
     let test_execution = test_config.test_execution();
     let before = test_config.before();
+    let expect_panic = test_config.expect_panic();
     let quota_config = test_config.quota_config();
     let oidc_db = test_config.oidc_db();
 
     let output = quote! {
         #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+        #expect_panic
         #test_execution
         async fn #test_name () #test_output {
             #input
@@ -111,6 +113,10 @@ impl ProTestConfig {
 
     pub fn before(&self) -> TokenStream {
         self.test_config.before()
+    }
+
+    pub fn expect_panic(&self) -> TokenStream {
+        self.test_config.expect_panic()
     }
 
     pub fn quota_config(&self) -> TokenStream {
@@ -185,12 +191,14 @@ mod tests {
             query_ctx_chunk_size = "bar",
             test_execution = "serial",
             before = "before_fn",
+            expect_panic = "panic!!!",
             quota_config = "baz",
             oidc_db = "qux",
         };
 
         let expected = quote! {
             #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+            #[should_panic(expected = "panic!!!")]
             #[serial_test::serial]
             async fn it_works() {
                 async fn it_works(app_ctx: ProPostgresContext<NoTls>) {
