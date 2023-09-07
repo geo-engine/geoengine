@@ -410,24 +410,23 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
     use crate::pro::util::tests::send_pro_test_request;
-    use crate::pro::util::tests::with_pro_temp_context;
+    use tokio_postgres::NoTls;
 
     #[test]
     fn can_resolve_api() {
         crate::util::openapi_examples::can_resolve_api(ApiDoc::openapi());
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn can_run_examples() {
-        with_pro_temp_context(|app_ctx, _| async move {
-            crate::pro::util::openapi_examples::can_run_pro_examples(
-                app_ctx,
-                ApiDoc::openapi(),
-                send_pro_test_request,
-            )
-            .await;
-        })
+    #[ge_context::test]
+    async fn can_run_examples(app_ctx: ProPostgresContext<NoTls>) {
+        crate::pro::util::openapi_examples::can_run_pro_examples(
+            app_ctx,
+            ApiDoc::openapi(),
+            send_pro_test_request,
+        )
         .await;
     }
 }

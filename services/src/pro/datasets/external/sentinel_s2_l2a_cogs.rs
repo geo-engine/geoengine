@@ -755,8 +755,8 @@ mod tests {
         contexts::{ApplicationContext, SessionContext},
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
         pro::{
-            layers::ProLayerProviderDb,
-            util::tests::{admin_login, with_pro_temp_context},
+            contexts::ProPostgresContext, ge_context, layers::ProLayerProviderDb,
+            util::tests::admin_login,
         },
         test_data,
     };
@@ -780,6 +780,7 @@ mod tests {
         Expectation, Server,
     };
     use std::{fs::File, io::BufReader, str::FromStr};
+    use tokio_postgres::NoTls;
 
     #[tokio::test]
     async fn loading_info() -> Result<()> {
@@ -1406,46 +1407,43 @@ mod tests {
         assert_eq!(uts, expected_timestamps);
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_adds_the_data_provider_to_the_db() {
-        with_pro_temp_context(|app_ctx, _| async move {
-            let session = admin_login(&app_ctx).await;
-            let ctx = app_ctx.session_context(session.clone());
+    #[ge_context::test]
+    async fn it_adds_the_data_provider_to_the_db(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-            let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
-                File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json")).unwrap(),
+        let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
+            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json")).unwrap(),
+        ))
+        .unwrap();
+
+        ctx.db().add_pro_layer_provider(def.into()).await.unwrap();
+
+        ctx.db()
+            .load_layer_provider(DataProviderId::from_u128(
+                0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5,
             ))
+            .await
             .unwrap();
 
-            ctx.db().add_pro_layer_provider(def.into()).await.unwrap();
+        let providers = ctx
+            .db()
+            .list_layer_providers(LayerProviderListingOptions {
+                offset: 0,
+                limit: 2,
+            })
+            .await
+            .unwrap();
 
-            ctx.db()
-                .load_layer_provider(DataProviderId::from_u128(
-                    0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5,
-                ))
-                .await
-                .unwrap();
+        assert_eq!(providers.len(), 1);
 
-            let providers = ctx
-                .db()
-                .list_layer_providers(LayerProviderListingOptions {
-                    offset: 0,
-                    limit: 2,
-                })
-                .await
-                .unwrap();
-
-            assert_eq!(providers.len(), 1);
-
-            assert_eq!(
-                providers[0],
-                LayerProviderListing {
-                    id: DataProviderId::from_u128(0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5),
-                    name: "Element 84 AWS STAC".to_owned(),
-                    description: "SentinelS2L2ACogsProviderDefinition".to_owned(),
-                }
-            );
-        })
-        .await;
+        assert_eq!(
+            providers[0],
+            LayerProviderListing {
+                id: DataProviderId::from_u128(0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5),
+                name: "Element 84 AWS STAC".to_owned(),
+                description: "SentinelS2L2ACogsProviderDefinition".to_owned(),
+            }
+        );
     }
 }

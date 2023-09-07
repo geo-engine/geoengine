@@ -201,101 +201,96 @@ async fn list_upload_file_layers_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{Session, SimpleApplicationContext};
-    use crate::util::tests::with_temp_context;
+    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
+    use crate::ge_context;
     use crate::util::tests::{send_test_request, SetMultipartBody, TestDataUploads};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use tokio_postgres::NoTls;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn upload() {
+    #[ge_context::test]
+    async fn upload(app_ctx: PostgresContext<NoTls>) {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
-            let session_id = ctx.session().id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = ctx.session().id();
 
-            let body = vec![("bar.txt", "bar"), ("foo.txt", "foo")];
+        let body = vec![("bar.txt", "bar"), ("foo.txt", "foo")];
 
-            let req = test::TestRequest::post()
-                .uri("/upload")
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .set_multipart(body);
+        let req = test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_multipart(body);
 
-            let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-            assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-            let upload: IdResponse<UploadId> = test::read_body_json(res).await;
-            test_data.uploads.push(upload.id);
+        let upload: IdResponse<UploadId> = test::read_body_json(res).await;
+        test_data.uploads.push(upload.id);
 
-            let root = upload.id.root_path().unwrap();
-            assert!(root.join("foo.txt").exists() && root.join("bar.txt").exists());
+        let root = upload.id.root_path().unwrap();
+        assert!(root.join("foo.txt").exists() && root.join("bar.txt").exists());
 
-            let req = test::TestRequest::get()
-                .uri(&format!("/uploads/{}/files", upload.id))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = test::TestRequest::get()
+            .uri(&format!("/uploads/{}/files", upload.id))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-            let res = send_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
-            assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-            let mut files: UploadFilesResponse = test::read_body_json(res).await;
-            files.files.sort();
+        let mut files: UploadFilesResponse = test::read_body_json(res).await;
+        files.files.sort();
 
-            assert_eq!(
-                files.files,
-                vec!["bar.txt".to_string(), "foo.txt".to_string()]
-            );
-        })
-        .await;
+        assert_eq!(
+            files.files,
+            vec!["bar.txt".to_string(), "foo.txt".to_string()]
+        );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_lists_layers() {
+    #[ge_context::test]
+    async fn it_lists_layers(app_ctx: PostgresContext<NoTls>) {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
-            let session_id = ctx.session().id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = ctx.session().id();
 
-            let files =
-                vec![geoengine_datatypes::test_data!("vector/data/two_layers.gpkg").to_path_buf()];
+        let files =
+            vec![geoengine_datatypes::test_data!("vector/data/two_layers.gpkg").to_path_buf()];
 
-            let req = actix_web::test::TestRequest::post()
-                .uri("/upload")
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .set_multipart_files(&files);
+        let req = actix_web::test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_multipart_files(&files);
 
-            let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-            assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-            let upload: IdResponse<UploadId> = test::read_body_json(res).await;
-            test_data.uploads.push(upload.id);
+        let upload: IdResponse<UploadId> = test::read_body_json(res).await;
+        test_data.uploads.push(upload.id);
 
-            let req = test::TestRequest::get()
-                .uri(&format!(
-                    "/uploads/{}/files/two_layers.gpkg/layers",
-                    upload.id
-                ))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/uploads/{}/files/two_layers.gpkg/layers",
+                upload.id
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-            let res = send_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
-            assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-            let layers: UploadFileLayersResponse = test::read_body_json(res).await;
+        let layers: UploadFileLayersResponse = test::read_body_json(res).await;
 
-            assert_eq!(
-                layers.layers,
-                vec![
-                    "points_with_time".to_string(),
-                    "points_with_time_and_more".to_string(),
-                    "layer_styles".to_string() // TOOO: remove once internal/system layers are hidden
-                ]
-            );
-        })
-        .await;
+        assert_eq!(
+            layers.layers,
+            vec![
+                "points_with_time".to_string(),
+                "points_with_time_and_more".to_string(),
+                "layer_styles".to_string() // TOOO: remove once internal/system layers are hidden
+            ]
+        );
     }
 }
