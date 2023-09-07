@@ -1233,7 +1233,10 @@ mod tests {
 
         let sorted_collection = collection.sort_by_time_asc().unwrap();
 
-        assert!(sorted_collection.chunks_equal_ignoring_cache_hint(&expected_collection));
+        assert!(
+            sorted_collection.chunks_equal_ignoring_cache_hint(&expected_collection),
+            "expected: {expected_collection:#?}\nactual: {sorted_collection:#?}"
+        );
     }
 
     #[test]

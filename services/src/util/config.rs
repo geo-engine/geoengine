@@ -261,6 +261,11 @@ pub enum OgcDefaultTime {
 }
 
 impl OgcDefaultTime {
+    ///  # Panics
+    ///
+    /// Panics if configuration is invalid
+    /// # TODO: return result instead
+    ///
     pub fn time_interval(&self) -> TimeInterval {
         match self {
             OgcDefaultTime::Now => geoengine_datatypes::primitives::TimeInterval::new_instant(

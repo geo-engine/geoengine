@@ -38,7 +38,9 @@ where
         let wkt_array = Arc::new(arrow::array::StringArray::from(wkts));
 
         let arrow::datatypes::DataType::Struct(fields) = self.table.data_type() else {
-            unreachable!("it must be a struct because the data type of a struct is `DataType::Struct`")
+            unreachable!(
+                "it must be a struct because the data type of a struct is `DataType::Struct`"
+            )
         };
 
         let mut record_batch_fields = Vec::with_capacity(fields.len());

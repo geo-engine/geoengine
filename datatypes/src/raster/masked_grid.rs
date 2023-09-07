@@ -75,6 +75,7 @@ where
     }
 
     /// Create a new `MaskedGrid` where all pixels have the same value and are valid.
+    #[allow(clippy::missing_panics_doc)]
     pub fn new_empty(shape: D) -> Self
     where
         T: Default,

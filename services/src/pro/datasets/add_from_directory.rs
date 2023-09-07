@@ -45,12 +45,10 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
         Ok(())
     }
 
-    let dir = fs::read_dir(file_path);
-    if dir.is_err() {
+    let Ok(dir) = fs::read_dir(file_path) else {
         warn!("Skipped adding datasets from directory because it can't be read");
         return;
-    }
-    let dir = dir.expect("checked");
+    };
 
     for entry in dir {
         if let Ok(entry) = entry {

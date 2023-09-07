@@ -72,6 +72,11 @@ fn can_resolve_schema(schema: RefOr<Schema>, components: &Components) {
 
 /// Loops through all registered HTTP handlers and ensures that the referenced schemas
 /// (inside of request bodies, parameters or responses) exist and can be resolved.
+///
+/// # Panics
+///
+/// Panics if a referenced schema cannot be resolved.
+///
 pub fn can_resolve_api(api: OpenApi) {
     let components = api.components.expect("api has at least one component");
 

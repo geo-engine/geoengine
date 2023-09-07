@@ -62,12 +62,11 @@ impl PlotOperator for PieChart {
 
         match self.params {
             PieChartParams::Count { column_name, donut } => {
-                let  Some(column_measurement) = in_desc
-                    .column_measurement(&column_name) else {
-                        return Err(Error::ColumnDoesNotExist {
-                            column: column_name,
-                        });
-                    };
+                let Some(column_measurement) = in_desc.column_measurement(&column_name) else {
+                    return Err(Error::ColumnDoesNotExist {
+                        column: column_name,
+                    });
+                };
 
                 let mut column_label = column_measurement.to_string();
                 if column_label.is_empty() {

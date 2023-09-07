@@ -33,6 +33,8 @@ use snafu::ResultExt;
 use std::str::FromStr;
 use uuid::Uuid;
 
+use super::external::TypedDataProviderDefinition;
+
 /// delete all collections without parent collection
 async fn _remove_collections_without_parent_collection(
     transaction: &tokio_postgres::Transaction<'_>,
@@ -616,7 +618,7 @@ where
 {
     async fn add_layer_provider(
         &self,
-        provider: Box<dyn DataProviderDefinition>,
+        provider: TypedDataProviderDefinition,
     ) -> Result<DataProviderId> {
         let conn = self.conn_pool.get().await?;
 
@@ -636,12 +638,7 @@ where
         let id = provider.id();
         conn.execute(
             &stmt,
-            &[
-                &id,
-                &provider.type_name(),
-                &provider.name(),
-                &serde_json::to_value(provider)?,
-            ],
+            &[&id, &provider.type_name(), &provider.name(), &provider],
         )
         .await?;
         Ok(id)
@@ -704,8 +701,8 @@ where
 
         let row = conn.query_one(&stmt, &[&id]).await?;
 
-        let definition = serde_json::from_value::<Box<dyn DataProviderDefinition>>(row.get(0))?;
+        let definition: TypedDataProviderDefinition = row.get(0);
 
-        definition.initialize().await
+        Box::new(definition).initialize().await
     }
 }

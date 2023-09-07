@@ -1,5 +1,6 @@
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use futures::future::BoxFuture;
+use futures_util::TryStreamExt;
 use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::util::abortable_query_execution;
@@ -22,7 +23,6 @@ use crate::util::config::get_config_element;
 use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
-use futures::StreamExt;
 use geoengine_datatypes::collections::ToGeoJson;
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
@@ -605,32 +605,23 @@ where
     let stream = processor.query(query_rect, &query_ctx).await?;
 
     let future: BoxFuture<geoengine_operators::util::Result<(Vec<serde_json::Value>, CacheHint)>> =
-        Box::pin(stream.fold(
-            geoengine_operators::util::Result::<(Vec<serde_json::Value>, CacheHint)>::Ok((
-                features,
-                CacheHint::max_duration(),
-            )),
-            |output, collection| async move {
-                match (output, collection) {
-                    (Ok((mut output, mut cache_hint)), Ok(collection)) => {
-                        // TODO: avoid parsing the generated json
-                        let mut json: serde_json::Value =
-                            serde_json::from_str(&collection.to_geo_json())
-                                .expect("to_geojson is correct");
-                        let more_features = json
-                            .get_mut("features")
-                            .expect("to_geojson is correct")
-                            .as_array_mut()
-                            .expect("to geojson is correct");
+        Box::pin(stream.try_fold(
+            (features, CacheHint::max_duration()),
+            |(mut output, mut cache_hint), collection| async move {
+                // TODO: avoid parsing the generated json
+                let mut json: serde_json::Value =
+                    serde_json::from_str(&collection.to_geo_json()).expect("to_geojson is correct");
+                let more_features = json
+                    .get_mut("features")
+                    .expect("to_geojson is correct")
+                    .as_array_mut()
+                    .expect("to geojson is correct");
 
-                        output.append(more_features);
+                output.append(more_features);
 
-                        cache_hint.merge_with(&collection.cache_hint);
+                cache_hint.merge_with(&collection.cache_hint);
 
-                        Ok((output, cache_hint))
-                    }
-                    (Err(error), _) | (_, Err(error)) => Err(error),
-                }
+                Ok((output, cache_hint))
             },
         ));
 

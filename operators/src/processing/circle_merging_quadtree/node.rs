@@ -69,7 +69,7 @@ impl Node {
                 ]);
 
                 'circle: for circle in std::mem::take(&mut self.circles) {
-                    for section in link.iter_mut() {
+                    for section in &mut *link {
                         if section
                             .rectangle
                             .contains(&circle.circle.buffer(epsilon_distance))
@@ -137,7 +137,7 @@ impl Node {
         epsilon_distance: f64,
         max_items_per_node: usize,
     ) -> Result<TryResult, CircleOfPoints> {
-        for section in quad.iter_mut() {
+        for section in quad {
             if section
                 .rectangle
                 .contains(&new_circle.circle.buffer(epsilon_distance))

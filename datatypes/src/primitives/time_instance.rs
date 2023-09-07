@@ -36,6 +36,7 @@ impl TimeInstance {
         TimeInstance(millis)
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn as_datetime_string(self) -> String {
         let instance = self.clamp(TimeInstance::MIN, TimeInstance::MAX);
 
@@ -45,6 +46,7 @@ impl TimeInstance {
             .to_datetime_string()
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn as_datetime_string_with_millis(self) -> String {
         let instance = self.clamp(TimeInstance::MIN, TimeInstance::MAX);
 

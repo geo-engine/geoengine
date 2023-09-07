@@ -348,15 +348,17 @@ impl Colorizer {
     /// Creates a color table of `number_of_colors` colors
     /// This must only be called for colorizers that use breakpoints
     fn color_table(&self, number_of_colors: usize, min: f64, max: f64) -> Vec<RgbaColor> {
-        let (Self::LinearGradient {breakpoints, .. } | Self::LogarithmicGradient { breakpoints, .. }) = self else {
-                // return empty color table for potential wrong usage
+        let (Self::LinearGradient { breakpoints, .. }
+        | Self::LogarithmicGradient { breakpoints, .. }) = self
+        else {
+            // return empty color table for potential wrong usage
 
-                debug_assert!(
-                    false,
-                    "Must never call `color_table` for types without breakpoints"
-                );
+            debug_assert!(
+                false,
+                "Must never call `color_table` for types without breakpoints"
+            );
 
-                return Vec::new();
+            return Vec::new();
         };
 
         let smallest_breakpoint_value = *breakpoints[0].value;
@@ -415,6 +417,7 @@ impl Colorizer {
     /// evenly between the new `min` and `max` values and uses the original colors.
     ///
     /// Returns an error if the type of colorizer is not gradient
+    #[allow(clippy::missing_panics_doc)]
     pub fn rescale(&self, min: f64, max: f64) -> Result<Self> {
         ensure!(min < max, error::MinMustBeSmallerThanMax { min, max });
 

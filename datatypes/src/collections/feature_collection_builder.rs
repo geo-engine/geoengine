@@ -157,7 +157,7 @@ where
         // also checks that column exists
         let (Some(data_builder), Some(column_type)) =
             (self.builders.get_mut(column), self.types.get(column))
-         else {
+        else {
             return Err(FeatureCollectionError::ColumnDoesNotExist {
                 name: column.to_string(),
             }
@@ -228,6 +228,7 @@ where
     }
 
     /// Append a null to `column` if possible
+    #[allow(clippy::missing_panics_doc)]
     pub fn push_null(&mut self, column: &str) -> Result<()> {
         // also checks that column exists
         let Some(data_builder) = self.builders.get_mut(column) else {
@@ -372,6 +373,7 @@ where
     ///
     /// This call fails if the lengths of the columns do not match the number of times `finish_row()` was called.
     ///
+    #[allow(clippy::missing_panics_doc)]
     pub fn build(mut self) -> Result<FeatureCollection<CollectionType>> {
         for builder in self
             .builders

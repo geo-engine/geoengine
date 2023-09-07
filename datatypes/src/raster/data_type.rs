@@ -1,13 +1,13 @@
+use super::{GridShape2D, GridShape3D};
 use crate::error::{self, Error};
 use crate::operations::image::RgbaTransmutable;
 use crate::raster::TypedRasterConversion;
 use crate::util::Result;
 use gdal::raster::GdalDataType;
 use num_traits::{AsPrimitive, Bounded, Num};
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-
-use super::{GridShape2D, GridShape3D};
 
 /// A collection of required traits for a pixel type
 pub trait Pixel:
@@ -141,7 +141,9 @@ impl Pixel for i64 {}
 impl Pixel for f32 {}
 impl Pixel for f64 {}
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone)]
+#[derive(
+    Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, FromSql, ToSql,
+)]
 pub enum RasterDataType {
     U8,
     U16,

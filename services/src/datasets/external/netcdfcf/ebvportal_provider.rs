@@ -36,7 +36,7 @@ use super::{
 pub const EBV_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x77d0_bf11_986e_43f5_b11d_8983_21f1_854c);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EbvPortalDataProviderDefinition {
     pub name: String,
@@ -54,7 +54,6 @@ pub struct EbvPortalDataProvider {
     pub netcdf_cf_provider: NetCdfCfDataProvider,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for EbvPortalDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
