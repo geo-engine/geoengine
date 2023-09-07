@@ -2240,14 +2240,13 @@ mod tests {
 
         let land_cover_dataset_id = add_land_cover_to_datasets(&ctx.db()).await;
 
-        let provider_definition  =
-            EbvPortalDataProviderDefinition {
-                name: "EBV Portal".to_string(),
-                path: test_data!("netcdf4d/").into(),
-                base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
-                overviews: test_data!("netcdf4d/overviews/").into(),
-                cache_ttl: Default::default(),
-            };
+        let provider_definition = EbvPortalDataProviderDefinition {
+            name: "EBV Portal".to_string(),
+            path: test_data!("netcdf4d/").into(),
+            base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
+            overviews: test_data!("netcdf4d/overviews/").into(),
+            cache_ttl: Default::default(),
+        };
 
         ctx.db()
             .add_layer_provider(provider_definition.into())
@@ -2304,7 +2303,9 @@ mod tests {
             .await
             .unwrap();
 
-        let TypedPlotQueryProcessor::JsonVega(processor) = initialized_operator.query_processor().unwrap() else {
+        let TypedPlotQueryProcessor::JsonVega(processor) =
+            initialized_operator.query_processor().unwrap()
+        else {
             panic!("wrong plot type");
         };
 
