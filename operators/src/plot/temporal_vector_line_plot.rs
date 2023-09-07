@@ -8,7 +8,7 @@ use crate::engine::{QueryProcessor, VectorColumnInfo};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::StreamExt;
+use futures::TryStreamExt;
 use geoengine_datatypes::primitives::{FeatureDataType, VectorQueryRectangle};
 use geoengine_datatypes::{
     collections::FeatureCollection,
@@ -173,30 +173,25 @@ where
             .features
             .query(query, ctx)
             .await?
-            .fold(Ok(values), |acc, features| async {
-                match (acc, features) {
-                    (Ok(mut acc), Ok(features)) => {
-                        let ids = features.data(&self.params.id_column)?;
-                        let values = features.data(&self.params.value_column)?;
+            .try_fold(values, |mut acc, features| async move {
+                let ids = features.data(&self.params.id_column)?;
+                let values = features.data(&self.params.value_column)?;
 
-                        for ((id, value), &time) in ids
-                            .strings_iter()
-                            .zip(values.float_options_iter())
-                            .zip(features.time_intervals())
-                        {
-                            if id.is_empty() || value.is_none() {
-                                continue;
-                            }
-
-                            let value = value.expect("checked above");
-
-                            acc.add(id, (time, value));
-                        }
-
-                        Ok(acc)
+                for ((id, value), &time) in ids
+                    .strings_iter()
+                    .zip(values.float_options_iter())
+                    .zip(features.time_intervals())
+                {
+                    if id.is_empty() || value.is_none() {
+                        continue;
                     }
-                    (Err(err), _) | (_, Err(err)) => Err(err),
+
+                    let value = value.expect("checked above");
+
+                    acc.add(id, (time, value));
                 }
+
+                Ok(acc)
             })
             .await?;
 

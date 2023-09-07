@@ -222,7 +222,7 @@ where
     }
 
     // TODO: return Result with SparseTilesFillAdapterError and map it to Error in the poll_next method if possible
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::missing_panics_doc)]
     pub fn next_step(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,

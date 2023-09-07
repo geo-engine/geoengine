@@ -9,7 +9,7 @@ edition = "2021"
 pro = []
 
 [dependencies]
-arrow = { version = "45.0", features = [
+arrow = { version = "45.0", features = [ # wait for https://github.com/apache/arrow-rs/issues/4746 to update
     "ipc_compression",
     # TODO: activate SIMD when stable
 ] }
@@ -17,7 +17,7 @@ async-trait = "0.1"
 bytes = "1.0" # for postgres-types impls
 chrono = "0.4"
 float-cmp = "0.9"
-gdal = "0.15"
+gdal = "0.16"
 geo-types = "0.7"
 geo = "0.26"
 geojson = "0.24"

@@ -167,6 +167,7 @@ where
 }
 
 /// Parse wcs 1.1.1 bbox, format is: "x1,y1,x2,y2,crs", crs format is like `urn:ogc:def:crs:EPSG::4326`
+#[allow(clippy::missing_panics_doc)]
 pub fn parse_wcs_bbox<'de, D>(deserializer: D) -> Result<WcsBoundingbox, D::Error>
 where
     D: serde::Deserializer<'de>,

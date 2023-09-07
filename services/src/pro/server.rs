@@ -216,17 +216,9 @@ async fn start_postgres(
 ) -> Result<()> {
     {
         let db_config = config::get_config_element::<config::Postgres>()?;
-        let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
-        pg_config
-            .user(&db_config.user)
-            .password(&db_config.password)
-            .host(&db_config.host)
-            .dbname(&db_config.database)
-            // fix schema by providing `search_path` option
-            .options(&format!("-c search_path={}", db_config.schema));
 
         let ctx = ProPostgresContext::new_with_data(
-            pg_config,
+            bb8_postgres::tokio_postgres::Config::from(db_config),
             NoTls,
             data_path_config.dataset_defs_path,
             data_path_config.provider_defs_path,

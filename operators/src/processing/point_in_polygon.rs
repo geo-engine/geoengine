@@ -281,26 +281,31 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                         .polygons
                         .query(query, ctx)
                         .await?
-                        .fold(
-                            Result::<(BooleanArray, CacheHint)>::Ok((
-                                initial_filter,
-                                CacheHint::max_duration(),
-                            )),
-                            |acc, polygons| async {
-                                let (filter, mut cache_hint) = acc?;
-                                let polygons = polygons?;
+                        .try_fold(
+                            (initial_filter, CacheHint::max_duration()),
+                            |acc, polygons| {
+                                let arc_points = arc_points.clone();
+                                async move {
+                                    let (filter, mut cache_hint) = acc;
+                                    let polygons = polygons;
 
-                                cache_hint.merge_with(&polygons.cache_hint);
+                                    cache_hint.merge_with(&polygons.cache_hint);
 
-                                if polygons.is_empty() {
-                                    return Ok((filter, cache_hint));
-                                }
+                                    if polygons.is_empty() {
+                                        return Ok((filter, cache_hint));
+                                    }
 
-                                Ok((
-                                    Self::filter_points(ctx, arc_points.clone(), polygons, &filter)
+                                    Ok((
+                                        Self::filter_points(
+                                            ctx,
+                                            arc_points.clone(),
+                                            polygons,
+                                            &filter,
+                                        )
                                         .await?,
-                                    cache_hint,
-                                ))
+                                        cache_hint,
+                                    ))
+                                }
                             },
                         )
                         .await?;
