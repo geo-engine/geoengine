@@ -51,27 +51,27 @@ fn init_is_filetype_raster() -> HashMap<&'static str, bool> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EdrDataProviderDefinition {
-    name: String,
-    id: DataProviderId,
+    pub name: String,
+    pub id: DataProviderId,
     #[serde(deserialize_with = "deserialize_base_url")]
-    base_url: Url,
-    vector_spec: Option<EdrVectorSpec>,
+    pub base_url: Url,
+    pub vector_spec: Option<EdrVectorSpec>,
     #[serde(default)]
-    cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: CacheTtlSeconds,
     #[serde(default)]
     /// List of vertical reference systems with a discrete scale
-    discrete_vrs: Vec<String>,
-    provenance: Option<Vec<Provenance>>,
+    pub discrete_vrs: Vec<String>,
+    pub provenance: Option<Vec<Provenance>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EdrVectorSpec {
-    x: String,
-    y: Option<String>,
-    time: String,
+    pub x: String,
+    pub y: Option<String>,
+    pub time: String,
 }
 
 #[async_trait]
