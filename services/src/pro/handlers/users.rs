@@ -1147,15 +1147,11 @@ mod tests {
 
     #[ge_context::test(test_execution = "serial")]
     async fn it_disables_anonymous_access(app_ctx: ProPostgresContext<NoTls>) {
-        // with_pro_temp_context(|app_ctx, _| async move {
         let req = test::TestRequest::post().uri("/anonymous");
         let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
-        // })
-        // .await;
 
-        // with_pro_temp_context(|app_ctx, _| async move {
         config::set_config("session.anonymous_access", false).unwrap();
 
         let req = test::TestRequest::post().uri("/anonymous");
@@ -1170,13 +1166,10 @@ mod tests {
             "Authorization error: Anonymous access is disabled, please log in",
         )
         .await;
-        // })
-        // .await;
     }
 
     #[ge_context::test(test_execution = "serial")]
     async fn it_disables_user_registration(app_ctx: ProPostgresContext<NoTls>) {
-        // with_pro_temp_context(|app_ctx, _| async move {
         let user_reg = UserRegistration {
             email: "foo@example.com".to_owned(),
             password: "secret123".to_owned(),
@@ -1192,10 +1185,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         config::set_config("user.user_registration", false).unwrap();
-        // })
-        // .await;
 
-        // with_pro_temp_context(|app_ctx, _| async move {
         let user_reg = UserRegistration {
             email: "foo@example.com".to_owned(),
             password: "secret123".to_owned(),
@@ -1217,8 +1207,6 @@ mod tests {
             "User registration is disabled",
         )
         .await;
-        // })
-        // .await;
     }
 
     const MOCK_CLIENT_ID: &str = "";
