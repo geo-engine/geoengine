@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use actix_web::{web, FromRequest, Responder};
+use snafu::ensure;
 
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
@@ -44,6 +45,8 @@ pub async fn ml_model_from_workflow_handler<C: ProApplicationContext>(
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: MlModelDb,
 {
+    ensure!(session.is_admin(), crate::error::AccessDenied);
+
     let ctx = Arc::new(app_ctx.session_context(session));
 
     let task_id = schedule_ml_model_training_task(ctx, info.into_inner()).await?;
