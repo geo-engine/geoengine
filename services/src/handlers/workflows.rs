@@ -244,7 +244,7 @@ async fn workflow_metadata<C: SessionContext>(
     get,
     path = "/workflow/{id}/provenance",
     responses(
-        (status = 200, description = "Provenance of used datasets", body = [ProvenanceOutput],
+        (status = 200, description = "Provenance of used datasets", body = [ProvenanceEntry],
             example = json!([{"dataset": {"type": "internal", "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"}, "provenance": {"citation": "Author, Dataset Tile", "license": "Some license", "uri": "http://example.org/"}}, {"dataset": {"type": "internal", "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"}, "provenance": {"citation": "Another Author, Another Dataset Tile", "license": "Some other license", "uri": "http://example.org/"}}])
         )
     ),
@@ -269,8 +269,8 @@ async fn get_workflow_provenance_handler<C: ApplicationContext>(
     Ok(web::Json(provenance))
 }
 
-#[derive(Serialize)]
-struct ProvenanceEntry {
+#[derive(Serialize, ToSchema)]
+pub struct ProvenanceEntry {
     provenance: Provenance,
     data: Vec<DataId>,
 }

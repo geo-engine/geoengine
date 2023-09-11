@@ -39,7 +39,7 @@ use crate::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
 use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
 use crate::handlers::wms::MapResponse;
-use crate::handlers::workflows::RasterStreamWebsocketResultType;
+use crate::handlers::workflows::{RasterStreamWebsocketResultType, ProvenanceEntry};
 use crate::handlers::ErrorResponse;
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
@@ -193,6 +193,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
 
             ProvenanceOutput,
             Provenance,
+            ProvenanceEntry,
 
             VectorDataType,
             FeatureDataType,
