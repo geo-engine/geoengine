@@ -57,6 +57,8 @@ jobs:
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
+      - name: Install latest nextest release
+        uses: taiki-e/install-action@nextest
       - name: setup rust build cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -94,7 +96,7 @@ jobs:
       - name: Check with SQLFluff
         run: sqlfluff lint
       - name: Run tests
-        run: cargo test ${{ matrix.features }} ${{ matrix.build }} --verbose
+        run: cargo nextest run ${{ matrix.features }} ${{ matrix.build }} --verbose
 
   build:
     runs-on: ${{matrix.os}}
