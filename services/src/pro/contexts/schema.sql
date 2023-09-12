@@ -1,3 +1,48 @@
+CREATE TYPE "StacBand" AS (
+    "name" text,
+    no_data_value double precision,
+    data_type "RasterDataType"
+);
+
+CREATE TYPE "StacZone" AS (
+    "name" text,
+    epsg oid
+);
+
+CREATE TYPE "StacApiRetries" AS (
+    number_of_retries bigint,
+    initial_delay_ms bigint,
+    exponential_backoff_factor double precision
+);
+
+CREATE TYPE "GdalRetries" AS (
+    number_of_retries bigint
+);
+
+CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
+    "name" text,
+    id uuid,
+    api_url text,
+    bands "StacBand" [],
+    zones "StacZone" [],
+    stac_api_retries "StacApiRetries",
+    gdal_retries "GdalRetries",
+    cache_ttl int
+);
+
+CREATE TYPE "ProDataProviderDefinition" AS (
+    -- one of
+    sentinel_s2_l2_a_cogs_provider_definition
+    "SentinelS2L2ACogsProviderDefinition"
+);
+
+CREATE TABLE pro_layer_providers (
+    id uuid PRIMARY KEY,
+    type_name text NOT NULL,
+    name text NOT NULL,
+    definition "ProDataProviderDefinition" NOT NULL
+);
+
 -- TODO: distinguish between roles that are (correspond to) users 
 --       and roles that are not
 

@@ -239,7 +239,7 @@ where
     Ok(tiles)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
 pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: RasterQueryRectangle,
@@ -315,7 +315,7 @@ where
     Ok(result)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
 pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
     file_path: &Path,
     processor: Box<dyn RasterQueryProcessor<RasterType = P>>,
@@ -1657,7 +1657,7 @@ mod tests {
 
         let base_start_time = DateTime::new_utc(2020, 7, 30, 11, 50, 1);
 
-        let time_steps = vec![
+        let time_steps = [
             Duration::days(365),
             Duration::days(31),
             Duration::days(1),

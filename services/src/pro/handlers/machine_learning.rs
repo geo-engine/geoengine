@@ -63,14 +63,17 @@ mod tests {
         engine::QueryProcessor,
         pro::machine_learning::xgboost::{XgboostOperator, XgboostParams},
     };
+    use tokio_postgres::NoTls;
 
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
     use crate::pro::machine_learning::ModelType::XGBoost;
     use crate::pro::machine_learning::{
         MachineLearningAggregator, TrainingParams, XgboostTrainingParams,
     };
+    use crate::pro::users::UserCredentials;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::TaskStatus;
-    use crate::util::config::get_config_element;
     use crate::util::tests::read_body_string;
     use crate::workflows::workflow::Workflow;
     use actix_web::{http::header, test};
@@ -91,20 +94,13 @@ mod tests {
         crate::pro::machine_learning::MachineLearningModelFromWorkflowResult,
         geoengine_datatypes::primitives::{BoundingBox2D, QueryRectangle, VectorQueryRectangle},
         geoengine_operators::engine::WorkflowOperatorPath,
-        serial_test::serial,
         std::collections::HashMap,
         std::path::PathBuf,
         tokio::{fs::File, io::AsyncReadExt},
     };
 
     use crate::{
-        pro::{
-            users::UserAuth,
-            util::{
-                config::Quota,
-                tests::{send_pro_test_request, with_pro_temp_context_from_spec},
-            },
-        },
+        pro::{users::UserAuth, util::tests::send_pro_test_request},
         tasks::TaskManager,
     };
 
@@ -162,154 +158,154 @@ mod tests {
         }
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[serial]
-    async fn ml_model_from_workflow_task_success() {
+    fn create_dataset_tiling_specification() -> TilingSpecification {
+        TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: geoengine_datatypes::raster::GridShape2D::new([4, 2]),
+        }
+    }
+
+    #[ge_context::test(tiling_spec = "create_dataset_tiling_specification")]
+    #[allow(clippy::too_many_lines)]
+    async fn ml_model_from_workflow_task_success(app_ctx: ProPostgresContext<NoTls>) {
         use crate::pro::machine_learning::TrainingParams::Xgboost;
 
-        let exe_ctx_tiling_spec = TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
-            tile_size_in_pixels: GridShape::new([4, 2]),
+        let session = app_ctx
+            .login(UserCredentials {
+                email: "admin@localhost".into(),
+                password: "admin".into(),
+            })
+            .await
+            .unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id;
+
+        let tile_size_in_pixels = [4, 2].into();
+
+        let src_a = generate_raster_test_data_band_helper(
+            vec![vec![1, 2, 3, 4, 5, 6, 7, 8]],
+            tile_size_in_pixels,
+        );
+        let src_b = generate_raster_test_data_band_helper(
+            vec![vec![9, 10, 11, 12, 13, 14, 15, 16]],
+            tile_size_in_pixels,
+        );
+        let src_target = generate_raster_test_data_band_helper(
+            vec![vec![0, 1, 2, 2, 2, 1, 0, 0]],
+            tile_size_in_pixels,
+        );
+
+        let mut training_config: HashMap<String, String> = HashMap::new();
+
+        training_config.insert("refresh_leaf".into(), "true".into());
+        training_config.insert("tree_method".into(), "hist".into());
+        training_config.insert("objective".into(), "multi:softmax".into());
+        training_config.insert("eta".into(), "0.75".into());
+        training_config.insert("num_class".into(), "4".into());
+        training_config.insert("max_depth".into(), "10".into());
+
+        let workflow_a = Workflow {
+            operator: src_a.boxed().into(),
         };
 
-        with_pro_temp_context_from_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-            get_config_element::<Quota>().unwrap(),
-            |app_ctx, _| async move {
-                let session = app_ctx.create_anonymous_session().await.unwrap();
-                let ctx = app_ctx.session_context(session.clone());
+        let workflow_b = Workflow {
+            operator: src_b.boxed().into(),
+        };
 
-                let session_id = session.id;
+        let workflow_target = Workflow {
+            operator: src_target.boxed().into(),
+        };
 
-                let tile_size_in_pixels = [4, 2].into();
+        let spatial_bounds: geoengine_datatypes::primitives::BoundingBox2D =
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
 
-                let src_a = generate_raster_test_data_band_helper(
-                    vec![vec![1, 2, 3, 4, 5, 6, 7, 8]],
-                    tile_size_in_pixels,
-                );
-                let src_b = generate_raster_test_data_band_helper(
-                    vec![vec![9, 10, 11, 12, 13, 14, 15, 16]],
-                    tile_size_in_pixels,
-                );
-                let src_target = generate_raster_test_data_band_helper(
-                    vec![vec![0, 1, 2, 2, 2, 1, 0, 0]],
-                    tile_size_in_pixels,
-                );
-
-                let mut training_config: HashMap<String, String> = HashMap::new();
-
-                training_config.insert("refresh_leaf".into(), "true".into());
-                training_config.insert("tree_method".into(), "hist".into());
-                training_config.insert("objective".into(), "multi:softmax".into());
-                training_config.insert("eta".into(), "0.75".into());
-                training_config.insert("num_class".into(), "4".into());
-                training_config.insert("max_depth".into(), "10".into());
-
-                let workflow_a = Workflow {
-                    operator: src_a.boxed().into(),
-                };
-
-                let workflow_b = Workflow {
-                    operator: src_b.boxed().into(),
-                };
-
-                let workflow_target = Workflow {
-                    operator: src_target.boxed().into(),
-                };
-
-                let spatial_bounds: geoengine_datatypes::primitives::BoundingBox2D =
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
-
-                let time_interval = TimeInterval::new_instant(
-                    geoengine_datatypes::primitives::DateTime::new_utc(2013, 12, 1, 12, 0, 0),
-                )
-                .unwrap();
-
-                let spatial_resolution = SpatialResolution::one();
-
-                let qry: QueryRectangle<BoundingBox2D> = VectorQueryRectangle {
-                    spatial_bounds,
-                    time_interval,
-                    spatial_resolution,
-                };
-
-                let xg_train = crate::pro::machine_learning::MLTrainRequest {
-                    query: qry,
-                    params: Xgboost(XgboostTrainingParams {
-                        no_data_value: -1_000.,
-                        training_config,
-                        feature_names: vec![Some("a".into()), Some("b".into())],
-                        label_names: vec![Some("target".into())],
-                        aggregate_variant: MachineLearningAggregator::Simple,
-                        memory_limit: Some(1024),
-                    }),
-                    input_workflows: vec![workflow_a, workflow_b],
-                    label_workflows: vec![workflow_target],
-                    model_type: XGBoost,
-                };
-
-                let req = test::TestRequest::post()
-                    .uri("/ml/train")
-                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                    .set_json(xg_train);
-
-                let res = send_pro_test_request(req, app_ctx.clone()).await;
-
-                assert_eq!(res.status(), 200, "{:?}", res.response());
-
-                let task_response =
-                    serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
-
-                let tasks = Arc::new(ctx.tasks());
-
-                wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
-
-                let status = tasks.get_task_status(task_response.task_id).await.unwrap();
-
-                let response = if let TaskStatus::Completed { info, .. } = status {
-                    info.as_any_arc()
-                        .downcast::<MachineLearningModelFromWorkflowResult>()
-                        .unwrap()
-                        .as_ref()
-                        .clone()
-                } else {
-                    panic!("Task must be completed");
-                };
-
-                let model_id = response.model_id;
-
-                // now use the model_id to get the model content for testing
-                let exe_ctx = ctx.execution_context().unwrap();
-                let ml_model_access = exe_ctx.extensions().get::<MlModelAccess>().unwrap();
-                let model = ml_model_access.load_ml_model_by_id(model_id).await.unwrap();
-
-                // get the content of the reference model on disk to compare against
-                let test_model_path = PathBuf::from(geoengine_datatypes::test_data!(
-                    "pro/ml/xgboost/reference_test_model.json"
-                ));
-
-                let mut test_model_bytes: Vec<u8> = Vec::new();
-                let mut f = File::open(test_model_path)
-                    .await
-                    .expect("Unable to open file of test model");
-                f.read_to_end(&mut test_model_bytes)
-                    .await
-                    .expect("Could not read file of test model");
-
-                // check that the returned model is as expected
-                assert_eq!(&test_model_bytes as &[u8], model.to_string().as_bytes());
-
-                // also check, that the model (which was written after training) to disk is as expected
-                let model_from_disk = ml_model_access
-                    .load_ml_model_by_id(model_id)
-                    .await
-                    .expect("Could not read specified ml model from disk");
-
-                assert_eq!(&test_model_bytes as &[u8], model_from_disk.as_bytes());
-            },
+        let time_interval = TimeInterval::new_instant(
+            geoengine_datatypes::primitives::DateTime::new_utc(2013, 12, 1, 12, 0, 0),
         )
-        .await;
+        .unwrap();
+
+        let spatial_resolution = SpatialResolution::one();
+
+        let qry: QueryRectangle<BoundingBox2D> = VectorQueryRectangle {
+            spatial_bounds,
+            time_interval,
+            spatial_resolution,
+        };
+
+        let xg_train = crate::pro::machine_learning::MLTrainRequest {
+            query: qry,
+            params: Xgboost(XgboostTrainingParams {
+                no_data_value: -1_000.,
+                training_config,
+                feature_names: vec![Some("a".into()), Some("b".into())],
+                label_names: vec![Some("target".into())],
+                aggregate_variant: MachineLearningAggregator::Simple,
+                memory_limit: Some(1024),
+            }),
+            input_workflows: vec![workflow_a, workflow_b],
+            label_workflows: vec![workflow_target],
+            model_type: XGBoost,
+        };
+
+        let req = test::TestRequest::post()
+            .uri("/ml/train")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(xg_train);
+
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        let tasks = Arc::new(ctx.tasks());
+
+        wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
+
+        let status = tasks.get_task_status(task_response.task_id).await.unwrap();
+
+        let response = if let TaskStatus::Completed { info, .. } = status {
+            info.as_any_arc()
+                .downcast::<MachineLearningModelFromWorkflowResult>()
+                .unwrap()
+                .as_ref()
+                .clone()
+        } else {
+            panic!("Task must be completed");
+        };
+
+        let model_id = response.model_id;
+
+        // now use the model_id to get the model content for testing
+        let exe_ctx = ctx.execution_context().unwrap();
+        let ml_model_access = exe_ctx.extensions().get::<MlModelAccess>().unwrap();
+        let model = ml_model_access.load_ml_model_by_id(model_id).await.unwrap();
+
+        // get the content of the reference model on disk to compare against
+        let test_model_path = PathBuf::from(geoengine_datatypes::test_data!(
+            "pro/ml/xgboost/reference_test_model.json"
+        ));
+
+        let mut test_model_bytes: Vec<u8> = Vec::new();
+        let mut f = File::open(test_model_path)
+            .await
+            .expect("Unable to open file of test model");
+        f.read_to_end(&mut test_model_bytes)
+            .await
+            .expect("Could not read file of test model");
+
+        // check that the returned model is as expected
+        assert_eq!(&test_model_bytes as &[u8], model.to_string().as_bytes());
+
+        // also check, that the model (which was written after training) to disk is as expected
+        let model_from_disk = ml_model_access
+            .load_ml_model_by_id(model_id)
+            .await
+            .expect("Could not read specified ml model from disk");
+
+        assert_eq!(&test_model_bytes as &[u8], model_from_disk.as_bytes());
     }
 
     /// Helper method to prepare a `MLTrainRequest` struct.
@@ -590,218 +586,217 @@ mod tests {
         }
     }
 
+    fn create_dataset_tiling_specification_5x5() -> TilingSpecification {
+        TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: geoengine_datatypes::raster::GridShape2D::new([5, 5]),
+        }
+    }
+
+    #[ge_context::test(tiling_spec = "create_dataset_tiling_specification_5x5")]
     #[allow(clippy::too_many_lines)]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn complete_train_predict_cycle() {
+    async fn complete_train_predict_cycle(app_ctx: ProPostgresContext<NoTls>) {
         // -----------------------------------------------------
         // Training Phase
         // -----------------------------------------------------
 
-        let exe_ctx_tiling_spec = TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
-            tile_size_in_pixels: GridShape::new([5, 5]),
+        let session = app_ctx
+            .login(UserCredentials {
+                email: "admin@localhost".into(),
+                password: "admin".into(),
+            })
+            .await
+            .unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id;
+
+        // this generates the training config + the training data
+        // and puts it in the request struct
+        let xg_train: MLTrainRequest = generate_ml_train_request();
+
+        let req = test::TestRequest::post()
+            .uri("/ml/train")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(xg_train);
+
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        let tasks = Arc::new(ctx.tasks());
+
+        wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
+
+        let status = tasks.get_task_status(task_response.task_id).await.unwrap();
+
+        let response = if let TaskStatus::Completed { info, .. } = status {
+            info.as_any_arc()
+                .downcast::<MachineLearningModelFromWorkflowResult>()
+                .unwrap()
+                .as_ref()
+                .clone()
+        } else {
+            panic!("Task must be completed");
         };
 
-        with_pro_temp_context_from_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-            get_config_element::<Quota>().unwrap(),
-            |app_ctx, _| async move {
-                let session = app_ctx.create_anonymous_session().await.unwrap();
-                let ctx = app_ctx.session_context(session.clone());
+        let exe_ctx = ctx.execution_context().unwrap();
 
-                let session_id = session.id;
+        // -----------------------------------------------------
+        // Prediction Phase
+        // -----------------------------------------------------
 
-                // this generates the training config + the training data
-                // and puts it in the request struct
-                let xg_train: MLTrainRequest = generate_ml_train_request();
-
-                let req = test::TestRequest::post()
-                    .uri("/ml/train")
-                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                    .set_json(xg_train);
-
-                let res = send_pro_test_request(req, app_ctx.clone()).await;
-
-                assert_eq!(res.status(), 200, "{:?}", res.response());
-
-                let task_response =
-                    serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
-
-                let tasks = Arc::new(ctx.tasks());
-
-                wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
-
-                let status = tasks.get_task_status(task_response.task_id).await.unwrap();
-
-                let response = if let TaskStatus::Completed { info, .. } = status {
-                    info.as_any_arc()
-                        .downcast::<MachineLearningModelFromWorkflowResult>()
-                        .unwrap()
-                        .as_ref()
-                        .clone()
-                } else {
-                    panic!("Task must be completed");
-                };
-
-                let exe_ctx = ctx.execution_context().unwrap();
-
-                // -----------------------------------------------------
-                // Prediction Phase
-                // -----------------------------------------------------
-
-                let red = generate_raster_test_data_band_helper(
-                    vec![
-                        vec![
-                            0, 0, 0, 0, 0, //
-                            0, 0, 0, 0, 0, //
-                            0, 0, 0, 0, 0, //
-                            0, 0, 0, 0, 0, //
-                            0, 0, 0, 0, 0, //
-                        ],
-                        vec![
-                            0, 0, 0, 0, 0, //
-                            0, 0, 0, 0, 0, //
-                            0, 0, 0, 0, 0, //
-                            0, 0, 0, 0, 0, //
-                            0, 0, 0, 0, 0, //
-                        ],
-                    ],
-                    [5, 5].into(),
-                )
-                .boxed();
-
-                let green = generate_raster_test_data_band_helper(
-                    vec![
-                        vec![
-                            255, 255, 255, 255, 255, //
-                            255, 0, 0, 0, 255, //
-                            255, 0, 0, 0, 255, //
-                            255, 0, 0, 0, 255, //
-                            255, 255, 255, 255, 255, //
-                        ],
-                        vec![
-                            0, 0, 255, 255, 255, //
-                            0, 0, 255, 0, 0, //
-                            0, 0, 0, 0, 0, //
-                            0, 0, 255, 0, 0, //
-                            255, 255, 255, 0, 0, //
-                        ],
-                    ],
-                    [5, 5].into(),
-                )
-                .boxed();
-
-                let blue = generate_raster_test_data_band_helper(
-                    vec![
-                        vec![
-                            0, 0, 0, 0, 0, //
-                            0, 0, 255, 0, 0, //
-                            0, 255, 255, 255, 0, //
-                            0, 0, 255, 0, 0, //
-                            0, 0, 0, 0, 0, //
-                        ],
-                        vec![
-                            0, 255, 0, 0, 0, //
-                            255, 0, 0, 255, 255, //
-                            255, 255, 0, 255, 255, //
-                            255, 255, 0, 0, 255, //
-                            0, 0, 0, 255, 0, //
-                        ],
-                    ],
-                    [5, 5].into(),
-                )
-                .boxed();
-
-                let temperature = generate_raster_test_data_band_helper(
-                    vec![
-                        vec![
-                            15, 15, 15, 15, 15, //
-                            15, 30, 5, 30, 15, //
-                            15, 5, 5, 5, 15, //
-                            15, 30, 5, 30, 15, //
-                            15, 15, 15, 15, 15, //
-                        ],
-                        vec![
-                            30, 5, 15, 15, 15, //
-                            5, 30, 15, 5, 5, //
-                            5, 5, 30, 5, 5, //
-                            5, 5, 15, 30, 5, //
-                            15, 15, 15, 5, 30, //
-                        ],
-                    ],
-                    [5, 5].into(),
-                )
-                .boxed();
-
-                let srcs = vec![red, green, blue, temperature];
-
-                let xg = XgboostOperator {
-                    params: XgboostParams {
-                        model_id: response.model_id,
-                        no_data_value: -1000.,
-                    },
-                    sources: MultipleRasterSources { rasters: srcs },
-                };
-
-                let op = RasterOperator::boxed(xg)
-                    .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-                    .await
-                    .unwrap();
-
-                let processor = op.query_processor().unwrap().get_f32().unwrap();
-
-                let query_rect = RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                };
-
-                let query_ctx = ctx.query_context().unwrap();
-
-                // geoengine_operators::engine::QueryProcessor::query(&processor, query_rect, &query_ctx)
-                let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
-
-                let result: Vec<Result<RasterTile2D<f32>>> = result_stream.collect().await;
-                let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
-
-                let mut all_pixels = Vec::new();
-
-                for tile in result {
-                    let data_of_tile = tile.into_materialized_tile().grid_array.inner_grid.data;
-                    for pixel in &data_of_tile {
-                        all_pixels.push(pixel.round());
-                    }
-                }
-
-                // expected result tiles
-                //    tile 1      ||      tile 2
-                // --------------------------------
-                // 1, 1, 1, 1, 1  ||  0, 2, 1, 1, 1
-                // 1, 0, 2, 0, 1  ||  2, 0, 1, 2, 2
-                // 1, 2, 2, 2, 1  ||  2, 2, 0, 2, 2
-                // 1, 0, 2, 0, 1  ||  2, 2, 1, 0, 2
-                // 1, 1, 1, 1, 1  ||  1, 1, 1, 2, 0
-
-                let expected = vec![
-                    // tile 1
-                    1.0, 1.0, 1.0, 1.0, 1.0, //
-                    1.0, 0.0, 2.0, 0.0, 1.0, //
-                    1.0, 2.0, 2.0, 2.0, 1.0, //
-                    1.0, 0.0, 2.0, 0.0, 1.0, //
-                    1.0, 1.0, 1.0, 1.0, 1.0, //
-                    // tile 2
-                    0.0, 2.0, 1.0, 1.0, 1.0, //
-                    2.0, 0.0, 1.0, 2.0, 2.0, //
-                    2.0, 2.0, 0.0, 2.0, 2.0, //
-                    2.0, 2.0, 1.0, 0.0, 2.0, //
-                    1.0, 1.0, 1.0, 2.0, 0.0, //
-                ];
-
-                assert_eq!(all_pixels, expected);
-            },
+        let red = generate_raster_test_data_band_helper(
+            vec![
+                vec![
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                ],
+                vec![
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                ],
+            ],
+            [5, 5].into(),
         )
-        .await;
+        .boxed();
+
+        let green = generate_raster_test_data_band_helper(
+            vec![
+                vec![
+                    255, 255, 255, 255, 255, //
+                    255, 0, 0, 0, 255, //
+                    255, 0, 0, 0, 255, //
+                    255, 0, 0, 0, 255, //
+                    255, 255, 255, 255, 255, //
+                ],
+                vec![
+                    0, 0, 255, 255, 255, //
+                    0, 0, 255, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                    0, 0, 255, 0, 0, //
+                    255, 255, 255, 0, 0, //
+                ],
+            ],
+            [5, 5].into(),
+        )
+        .boxed();
+
+        let blue = generate_raster_test_data_band_helper(
+            vec![
+                vec![
+                    0, 0, 0, 0, 0, //
+                    0, 0, 255, 0, 0, //
+                    0, 255, 255, 255, 0, //
+                    0, 0, 255, 0, 0, //
+                    0, 0, 0, 0, 0, //
+                ],
+                vec![
+                    0, 255, 0, 0, 0, //
+                    255, 0, 0, 255, 255, //
+                    255, 255, 0, 255, 255, //
+                    255, 255, 0, 0, 255, //
+                    0, 0, 0, 255, 0, //
+                ],
+            ],
+            [5, 5].into(),
+        )
+        .boxed();
+
+        let temperature = generate_raster_test_data_band_helper(
+            vec![
+                vec![
+                    15, 15, 15, 15, 15, //
+                    15, 30, 5, 30, 15, //
+                    15, 5, 5, 5, 15, //
+                    15, 30, 5, 30, 15, //
+                    15, 15, 15, 15, 15, //
+                ],
+                vec![
+                    30, 5, 15, 15, 15, //
+                    5, 30, 15, 5, 5, //
+                    5, 5, 30, 5, 5, //
+                    5, 5, 15, 30, 5, //
+                    15, 15, 15, 5, 30, //
+                ],
+            ],
+            [5, 5].into(),
+        )
+        .boxed();
+
+        let srcs = vec![red, green, blue, temperature];
+
+        let xg = XgboostOperator {
+            params: XgboostParams {
+                model_id: response.model_id,
+                no_data_value: -1000.,
+            },
+            sources: MultipleRasterSources { rasters: srcs },
+        };
+
+        let op = RasterOperator::boxed(xg)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let processor = op.query_processor().unwrap().get_f32().unwrap();
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let query_ctx = ctx.query_context().unwrap();
+
+        // geoengine_operators::engine::QueryProcessor::query(&processor, query_rect, &query_ctx)
+        let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
+
+        let result: Vec<Result<RasterTile2D<f32>>> = result_stream.collect().await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        let mut all_pixels = Vec::new();
+
+        for tile in result {
+            let data_of_tile = tile.into_materialized_tile().grid_array.inner_grid.data;
+            for pixel in &data_of_tile {
+                all_pixels.push(pixel.round());
+            }
+        }
+
+        // expected result tiles
+        //    tile 1      ||      tile 2
+        // --------------------------------
+        // 1, 1, 1, 1, 1  ||  0, 2, 1, 1, 1
+        // 1, 0, 2, 0, 1  ||  2, 0, 1, 2, 2
+        // 1, 2, 2, 2, 1  ||  2, 2, 0, 2, 2
+        // 1, 0, 2, 0, 1  ||  2, 2, 1, 0, 2
+        // 1, 1, 1, 1, 1  ||  1, 1, 1, 2, 0
+
+        let expected = vec![
+            // tile 1
+            1.0, 1.0, 1.0, 1.0, 1.0, //
+            1.0, 0.0, 2.0, 0.0, 1.0, //
+            1.0, 2.0, 2.0, 2.0, 1.0, //
+            1.0, 0.0, 2.0, 0.0, 1.0, //
+            1.0, 1.0, 1.0, 1.0, 1.0, //
+            // tile 2
+            0.0, 2.0, 1.0, 1.0, 1.0, //
+            2.0, 0.0, 1.0, 2.0, 2.0, //
+            2.0, 2.0, 0.0, 2.0, 2.0, //
+            2.0, 2.0, 1.0, 0.0, 2.0, //
+            1.0, 1.0, 1.0, 2.0, 0.0, //
+        ];
+
+        assert_eq!(all_pixels, expected);
     }
 }

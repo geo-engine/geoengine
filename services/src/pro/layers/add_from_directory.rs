@@ -1,13 +1,6 @@
-use std::{
-    collections::HashMap,
-    ffi::OsStr,
-    fs::{self, DirEntry, File},
-    io::BufReader,
-    path::PathBuf,
-};
-
-use crate::layers::storage::LayerDb;
+use super::ProLayerProviderDb;
 use crate::{error::Result, layers::listing::LayerCollectionId};
+use crate::{layers::storage::LayerDb, pro::datasets::TypedProDataProviderDefinition};
 use crate::{
     layers::{
         add_from_directory::UNSORTED_COLLECTION_ID,
@@ -16,8 +9,14 @@ use crate::{
     },
     pro::permissions::{Permission, PermissionDb, Role},
 };
-
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
+use std::{
+    collections::HashMap,
+    ffi::OsStr,
+    fs::{self, DirEntry, File},
+    io::BufReader,
+    path::PathBuf,
+};
 
 pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, file_path: PathBuf) {
     async fn add_layer_from_dir_entry<L: LayerDb + PermissionDb>(
@@ -54,12 +53,10 @@ pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, fi
         Ok(())
     }
 
-    let dir = fs::read_dir(file_path);
-    if dir.is_err() {
+    let Ok(dir) = fs::read_dir(file_path) else {
         warn!("Skipped adding layers from directory because it can't be read");
         return;
-    }
-    let dir = dir.expect("checked");
+    };
 
     for entry in dir {
         match entry {
@@ -80,6 +77,11 @@ pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, fi
     }
 }
 
+///
+/// # Panics
+///
+/// Panics if root collection cannot be resolved
+///
 pub async fn add_layer_collections_from_directory<
     L: LayerDb + LayerCollectionProvider + PermissionDb,
 >(
@@ -127,12 +129,10 @@ pub async fn add_layer_collections_from_directory<
         Ok(())
     }
 
-    let dir = fs::read_dir(file_path);
-    if dir.is_err() {
+    let Ok(dir) = fs::read_dir(file_path) else {
         warn!("Skipped adding layer collections from directory because it can't be read");
         return;
-    }
-    let dir = dir.expect("checked");
+    };
 
     let mut collection_defs = vec![];
 
@@ -189,6 +189,53 @@ pub async fn add_layer_collections_from_directory<
 
             if let Err(e) = op {
                 warn!("Skipped adding child collection to db: {}", e);
+            }
+        }
+    }
+}
+
+pub async fn add_pro_providers_from_directory<D: ProLayerProviderDb>(
+    db: &mut D,
+    base_path: PathBuf,
+) {
+    async fn add_provider_definition_from_dir_entry<D: ProLayerProviderDb>(
+        db: &mut D,
+        entry: &DirEntry,
+    ) -> Result<()> {
+        let def: TypedProDataProviderDefinition =
+            serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
+
+        db.add_pro_layer_provider(def).await?; // TODO: add as system user
+        Ok(())
+    }
+
+    let Ok(dir) = fs::read_dir(&base_path) else {
+        error!(
+            "Skipped adding pro providers from directory `{:?}` because it can't be read",
+            base_path
+        );
+        return;
+    };
+
+    for entry in dir {
+        match entry {
+            Ok(entry) if entry.path().is_file() => {
+                match add_provider_definition_from_dir_entry(db, &entry).await {
+                    Ok(_) => info!("Added pro provider from file `{:?}`", entry.path()),
+                    Err(e) => {
+                        warn!(
+                            "Skipped adding pro provider from file `{:?}` error: `{}`",
+                            entry.path(),
+                            e.to_string()
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Skipped adding pro provider from directory entry `{:?}`", e);
+            }
+            _ => {
+                // ignore directories, etc.
             }
         }
     }

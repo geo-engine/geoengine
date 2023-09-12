@@ -460,7 +460,7 @@ mod tests {
         builder.set_default_time_intervals();
 
         let numbers = vec![1., 2., 3., 4.];
-        let nulls = vec![true, false, true, true];
+        let nulls = [true, false, true, true];
 
         let value_buffer = Buffer::from(numbers.as_slice().to_byte_slice());
 
