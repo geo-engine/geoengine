@@ -506,6 +506,7 @@ where
         TestDefault::test_default(),
         TestDefault::test_default(),
         get_config_element::<Quota>().unwrap(),
+        None::<fn() -> OidcRequestDb>,
         f,
     )
     .await
@@ -521,6 +522,7 @@ pub async fn with_pro_temp_context_from_spec<F, Fut, R>(
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
     quota_config: Quota,
+    oidc_db: Option<impl FnOnce() -> OidcRequestDb + std::panic::UnwindSafe + Send + 'static>,
     f: F,
 ) -> R
 where
@@ -544,6 +546,7 @@ where
                         exe_ctx_tiling_spec,
                         query_ctx_chunk_size,
                         quota_config,
+                        oidc_db.map(|oidc_db| oidc_db()),
                     )
                     .await
                     .unwrap();

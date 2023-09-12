@@ -1,3 +1,4 @@
+mod db_types;
 mod postgres;
 
 use std::str::FromStr;
@@ -385,89 +386,77 @@ impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    use geoengine_datatypes::test_data;
-    use serial_test::serial;
-
-    use crate::contexts::SimpleApplicationContext;
-    use crate::util::tests::with_temp_context;
+    use crate::contexts::{PostgresContext, SimpleApplicationContext};
+    use crate::ge_context;
     use crate::{contexts::SessionContext, util::config::set_config};
+    use geoengine_datatypes::test_data;
+    use std::path::PathBuf;
+    use tokio_postgres::NoTls;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[serial]
-    async fn read_model_test() {
-        with_temp_context(|app_ctx, _| async move {
-            let cfg = get_config_element::<crate::util::config::MachineLearning>().unwrap();
-            let cfg_backup = &cfg.model_defs_path;
+    #[ge_context::test(test_execution = "serial")]
+    async fn read_model_test(app_ctx: PostgresContext<NoTls>) {
+        let cfg = get_config_element::<crate::util::config::MachineLearning>().unwrap();
+        let cfg_backup = &cfg.model_defs_path;
 
-            set_config(
-                "machinelearning.model_defs_path",
-                test_data!("pro/ml").to_str().unwrap(),
-            )
-            .unwrap();
-            let ctx =app_ctx
-                .default_session_context()
-                .await
-                .unwrap();
+        set_config(
+            "machinelearning.model_defs_path",
+            test_data!("pro/ml").to_str().unwrap(),
+        )
+        .unwrap();
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let exe_ctx = ctx.execution_context().unwrap();
+        let exe_ctx = ctx.execution_context().unwrap();
 
-            let model_path = PathBuf::from("xgboost/s2_10m_de_marburg/model.json");
-            let mut model = exe_ctx.read_ml_model(model_path).await.unwrap();
+        let model_path = PathBuf::from("xgboost/s2_10m_de_marburg/model.json");
+        let mut model = exe_ctx.read_ml_model(model_path).await.unwrap();
 
-            let actual: String = model.drain(0..277).collect();
+        let actual: String = model.drain(0..277).collect();
 
-            set_config(
-                "machinelearning.model_defs_path",
-                cfg_backup.to_str().unwrap(),
-            )
-            .unwrap();
+        set_config(
+            "machinelearning.model_defs_path",
+            cfg_backup.to_str().unwrap(),
+        )
+        .unwrap();
 
-            let expected = "{\"learner\":{\"attributes\":{},\"feature_names\":[],\"feature_types\":[],\"gradient_booster\":{\"model\":{\"gbtree_model_param\":{\"num_parallel_tree\":\"1\",\"num_trees\":\"16\",\"size_leaf_vector\":\"0\"},\"tree_info\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"trees\":[{\"base_weights\":[5.192308E-1,9.722222E-1";
+        let expected = "{\"learner\":{\"attributes\":{},\"feature_names\":[],\"feature_types\":[],\"gradient_booster\":{\"model\":{\"gbtree_model_param\":{\"num_parallel_tree\":\"1\",\"num_trees\":\"16\",\"size_leaf_vector\":\"0\"},\"tree_info\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"trees\":[{\"base_weights\":[5.192308E-1,9.722222E-1";
 
-            assert_eq!(actual, expected);
-        }).await;
+        assert_eq!(actual, expected);
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[serial]
-    async fn write_model_test() {
-        with_temp_context(|app_ctx, _| async move {
-            let cfg = get_config_element::<crate::util::config::MachineLearning>().unwrap();
-            let cfg_backup = cfg.model_defs_path;
+    #[ge_context::test(test_execution = "serial")]
+    async fn write_model_test(app_ctx: PostgresContext<NoTls>) {
+        let cfg = get_config_element::<crate::util::config::MachineLearning>().unwrap();
+        let cfg_backup = cfg.model_defs_path;
 
-            let tmp_dir = tempfile::tempdir().unwrap();
-            let tmp_path = tmp_dir.path();
-            std::fs::create_dir_all(tmp_path.join("pro/ml/xgboost")).unwrap();
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        std::fs::create_dir_all(tmp_path.join("pro/ml/xgboost")).unwrap();
 
-            let temp_ml_path = tmp_path.join("pro/ml").to_str().unwrap().to_string();
+        let temp_ml_path = tmp_path.join("pro/ml").to_str().unwrap().to_string();
 
-            set_config("machinelearning.model_defs_path", temp_ml_path).unwrap();
+        set_config("machinelearning.model_defs_path", temp_ml_path).unwrap();
 
-            let ctx = app_ctx.default_session_context().await.unwrap();
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let mut exe_ctx = ctx.execution_context().unwrap();
+        let mut exe_ctx = ctx.execution_context().unwrap();
 
-            let model_path = PathBuf::from("xgboost/model.json");
+        let model_path = PathBuf::from("xgboost/model.json");
 
-            exe_ctx
-                .write_ml_model(model_path, String::from("model content"))
-                .await
-                .unwrap();
-
-            set_config(
-                "machinelearning.model_defs_path",
-                cfg_backup.to_str().unwrap(),
-            )
+        exe_ctx
+            .write_ml_model(model_path, String::from("model content"))
+            .await
             .unwrap();
 
-            let actual = tokio::fs::read_to_string(tmp_path.join("pro/ml/xgboost/model.json"))
-                .await
-                .unwrap();
+        set_config(
+            "machinelearning.model_defs_path",
+            cfg_backup.to_str().unwrap(),
+        )
+        .unwrap();
 
-            assert_eq!(actual, "model content");
-        })
-        .await;
+        let actual = tokio::fs::read_to_string(tmp_path.join("pro/ml/xgboost/model.json"))
+            .await
+            .unwrap();
+
+        assert_eq!(actual, "model content");
     }
 }

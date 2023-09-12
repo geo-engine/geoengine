@@ -1,8 +1,8 @@
 use arrow::array::{
-    downcast_array, Array, ArrayData, BooleanArray, Date64Array, Date64Builder,
+    downcast_array, Array, ArrayData, AsArray, BooleanArray, Date64Array, Date64Builder,
     FixedSizeBinaryBuilder, FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder,
-    Int32Array, Int32Builder, ListArray, ListBuilder, StringArray, StringBuilder, StructBuilder,
-    UInt64Array, UInt64Builder,
+    Int32Array, Int32Builder, Int64Builder, ListArray, ListBuilder, StringArray, StringBuilder,
+    StructBuilder, UInt64Array, UInt64Builder,
 };
 use arrow::buffer::Buffer;
 use arrow::compute::gt_eq_scalar;
@@ -703,4 +703,46 @@ fn gt_eq_example() {
     // dbg!(&b);
 
     assert_eq!(&b, &BooleanArray::from(vec![Some(false), Some(true), None]));
+}
+
+#[test]
+fn sort_example() {
+    let a = {
+        let mut builder = FixedSizeListBuilder::new(Int64Builder::new(), 2);
+
+        for value in [[1, 5], [0, 3], [1, 3]] {
+            builder.values().append_slice(&value);
+            builder.append(true);
+        }
+
+        builder.finish()
+    };
+
+    // dbg!(&a);
+
+    let sort_options = Some(arrow::compute::SortOptions {
+        descending: false,
+        nulls_first: false,
+    });
+
+    let sort_indices = arrow::compute::sort_to_indices(&a, sort_options, None).unwrap();
+
+    let array_ref = arrow::compute::take(&a, &sort_indices, None).unwrap();
+
+    let b: &FixedSizeListArray = array_ref.as_fixed_size_list();
+
+    // dbg!(&b);
+
+    let c = {
+        let mut builder = FixedSizeListBuilder::new(Int64Builder::new(), 2);
+
+        for value in [[0, 3], [1, 3], [1, 5]] {
+            builder.values().append_slice(&value);
+            builder.append(true);
+        }
+
+        builder.finish()
+    };
+
+    assert_eq!(b, &c);
 }

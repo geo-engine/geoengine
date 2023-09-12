@@ -586,8 +586,8 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvRemoveOverviewTask<C> {
 mod tests {
 
     use super::*;
-
-    use crate::util::tests::with_temp_context;
+    use crate::contexts::PostgresContext;
+    use crate::ge_context;
     use crate::{
         contexts::SimpleApplicationContext,
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
@@ -600,6 +600,7 @@ mod tests {
     use geoengine_datatypes::test_data;
     use serde_json::json;
     use std::path::Path;
+    use tokio_postgres::NoTls;
 
     async fn send_test_request<C: SimpleApplicationContext>(
         req: test::TestRequest,
@@ -625,161 +626,161 @@ mod tests {
             .map_into_boxed_body()
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_remove_overviews() {
+    #[ge_context::test]
+    async fn test_remove_overviews(app_ctx: PostgresContext<NoTls>) {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }
 
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let overview_folder = tempfile::tempdir().unwrap();
+        let overview_folder = tempfile::tempdir().unwrap();
 
-            ctx.db()
-                .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
+        ctx.db()
+            .add_layer_provider(
+                NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
                     path: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
                     cache_ttl: Default::default(),
-                }))
-                .await
-                .unwrap();
-
-            let req = actix_web::test::TestRequest::put()
-                .uri("/ebv/overviews/dataset_m.nc")
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-
-            let res = send_test_request(req, app_ctx.clone()).await;
-
-            assert_eq!(res.status(), 200, "{:?}", res.response());
-
-            let task_response =
-                serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
-
-            let tasks = Arc::new(ctx.tasks());
-
-            wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
-
-            let status = tasks.get_task_status(task_response.task_id).await.unwrap();
-
-            let mut response = if let TaskStatus::Completed { info, .. } = status {
-                info.as_any_arc()
-                    .downcast::<NetCdfCfOverviewResponse>()
-                    .unwrap()
-                    .as_ref()
-                    .clone()
-            } else {
-                panic!("Task must be completed");
-            };
-
-            response.success.sort();
-            assert_eq!(
-                response,
-                NetCdfCfOverviewResponse {
-                    success: vec!["dataset_m.nc".into()],
-                    skip: vec![],
-                    error: vec![],
                 }
-            );
+                .into(),
+            )
+            .await
+            .unwrap();
 
-            // Now, delete the overviews
+        let req = actix_web::test::TestRequest::put()
+            .uri("/ebv/overviews/dataset_m.nc")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-            let req = actix_web::test::TestRequest::delete()
-                .uri("/ebv/overviews/dataset_m.nc")
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-            let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200, "{:?}", res.response());
 
-            assert_eq!(res.status(), 200, "{:?}", res.response());
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-            let task_response =
-                serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+        let tasks = Arc::new(ctx.tasks());
 
-            wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
+        wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
 
-            let status = tasks.get_task_status(task_response.task_id).await.unwrap();
-            let status = serde_json::to_value(status).unwrap();
+        let status = tasks.get_task_status(task_response.task_id).await.unwrap();
 
-            assert_eq!(status["status"], json!("completed"));
-            assert_eq!(status["info"], json!(null));
-            assert_eq!(status["timeTotal"], json!("00:00:00"));
-            assert!(status["timeStarted"].is_string());
+        let mut response = if let TaskStatus::Completed { info, .. } = status {
+            info.as_any_arc()
+                .downcast::<NetCdfCfOverviewResponse>()
+                .unwrap()
+                .as_ref()
+                .clone()
+        } else {
+            panic!("Task must be completed");
+        };
 
-            assert!(is_empty(overview_folder.path()));
-        })
-        .await;
+        response.success.sort();
+        assert_eq!(
+            response,
+            NetCdfCfOverviewResponse {
+                success: vec!["dataset_m.nc".into()],
+                skip: vec![],
+                error: vec![],
+            }
+        );
+
+        // Now, delete the overviews
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri("/ebv/overviews/dataset_m.nc")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
+
+        let status = tasks.get_task_status(task_response.task_id).await.unwrap();
+        let status = serde_json::to_value(status).unwrap();
+
+        assert_eq!(status["status"], json!("completed"));
+        assert_eq!(status["info"], json!(null));
+        assert_eq!(status["timeTotal"], json!("00:00:00"));
+        assert!(status["timeStarted"].is_string());
+
+        assert!(is_empty(overview_folder.path()));
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_remove_overviews_non_existing() {
-        // setup
-
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
-            let session_id = app_ctx.default_session_id().await;
-
-            let overview_folder = tempfile::tempdir().unwrap();
-
-            ctx.db()
-                .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
-                    name: "test".to_string(),
-                    path: test_data!("netcdf4d").to_path_buf(),
-                    overviews: overview_folder.path().to_path_buf(),
-                    cache_ttl: Default::default(),
-                }))
-                .await
-                .unwrap();
-
-            // remove overviews that don't exist
-
-            let req = actix_web::test::TestRequest::delete()
-                .uri("/ebv/overviews/path%2Fto%2Fdataset.nc?force=true")
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-
-            let res = send_test_request(req, app_ctx.clone()).await;
-
-            assert_eq!(res.status(), 200, "{:?}", res.response());
-
-            let task_response =
-                serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
-
-            let tasks = Arc::new(ctx.tasks());
-
-            wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
-
-            let status = tasks.get_task_status(task_response.task_id).await.unwrap();
-            let status = serde_json::to_value(status).unwrap();
-
-            assert_eq!(status["status"], json!("completed"));
-            assert_eq!(status["info"], json!(null));
-            assert_eq!(status["timeTotal"], json!("00:00:00"));
-            assert!(status["timeStarted"].is_string());
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_create_non_existing_overview() {
-        fn is_empty(directory: &Path) -> bool {
-            directory.read_dir().unwrap().next().is_none()
-        }
-
-        with_temp_context(|app_ctx, _| async move {
+    #[ge_context::test]
+    async fn test_remove_overviews_non_existing(app_ctx: PostgresContext<NoTls>) {
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
         let overview_folder = tempfile::tempdir().unwrap();
 
         ctx.db()
-            .add_layer_provider(Box::new(NetCdfCfDataProviderDefinition {
-                name: "test".to_string(),
-                path: test_data!("netcdf4d").to_path_buf(),
-                overviews: overview_folder.path().to_path_buf(),
-                cache_ttl: Default::default(),
-            }))
+            .add_layer_provider(
+                NetCdfCfDataProviderDefinition {
+                    name: "test".to_string(),
+                    path: test_data!("netcdf4d").to_path_buf(),
+                    overviews: overview_folder.path().to_path_buf(),
+                    cache_ttl: Default::default(),
+                }
+                .into(),
+            )
+            .await
+            .unwrap();
+
+        // remove overviews that don't exist
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri("/ebv/overviews/path%2Fto%2Fdataset.nc?force=true")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        let tasks = Arc::new(ctx.tasks());
+
+        wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
+
+        let status = tasks.get_task_status(task_response.task_id).await.unwrap();
+        let status = serde_json::to_value(status).unwrap();
+
+        assert_eq!(status["status"], json!("completed"));
+        assert_eq!(status["info"], json!(null));
+        assert_eq!(status["timeTotal"], json!("00:00:00"));
+        assert!(status["timeStarted"].is_string());
+    }
+
+    #[ge_context::test]
+    async fn test_create_non_existing_overview(app_ctx: PostgresContext<NoTls>) {
+        fn is_empty(directory: &Path) -> bool {
+            directory.read_dir().unwrap().next().is_none()
+        }
+
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = app_ctx.default_session_id().await;
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        ctx.db()
+            .add_layer_provider(
+                NetCdfCfDataProviderDefinition {
+                    name: "test".to_string(),
+                    path: test_data!("netcdf4d").to_path_buf(),
+                    overviews: overview_folder.path().to_path_buf(),
+                    cache_ttl: Default::default(),
+                }
+                .into(),
+            )
             .await
             .unwrap();
 
@@ -819,8 +820,5 @@ mod tests {
         assert_eq!(clean_up, r#"{"status":"completed","info":null}"#);
 
         assert!(is_empty(overview_folder.path()));
-
-        })
-        .await;
     }
 }

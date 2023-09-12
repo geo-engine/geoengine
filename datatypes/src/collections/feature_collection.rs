@@ -88,6 +88,36 @@ impl<CollectionType> AsRef<FeatureCollection<CollectionType>>
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct FeatureCollectionInternals<G> {
+    pub table: StructArray,
+    pub types: HashMap<String, FeatureDataType>,
+    pub collection_type: PhantomData<G>,
+    pub cache_hint: CacheHint,
+}
+
+impl<G> From<FeatureCollectionInternals<G>> for FeatureCollection<G> {
+    fn from(internals: FeatureCollectionInternals<G>) -> FeatureCollection<G> {
+        FeatureCollection {
+            table: internals.table,
+            types: internals.types,
+            collection_type: internals.collection_type,
+            cache_hint: internals.cache_hint,
+        }
+    }
+}
+
+impl<G> From<FeatureCollection<G>> for FeatureCollectionInternals<G> {
+    fn from(collection: FeatureCollection<G>) -> FeatureCollectionInternals<G> {
+        FeatureCollectionInternals {
+            table: collection.table,
+            types: collection.types,
+            collection_type: collection.collection_type,
+            cache_hint: collection.cache_hint,
+        }
+    }
+}
+
 /// A trait for common feature collection modifications that are independent of the geometry type
 pub trait FeatureCollectionModifications {
     type Output;
@@ -843,6 +873,7 @@ where
     GeometryIter: std::iter::Iterator<Item = GeometryRef>,
     GeometryRef: crate::primitives::GeometryRef,
 {
+    #[allow(clippy::missing_panics_doc)]
     pub fn new<CollectionType: Geometry + ArrowTyped>(
         collection: &'a FeatureCollection<CollectionType>,
         geometries: GeometryIter,
@@ -1131,6 +1162,7 @@ where
     ///
     /// assert_eq!(pc.len(), 0);
     /// ```
+    #[allow(clippy::missing_panics_doc)]
     pub fn empty() -> Self {
         Self::from_data(vec![], vec![], Default::default(), CacheHint::default())
             .expect("should not fail because no data is given")

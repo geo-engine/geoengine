@@ -1,6 +1,6 @@
 # Geo Engine
 
-[![CI](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml/badge.svg)](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml)
+[![CI](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml/badge.svg?event=merge_group)](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml?query=event%3Amerge_group)
 [![Coverage Status](https://coveralls.io/repos/github/geo-engine/geoengine/badge.svg?branch=main)](https://coveralls.io/github/geo-engine/geoengine?branch=main)
 [![Documentation](https://img.shields.io/badge/documentation-docs.geoengine.io-blue)](https://docs.geoengine.io/)
 

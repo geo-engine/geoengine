@@ -1,6 +1,6 @@
 mod batch_builder;
 mod data_types;
-pub(self) mod error;
+mod error;
 mod feature_collection;
 #[macro_use]
 mod feature_collection_builder;
@@ -14,11 +14,11 @@ mod multi_point_collection;
 mod multi_polygon_collection;
 
 pub(crate) use error::FeatureCollectionError;
-pub(self) use feature_collection::FilterArray;
+use feature_collection::FilterArray;
 pub use feature_collection::{
     ChunksEqualIgnoringCacheHint, FeatureCollection, FeatureCollectionInfos,
-    FeatureCollectionIterator, FeatureCollectionModifications, FeatureCollectionRow,
-    FilteredColumnNameIter, ToGeoJson,
+    FeatureCollectionInternals, FeatureCollectionIterator, FeatureCollectionModifications,
+    FeatureCollectionRow, FilteredColumnNameIter, ToGeoJson,
 };
 pub use feature_collection_builder::{
     BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,

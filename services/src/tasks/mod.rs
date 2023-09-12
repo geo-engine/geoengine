@@ -211,6 +211,7 @@ pub struct TaskStatusWithId {
 
 impl TaskStatus {
     #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn completed(&self, info: Arc<dyn TaskStatusInfo>) -> Self {
         Self::Completed {
             task_type: self.task_type(),

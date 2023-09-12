@@ -36,6 +36,7 @@ use geoengine_operators::source::{
     OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
     OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
 };
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
@@ -59,20 +60,19 @@ type Result<T, E = ArunaProviderError> = std::result::Result<T, E>;
 
 const URL_REPLACEMENT: &str = "%URL%";
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct ArunaDataProviderDefinition {
-    id: DataProviderId,
-    name: String,
-    api_url: String,
-    project_id: String,
-    api_token: String,
-    filter_label: String,
+    pub id: DataProviderId,
+    pub name: String,
+    pub api_url: String,
+    pub project_id: String,
+    pub api_token: String,
+    pub filter_label: String,
     #[serde(default)]
-    cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
-#[typetag::serde]
 #[async_trait::async_trait]
 impl DataProviderDefinition for ArunaDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
@@ -1808,7 +1808,9 @@ mod tests {
             .unwrap();
 
         let proc = initialized_op.query_processor().unwrap();
-        let TypedVectorQueryProcessor::MultiPoint(proc) = proc else { panic!("Expected MultiPoint QueryProcessor"); };
+        let TypedVectorQueryProcessor::MultiPoint(proc) = proc else {
+            panic!("Expected MultiPoint QueryProcessor");
+        };
 
         let ctx = MockQueryContext::test_default();
 

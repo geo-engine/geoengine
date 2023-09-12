@@ -107,6 +107,7 @@ impl DateTime {
         Some(Self { datetime })
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn parse_from_str(
         input: &str,
         format: &DateTimeParseFormat,

@@ -512,8 +512,6 @@ where
 
         let row = &rows[0];
 
-        let row = &rows[0];
-
         let project_id = ProjectId(row.get(0));
         let version_id = ProjectVersionId(row.get(1));
         let name = row.get(2);
