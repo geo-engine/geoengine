@@ -245,6 +245,8 @@ pub enum Error {
 
     PangaeaNoTsv,
     GfbioMissingAbcdField,
+    #[snafu(display("The response from the EDR server does not match the expected format."))]
+    EdrInvalidMetadataFormat,
     ExpectedExternalDataId,
     InvalidExternalDataId {
         provider: DataProviderId,

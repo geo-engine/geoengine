@@ -1,0 +1,1376 @@
+{
+    "collections": [
+      {
+        "id": "GFS_single-level",
+        "title": "GFS - Single Level",
+        "extent": {
+          "spatial": {
+            "bbox": [
+              [
+                0,
+                -90,
+                359.50000000000006,
+                90
+              ]
+            ],
+            "crs": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]",
+            "_projString": "+proj=longlat +lon_0=180 +R=6371229"
+          },
+          "temporal": {
+            "interval": [
+              [
+                "2023-08-15T06:00:00Z",
+                "2023-08-19T09:00:00Z"
+              ]
+            ],
+            "values": [
+              "2023-08-15T06:00:00Z",
+              "2023-08-15T09:00:00Z",
+              "2023-08-15T12:00:00Z",
+              "2023-08-15T15:00:00Z",
+              "2023-08-15T18:00:00Z",
+              "2023-08-15T21:00:00Z",
+              "2023-08-16T00:00:00Z",
+              "2023-08-16T03:00:00Z",
+              "2023-08-16T06:00:00Z",
+              "2023-08-16T09:00:00Z",
+              "2023-08-16T12:00:00Z",
+              "2023-08-16T15:00:00Z",
+              "2023-08-16T18:00:00Z",
+              "2023-08-16T21:00:00Z",
+              "2023-08-17T00:00:00Z",
+              "2023-08-17T03:00:00Z",
+              "2023-08-17T06:00:00Z",
+              "2023-08-17T09:00:00Z",
+              "2023-08-17T12:00:00Z",
+              "2023-08-17T15:00:00Z",
+              "2023-08-17T18:00:00Z",
+              "2023-08-17T21:00:00Z",
+              "2023-08-18T00:00:00Z",
+              "2023-08-18T03:00:00Z",
+              "2023-08-18T06:00:00Z",
+              "2023-08-18T09:00:00Z",
+              "2023-08-18T12:00:00Z",
+              "2023-08-18T15:00:00Z",
+              "2023-08-18T18:00:00Z",
+              "2023-08-18T21:00:00Z",
+              "2023-08-19T00:00:00Z",
+              "2023-08-19T03:00:00Z",
+              "2023-08-19T06:00:00Z",
+              "2023-08-19T09:00:00Z"
+            ],
+            "trs": "TIMECRS[\"DateTime\",TDATUM[\"Gregorian Calendar\"],CS[TemporalDateTime,1],AXIS[\"Time (T)\",future]"
+          }
+        },
+        "crs": [
+          "CRS:84"
+        ],
+        "output_formats": [
+          "CoverageJSON",
+          "CoverageJSON_Grid",
+          "CoverageJSON_MultiPointSeries",
+          "GRIB2",
+          "GeoTIFF",
+          "GeoTIFF_float",
+          "KML",
+          "NetCDF3",
+          "NetCDF3_float",
+          "NetCDF3_grid",
+          "NetCDF3_grid_float",
+          "NetCDF3_point",
+          "NetCDF4",
+          "NetCDF4_float",
+          "NetCDF4_grid",
+          "NetCDF4_grid_float",
+          "NetCDF4_point"
+        ],
+        "data_queries": {
+          "position": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level/position",
+              "rel": "data",
+              "title": "Position Query",
+              "templated": false,
+              "variables": {
+                "title": "Position Query",
+                "description": "Data at point location",
+                "query_type": "position",
+                "output_formats": [
+                  "CoverageJSON",
+                  "KML",
+                  "NetCDF4",
+                  "NetCDF3"
+                ],
+                "default_output_format": "CoverageJSON",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "radius": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level/radius",
+              "rel": "data",
+              "title": "Radius Query",
+              "templated": false,
+              "variables": {
+                "title": "Radius Query",
+                "description": "Data within circle",
+                "query_type": "radius",
+                "output_formats": [
+                  "CoverageJSON",
+                  "NetCDF4",
+                  "NetCDF3"
+                ],
+                "default_output_format": "CoverageJSON",
+                "within_units": [
+                  "m",
+                  "km",
+                  "ft",
+                  "mi",
+                  "NM(US)",
+                  "NM(UK)"
+                ],
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "area": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level/area",
+              "rel": "data",
+              "title": "Area Query",
+              "templated": false,
+              "variables": {
+                "title": "Area Query",
+                "description": "Data within polygonal area",
+                "query_type": "area",
+                "output_formats": [
+                  "CoverageJSON_MultiPointSeries",
+                  "CoverageJSON_Grid",
+                  "GRIB2",
+                  "NetCDF4_point",
+                  "NetCDF4_grid",
+                  "NetCDF4_grid_float",
+                  "NetCDF3_point",
+                  "NetCDF3_grid",
+                  "NetCDF3_grid_float",
+                  "GeoTIFF",
+                  "GeoTIFF_float",
+                  "KML"
+                ],
+                "default_output_format": "CoverageJSON_MultiPointSeries",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "cube": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level/cube",
+              "rel": "data",
+              "title": "Cube Query",
+              "templated": false,
+              "variables": {
+                "title": "Cube Query",
+                "description": "Data within 4D cube",
+                "query_type": "cube",
+                "output_formats": [
+                  "GRIB2",
+                  "CoverageJSON",
+                  "GeoTIFF",
+                  "GeoTIFF_float",
+                  "KML",
+                  "NetCDF4",
+                  "NetCDF4_float",
+                  "NetCDF3",
+                  "NetCDF3_float"
+                ],
+                "default_output_format": "GRIB2",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "trajectory": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level/trajectory",
+              "rel": "data",
+              "title": "Trajectory Query",
+              "templated": false,
+              "variables": {
+                "title": "Trajectory Query",
+                "description": "Data along trajectory",
+                "query_type": "trajectory",
+                "output_formats": [
+                  "CoverageJSON",
+                  "NetCDF4",
+                  "NetCDF3"
+                ],
+                "default_output_format": "CoverageJSON",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "corridor": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level/corridor",
+              "rel": "data",
+              "title": "Corridor Query",
+              "templated": false,
+              "variables": {
+                "title": "Corridor Query",
+                "description": "Data within corridor",
+                "query_type": "corridor",
+                "output_formats": [
+                  "NetCDF4",
+                  "NetCDF3",
+                  "CoverageJSON"
+                ],
+                "default_output_format": "NetCDF4",
+                "width_units": [
+                  "m",
+                  "km",
+                  "ft",
+                  "mi",
+                  "NM(US)",
+                  "NM(UK)"
+                ],
+                "height_units": [
+                  "1"
+                ],
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameter_names": {
+          "temperature_max-wind": {
+            "type": "Parameter",
+            "id": "temperature_max-wind",
+            "label": "Temperature - Max. wind",
+            "unit": {
+              "symbol": "K"
+            },
+            "observedProperty": {
+              "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-0-0",
+              "label": "Temperature"
+            },
+            "measurementType": {
+              "method": "spec:regular"
+            },
+            "_verticalReference": "special_max-wind"
+          }
+        }
+      },
+      {
+        "id": "GFS_single-level_50",
+        "title": "GFS - Single Level (50)",
+        "links": [
+          {
+            "href": "https://example.com/edr/collections/GFS_single-level_50?f=JSON",
+            "rel": "data",
+            "type": "application/json",
+            "title": "Collection metadata in JSON"
+          },
+          {
+            "href": "https://example.com/edr/collections/GFS_single-level_50/instances?f=JSON",
+            "rel": "data",
+            "type": "application/json",
+            "title": "Instances metadata in JSON"
+          }
+        ],
+        "extent": {
+        },
+        "crs": [
+          "CRS:84"
+        ],
+        "output_formats": [
+          "CoverageJSON",
+          "CoverageJSON_Grid",
+          "CoverageJSON_MultiPointSeries",
+          "GRIB2",
+          "GeoTIFF",
+          "GeoTIFF_float",
+          "KML",
+          "NetCDF3",
+          "NetCDF3_float",
+          "NetCDF3_grid",
+          "NetCDF3_grid_float",
+          "NetCDF3_point",
+          "NetCDF4",
+          "NetCDF4_float",
+          "NetCDF4_grid",
+          "NetCDF4_grid_float",
+          "NetCDF4_point"
+        ],
+        "data_queries": {
+          "position": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level_50/position",
+              "rel": "data",
+              "title": "Position Query",
+              "templated": false,
+              "variables": {
+                "title": "Position Query",
+                "description": "Data at point location",
+                "query_type": "position",
+                "output_formats": [
+                  "CoverageJSON",
+                  "KML",
+                  "NetCDF4",
+                  "NetCDF3"
+                ],
+                "default_output_format": "CoverageJSON",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "radius": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level_50/radius",
+              "rel": "data",
+              "title": "Radius Query",
+              "templated": false,
+              "variables": {
+                "title": "Radius Query",
+                "description": "Data within circle",
+                "query_type": "radius",
+                "output_formats": [
+                  "CoverageJSON",
+                  "NetCDF4",
+                  "NetCDF3"
+                ],
+                "default_output_format": "CoverageJSON",
+                "within_units": [
+                  "m",
+                  "km",
+                  "ft",
+                  "mi",
+                  "NM(US)",
+                  "NM(UK)"
+                ],
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "area": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level_50/area",
+              "rel": "data",
+              "title": "Area Query",
+              "templated": false,
+              "variables": {
+                "title": "Area Query",
+                "description": "Data within polygonal area",
+                "query_type": "area",
+                "output_formats": [
+                  "CoverageJSON_MultiPointSeries",
+                  "CoverageJSON_Grid",
+                  "GRIB2",
+                  "NetCDF4_point",
+                  "NetCDF4_grid",
+                  "NetCDF4_grid_float",
+                  "NetCDF3_point",
+                  "NetCDF3_grid",
+                  "NetCDF3_grid_float",
+                  "GeoTIFF",
+                  "GeoTIFF_float",
+                  "KML"
+                ],
+                "default_output_format": "CoverageJSON_MultiPointSeries",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "cube": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level_50/cube",
+              "rel": "data",
+              "title": "Cube Query",
+              "templated": false,
+              "variables": {
+                "title": "Cube Query",
+                "description": "Data within 4D cube",
+                "query_type": "cube",
+                "output_formats": [
+                  "GRIB2",
+                  "CoverageJSON",
+                  "GeoTIFF",
+                  "GeoTIFF_float",
+                  "KML",
+                  "NetCDF4",
+                  "NetCDF4_float",
+                  "NetCDF3",
+                  "NetCDF3_float"
+                ],
+                "default_output_format": "GRIB2",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "trajectory": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level_50/trajectory",
+              "rel": "data",
+              "title": "Trajectory Query",
+              "templated": false,
+              "variables": {
+                "title": "Trajectory Query",
+                "description": "Data along trajectory",
+                "query_type": "trajectory",
+                "output_formats": [
+                  "CoverageJSON",
+                  "NetCDF4",
+                  "NetCDF3"
+                ],
+                "default_output_format": "CoverageJSON",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "corridor": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_single-level_50/corridor",
+              "rel": "data",
+              "title": "Corridor Query",
+              "templated": false,
+              "variables": {
+                "title": "Corridor Query",
+                "description": "Data within corridor",
+                "query_type": "corridor",
+                "output_formats": [
+                  "NetCDF4",
+                  "NetCDF3",
+                  "CoverageJSON"
+                ],
+                "default_output_format": "NetCDF4",
+                "width_units": [
+                  "m",
+                  "km",
+                  "ft",
+                  "mi",
+                  "NM(US)",
+                  "NM(UK)"
+                ],
+                "height_units": [
+                  "1"
+                ],
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameter_names": {
+          "total-precipitation_gnd-surf_stat:acc/P6DT3H": {
+            "type": "Parameter",
+            "id": "total-precipitation_gnd-surf_stat:acc/P6DT3H",
+            "label": "Total precipitation - Ground surface - Accumulation 147h",
+            "unit": {
+              "symbol": "kg/m²"
+            },
+            "observedProperty": {
+              "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-8",
+              "label": "Total precipitation"
+            },
+            "measurementType": {
+              "method": "spec:regular;stat:accumulation/P6DT3H",
+              "duration": "P6DT3H"
+            },
+            "_verticalReference": "special_gnd-surf"
+          },
+          "convective-precipitation_gnd-surf_stat:acc/P6DT3H": {
+            "type": "Parameter",
+            "id": "convective-precipitation_gnd-surf_stat:acc/P6DT3H",
+            "label": "Convective precipitation - Ground surface - Accumulation 147h",
+            "unit": {
+              "symbol": "kg/m²"
+            },
+            "observedProperty": {
+              "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-10",
+              "label": "Convective precipitation"
+            },
+            "measurementType": {
+              "method": "spec:regular;stat:accumulation/P6DT3H",
+              "duration": "P6DT3H"
+            },
+            "_verticalReference": "special_gnd-surf"
+          }
+        }
+      },
+      {
+        "id": "GFS_isobaric",
+        "title": "GFS - Isobaric level",
+        "links": [
+          {
+            "href": "https://example.com/edr/collections/GFS_isobaric?f=JSON",
+            "rel": "data",
+            "type": "application/json",
+            "title": "Collection metadata in JSON"
+          },
+          {
+            "href": "https://example.com/edr/collections/GFS_isobaric/instances?f=JSON",
+            "rel": "data",
+            "type": "application/json",
+            "title": "Instances metadata in JSON"
+          }
+        ],
+        "extent": {
+          "spatial": {
+            "bbox": [
+              [
+                0,
+                -90,
+                359.50000000000006,
+                90
+              ]
+            ],
+            "crs": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]",
+            "_projString": "+proj=longlat +lon_0=180 +R=6371229"
+          },
+          "vertical": {
+            "interval": [
+              [
+                "0.01",
+                "1000"
+              ]
+            ],
+            "values": [
+              "0.01",
+              "1000"
+            ],
+            "vrs": "isobaric"
+          },
+          "temporal": {
+            "interval": [
+              [
+                "2023-08-15T06:00:00Z",
+                "2023-08-19T09:00:00Z"
+              ]
+            ],
+            "values": [
+              "2023-08-15T06:00:00Z",
+              "2023-08-15T09:00:00Z",
+              "2023-08-15T12:00:00Z",
+              "2023-08-15T15:00:00Z",
+              "2023-08-15T18:00:00Z",
+              "2023-08-15T21:00:00Z",
+              "2023-08-16T00:00:00Z",
+              "2023-08-16T03:00:00Z",
+              "2023-08-16T06:00:00Z",
+              "2023-08-16T09:00:00Z",
+              "2023-08-16T12:00:00Z",
+              "2023-08-16T15:00:00Z",
+              "2023-08-16T18:00:00Z",
+              "2023-08-16T21:00:00Z",
+              "2023-08-17T00:00:00Z",
+              "2023-08-17T03:00:00Z",
+              "2023-08-17T06:00:00Z",
+              "2023-08-17T09:00:00Z",
+              "2023-08-17T12:00:00Z",
+              "2023-08-17T15:00:00Z",
+              "2023-08-17T18:00:00Z",
+              "2023-08-17T21:00:00Z",
+              "2023-08-18T00:00:00Z",
+              "2023-08-18T03:00:00Z",
+              "2023-08-18T06:00:00Z",
+              "2023-08-18T09:00:00Z",
+              "2023-08-18T12:00:00Z",
+              "2023-08-18T15:00:00Z",
+              "2023-08-18T18:00:00Z",
+              "2023-08-18T21:00:00Z",
+              "2023-08-19T00:00:00Z",
+              "2023-08-19T03:00:00Z",
+              "2023-08-19T06:00:00Z",
+              "2023-08-19T09:00:00Z"
+            ],
+            "trs": "TIMECRS[\"DateTime\",TDATUM[\"Gregorian Calendar\"],CS[TemporalDateTime,1],AXIS[\"Time (T)\",future]"
+          }
+        },
+        "crs": [
+          "CRS:84"
+        ],
+        "output_formats": [
+          "CoverageJSON",
+          "CoverageJSON_Grid",
+          "CoverageJSON_MultiPointSeries",
+          "GRIB2",
+          "GeoTIFF",
+          "GeoTIFF_float",
+          "KML",
+          "NetCDF3",
+          "NetCDF3_float",
+          "NetCDF3_grid",
+          "NetCDF3_grid_float",
+          "NetCDF3_point",
+          "NetCDF4",
+          "NetCDF4_float",
+          "NetCDF4_grid",
+          "NetCDF4_grid_float",
+          "NetCDF4_point"
+        ],
+        "data_queries": {
+          "position": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_isobaric/position",
+              "rel": "data",
+              "title": "Position Query",
+              "templated": false,
+              "variables": {
+                "title": "Position Query",
+                "description": "Data at point location",
+                "query_type": "position",
+                "output_formats": [
+                  "CoverageJSON",
+                  "KML",
+                  "NetCDF4",
+                  "NetCDF3"
+                ],
+                "default_output_format": "CoverageJSON",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "radius": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_isobaric/radius",
+              "rel": "data",
+              "title": "Radius Query",
+              "templated": false,
+              "variables": {
+                "title": "Radius Query",
+                "description": "Data within circle",
+                "query_type": "radius",
+                "output_formats": [
+                  "CoverageJSON",
+                  "NetCDF4",
+                  "NetCDF3"
+                ],
+                "default_output_format": "CoverageJSON",
+                "within_units": [
+                  "m",
+                  "km",
+                  "ft",
+                  "mi",
+                  "NM(US)",
+                  "NM(UK)"
+                ],
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "area": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_isobaric/area",
+              "rel": "data",
+              "title": "Area Query",
+              "templated": false,
+              "variables": {
+                "title": "Area Query",
+                "description": "Data within polygonal area",
+                "query_type": "area",
+                "output_formats": [
+                  "CoverageJSON_MultiPointSeries",
+                  "CoverageJSON_Grid",
+                  "GRIB2",
+                  "NetCDF4_point",
+                  "NetCDF4_grid",
+                  "NetCDF4_grid_float",
+                  "NetCDF3_point",
+                  "NetCDF3_grid",
+                  "NetCDF3_grid_float",
+                  "GeoTIFF",
+                  "GeoTIFF_float",
+                  "KML"
+                ],
+                "default_output_format": "CoverageJSON_MultiPointSeries",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "cube": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_isobaric/cube",
+              "rel": "data",
+              "title": "Cube Query",
+              "templated": false,
+              "variables": {
+                "title": "Cube Query",
+                "description": "Data within 4D cube",
+                "query_type": "cube",
+                "output_formats": [
+                  "GRIB2",
+                  "CoverageJSON",
+                  "GeoTIFF",
+                  "GeoTIFF_float",
+                  "KML",
+                  "NetCDF4",
+                  "NetCDF4_float",
+                  "NetCDF3",
+                  "NetCDF3_float"
+                ],
+                "default_output_format": "GRIB2",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "trajectory": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_isobaric/trajectory",
+              "rel": "data",
+              "title": "Trajectory Query",
+              "templated": false,
+              "variables": {
+                "title": "Trajectory Query",
+                "description": "Data along trajectory",
+                "query_type": "trajectory",
+                "output_formats": [
+                  "CoverageJSON",
+                  "NetCDF4",
+                  "NetCDF3"
+                ],
+                "default_output_format": "CoverageJSON",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "corridor": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_isobaric/corridor",
+              "rel": "data",
+              "title": "Corridor Query",
+              "templated": false,
+              "variables": {
+                "title": "Corridor Query",
+                "description": "Data within corridor",
+                "query_type": "corridor",
+                "output_formats": [
+                  "NetCDF4",
+                  "NetCDF3",
+                  "CoverageJSON"
+                ],
+                "default_output_format": "NetCDF4",
+                "width_units": [
+                  "m",
+                  "km",
+                  "ft",
+                  "mi",
+                  "NM(US)",
+                  "NM(UK)"
+                ],
+                "height_units": [
+                  "Pa",
+                  "hPa",
+                  "mmHg",
+                  "mb"
+                ],
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameter_names": {
+          "temperature": {
+            "type": "Parameter",
+            "id": "temperature",
+            "label": "Temperature",
+            "unit": {
+              "symbol": "K"
+            },
+            "observedProperty": {
+              "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-0-0",
+              "label": "Temperature"
+            },
+            "measurementType": {
+              "method": "spec:regular"
+            }
+          }
+        }
+      },
+      {
+        "id": "GFS_between-depth",
+        "title": "GFS - Layer between two depths below land surface",
+        "links": [
+          {
+            "href": "https://example.com/edr/collections/GFS_between-depth?f=JSON",
+            "rel": "data",
+            "type": "application/json",
+            "title": "Collection metadata in JSON"
+          },
+          {
+            "href": "https://example.com/edr/collections/GFS_between-depth/instances?f=JSON",
+            "rel": "data",
+            "type": "application/json",
+            "title": "Instances metadata in JSON"
+          }
+        ],
+        "extent": {
+          "spatial": {
+            "bbox": [
+              [
+                0,
+                -90,
+                359.50000000000006,
+                90
+              ]
+            ],
+            "crs": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]",
+            "_projString": "+proj=longlat +lon_0=180 +R=6371229"
+          },
+          "vertical": {
+            "interval": [
+              [
+                "0\\10cm",
+                "40\\100cm"
+              ]
+            ],
+            "values": [
+              "0\\10cm",
+              "100\\200cm",
+              "10\\40cm",
+              "40\\100cm"
+            ],
+            "vrs": "between-depth"
+          },
+          "temporal": {
+            "interval": [
+              [
+                "2023-08-15T06:00:00Z",
+                "2023-08-19T09:00:00Z"
+              ]
+            ],
+            "values": [
+              "2023-08-15T06:00:00Z",
+              "2023-08-15T09:00:00Z",
+              "2023-08-15T12:00:00Z",
+              "2023-08-15T15:00:00Z",
+              "2023-08-15T18:00:00Z",
+              "2023-08-15T21:00:00Z",
+              "2023-08-16T00:00:00Z",
+              "2023-08-16T03:00:00Z",
+              "2023-08-16T06:00:00Z",
+              "2023-08-16T09:00:00Z",
+              "2023-08-16T12:00:00Z",
+              "2023-08-16T15:00:00Z",
+              "2023-08-16T18:00:00Z",
+              "2023-08-16T21:00:00Z",
+              "2023-08-17T00:00:00Z",
+              "2023-08-17T03:00:00Z",
+              "2023-08-17T06:00:00Z",
+              "2023-08-17T09:00:00Z",
+              "2023-08-17T12:00:00Z",
+              "2023-08-17T15:00:00Z",
+              "2023-08-17T18:00:00Z",
+              "2023-08-17T21:00:00Z",
+              "2023-08-18T00:00:00Z",
+              "2023-08-18T03:00:00Z",
+              "2023-08-18T06:00:00Z",
+              "2023-08-18T09:00:00Z",
+              "2023-08-18T12:00:00Z",
+              "2023-08-18T15:00:00Z",
+              "2023-08-18T18:00:00Z",
+              "2023-08-18T21:00:00Z",
+              "2023-08-19T00:00:00Z",
+              "2023-08-19T03:00:00Z",
+              "2023-08-19T06:00:00Z",
+              "2023-08-19T09:00:00Z"
+            ],
+            "trs": "TIMECRS[\"DateTime\",TDATUM[\"Gregorian Calendar\"],CS[TemporalDateTime,1],AXIS[\"Time (T)\",future]"
+          }
+        },
+        "crs": [
+          "CRS:84"
+        ],
+        "output_formats": [
+          "CoverageJSON",
+          "CoverageJSON_Grid",
+          "CoverageJSON_MultiPointSeries",
+          "GRIB2",
+          "GeoTIFF",
+          "GeoTIFF_float",
+          "KML"
+        ],
+        "data_queries": {
+          "position": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_between-depth/position",
+              "rel": "data",
+              "title": "Position Query",
+              "templated": false,
+              "variables": {
+                "title": "Position Query",
+                "description": "Data at point location",
+                "query_type": "position",
+                "output_formats": [
+                  "CoverageJSON",
+                  "KML"
+                ],
+                "default_output_format": "CoverageJSON",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "radius": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_between-depth/radius",
+              "rel": "data",
+              "title": "Radius Query",
+              "templated": false,
+              "variables": {
+                "title": "Radius Query",
+                "description": "Data within circle",
+                "query_type": "radius",
+                "output_formats": [
+                  "CoverageJSON"
+                ],
+                "default_output_format": "CoverageJSON",
+                "within_units": [
+                  "m",
+                  "km",
+                  "ft",
+                  "mi",
+                  "NM(US)",
+                  "NM(UK)"
+                ],
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "area": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_between-depth/area",
+              "rel": "data",
+              "title": "Area Query",
+              "templated": false,
+              "variables": {
+                "title": "Area Query",
+                "description": "Data within polygonal area",
+                "query_type": "area",
+                "output_formats": [
+                  "CoverageJSON_MultiPointSeries",
+                  "CoverageJSON_Grid",
+                  "GRIB2",
+                  "GeoTIFF",
+                  "GeoTIFF_float",
+                  "KML"
+                ],
+                "default_output_format": "CoverageJSON_MultiPointSeries",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "cube": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_between-depth/cube",
+              "rel": "data",
+              "title": "Cube Query",
+              "templated": false,
+              "variables": {
+                "title": "Cube Query",
+                "description": "Data within 4D cube",
+                "query_type": "cube",
+                "output_formats": [
+                  "GRIB2",
+                  "CoverageJSON",
+                  "GeoTIFF",
+                  "GeoTIFF_float",
+                  "KML"
+                ],
+                "default_output_format": "GRIB2",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "trajectory": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_between-depth/trajectory",
+              "rel": "data",
+              "title": "Trajectory Query",
+              "templated": false,
+              "variables": {
+                "title": "Trajectory Query",
+                "description": "Data along trajectory",
+                "query_type": "trajectory",
+                "output_formats": [
+                  "CoverageJSON"
+                ],
+                "default_output_format": "CoverageJSON",
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          },
+          "corridor": {
+            "link": {
+              "href": "https://example.com/edr/collections/GFS_between-depth/corridor",
+              "rel": "data",
+              "title": "Corridor Query",
+              "templated": false,
+              "variables": {
+                "title": "Corridor Query",
+                "description": "Data within corridor",
+                "query_type": "corridor",
+                "output_formats": [
+                  "CoverageJSON"
+                ],
+                "default_output_format": "CoverageJSON",
+                "width_units": [
+                  "m",
+                  "km",
+                  "ft",
+                  "mi",
+                  "NM(US)",
+                  "NM(UK)"
+                ],
+                "height_units": [
+                  "1"
+                ],
+                "crs_details": [
+                  {
+                    "crs": "CRS:84",
+                    "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameter_names": {
+          "soil-temperature": {
+            "type": "Parameter",
+            "id": "soil-temperature",
+            "label": "Soil temperature",
+            "unit": {
+              "symbol": "K"
+            },
+            "observedProperty": {
+              "id": "http://codes.wmo.int/grib2/codeflag/4.2/_2-0-2",
+              "label": "Soil temperature"
+            },
+            "measurementType": {
+              "method": "spec:regular"
+            }
+          },
+          "volumetric-soil-moisture-content": {
+            "type": "Parameter",
+            "id": "volumetric-soil-moisture-content",
+            "label": "Volumetric soil moisture content",
+            "observedProperty": {
+              "id": "http://codes.wmo.int/grib2/codeflag/4.2/_2-0-192",
+              "label": "Volumetric soil moisture content"
+            },
+            "measurementType": {
+              "method": "spec:regular"
+            }
+          },
+          "liquid-volumetric-soil-moisture-non-frozen": {
+            "type": "Parameter",
+            "id": "liquid-volumetric-soil-moisture-non-frozen",
+            "label": "Liquid volumetric soil moisture (non frozen)",
+            "unit": {
+              "symbol": "1"
+            },
+            "observedProperty": {
+              "id": "http://codes.wmo.int/grib2/codeflag/4.2/_2-3-192",
+              "label": "Liquid volumetric soil moisture (non frozen)"
+            },
+            "measurementType": {
+              "method": "spec:regular"
+            }
+          }
+        }
+      },
+      {
+        "links": [
+          {
+            "href": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr/collections/PointsInGermany/",
+            "rel": "self",
+            "type": "application/json"
+          },
+          {
+            "href": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr/collections/PointsInGermany/cube",
+            "rel": "data",
+            "type": "application/geo+json"
+          }
+        ],
+        "id": "PointsInGermany",
+        "extent": {
+          "spatial": {
+            "bbox": [
+              [
+                -180,
+                -90,
+                180,
+                90
+              ]
+            ],
+            "crs": "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]"
+          },
+          "temporal": {
+            "interval": [
+              [
+                "2023-01-01T12:42:29Z",
+                "2023-02-01T12:42:29Z"
+              ]
+            ],
+            "values": [
+              "2023-01-01T12:42:29Z/2023-02-01T12:42:29Z"
+            ],
+            "trs": "http://www.opengis.net/def/uom/ISO-8601/0/Gregorian"
+          }
+        },
+        "data_queries": {
+          "cube": {
+            "href": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr/collections/PointsInGermany/cube",
+            "rel": "data",
+            "variables": {
+              "title": "PointsInGermany",
+              "description": "SELECT * FROM GeoStream",
+              "query_type": "cube",
+              "output_formats": [
+                "GeoJSON"
+              ],
+              "default_output_format": "GeoJSON",
+              "crs_details": [
+                {
+                  "crs": "EPSG:4326",
+                  "wkt": "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]"
+                }
+              ]
+            }
+          }
+        },
+        "crs": [
+          "EPSG:4326"
+        ],
+        "output_formats": [
+          "GeoJSON"
+        ],
+        "parameter_names": {
+          "ID": {
+            "type": "Parameter",
+            "description": "ID",
+            "label": "ID",
+            "observedProperty": {
+              "id": "ID",
+              "label": "ID"
+            },
+            "data-type": "INTEGER"
+          }
+        }
+      },
+      {
+        "links": [
+          {
+            "href": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr/collections/PointsInFrance/",
+            "rel": "self",
+            "type": "application/json"
+          },
+          {
+            "href": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr/collections/PointsInFrance/cube",
+            "rel": "data",
+            "type": "application/geo+json"
+          }
+        ],
+        "id": "PointsInFrance",
+        "extent": {
+          "spatial": {
+            "bbox": [
+              [
+                -180,
+                -90,
+                180,
+                90
+              ]
+            ],
+            "crs": "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]"
+          },
+          "vertical": {
+            "interval": [
+              [
+                "0\\10cm",
+                "40\\100cm"
+              ]
+            ],
+            "values": [
+              "0\\10cm",
+              "10\\40cm"
+            ],
+            "vrs": "between-depth"
+          },
+          "temporal": {
+            "interval": [
+              [
+                "2023-01-01T12:42:29Z",
+                "2023-02-01T12:42:29Z"
+              ]
+            ],
+            "values": [
+              "2023-01-01T12:42:29Z/2023-02-01T12:42:29Z"
+            ],
+            "trs": "http://www.opengis.net/def/uom/ISO-8601/0/Gregorian"
+          }
+        },
+        "data_queries": {
+          "cube": {
+            "href": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr/collections/PointsInFrance/cube",
+            "rel": "data",
+            "variables": {
+              "title": "PointsInFrance",
+              "description": "SELECT * FROM GeoStream2",
+              "query_type": "cube",
+              "output_formats": [
+                "GeoJSON"
+              ],
+              "default_output_format": "GeoJSON",
+              "crs_details": [
+                {
+                  "crs": "EPSG:4326",
+                  "wkt": "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]"
+                }
+              ]
+            }
+          }
+        },
+        "crs": [
+          "EPSG:4326"
+        ],
+        "output_formats": [
+          "GeoJSON"
+        ],
+        "parameter_names": {
+          "ID": {
+            "type": "Parameter",
+            "description": "ID",
+            "label": "ID",
+            "observedProperty": {
+              "id": "ID",
+              "label": "ID"
+            },
+            "data-type": "INTEGER"
+          },
+          "NAME": {
+            "type": "Parameter",
+            "description": "NAME",
+            "label": "NAME",
+            "observedProperty": {
+              "id": "NAME",
+              "label": "NAME"
+            },
+            "data-type": "STRING"
+          }
+        }
+      }
+    ]
+  }

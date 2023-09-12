@@ -1,0 +1,79 @@
+{
+    "links": [
+      {
+        "href": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr/collections/PointsInGermany/",
+        "rel": "self",
+        "type": "application/json"
+      },
+      {
+        "href": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr/collections/PointsInGermany/cube",
+        "rel": "data",
+        "type": "application/geo+json"
+      }
+    ],
+    "id": "PointsInGermany",
+    "extent": {
+      "spatial": {
+        "bbox": [
+          [
+            -180,
+            -90,
+            180,
+            90
+          ]
+        ],
+        "crs": "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]"
+      },
+      "temporal": {
+        "interval": [
+          [
+            "2023-01-01T12:42:29Z",
+            "2023-02-01T12:42:29Z"
+          ]
+        ],
+        "values": [
+          "2023-01-01T12:42:29Z/2023-02-01T12:42:29Z"
+        ],
+        "trs": "http://www.opengis.net/def/uom/ISO-8601/0/Gregorian"
+      }
+    },
+    "data_queries": {
+      "cube": {
+        "href": "https://dbs-demo.mathematik.uni-marburg.de/dev/cep/edr/collections/PointsInGermany/cube",
+        "rel": "data",
+        "variables": {
+          "title": "PointsInGermany",
+          "description": "SELECT * FROM GeoStream",
+          "query_type": "cube",
+          "output_formats": [
+            "GeoJSON"
+          ],
+          "default_output_format": "GeoJSON",
+          "crs_details": [
+            {
+              "crs": "EPSG:4326",
+              "wkt": "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]"
+            }
+          ]
+        }
+      }
+    },
+    "crs": [
+      "EPSG:4326"
+    ],
+    "output_formats": [
+      "GeoJSON"
+    ],
+    "parameter_names": {
+      "ID": {
+        "type": "Parameter",
+        "description": "ID",
+        "label": "ID",
+        "observedProperty": {
+          "id": "ID",
+          "label": "ID"
+        },
+        "data-type": "INTEGER"
+      }
+    }
+  }
