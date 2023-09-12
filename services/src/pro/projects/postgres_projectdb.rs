@@ -146,8 +146,6 @@ where
         &self,
         options: ProjectListOptions,
     ) -> Result<Vec<ProjectListing>, ProjectDbError> {
-        // TODO: project filters
-
         let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
         let stmt = conn

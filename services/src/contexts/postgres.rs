@@ -531,8 +531,8 @@ mod tests {
     use crate::projects::{
         ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LineSymbology,
         LoadVersion, NumberParam, OrderBy, Plot, PlotUpdate, PointSymbology, PolygonSymbology,
-        ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
-        RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
+        ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, RasterSymbology,
+        STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
     };
     use crate::util::tests::register_ndvi_workflow_helper;
     use crate::util::tests::with_temp_context;
@@ -715,7 +715,6 @@ mod tests {
         session: &SimpleSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
-            filter: ProjectFilter::None,
             order: OrderBy::NameDesc,
             offset: 0,
             limit: 2,

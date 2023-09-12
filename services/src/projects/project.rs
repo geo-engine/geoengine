@@ -430,18 +430,6 @@ impl From<&Project> for ProjectListing {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema, Default)]
-pub enum ProjectFilter {
-    Name {
-        term: String,
-    },
-    Description {
-        term: String,
-    },
-    #[default]
-    None,
-}
-
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
 #[schema(example = json!({
@@ -568,8 +556,6 @@ impl<'a> ToSchema<'a> for PlotUpdate {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, IntoParams, Validate)]
 pub struct ProjectListOptions {
-    #[serde(default)]
-    pub filter: ProjectFilter,
     #[param(example = "NameAsc")]
     pub order: OrderBy,
     #[param(example = 0)]
