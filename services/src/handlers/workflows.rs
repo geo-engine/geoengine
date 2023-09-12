@@ -801,7 +801,7 @@ mod tests {
                 res,
                 400,
                 "BodyDeserializeError",
-                "expected ident at line 1 column 2",
+                "Error in user input: expected ident at line 1 column 2",
             )
             .await;
         })
@@ -829,7 +829,7 @@ mod tests {
                 res,
                 400,
                 "BodyDeserializeError",
-                "missing field `type` at line 1 column 2",
+                "Error in user input: missing field `type` at line 1 column 2",
             )
             .await;
         })

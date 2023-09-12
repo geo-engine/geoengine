@@ -867,7 +867,7 @@ mod tests {
                 res,
                 400,
                 "BodyDeserializeError",
-                "missing field `email` at line 1 column 47",
+                "Error in user input: missing field `email` at line 1 column 47",
             )
             .await;
         })
@@ -966,7 +966,7 @@ mod tests {
                 res,
                 400,
                 "BodyDeserializeError",
-                "expected ident at line 1 column 2",
+                "Error in user input: expected ident at line 1 column 2",
             )
             .await;
         })
@@ -998,7 +998,7 @@ mod tests {
                 res,
                 400,
                 "BodyDeserializeError",
-                "missing field `password` at line 1 column 27",
+                "Error in user input: missing field `password` at line 1 column 27",
             )
             .await;
         })
@@ -1605,7 +1605,7 @@ mod tests {
                 res,
                 400,
                 "BodyDeserializeError",
-                "missing field `state` at line 1 column 29",
+                "Error in user input: missing field `state` at line 1 column 29",
             )
             .await;
         })

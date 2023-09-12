@@ -516,7 +516,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "missing field `name` at line 1 column 195",
+            "Error in user input: missing field `name` at line 1 column 195",
         )
         .await;
 
@@ -765,7 +765,7 @@ mod tests {
                 res,
                 400,
                 "BodyDeserializeError",
-                "expected ident at line 1 column 2",
+                "Error in user input: expected ident at line 1 column 2",
             )
             .await;
         })
@@ -806,7 +806,7 @@ mod tests {
                 res,
                 400,
                 "BodyDeserializeError",
-                "missing field `id` at line 1 column 260",
+                "Error in user input: missing field `id` at line 1 column 260",
             )
             .await;
         })
