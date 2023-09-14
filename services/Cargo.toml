@@ -86,12 +86,13 @@ tracing-opentelemetry = "0.19"
 tracing-subscriber = { version = "0.3", features = ["local-time", "ansi", "tracing-log"] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
-utoipa = { git = "https://github.com/1lutz/utoipa.git", features = ["actix_extras", "chrono", "uuid"] }
+utoipa = { git = "https://github.com/1lutz/utoipa.git", features = ["actix_extras", "chrono", "uuid", "debug"] }
 utoipa-swagger-ui = { git = "https://github.com/1lutz/utoipa.git", features = ["actix-web"] }
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
 validator = { version = "0.16", features = ["derive"] }
 walkdir = "2.3"
 zip = "0.6"
+assert-json-diff = "2.0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nix = "0.26"

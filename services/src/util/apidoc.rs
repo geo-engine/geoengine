@@ -164,3 +164,108 @@ impl Modify for TransformSchemasWithTag {
         openapi.components = Some(new_components);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::util::apidoc::TransformSchemasWithTag;
+    use assert_json_diff::assert_json_eq;
+    use serde::Serialize;
+    use serde_json::json;
+    use utoipa::{openapi::*, Modify, ToSchema};
+
+    #[test]
+    #[allow(dead_code)]
+    fn separate_inline_schema() {
+        #[derive(Serialize, ToSchema)]
+        #[serde(rename_all = "camelCase", tag = "type")]
+        enum MyEnum {
+            Inlined { v: usize },
+            B(MyStruct),
+        }
+        #[derive(Serialize, ToSchema)]
+        struct MyStruct {
+            text: String,
+        }
+        let mut openapi = OpenApiBuilder::new()
+            .components(Some(
+                ComponentsBuilder::new()
+                    .schema_from::<MyEnum>()
+                    .schema_from::<MyStruct>()
+                    .into(),
+            ))
+            .build();
+        let transformer = TransformSchemasWithTag;
+        transformer.modify(&mut openapi);
+
+        assert_json_eq!(
+            serde_json::to_value(openapi.components.unwrap().schemas).unwrap(),
+            json!({
+                "MyEnum": {
+                    "oneOf": [
+                        {
+                            "$ref": "#/components/schemas/InlinedMyEnum"
+                        },
+                        {
+                            "$ref": "#/components/schemas/MyStructWithType"
+                        }
+                    ],
+                    "discriminator": {
+                        "propertyName": "type",
+                        "mapping": {
+                            "inlined": "#/components/schemas/InlinedMyEnum",
+                            "b": "#/components/schemas/MyStructWithType"
+                        }
+                    }
+                },
+                "MyStruct": {
+                    "type": "object",
+                    "required": [
+                        "text"
+                    ],
+                    "properties": {
+                        "text": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "MyStructWithType": {
+                    "type": "object",
+                    "required": [
+                        "text",
+                        "type"
+                    ],
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": [
+                                "b"
+                            ]
+                        },
+                        "text": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "InlinedMyEnum": {
+                    "type": "object",
+                    "required": [
+                        "v",
+                        "type"
+                    ],
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": [
+                                "inlined"
+                            ]
+                        },
+                        "v": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    }
+                }
+            })
+        );
+    }
+}
