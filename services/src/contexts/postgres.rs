@@ -562,10 +562,10 @@ mod tests {
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureDataType, RasterQueryRectangle, SpatialResolution,
-        TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
+        BoundingBox2D, CacheTtlSeconds, Coordinate2D, FeatureDataType, RasterQueryRectangle,
+        SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+        VectorQueryRectangle,
     };
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
@@ -3189,7 +3189,7 @@ mod tests {
                 on_error: crate::api::model::operators::OgrSourceErrorSpec::Abort,
                 sql_query: None,
                 attribute_query: Some("foo = 'bar'".to_string()),
-                cache_ttl: CacheTtlSeconds::new(5),
+                cache_ttl: crate::api::model::datatypes::CacheTtlSeconds::new(5),
             }],
         )
         .await;
@@ -3279,7 +3279,7 @@ mod tests {
                     on_error: crate::api::model::operators::OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: Some("foo = 'bar'".to_string()),
-                    cache_ttl: CacheTtlSeconds::new(5),
+                    cache_ttl: crate::api::model::datatypes::CacheTtlSeconds::new(5),
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -3382,7 +3382,7 @@ mod tests {
                 }]),
                 gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
                 gdal_config_options: Some(vec![
-                    crate::api::model::operators::GdalConfigOption::from((
+                    crate::api::model::datatypes::GdalConfigOption::from((
                         "foo".to_string(),
                         "bar".to_string(),
                     )),
@@ -3456,7 +3456,7 @@ mod tests {
                     ]),
                     gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
                     gdal_config_options: Some(vec![
-                        crate::api::model::operators::GdalConfigOption::from((
+                        crate::api::model::datatypes::GdalConfigOption::from((
                             "foo".to_string(),
                             "bar".to_string(),
                         )),
@@ -3477,7 +3477,7 @@ mod tests {
                     step: 1,
                 }
                 .into(),
-                cache_ttl: CacheTtlSeconds::max(),
+                cache_ttl: crate::api::model::datatypes::CacheTtlSeconds::max(),
             }],
         )
         .await;
@@ -3534,14 +3534,14 @@ mod tests {
                     ]),
                     gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
                     gdal_config_options: Some(vec![
-                        crate::api::model::operators::GdalConfigOption::from((
+                        crate::api::model::datatypes::GdalConfigOption::from((
                             "foo".to_string(),
                             "bar".to_string(),
                         )),
                     ]),
                     allow_alphaband_as_mask: false,
                 },
-                cache_ttl: CacheTtlSeconds::max(),
+                cache_ttl: crate::api::model::datatypes::CacheTtlSeconds::max(),
             }],
         )
         .await;
@@ -3597,7 +3597,7 @@ mod tests {
                     ]),
                     gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
                     gdal_config_options: Some(vec![
-                        crate::api::model::operators::GdalConfigOption::from((
+                        crate::api::model::datatypes::GdalConfigOption::from((
                             "foo".to_string(),
                             "bar".to_string(),
                         )),
@@ -3606,7 +3606,7 @@ mod tests {
                 },
                 start: TimeInstance::from_millis(0).unwrap().into(),
                 end: TimeInstance::from_millis(1000).unwrap().into(),
-                cache_ttl: CacheTtlSeconds::max(),
+                cache_ttl: crate::api::model::datatypes::CacheTtlSeconds::max(),
                 step: TimeStep {
                     granularity: TimeGranularity::Millis,
                     step: 1,
@@ -3670,14 +3670,14 @@ mod tests {
                         ]),
                         gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
                         gdal_config_options: Some(vec![
-                            crate::api::model::operators::GdalConfigOption::from((
+                            crate::api::model::datatypes::GdalConfigOption::from((
                                 "foo".to_string(),
                                 "bar".to_string(),
                             )),
                         ]),
                         allow_alphaband_as_mask: false,
                     }),
-                    cache_ttl: CacheTtlSeconds::max(),
+                    cache_ttl: crate::api::model::datatypes::CacheTtlSeconds::max(),
                 }],
             }],
         )
@@ -3771,7 +3771,7 @@ mod tests {
                             on_error: crate::api::model::operators::OgrSourceErrorSpec::Abort,
                             sql_query: None,
                             attribute_query: Some("foo = 'bar'".to_string()),
-                            cache_ttl: CacheTtlSeconds::new(5),
+                            cache_ttl: crate::api::model::datatypes::CacheTtlSeconds::new(5),
                         },
                         result_descriptor: VectorResultDescriptor {
                             data_type: VectorDataType::MultiPoint,
@@ -3849,7 +3849,7 @@ mod tests {
                             ]),
                             gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
                             gdal_config_options: Some(vec![
-                                crate::api::model::operators::GdalConfigOption::from((
+                                crate::api::model::datatypes::GdalConfigOption::from((
                                     "foo".to_string(),
                                     "bar".to_string(),
                                 )),
@@ -3872,7 +3872,7 @@ mod tests {
                             step: 1,
                         }
                         .into(),
-                        cache_ttl: CacheTtlSeconds::max(),
+                        cache_ttl: crate::api::model::datatypes::CacheTtlSeconds::max(),
                     },
                 )
                 .into(),
@@ -3926,14 +3926,14 @@ mod tests {
                             ]),
                             gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
                             gdal_config_options: Some(vec![
-                                crate::api::model::operators::GdalConfigOption::from((
+                                crate::api::model::datatypes::GdalConfigOption::from((
                                     "foo".to_string(),
                                     "bar".to_string(),
                                 )),
                             ]),
                             allow_alphaband_as_mask: false,
                         },
-                        cache_ttl: CacheTtlSeconds::max(),
+                        cache_ttl: crate::api::model::datatypes::CacheTtlSeconds::max(),
                     },
                 )
                 .into(),
@@ -3986,7 +3986,7 @@ mod tests {
                             ]),
                             gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
                             gdal_config_options: Some(vec![
-                                crate::api::model::operators::GdalConfigOption::from((
+                                crate::api::model::datatypes::GdalConfigOption::from((
                                     "foo".to_string(),
                                     "bar".to_string(),
                                 )),
@@ -3995,7 +3995,7 @@ mod tests {
                         },
                         start: TimeInstance::from_millis(0).unwrap().into(),
                         end: TimeInstance::from_millis(1000).unwrap().into(),
-                        cache_ttl: CacheTtlSeconds::max(),
+                        cache_ttl: crate::api::model::datatypes::CacheTtlSeconds::max(),
                         step: TimeStep {
                             granularity: TimeGranularity::Millis,
                             step: 1,
@@ -4057,14 +4057,14 @@ mod tests {
                                 ]),
                                 gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
                                 gdal_config_options: Some(vec![
-                                    crate::api::model::operators::GdalConfigOption::from((
+                                    crate::api::model::datatypes::GdalConfigOption::from((
                                         "foo".to_string(),
                                         "bar".to_string(),
                                     )),
                                 ]),
                                 allow_alphaband_as_mask: false,
                             }),
-                            cache_ttl: CacheTtlSeconds::max(),
+                            cache_ttl: crate::api::model::datatypes::CacheTtlSeconds::max(),
                         }],
                     },
                 )

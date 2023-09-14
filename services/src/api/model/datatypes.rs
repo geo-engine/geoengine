@@ -2359,6 +2359,22 @@ pub enum PlotOutputFormat {
 #[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, PartialOrd, Deserialize, ToSchema)]
 pub struct CacheTtlSeconds(u32);
 
+const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
+
+impl CacheTtlSeconds {
+    pub fn new(seconds: u32) -> Self {
+        Self(seconds.min(MAX_CACHE_TTL_SECONDS))
+    }
+
+    pub fn max() -> Self {
+        Self(MAX_CACHE_TTL_SECONDS)
+    }
+
+    pub fn seconds(self) -> u32 {
+        self.0
+    }
+}
+
 impl From<geoengine_datatypes::primitives::CacheTtlSeconds> for CacheTtlSeconds {
     fn from(value: geoengine_datatypes::primitives::CacheTtlSeconds) -> Self {
         Self(value.seconds())
